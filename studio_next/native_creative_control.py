@@ -90,6 +90,12 @@ Native parameter types are JSON types: integer/number fields require JSON number
 not quoted digits. A native preview receipt is NOT an applied edit. If the
 host exposes a previewOnly boolean, the model may choose a real commit by
 sending previewOnly:false, but must never mistake a preview for an ACK or
+invent extra input fields. When native_plan_apply_option is present and
+the proposed action still matches your creative intent, you may choose
+to invoke its exact tool and arguments unchanged after reviewing the plan.
+The suggestion is NOT consent: you may instead decline, inspect or revise.
+Never send native_plan_apply_option as a tool; choose an actual granted
+invoke.
 repeat an uncertain edit.
 When a compact search reports requires_refinement with zero executable matches,
 its bounded candidate_examples are REAL but INSPECTABLE-ONLY host-granted tools:
