@@ -460,6 +460,48 @@ class IndependentLocalCreativeServiceTests(unittest.TestCase):
                 self.assertFalse(list(media.parent.glob(".zx7-import-*")))
             finally:backend.close()
 
+    def test_authenticated_local_creative_research_has_no_separate_setup(self):
+        from unittest.mock import patch
+        from studio_next.creative_research_hub import CreativeResearchHub, CreativeSource
+        with tempfile.TemporaryDirectory() as root:
+            token="creative-owner-local-token-123456789012"
+            coordinator=LocalBodyCoordinator(root,execute=lambda ir,workspace:{
+                "status":"blocked"})
+            server=ThreadingHTTPServer(("127.0.0.1",0),
+                make_body_http_handler(coordinator,token))
+            thread=threading.Thread(target=server.serve_forever,daemon=True)
+            thread.start()
+            origin=f"http://127.0.0.1:{server.server_port}/v1/research"
+            hits=[]
+            def research(query,limit):
+                hits.append(query)
+                return [{"title":"Film grammar",
+                         "source_page":"https://example.org/grammar"}]
+            hub=CreativeResearchHub([
+                CreativeSource("narrative","knowledge",frozenset({"all"}),research)])
+            def post(payload,credential=token):
+                return Request(origin,data=json.dumps(payload).encode(),
+                    headers={"Authorization":"Bearer "+credential,
+                             "Content-Type":"application/json"},method="POST")
+            try:
+                with patch("studio_next.body_service.CreativeResearchHub.installed",
+                           return_value=hub):
+                    with self.assertRaises(HTTPError) as denied:
+                        urlopen(post({"query":"story"},credential="bad"),timeout=2)
+                    self.assertEqual(denied.exception.code,401)
+                    with urlopen(post({"query":"story structure"}),timeout=3) as response:
+                        result=json.loads(response.read())
+                    self.assertEqual(len(result["results"]),1)
+                    self.assertFalse(result["rights_verified"])
+                    self.assertEqual(hits,["story structure"])
+                    with self.assertRaises(HTTPError) as illegal:
+                        urlopen(post({"query":"story", "url":"http://private"}),timeout=2)
+                    self.assertEqual(illegal.exception.code,400)
+                    self.assertEqual(hits,["story structure"])
+            finally:
+                server.shutdown();server.server_close();thread.join(timeout=5)
+                coordinator.close()
+
     def test_authentication_and_no_public_source_or_mutable_shell_commands(self):
         with tempfile.TemporaryDirectory() as root:
             token="local-unguessable-operator-token-123456789"
