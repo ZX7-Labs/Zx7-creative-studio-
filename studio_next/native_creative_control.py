@@ -401,6 +401,27 @@ def _selected_native_input_hints(tool_names, live_tools):
     return result
 
 
+def _nonduplicated_native_input_hints(hints, model_events):
+    """Avoid re-serializing the identical live schema in one neural turn.
+
+    The bounded event window already carries the *full* most recent native
+    tool schema. A separately copied 16-field descriptive hint for that same
+    tool adds prompt tokens without supplying new source evidence. Retain
+    hints for every other selected tool and for omitted/oversize schemas.
+    No tool identity, grant, argument validator or immutable event is altered.
+    """
+    covered = {
+        event["tool"] for event in model_events
+        if (isinstance(event, dict) and
+            event.get("kind") == "native_tool_schema" and
+            isinstance(event.get("tool"), str) and
+            isinstance(event.get("input_schema"), dict) and
+            bool(event["input_schema"].get("properties")))
+    }
+    return [entry for entry in hints
+            if isinstance(entry, dict) and entry.get("tool") not in covered]
+
+
 def _model_event_window(events):
     """Loss-aware, bounded model working memory over an *unaltered* journal.
 
@@ -1065,6 +1086,13 @@ class NativeCreativeControl:
                     indexed_actions.append("describe")
                 if self._selectable_tools:
                     indexed_actions.append("invoke")
+                recent_events = _model_event_window(self.events)
+                selected_hints = (
+                    _selected_native_input_hints(
+                        self._selectable_tools, self.tools)
+                    if self.catalog_mode == "indexed" else [])
+                selected_hints = _nonduplicated_native_input_hints(
+                    selected_hints, recent_events)
                 context = {
                     "creative_brief": brief,
                     # Expose only actions that the exact current grammar
@@ -1080,9 +1108,7 @@ class NativeCreativeControl:
                     "compact_tool_catalog": self.catalog_mode == "indexed",
                     "selectable_native_tools": list(self._selectable_tools),
                     "inspectable_native_tools": list(self._inspectable_tied_candidates),
-                    "host_selected_native_input_hints": (
-                        _selected_native_input_hints(self._selectable_tools, self.tools)
-                        if self.catalog_mode == "indexed" else []),
+                    "host_selected_native_input_hints": selected_hints,
                     # After an acknowledged one-shot machine operation,
                     # reveal a compact term vocabulary grounded only in other
                     # real granted native tool names. The tiny brain chooses
@@ -1103,7 +1129,7 @@ class NativeCreativeControl:
                     # Keep stable context first for local runtime prefix caching;
                     # this never caches decisions or replays native operations.
                     "turn": turn,
-                    "latest_events": _model_event_window(self.events),
+                    "latest_events": recent_events,
                     "last_native_result_texts": self._last_native_texts,
                     "native_project_presence_from_last_inspection": self._project_presence,
                     "latest_host_attested_native_project_progress": (
