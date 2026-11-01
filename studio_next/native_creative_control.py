@@ -2041,8 +2041,32 @@ class NativeCreativeControl:
                                         native_name, args["inputs"],
                                         host_response))
                                 if suggested_consent is not None:
-                                    self._last_native_preview_feedback[
-                                        "native_plan_apply_option"] = suggested_consent
+                                    # A genuine app can suggest an apply
+                                    # call that exceeds its *published* MCP
+                                    # schema. Never encourage a weak model to
+                                    # copy an impossible or stale native
+                                    # argument shape and loop on known-invalid
+                                    # editor writes. This remains a PREVIEW,
+                                    # not consent or an automatic native call.
+                                    # Host policy, source pin and original
+                                    # schema all remain authoritative.
+                                    proposed = suggested_consent["arguments"]
+                                    if (self.host_tool_access is not None and
+                                            self.host_tool_access.get(
+                                                native_name) == "write" and
+                                            not self._host_write_already_acknowledged(
+                                                native_name) and
+                                            validators[native_name].is_valid(
+                                                proposed)):
+                                        suggested_consent[
+                                            "current_host_schema_validated"] = True
+                                        suggested_consent[
+                                            "next_model_invoke_must_use_exact_suggested_arguments"] = True
+                                        self._last_native_preview_feedback[
+                                            "native_plan_apply_option"] = suggested_consent
+                                    else:
+                                        self._last_native_preview_feedback[
+                                            "native_plan_requires_new_model_review"] = True
                                 self._last_native_texts = texts
                                 self._last_images, self._last_hashes = [], []
                                 self._last_audio, self._last_audio_evidence = [], None
