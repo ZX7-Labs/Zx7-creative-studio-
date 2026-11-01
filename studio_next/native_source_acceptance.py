@@ -226,7 +226,7 @@ def _static_native_video_visibility(clip: dict) -> bool:
     if not isinstance(transform, dict):
         return False
     opacity = transform.get("opacity", 100)
-    if not _finite_real(opacity) or opacity <= 0:
+    if not _finite_real(opacity):
         return False
     keyframes = clip.get("keyframes")
     if keyframes is not None and not isinstance(keyframes, dict):
@@ -253,6 +253,12 @@ def _static_native_video_visibility(clip: dict) -> bool:
                 return False
             if all(frame["value"] == 0 for frame in animated_opacity):
                 return False
+    # getAnimatedTransform overrides static alpha for every frame when
+    # opacity keyframes are present. A 0% base with an animated 100%
+    # source is therefore valid; only a truly static/empty alpha track
+    # can use the saved base value to prove permanent invisibility.
+    if opacity <= 0 and not animated_opacity:
+        return False
     # Pinned exporter.js applyClipCrop clips against a nonnegative crop
     # rectangle. Opposing trims that consume the entire height/width leave
     # exactly ZERO original-video pixels, regardless of import provenance.
@@ -291,6 +297,61 @@ def _static_native_video_visibility(clip: dict) -> bool:
         if sum(values) >= 100:
             return False
     return True
+
+
+def _native_zero_alpha_at_all_exported_frame_centers(
+        clip: dict, export_interval: tuple) -> bool:
+    """Prove keyframed alpha stays zero over ALL physically sampled frames.
+
+    Pinned keyframes.js:getValueAtTime interpolates between the adjacent
+    keyframe values using any easing. If every enclosing keyframe across
+    the actual output sample range is exactly zero, the result is zero
+    irrespective of easing (including hold/cubic bezier). This uses the
+    real decoded output frame grid, not guessed timeline durations. It
+    never predicts pixels from unknown keyframes, clips or missing FPS.
+    """
+    frame_grid = export_interval
+    if len(frame_grid) != 4 or frame_grid[2] is None or frame_grid[3] is None:
+        return False
+    keyframes = clip.get("keyframes")
+    animated = keyframes.get("opacity") if isinstance(keyframes, dict) else None
+    if not isinstance(animated, list) or not animated:
+        return False
+    if any(not isinstance(kf, dict) or
+           not _finite_real(kf.get("time")) or
+           not _finite_real(kf.get("value"))
+           for kf in animated):
+        return False
+    times = [kf["time"] for kf in animated]
+    # Duplicate/unspecified interpolation order has no reliable zero
+    # certificate. The native editor sorts by keyframe time.
+    if len(set(times)) != len(times):
+        return False
+    ordered = sorted(animated, key=lambda kf: kf["time"])
+    playback = _native_clip_playback_window(clip)
+    if playback is None:
+        return False
+    output_start, output_end, fps, count = frame_grid
+    beginning, finish = playback
+    first = max(0, math.ceil((beginning - output_start) * fps - 0.5))
+    last = min(count - 1, math.ceil((finish - output_start) * fps - 0.5) - 1)
+    if first > last:
+        return False
+    # getAnimatedTransform uses local clip time, never absolute project
+    # timeline time. Include each enclosing interpolation endpoint.
+    first_local = (output_start + (first + 0.5) / fps -
+                   clip["startTime"])
+    last_local = (output_start + (last + 0.5) / fps -
+                  clip["startTime"])
+    if not math.isfinite(first_local) or not math.isfinite(last_local):
+        return False
+    from bisect import bisect_left, bisect_right
+    ordered_times = [kf["time"] for kf in ordered]
+    before = max(0, bisect_right(ordered_times, first_local) - 1)
+    after = min(len(ordered) - 1,
+                bisect_left(ordered_times, last_local))
+    return all(kf["value"] == 0 for kf in
+               ordered[min(before, after):max(before, after) + 1])
 
 
 def verify_original_footage_on_native_timeline(
@@ -495,7 +556,9 @@ def verify_original_footage_on_native_timeline(
                 matching_export_windows = (
                     [window for window in effective_windows
                      if playback_window is not None and
-                     _export_samples_original_clip(playback_window, window)])
+                     _export_samples_original_clip(playback_window, window) and
+                     not _native_zero_alpha_at_all_exported_frame_centers(
+                         clip, window)])
                 if (isinstance(clip, dict) and
                         clip.get("type") == "video" and
                         clip.get("enabled", True) is True and
