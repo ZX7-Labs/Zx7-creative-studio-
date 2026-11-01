@@ -2755,7 +2755,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     self.token = context[
                         "last_native_preview_feedback"][
                             "native_model_consent_receipt_sha256"]
-                    return decision("search", query="add_asset_to_timeline")
+                    return decision("describe", tool="add_asset_to_timeline")
                 return decision("apply_preview", receipt_sha256=self.token)
 
         stale_editor = DirectNativePlan()
@@ -2763,8 +2763,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                     "No exact current native preview"):
             await NativeCreativeControl(
                 stale_editor, StaleApprovalModel(),
-                host_tool_access=grants, max_turns=3,
-                catalog_mode="indexed").run("Review a real plan, search, then try stale consent")
+                host_tool_access=grants, max_turns=3).run(
+                    "Review a real plan, inspect its schema, then try stale consent")
         self.assertEqual(len([1 for name, _ in stale_editor.calls
                               if name == "add_asset_to_timeline"]), 1)
 
