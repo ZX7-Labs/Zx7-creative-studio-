@@ -691,6 +691,37 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.calls, [])
         self.assertEqual(outcome["status"], "model_finished_unverified")
 
+    async def test_selected_hint_dedup_keeps_full_native_schema(self):
+        from studio_next.native_creative_control import _nonduplicated_native_input_hints
+        raw = [{"tool": "update_text_clip", "input_properties": [{"name": "clipId"}]},
+               {"tool": "get_timeline", "input_properties": [{"name": "clipLimit"}]}]
+        schema = {"properties": {"clipId": {"type": "string"}}}
+        events = [{"kind": "native_tool_schema", "tool": "update_text_clip",
+                   "input_schema": schema}]
+        filtered = _nonduplicated_native_input_hints(raw, events)
+        self.assertEqual(filtered, raw[1:])
+        self.assertEqual(events[0]["input_schema"], schema)
+        self.assertEqual(_nonduplicated_native_input_hints(raw, [
+            {"kind": "native_tool_schema", "tool": "update_text_clip",
+             "input_schema": {"schema_too_large": True}}]), raw)
+        session = FakeSession()
+        model = ScriptedModel([
+            decision("search", query="update_text_clip"),
+            decision("describe", tool="update_text_clip"),
+            decision("finish", summary="Only source schema inspected"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=3, catalog_mode="indexed").run(
+            "Inspect editor native schema")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertTrue(any(x["tool"] == "update_text_clip" for x in
+            model.observed[1]["host_selected_native_input_hints"]))
+        self.assertFalse(any(x["tool"] == "update_text_clip" for x in
+            model.observed[2]["host_selected_native_input_hints"]))
+        self.assertEqual(model.observed[2]["latest_events"][-1]["input_schema"],
+                         session.tools[1].input_schema)
+        self.assertEqual(session.calls, [])
+
     async def test_tool_hints_bounded_in_aggregate_with_real_host_names_retained(self):
         from studio_next.native_creative_control import _native_tool_hints
         session = FakeSession()
