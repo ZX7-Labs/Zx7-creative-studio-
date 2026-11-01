@@ -144,6 +144,46 @@ class FederatedCreativeResearchTests(unittest.TestCase):
                          "https://en.wikipedia.org/wiki/Film_editing")
         self.assertTrue(records[0]["research_not_a_reuse_license"])
 
+    def test_polyhaven_and_ambientcg_only_surface_cc0_candidate_3d(self):
+        from studio_next.creative_research_3d import (
+            poly_haven_assets, ambientcg_assets)
+        calls = []
+        def provider(url):
+            calls.append(url)
+            if urlsplit(url).hostname == "api.polyhaven.com":
+                return {"results": [
+                    {"slug": "ornate_chair", "score": 0.8},
+                    {"slug": "../../unsafe", "score": 0.9}]}
+            return {"assets": [
+                {"id": "Rock001", "title": "Cliff Rock"},
+                {"id": "bad/path", "title": "Invalid"}]}
+        one = poly_haven_assets(provider,"stylized chair",3,type_name="models")
+        two = ambientcg_assets(provider,"stone",3,type_name="3d-model")
+        self.assertEqual(len(one), 1)
+        self.assertEqual(len(two), 1)
+        self.assertEqual(one[0]["provider_credit"],"Powered by Poly Haven")
+        self.assertEqual(one[0]["rights_status"],"candidate_unverified")
+        self.assertEqual(two[0]["media_type"],"3d")
+        self.assertTrue(all(x["declared_license"]=="CC0" for x in one+two))
+        self.assertEqual([urlsplit(x).hostname for x in calls],
+                         ["api.polyhaven.com","ambientcg.com"])
+        self.assertEqual(parse_qs(urlsplit(calls[0]).query)["t"],["models"])
+        self.assertEqual(parse_qs(urlsplit(calls[1]).query)["type"],["3d-model"])
+
+    def test_registered_3d_sources_do_not_require_paid_or_model_backend(self):
+        def provider(url):
+            if urlsplit(url).hostname == "api.polyhaven.com":
+                return {"results":[{"slug":"camera_tripod"}]}
+            if urlsplit(url).hostname == "ambientcg.com":
+                return {"assets":[{"id":"Camera001","title":"Camera"}]}
+            raise RuntimeError("Offline")
+        hub = CreativeResearchHub.installed(fetch_json=provider)
+        r = hub.research(query="camera",domain="assets",media="3d",limit=6)
+        self.assertEqual(len(r["results"]),2)
+        self.assertFalse(r["rights_verified"])
+        self.assertEqual(set(x["source"] for x in r["results"]),
+                         {"polyhaven_models","ambientcg_models"})
+
     def test_body_catalog_has_no_extra_creative_research_setup(self):
         def arts(q,n):
             return [{"title":"Lighting",
