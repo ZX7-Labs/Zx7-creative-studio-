@@ -64,4 +64,32 @@ jobs:
             if success>=3:break
           print('ACTUAL_DOWNLOADABLE_CC0_IMAGES',success,flush=True)
           assert success>=1,'No actual accessible CC0 media bytes despite open metadata'
+          for term in ('cathedral','misty','solitary','landscape'):
+            for method in ('search','categorymembers'):
+              args={'action':'query','format':'json','prop':'imageinfo',
+                'iiprop':'url|mime|extmetadata','iiurlwidth':843,
+                'iiextmetadatafilter':'LicenseShortName|LicenseUrl'}
+              if method=='search':
+                args.update({'generator':'search','gsrsearch':term+' filetype:bitmap',
+                             'gsrnamespace':6,'gsrlimit':50})
+              else:
+                args.update({'generator':'categorymembers',
+                             'gcmtitle':'Category:CC-Zero','gcmtype':'file',
+                             'gcmstartsortkeyprefix':term,'gcmlimit':50})
+              with urllib.request.urlopen(urllib.request.Request(
+                   'https://commons.wikimedia.org/w/api.php?'+
+                   urllib.parse.urlencode(args),
+                   headers={'User-Agent':'ZX7Studio-CC0-Probe/0.1'}),
+                   timeout=15) as response:
+                payload=json.load(response)
+              pages=list((payload.get('query') or {}).get('pages',{}).values())
+              approved=[]
+              for item in pages:
+                ii=(item.get('imageinfo') or [{}])[0]
+                lic=((ii.get('extmetadata') or {}).get('LicenseShortName') or {}).get('value')
+                if lic in ('CC0','CC0 1.0'):
+                  approved.append(item.get('title'))
+              print('RELEVANT CC0',term,method,'all',len(pages),
+                    'cc0',len(approved),'examples',approved[:5],flush=True)
+
           PY
