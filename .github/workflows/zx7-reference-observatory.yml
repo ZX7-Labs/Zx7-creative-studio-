@@ -10,6 +10,7 @@ on:
       - "studio_next/creative_research_mcp.py"
       - "studio_next/creative_evidence_memory.py"
       - "studio_next/test_creative_evidence_memory.py"
+      - "scripts/repo_audit.py"
       - "studio_next/test_reference_observatory.py"
       - ".github/workflows/zx7-reference-observatory.yml"
   workflow_dispatch:
@@ -25,6 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -40,3 +42,16 @@ jobs:
       - name: Verify repository source syntax inventory
         run: |
           python -m compileall -q studio_next scripts
+
+      - name: Check every tracked source file and pin in repository
+        run: |
+          python -m pip install --disable-pip-version-check 'PyYAML>=6,<7'
+          python -m unittest discover -s scripts -p 'test_repo_audit.py' -v
+          python scripts/repo_audit.py --out output/repo-audit/all-tracked-files.json
+      - name: Preserve complete indexed-file integrity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-reference-full-source-inventory
+          path: output/repo-audit/
+          retention-days: 14
