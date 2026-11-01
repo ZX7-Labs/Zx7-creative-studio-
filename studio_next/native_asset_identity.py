@@ -45,6 +45,11 @@ def assess_native_asset_selection(tool_name: str, inputs: dict,
         return {"validation_keyword": "native_asset_inventory_unverified",
                 "no_native_dispatch": True}
     ids = {item["id"] for item in assets}
+    if len(ids) != len(assets):
+        # Velorn resolves a duplicate ID by assets.find(first), which may
+        # not be the model-selected footage. Do not silently resolve the tie.
+        return {"validation_keyword": "native_asset_inventory_unverified",
+                "no_native_dispatch": True}
     names = [item["name"].casefold() for item in assets
              if isinstance(item.get("name"), str)]
     selected_ids = []
@@ -65,8 +70,14 @@ def assess_native_asset_selection(tool_name: str, inputs: dict,
             selected_names.append(name.strip().casefold())
 
     if tool_name == "replace_clip_with_asset":
-        collect_selector({"assetId": inputs.get("replacementAssetId"),
-                          "assetName": inputs.get("replacementAssetName")})
+        # Actual pinned mcpActions.js buildReplaceClipWithAssetPlan uses
+        # payload.assetId || payload.replacementAssetId and likewise for the
+        # name. Missing the PRIMARY assetId previously allowed an invented
+        # source path to bypass independent object-existence admission.
+        collect_selector({
+            "assetId": inputs.get("assetId") or inputs.get("replacementAssetId"),
+            "assetName": inputs.get("assetName") or inputs.get("replacementAssetName"),
+        })
     else:
         collect_selector(inputs)
     if tool_name == "add_assets_to_timeline":
