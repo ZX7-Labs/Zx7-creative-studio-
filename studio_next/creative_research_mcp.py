@@ -1,4 +1,4 @@
-"""Opt-in standard MCP research server; public metadata only, no asset import.
+"""Opt-in MCP research and host-granted local video-reference inspection.
 
 Starting this local MCP process authorizes its fixed free public HTTPS
 endpoints by default; the host can disable all network calls. The model cannot grant itself
@@ -45,10 +45,10 @@ _TOOL_DEFINITIONS = (
 
 
 def create_research_server(*, allow_public_research=True, research_client=None,
-                           research_hub=None):
+                           research_hub=None, reference_root=None):
     """Use official MCP SDK; requires an explicit host-side network grant."""
-    if allow_public_research is not True:
-        raise PermissionError("Host must explicitly permit free public metadata research")
+    if type(allow_public_research) is not bool or (not allow_public_research and reference_root is None):
+        raise PermissionError("Host must permit public research or grant local reference media")
     import anyio
     import jsonschema
     from mcp.server import Server
@@ -56,13 +56,34 @@ def create_research_server(*, allow_public_research=True, research_client=None,
 
     client = research_client if research_client is not None else CreativeResearch()
     hub = research_hub if research_hub is not None else CreativeResearchHub.installed()
-    operations = {
+    operations = ({
         "research_creative": (_TOOL_DEFINITIONS[0][2], hub.research),
         "research_assets": (_TOOL_DEFINITIONS[1][2], client.assets),
         "research_studies": (_TOOL_DEFINITIONS[2][2], client.studies),
-    }
-    tools = [types.Tool(name=name, description=description, inputSchema=schema)
-             for name, description, schema in _TOOL_DEFINITIONS]
+    } if allow_public_research else {})
+    tools = ([types.Tool(name=name, description=description, inputSchema=schema)
+              for name, description, schema in _TOOL_DEFINITIONS]
+             if allow_public_research else [])
+    if reference_root is not None:
+        from pathlib import Path
+        from .reference_evidence_tools import inspect_authorized_reference
+        approved_root = Path(reference_root).resolve(strict=True)
+        if not approved_root.is_dir():
+            raise ValueError("Local reference root must be an existing directory")
+        observation_schema = {"type":"object",
+            "properties":{
+                "reference":{"type":"string","minLength":1,"maxLength":1024},
+                "bins":{"type":"integer","minimum":8,"maximum":256}},
+            "required":["reference"],"additionalProperties":False}
+        def inspect(*, reference, bins=64):
+            return inspect_authorized_reference(approved_root, reference, bins=bins)
+        operations["observe_authorized_reference"] = (observation_schema, inspect)
+        tools.append(types.Tool(
+            name="observe_authorized_reference",
+            description=("Decode host-granted local reference footage into measured "
+                         "editing change and actual sound-energy graphs. Not a cinematic "
+                         "quality score, video-semantic judgment or a YouTube download."),
+            inputSchema=observation_schema))
     capacity = anyio.CapacityLimiter(2)
 
     async def list_tools(_context, _params=None):
@@ -100,10 +121,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--disable-public-research", action="store_true",
                         help="Host-owned kill switch for fixed public research endpoints")
+    parser.add_argument("--reference-root",
+                        help="Optional host-granted local media directory for actual reference-video observation")
     args = parser.parse_args(argv)
     try:
         server = create_research_server(
-            allow_public_research=not args.disable_public_research)
+            allow_public_research=not args.disable_public_research,
+            reference_root=args.reference_root)
     except PermissionError as exc:
         parser.error(str(exc))
     from mcp.server.stdio import stdio_server
