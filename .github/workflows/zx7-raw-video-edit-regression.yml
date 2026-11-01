@@ -4,10 +4,14 @@ on:
     branches: ["experiment/unedited-live-action-neural-edit-20261102"]
     paths:
       - "studio_next/test_raw_video_neural_edit.py"
+      - "scripts/run_raw_video_neural_edit_test.py"
       - ".github/workflows/zx7-raw-video-edit-regression.yml"
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: zx7-raw-camera-physical-regressions
+  cancel-in-progress: true
 jobs:
   physically-decoded-original-camera-editor:
     runs-on: ubuntu-24.04
