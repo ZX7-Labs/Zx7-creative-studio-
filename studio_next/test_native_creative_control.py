@@ -414,6 +414,119 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(NativeCreativeControlError, "No earlier independently verified export"):
             await NativeCreativeControl(session2, model2).run("Review unverified output")
 
+    async def test_untrusted_bootstrap_mcp_status_cannot_claim_project_absent(self):
+        for bad in (
+            SimpleNamespace(content=[SimpleNamespace(
+                type="text", text='{"project":null,"mcp":{"hasProject":false}}')]),
+            SimpleNamespace(is_error=False, isError=True, content=[SimpleNamespace(
+                type="text", text='{"project":null,"mcp":{"hasProject":false}}')]),
+        ):
+            with self.subTest(response=repr(bad)[:100]):
+                session = FakeSession()
+                session.tools.append(SimpleNamespace(
+                    name="get_project", description="Actual project state",
+                    input_schema={"type": "object", "properties": {}}))
+                session.custom_response = bad
+                grants = {tool.name: ("write" if tool.name == "update_text_clip" else "read")
+                          for tool in session.tools}
+                model = ScriptedModel([decision(
+                    "finish", summary="State is not proven")])
+                outcome = await NativeCreativeControl(
+                    session, model, max_turns=1, catalog_mode="indexed",
+                    host_tool_access=grants).run("Review current creative project")
+                self.assertEqual([name for name, _ in session.calls], ["get_project"])
+                self.assertEqual(model.observed[0][
+                    "native_project_presence_from_last_inspection"], "unknown")
+                self.assertFalse(any(ev["kind"] == "host_project_bootstrap_observation"
+                                     for ev in outcome["events"]))
+                self.assertTrue(any(ev["kind"] == "host_project_bootstrap_error"
+                                    and ev.get("error_type") == "UntrustedMCPStatusEnvelope"
+                                    for ev in outcome["events"]))
+
+    async def test_untrusted_post_write_project_status_never_claims_recovery(self):
+        session = FakeSession()
+        session.tools += [
+            SimpleNamespace(name="get_project", description="Native real state",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="create_project", description="Create native project",
+                            input_schema={"type": "object",
+                                          "properties": {"name": {"type": "string"}}}),
+        ]
+        reads = 0
+        async def native(name, arguments):
+            nonlocal reads
+            session.calls.append((name, arguments))
+            if name == "get_project":
+                reads += 1
+                state = [SimpleNamespace(
+                    type="text", text='{"project":null,"mcp":{"hasProject":false}}')]
+                if reads == 1:
+                    return SimpleNamespace(is_error=False, content=state)
+                return SimpleNamespace(content=state)
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text",
+                                text='{"success":true,"result":{"previewOnly":false}}')])
+        session.call_tool = native
+        grants = {tool.name: ("write" if tool.name == "create_project" else "read")
+                  for tool in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="create_project", inputs={"name": "Original"}),
+            decision("finish", summary="Project state still requires inspection"),
+        ])
+        outcome = await NativeCreativeControl(
+            session, model, max_turns=2, catalog_mode="indexed",
+            host_tool_access=grants,
+            host_possible_effects={"create_project": ["project_open"]},
+            host_once_after_acknowledged_write=("create_project",)).run(
+                "Create independent original project")
+        self.assertEqual([name for name, _ in session.calls],
+                         ["get_project", "create_project", "get_project"])
+        self.assertEqual(model.observed[1][
+            "native_project_presence_from_last_inspection"], "unknown")
+        self.assertTrue(model.observed[1][
+            "last_host_project_write_reconciliation"]["must_inspect_native_project"])
+        self.assertTrue(any(ev["kind"] == "host_project_post_write_error"
+                            and ev.get("error_type") == "UntrustedMCPStatusEnvelope"
+                            for ev in outcome["events"]))
+        self.assertFalse(any(ev["kind"] == "host_project_post_write_observation"
+                             for ev in outcome["events"]))
+
+    async def test_missing_mistyped_and_conflicting_mcp_status_cannot_certify_write(self):
+        # Successful-looking native content cannot substitute for a verified
+        # MCP transport status. Nor can contradictory status aliases.
+        content = [SimpleNamespace(type="text", text='{"success":true,"editable":true}')]
+        responses = [
+            SimpleNamespace(content=content),
+            SimpleNamespace(is_error=0, content=content),
+            SimpleNamespace(is_error="false", content=content),
+            SimpleNamespace(is_error=False, isError=True, content=content),
+            {"is_error": True, "isError": False, "content": content},
+        ]
+        for response in responses:
+            with self.subTest(response=repr(response)[:100]):
+                session = FakeSession()
+                session.custom_response = response
+                grants = {item.name: ("write" if item.name == "update_text_clip" else "read")
+                          for item in session.tools}
+                model = ScriptedModel([
+                    decision("invoke", tool="update_text_clip",
+                             inputs={"clipId": "original", "text": "Edited"}),
+                    decision("finish", summary="Must not be accepted"),
+                ])
+                outcome = await NativeCreativeControl(
+                    session, model, host_tool_access=grants,
+                    required_evidence=("native_write_acknowledged",),
+                    max_turns=2).run("Edit the actual source")
+                self.assertEqual(outcome["status"], "native_error_requires_state_reconciliation")
+                self.assertEqual(len(session.calls), 1)
+                self.assertEqual(outcome["events"][-1]["kind"], "native_tool_uncertain_outcome")
+                self.assertEqual(outcome["events"][-1]["uncertainty_reason"],
+                                 "untrusted_mcp_status_envelope")
+                self.assertTrue(outcome["events"][-1]["must_reconcile_native_state"])
+                self.assertFalse(any(event["kind"] in ("native_tool_result", "model_finished")
+                                     for event in outcome["events"]))
+                self.assertEqual(len(model.observed), 1)
+
     async def test_error_results_do_not_become_trusted_success(self):
         session = FakeSession()
         session.custom_response = SimpleNamespace(is_error=True, content=[
