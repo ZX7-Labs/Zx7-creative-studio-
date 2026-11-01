@@ -162,6 +162,93 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertIn("const sourceUrl = overrideUrl || resolvedUrl", exporter)
         self.assertIn("const resolvedUrl = proxyUrl ||", exporter)
 
+    def test_physically_rendered_frames_must_sample_the_original_clip(self):
+        # Pinned exporter.js samples native video at frame centers, not at
+        # arbitrary sub-frame time intersections. A clip can overlap a real
+        # 24-fps movie by milliseconds and still contribute ZERO pictures.
+        window = {
+            "start_seconds": 0, "end_seconds": 1,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 24,
+        }
+        clip = self.project["timelines"][0]["clips"][0]
+        for begin, length, expected in (
+            (0, 0.005, False),
+            (0.019, 0.004, True),
+            (0.023, 0.01, False),
+            (0.06, 0.004, True),
+            (0.065, 0.008, False),
+            (0.98, 0.015, True),
+            (0.995, 0.01, False),
+            (1.0, 0.1, False),
+        ):
+            with self.subTest(begin=begin, length=length):
+                clip["startTime"] = begin
+                clip["duration"] = length
+                self.save()
+                answer = self.verify([window])[
+                    "actual_original_video_used_on_native_timeline"]
+                self.assertEqual(answer, expected)
+        # The historical interval-only test describes project/timeline
+        # placement, not independently verified export-frame sampling.
+        clip["startTime"] = 0.023
+        clip["duration"] = 0.01
+        self.save()
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 1
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_custom_export_sample_grid_uses_actual_range_origin(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["startTime"] = 12
+        clip["duration"] = 0.02
+        self.save()
+        shifted = {"start_seconds": 12, "end_seconds": 13,
+                   "video_frame_rate": 24, "decoded_video_frame_count": 24}
+        # First frame center = 12.020833... outside source [12,12.02).
+        self.assertFalse(self.verify([shifted])[
+            "actual_original_video_used_on_native_timeline"])
+        clip["duration"] = 0.022
+        self.save()
+        self.assertTrue(self.verify([shifted])[
+            "actual_original_video_used_on_native_timeline"])
+
+    def test_frame_grid_validation_rejects_unverified_native_movie_metadata(self):
+        base = {"start_seconds": 0, "end_seconds": 1,
+                "video_frame_rate": 24, "decoded_video_frame_count": 24}
+        invalid = (
+            {"video_frame_rate": None},
+            {"video_frame_rate": 24},
+            {"decoded_video_frame_count": 24},
+            {"video_frame_rate": True, "decoded_video_frame_count": 24},
+            {"video_frame_rate": 0, "decoded_video_frame_count": 24},
+            {"video_frame_rate": float("inf"),
+             "decoded_video_frame_count": 24},
+            {"video_frame_rate": 24, "decoded_video_frame_count": True},
+            {"video_frame_rate": 24, "decoded_video_frame_count": "24"},
+            {"video_frame_rate": 24, "decoded_video_frame_count": 1},
+            {"video_frame_rate": 24, "decoded_video_frame_count": 99999999},
+        )
+        for bad in invalid:
+            with self.subTest(bad=repr(bad)):
+                candidate = ({**base, **bad} if
+                             "decoded_video_frame_count" in bad and
+                             "video_frame_rate" in bad else {
+                                 "start_seconds": 0, "end_seconds": 1, **bad})
+                with self.assertRaisesRegex(ValueError, "export frame grid"):
+                    self.verify([candidate])
+        self.assertTrue(self.verify([base])[
+            "actual_original_video_used_on_native_timeline"])
+
+    def test_native_output_frame_sample_time_is_pinned_to_editor_source(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/src/services/exporter.js").read_text(
+                      encoding="utf-8")
+        self.assertIn("sampleAtFrameCenter = true", source)
+        self.assertIn("const frameSampleOffset = sampleAtFrameCenter ? halfFrame : 0", source)
+        self.assertIn(
+            "const targetTime = rangeStart + frameIndex * frameDuration + frameSampleOffset",
+            source)
+
     def test_original_source_clip_must_overlap_actual_export_window(self):
         # Pinned renderer may extend a full export beyond timeline.duration;
         # the *actual verified output interval* is the correct acceptance bound.
