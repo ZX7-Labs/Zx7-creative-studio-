@@ -55,6 +55,53 @@ class SourcePreviewContracts(unittest.TestCase):
         self.assertFalse(source_reviewed_preview_is_readonly(
             "add_asset_to_timeline", {"previewOnly": 1}, schema))
 
+    def test_project_false_ack_preview_requires_pinned_source_envelope(self):
+        """No arbitrary native error can become a safe-to-retry preview."""
+        from studio_next.native_state_evidence import pinned_legacy_project_preview
+        import copy
+        schema = {"type": "object", "properties": {
+            "previewOnly": {"type": "boolean"}}}
+        for name in ("create_project", "duplicate_project"):
+            with self.subTest(name=name):
+                inputs = {"name": "Authorized project"}
+                receipt = {
+                    "success": False, "action": name,
+                    "result": {"previewOnly": True, "action": name,
+                               "plan": {"action": name, "previewOnly": True,
+                                        "name": "Authorized project"}},
+                    "suggestedApplyCall": {
+                        "tool": name, "arguments": {**inputs, "previewOnly": False}},
+                }
+                self.assertTrue(pinned_legacy_project_preview(
+                    name, inputs, schema, receipt))
+                self.assertTrue(pinned_legacy_project_preview(
+                    name, {**inputs, "previewOnly": True}, schema, receipt))
+                self.assertFalse(pinned_legacy_project_preview(
+                    name, {**inputs, "previewOnly": False}, schema, receipt))
+                for changed in (
+                    {"success": True},
+                    {"action": "other_editor_tool"},
+                    {"previewOnly": True},
+                    {"result": {"previewOnly": True, "action": name,
+                                "plan": {"action": name, "previewOnly": False}}},
+                    {"result": {"previewOnly": True, "action": name,
+                                "success": True, "plan": receipt["result"]["plan"]}},
+                    {"result": {"previewOnly": True, "action": "other_editor_tool",
+                                "plan": receipt["result"]["plan"]}},
+                    {"suggestedApplyCall": {"tool": name, "arguments": {
+                        **inputs, "previewOnly": True}}},
+                    {"suggestedApplyCall": {"tool": "other_editor_tool",
+                                            "arguments": {**inputs, "previewOnly": False}}},
+                ):
+                    forged = copy.deepcopy(receipt)
+                    forged.update(changed)
+                    self.assertFalse(pinned_legacy_project_preview(
+                        name, inputs, schema, forged))
+                self.assertFalse(pinned_legacy_project_preview(
+                    "arbitrary_write_with_preview_flag", inputs, schema, receipt))
+                self.assertFalse(pinned_legacy_project_preview(
+                    name, inputs, {"type": "object", "properties": {}}, receipt))
+
     def test_direct_pinned_plan_preview_requires_full_source_attestation(self):
         import copy
         schema = {"type": "object", "properties": {

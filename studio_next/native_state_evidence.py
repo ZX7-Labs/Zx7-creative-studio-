@@ -122,6 +122,52 @@ def source_reviewed_preview_is_readonly(name, inputs, native_schema):
 
 
 
+def pinned_legacy_project_preview(name, inputs, native_schema, receipt):
+    """Admit only Velorn's source-reviewed, nonmutating project-plan envelope.
+
+    Pinned electron/mcpServer.js createProject/duplicateProject returns an
+    outer success:false *only for previews*. The pinned mcpActions.js handlers
+    return the nested plan before the corresponding project create/copy call.
+    A failed unrelated native write may never impersonate that exception.
+    """
+    if name not in ("create_project", "duplicate_project"):
+        return False
+    if not isinstance(inputs, dict) or not isinstance(native_schema, dict):
+        return False
+    properties = native_schema.get("properties")
+    preview_field = (properties.get("previewOnly")
+                     if isinstance(properties, dict) else None)
+    if (not isinstance(preview_field, dict) or
+            preview_field.get("type") != "boolean" or
+            inputs.get("previewOnly") is False or
+            ("previewOnly" in inputs and type(inputs["previewOnly"]) is not bool)):
+        return False
+    if (not isinstance(receipt, dict) or
+            receipt.get("success") is not False or
+            receipt.get("action") != name or
+            "previewOnly" in receipt or
+            receipt.get("error") not in (None, "")):
+        return False
+    result = receipt.get("result")
+    apply = receipt.get("suggestedApplyCall")
+    if not isinstance(result, dict) or not isinstance(apply, dict):
+        return False
+    plan = result.get("plan")
+    arguments = apply.get("arguments")
+    return (
+        result.get("previewOnly") is True and
+        result.get("action") == name and
+        "success" not in result and
+        result.get("error") in (None, "") and
+        isinstance(plan, dict) and
+        plan.get("action") == name and
+        plan.get("previewOnly") is True and
+        apply.get("tool") == name and
+        isinstance(arguments, dict) and
+        arguments == {**inputs, "previewOnly": False}
+    )
+
+
 def pinned_direct_native_plan_preview(name, inputs, native_schema, receipt):
     """Recognize only an actual pinned Velorn read-only direct plan receipt.
 

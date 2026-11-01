@@ -850,8 +850,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             session.calls.append((name, inputs))
             if name == "create_project" and inputs.get("previewOnly", True):
                 receipt = {"success": False, "action": "create_project",
-                           "result": {"previewOnly": True,
-                                      "plan": {"name": inputs["name"]}},
+                           "result": {"previewOnly": True, "action": "create_project",
+                                      "plan": {"previewOnly": True, "action": "create_project",
+                                               "name": inputs["name"]}},
                            "suggestedApplyCall": {"tool": "create_project",
                                                   "arguments": {"name": inputs["name"],
                                                                 "previewOnly": False}}}

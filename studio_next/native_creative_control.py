@@ -1855,8 +1855,12 @@ class NativeCreativeControl:
                             isinstance(host_result, dict) and
                             host_result.get("action") == native_name)
                         from .native_state_evidence import (
-                            pinned_direct_native_plan_preview)
+                            pinned_direct_native_plan_preview,
+                            pinned_legacy_project_preview)
                         direct_plan_preview = pinned_direct_native_plan_preview(
+                            native_name, args["inputs"],
+                            validators[native_name].schema, host_response)
+                        legacy_project_preview = pinned_legacy_project_preview(
                             native_name, args["inputs"],
                             validators[native_name].schema, host_response)
                         # A model-specified previewOnly:false is an
@@ -1874,11 +1878,8 @@ class NativeCreativeControl:
                             args["inputs"].get("previewOnly") is not False)
                         acknowledged_preview = (
                             native_preview_input_admissible and (
-                                (preview is True and (
-                                    (success is False and
-                                     host_response.get("previewOnly", True)
-                                     is not False) or
-                                    (success is None and wrapper_preview))) or
+                                (success is None and wrapper_preview) or
+                                legacy_project_preview or
                                 direct_plan_preview))
                         if success is False or acknowledged_preview:
                             if acknowledged_preview:
