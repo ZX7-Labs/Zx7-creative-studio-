@@ -24,6 +24,9 @@ on:
 
 permissions:
   contents: read
+concurrency:
+  group: zx7-reference-observatory-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   independently-decoded-reference:
