@@ -41,6 +41,7 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                         names = [x.name for x in (await session.list_tools()).tools]
                         self.assertEqual(names, [
                             "observe_authorized_reference",
+                            "detect_authorized_reference_shots",
                             "study_authorized_reference",
                             "recall_reference_case",
                             "recent_reference_cases"])
@@ -52,6 +53,14 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(len(graph["graph"]), 16)
                         self.assertTrue(graph["has_audio"])
                         self.assertFalse(graph["original_video_bytes_retained"])
+                        shot_info = await session.call_tool(
+                            "detect_authorized_reference_shots",
+                            {"reference":"sample.mp4","method":"content"})
+                        self.assertFalse(shot_info.is_error)
+                        real_shots = json.loads(shot_info.content[0].text)
+                        self.assertEqual(real_shots["library"], "PySceneDetect")
+                        self.assertGreaterEqual(len(real_shots["shot_intervals"]), 1)
+                        self.assertFalse(real_shots["creative_quality_certified"])
                         for bad in ({"reference":"../private.mp4"},
                                     {"reference":"/etc/passwd"},
                                     {"reference":"sample.mp4","bins":999}):
