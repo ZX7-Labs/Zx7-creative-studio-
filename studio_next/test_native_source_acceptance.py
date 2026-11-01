@@ -96,6 +96,21 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
             "start_seconds": 0, "end_seconds": 4
         }])["actual_original_video_used_on_native_timeline"])
 
+    def test_pinned_exporter_uses_source_trim_for_video_frame_sampling(self):
+        # Source exception must not silently survive a Velorn upgrade that
+        # changes the editor's treatment of original clip source in-points.
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js").read_text(
+                        encoding="utf-8")
+        start = exporter.index("const getClipCursorEntry = (clip) => {")
+        end = exporter.index("const closeClipCursorEntry", start)
+        method = exporter[start:end]
+        self.assertIn("clip.trimStart || 0", method)
+        self.assertIn("getClipPlaybackWindow(clip).end", method)
+        self.assertIn("createClipFrameCursor({", method)
+        self.assertLess(method.index("clip.trimStart || 0"),
+                        method.index("createClipFrameCursor({"))
+
     def test_native_source_trim_must_reach_actual_original_video_frames(self):
         # An owner-copy SHA and a timeline overlap alone cannot prove source
         # pixels were available. A model can request trimStart=600 from a real
