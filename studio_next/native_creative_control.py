@@ -1948,6 +1948,24 @@ class NativeCreativeControl:
                                             "description": str(option.get(
                                                 "description", ""))[:256],
                                         }
+                                # The real native app sometimes gives a
+                                # concrete suggestedApplyCall with a preview.
+                                # The 48-turn Qwen2B physical trial
+                                # #41276468792 read these plans but kept
+                                # searching and writing markers without
+                                # ever committing the original video import.
+                                # Surface a *bounded, source-validated* plan
+                                # consent option prominently; never execute
+                                # it or alter the creative model's intent.
+                                from .native_state_evidence import (
+                                    native_model_consent_apply_affordance)
+                                suggested_consent = (
+                                    native_model_consent_apply_affordance(
+                                        native_name, args["inputs"],
+                                        host_response))
+                                if suggested_consent is not None:
+                                    self._last_native_preview_feedback[
+                                        "native_plan_apply_option"] = suggested_consent
                                 self._last_native_texts = texts
                                 self._last_images, self._last_hashes = [], []
                                 self._last_audio, self._last_audio_evidence = [], None
