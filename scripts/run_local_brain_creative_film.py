@@ -22,6 +22,11 @@ import urllib.parse
 import urllib.request
 import wave
 
+# Script invocation must resolve the checked-out ZX7 repository itself, not a
+# globally installed unrelated package or an absent scripts namespace.
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
@@ -479,8 +484,12 @@ def produce(args):
             video_path=workspace/"ZX7-LOCAL-AI-ONE-MINUTE.mp4"
             export=render_owned_mlt(project_path,workspace,video_path)
             evidence["native_render"]=export
-            observation=full_decode_inspection(video_path)
+            observation=full_decode_inspection(video_path, expected={
+                "width":SIZE[0], "height":SIZE[1],
+                "duration_seconds":SECONDS, "require_audio":True})
             evidence["independent_decode"]=observation
+            if not observation["technical_delivery_verified"]:
+                raise RuntimeError("One-minute original film did not pass complete audiovisual decode and clock")
             evidence["film_seconds"]=SECONDS
             evidence["native_mlt_rendered"]=True
             evidence["status"]="rendered_not_art_director_approved"
