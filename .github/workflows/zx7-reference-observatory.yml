@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "proof/local-brain-60s-native-film-20261101"
+      - "fix/reference-*"
     paths:
       - "studio_next/reference_observatory.py"
       - "studio_next/reference_evidence_tools.py"
