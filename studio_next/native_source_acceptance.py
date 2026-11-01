@@ -292,6 +292,16 @@ def verify_original_footage_on_native_timeline(
                         not (checked_windows is not None and
                              clip.get("cacheStatus") == "cached" and
                              (clip.get("cacheUrl") or clip.get("cachePath"))) and
+                        # Optical-flow video sampling redirects the decoder
+                        # to clip.opticalFlowCache.path/url, whose metadata
+                        # sourceSignature checks size/mtime rather than the
+                        # SHA-256 derivation of cached rendered pixels.
+                        # Until cache provenance is independently verified,
+                        # source-on-delivered-MP4 cannot use this cache as
+                        # proof of original source frames. The project-only
+                        # source-copy custody claim remains valid.
+                        not (checked_windows is not None and
+                             clip.get("frameSampling") == "optical-flow") and
                         clip.get("trackId") in visible_video_tracks and
                         isinstance(clip.get("assetId"), str) and
                         playback_window is not None and
