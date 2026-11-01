@@ -15,7 +15,8 @@ from scripts.run_local_brain_creative_film import (_fit_film_caption, _title_ove
 
 from .model_film_revision import (
     ModelFilmRevisionError, apply_model_selected_revision,
-    audit_editorial_reprises, encoded_film_contact_sheet,
+    audit_editorial_reprises, encoded_beat_motion_pair,
+    encoded_film_contact_sheet,
 )
 
 
@@ -288,6 +289,34 @@ class LocalFilmRevisionTests(unittest.TestCase):
                 # depict different decoded sources, not repeated thumbnails.
                 self.assertGreater(red[0], red[2] + 60)
                 self.assertGreater(blue[2], blue[0] + 60)
+            temporal = root / "actual-second-beat-temporal.png"
+            focus = encoded_beat_motion_pair(
+                movie,[48],0,temporal,fps=24)
+            self.assertEqual(focus["beat_index"],0)
+            self.assertEqual(focus["selected_frame_indices"],[12,36])
+            self.assertEqual(
+                focus["source_sha256"],
+                hashlib.sha256(movie.read_bytes()).hexdigest())
+            self.assertEqual(
+                focus["preview_sha256"],
+                hashlib.sha256(temporal.read_bytes()).hexdigest())
+            self.assertTrue(
+                focus["temporal_sample_not_semantic_motion_certification"])
+            with Image.open(temporal) as closeup:
+                red=closeup.getpixel((160,90))
+                blue=closeup.getpixel((720,90))
+                self.assertGreater(red[0],red[2]+70)
+                self.assertGreater(blue[2],blue[0]+70)
+            with self.assertRaises(ModelFilmRevisionError):
+                encoded_beat_motion_pair(movie,[48],0,temporal,fps=24)
+            targeted_link=root/"linked-temporal.png"
+            outside=root/"outside-temporal.png"
+            targeted_link.symlink_to(outside)
+            with self.assertRaises(ModelFilmRevisionError):
+                encoded_beat_motion_pair(
+                    movie,[48],0,targeted_link,fps=24)
+            self.assertFalse(outside.exists())
+
             with self.assertRaises(ModelFilmRevisionError):
                 encoded_film_contact_sheet(movie, [24, 24], sheet, fps=24)
             outside = root / "outside.png"
