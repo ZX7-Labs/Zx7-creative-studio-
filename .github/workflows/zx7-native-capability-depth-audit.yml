@@ -1,0 +1,55 @@
+name: ZX7 Native Video Capability Deep Regression
+
+on:
+  push:
+    branches:
+      - "proof/local-brain-60s-native-film-20261101"
+    paths:
+      - ".github/workflows/zx7-native-capability-depth-audit.yml"
+      - "studio_next/native_creative_control.py"
+      - "studio_next/body_mlt_editor.py"
+      - "studio_next/body_mlt_local_edits.py"
+      - "studio_next/body_editor_mcp.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-craft-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install free native video, color, sound and contract engines
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg melt frei0r-plugins fonts-dejavu-core
+          python -m pip install --disable-pip-version-check -e '.[production,editor]'
+      - name: Verify actual native editing contracts and observable revisions
+        run: |
+          python -m unittest -v \
+            studio_next.test_body_mlt_editor \
+            studio_next.test_body_mlt_local_edits \
+            studio_next.test_body_mlt_grade \
+            studio_next.test_body_mlt_masks \
+            studio_next.test_body_mlt_transform \
+            studio_next.test_body_mlt_relink \
+            studio_next.test_body_editor_audio \
+            studio_next.test_body_editor_audio_timeline \
+            studio_next.test_body_editor_mcp \
+            studio_next.test_body_review_compare \
+            studio_next.test_body_sequence_cuts \
+            studio_next.test_native_creative_control \
+            studio_next.test_native_creative_audit \
+            studio_next.test_provider \
+            studio_next.test_film_eye \
+            studio_next.test_film_revision \
+            studio_next.test_review_own_film
