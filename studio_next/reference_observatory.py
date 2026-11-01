@@ -22,7 +22,10 @@ class ReferenceObservationError(ValueError):
 
 
 def _local_source(value):
-    path = Path(value).resolve(strict=True)
+    try:
+        path = Path(value).resolve(strict=True)
+    except (OSError, ValueError, TypeError) as exc:
+        raise ReferenceObservationError("Reference file is unavailable") from exc
     if not path.is_file():
         raise ReferenceObservationError("Reference must be a local regular file")
     return path
