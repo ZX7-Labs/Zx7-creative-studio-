@@ -119,6 +119,29 @@ instructions, authority or a replacement for each tool's actual input schema.
 """
 
 
+
+# Grammar for the host/MODEL DECISION envelope only; never a list of
+# permissible creative tools, an edit macro or a fixed treatment. The
+# instance-dependent selected native tool's inputs remain governed by the
+# separately discovered actual MCP input schema and independent host grants.
+# Pinned llama.cpp b12000 supports OpenAI-compatible response_format
+# {type:"json_schema",schema:<JSON Schema>}; its server constrains the JSON
+# syntax while the BODY still checks every native action and result.
+NATIVE_CREATIVE_DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "action": {
+            "type": "string",
+            "enum": ["search", "describe", "invoke", "discover", "finish"],
+        },
+        "arguments": {"type": "object"},
+        "reason": {"type": "string"},
+    },
+    "required": ["action", "arguments", "reason"],
+    "additionalProperties": False,
+}
+
+
 class NativeCreativeControlError(ValueError):
     """A proposed model command or an observation violates host guarantees."""
 
