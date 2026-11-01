@@ -118,6 +118,8 @@ class CreativeResearchTests(unittest.TestCase):
             host = urlsplit(url).hostname
             if host == "api.openverse.org":
                 raise CreativeResearchError("Offline public API")
+            if host == "api.artic.edu":
+                raise CreativeResearchError("Museum unavailable")
             if host == "commons.wikimedia.org":
                 return {"query": {"pages": {"1": {
                     "title": "File:Free image.png",
@@ -133,11 +135,12 @@ class CreativeResearchTests(unittest.TestCase):
             query="visual cinema",media="image",limit=3)
         self.assertEqual(result["provider"],"wikimedia_commons")
         self.assertTrue(result["fallback_used"])
-        self.assertEqual(result["provider_failures"],["openverse_unavailable_or_invalid"])
+        self.assertEqual(result["provider_failures"],["openverse_unavailable_or_invalid",
+                         "art_institute_chicago_unavailable_or_invalid"])
         self.assertEqual(len(result["results"]),1)
         self.assertFalse(result["rights_verified"])
         self.assertEqual([urlsplit(u).hostname for u in urls],
-                         ["api.openverse.org","commons.wikimedia.org"])
+                         ["api.openverse.org","api.artic.edu","commons.wikimedia.org"])
         self.assertIn("filetype:bitmap",
                       parse_qs(urlsplit(urls[-1]).query)["gsrsearch"][0])
 
