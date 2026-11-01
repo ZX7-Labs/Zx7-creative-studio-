@@ -84,6 +84,51 @@ _PINNED_UNKNOWN_BETWEEN_TRANSITION_CLIPS = (
 
 
 
+def native_model_consent_apply_affordance(name, model_inputs, receipt):
+    """Expose a native plan's unchanged apply candidate for model consent.
+
+    A preview does not create a clip. The pinned editor emits a concrete
+    suggestedApplyCall that the *model may accept or decline* in a later
+    independent turn. The host MUST NOT invoke, substitute, or repair it.
+    Cross-check every model-chosen input except the previewOnly switch to
+    reject any suggestion that would silently alter source, edit or output.
+    An omitted suggestion, unknown tool or oversized argument list is
+    deliberately not shown.
+    """
+    if (not isinstance(name, str) or not name or
+            not isinstance(model_inputs, dict) or
+            model_inputs.get("previewOnly") is False or
+            not isinstance(receipt, dict) or
+            receipt.get("previewOnly") is not True or
+            receipt.get("action") != name):
+        return None
+    suggestion = receipt.get("suggestedApplyCall")
+    if not isinstance(suggestion, dict) or suggestion.get("tool") != name:
+        return None
+    args = suggestion.get("arguments")
+    if (not isinstance(args, dict) or args.get("previewOnly") is not False or
+            any(k != "previewOnly" and
+                (k not in args or args[k] != value)
+                for k, value in model_inputs.items())):
+        return None
+    try:
+        encoded = json.dumps(suggestion, ensure_ascii=False,
+                             sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if len(encoded.encode("utf-8")) > 4096:
+        return None
+    return {
+        "source": "native_editor_preview_suggestedApplyCall",
+        "tool": name,
+        "arguments": args,
+        "independent_model_consent_required": True,
+        "not_executed_by_host": True,
+        "not_a_native_write_ack": True,
+    }
+
+
+
 def pinned_native_export_identity(name, receipt):
     """Attest native editor's own project/timeline/output at render launch.
 
