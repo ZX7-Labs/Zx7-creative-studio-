@@ -70,7 +70,7 @@ def _public_api_json(url):
     hosts = {"api.openverse.org", "api.crossref.org", "commons.wikimedia.org",
              "api.artic.edu", "sfxmint.com",
              "openaccess-api.clevelandart.org", "en.wikipedia.org",
-             "api.polyhaven.com", "ambientcg.com"}
+             "api.polyhaven.com", "ambientcg.com", "images-api.nasa.gov", "www.ebi.ac.uk"}
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname not in hosts:
         raise CreativeResearchError("Research request is not an approved free API")
