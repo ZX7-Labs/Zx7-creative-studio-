@@ -33,6 +33,7 @@ class LocalFilmRevisionTests(unittest.TestCase):
     def decision(self, **kw):
         base = {"action": "revise", "beat_index": 1,
                 "field": "camera", "value": "pull",
+                "expected_before":"push",
                 "reason": "The actual second shot needs a deliberate wider resolution."}
         base.update(kw)
         return base
@@ -47,13 +48,14 @@ class LocalFilmRevisionTests(unittest.TestCase):
         self.assertEqual(receipt["changed_fields"], ["beats[1].camera"])
         self.assertTrue(receipt["revision_applied"])
         paced, _ = apply_model_selected_revision(
-            self.plan, self.decision(field="weight", value="0.75"), asset_count=2)
+            self.plan, self.decision(field="weight", value="0.75", expected_before="2"), asset_count=2)
         self.assertEqual(paced["beats"][1]["weight"], 0.75)
         selected, _ = apply_model_selected_revision(
-            self.plan, self.decision(field="artwork", value="0"), asset_count=2)
+            self.plan, self.decision(field="artwork", value="0", expected_before="1"), asset_count=2)
         self.assertEqual(selected["beats"][1]["artwork"], 0)
         caption, _ = apply_model_selected_revision(
-            self.plan, self.decision(field="caption", value="A fresh original sentence"),
+            self.plan, self.decision(field="caption", value="A fresh original sentence",
+                                        expected_before="Motion emerges"),
             asset_count=2)
         self.assertEqual(caption["beats"][1]["caption"], "A fresh original sentence")
         kept, claim = apply_model_selected_revision(
@@ -65,7 +67,11 @@ class LocalFilmRevisionTests(unittest.TestCase):
         bad = [
             self.decision(beat_index=True), self.decision(beat_index=200),
             self.decision(field="shell"),
-            self.decision(field=[]), self.decision(field="camera", value="zoom='system()'"),
+            self.decision(field=[]),
+            self.decision(expected_before="A different shot's caption"),
+            self.decision(expected_before="Motion emerges"),
+            {key:value for key,value in self.decision().items()
+             if key!="expected_before"}, self.decision(field="camera", value="zoom='system()'"),
             self.decision(field="camera", value="push"),
             self.decision(field="artwork", value="../../tmp"),
             self.decision(field="artwork", value="2"),
@@ -116,6 +122,13 @@ class LocalFilmRevisionTests(unittest.TestCase):
                 self.assertGreater(blue[2], blue[0] + 60)
             with self.assertRaises(ModelFilmRevisionError):
                 encoded_film_contact_sheet(movie, [24, 24], sheet, fps=24)
+            outside = root / "outside.png"
+            dangling = root / "dangling-review.png"
+            dangling.symlink_to(outside)
+            with self.assertRaises(ModelFilmRevisionError):
+                encoded_film_contact_sheet(movie, [24, 24], dangling, fps=24)
+            self.assertFalse(outside.exists(),
+                             "Symlink must never create outside preview output")
             with self.assertRaises(ModelFilmRevisionError):
                 encoded_film_contact_sheet(movie, [24, 0], root / "bad.png", fps=24)
 
