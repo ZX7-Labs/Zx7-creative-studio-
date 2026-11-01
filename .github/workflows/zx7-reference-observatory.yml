@@ -13,6 +13,8 @@ on:
       - "studio_next/test_reference_mcp.py"
       - "studio_next/pro_scene_detector.py"
       - "studio_next/test_pro_scene_detector.py"
+      - "studio_next/reference_comparison.py"
+      - "studio_next/test_reference_comparison.py"
       - "pyproject.toml"
       - "scripts/repo_audit.py"
       - "scripts/test_repo_audit.py"
@@ -45,7 +47,7 @@ jobs:
       - name: Compile reference observatory and regression tests
         run: |
           python -m py_compile studio_next/reference_observatory.py studio_next/reference_evidence_tools.py studio_next/creative_research_mcp.py studio_next/test_reference_observatory.py
-          python -m unittest -v studio_next.test_reference_observatory studio_next.test_creative_evidence_memory studio_next.test_reference_mcp studio_next.test_pro_scene_detector
+          python -m unittest -v studio_next.test_reference_observatory studio_next.test_creative_evidence_memory studio_next.test_reference_mcp studio_next.test_pro_scene_detector studio_next.test_reference_comparison
       - name: Verify repository source syntax inventory
         run: |
           python -m compileall -q studio_next scripts
