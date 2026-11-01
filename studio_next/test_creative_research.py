@@ -111,9 +111,39 @@ class CreativeResearchTests(unittest.TestCase):
             research.studies(query="x"*241)
         self.assertFalse(provider.calls)
 
+    def test_unavailable_openverse_is_explicitly_replaced_only_by_cc0_commons(self):
+        urls = []
+        def provider(url):
+            urls.append(url)
+            host = urlsplit(url).hostname
+            if host == "api.openverse.org":
+                raise CreativeResearchError("Offline public API")
+            if host == "commons.wikimedia.org":
+                return {"query": {"pages": {"1": {
+                    "title": "File:Free image.png",
+                    "imageinfo": [{"mime": "image/png",
+                        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Free_image.png",
+                        "extmetadata": {
+                            "LicenseShortName": {"value": "CC0"},
+                            "LicenseUrl": {"value":
+                                "https://creativecommons.org/publicdomain/zero/1.0/"}}}],
+                }}}}
+            raise AssertionError("Unexpected provider")
+        result = CreativeResearch(provider).assets(
+            query="visual cinema",media="image",limit=3)
+        self.assertEqual(result["provider"],"wikimedia_commons")
+        self.assertTrue(result["fallback_used"])
+        self.assertEqual(result["provider_failures"],["openverse_unavailable_or_invalid"])
+        self.assertEqual(len(result["results"]),1)
+        self.assertFalse(result["rights_verified"])
+        self.assertEqual([urlsplit(u).hostname for u in urls],
+                         ["api.openverse.org","commons.wikimedia.org"])
+        self.assertIn("filetype:bitmap",
+                      parse_qs(urlsplit(urls[-1]).query)["gsrsearch"][0])
+
     def test_untrusted_provider_structures_fail_and_do_not_invent_results(self):
         for search,media,data in (
-            ("assets","image",{"results":{}}),
+            ("assets","image",{"results":{}, "query":{"pages":[]}}),
             ("assets","video",{"query":{"pages":[]}}),
             ("studies",None,{"message":{"items":{}}}),
         ):
