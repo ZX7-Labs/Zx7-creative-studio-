@@ -7,6 +7,9 @@ on:
     paths:
       - ".github/workflows/zx7-native-capability-depth-audit.yml"
       - "studio_next/native_creative_control.py"
+      - "studio_next/native_creative_audit.py"
+      - "studio_next/test_native_creative_audit.py"
+      - "studio_next/test_native_creative_control.py"
       - "studio_next/native_asset_identity.py"
       - "studio_next/test_native_asset_identity.py"
       - "scripts/run_native_model_trial.py"
