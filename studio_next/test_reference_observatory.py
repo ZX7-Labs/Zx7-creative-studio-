@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from .reference_observatory import observe_reference, ReferenceObservationError
+from .reference_evidence_tools import inspect_authorized_reference
 
 
 class ReferenceObservatoryTests(unittest.TestCase):
@@ -35,6 +36,21 @@ class ReferenceObservatoryTests(unittest.TestCase):
                              result["source_sha256"])
             self.assertEqual(result["limits"]["professional_artistic_quality"],
                              "not certified")
+            summary = inspect_authorized_reference(temp, "film.mp4", bins=16)
+            self.assertEqual(len(summary["graph"]), 16)
+            self.assertEqual(summary["cut_candidate_count"], 3)
+            self.assertTrue(summary["has_audio"])
+            self.assertFalse(summary["original_video_bytes_retained"])
+            self.assertFalse(summary["model_has_understood_story_or_editing_intent"])
+            with self.assertRaises(ReferenceObservationError):
+                inspect_authorized_reference(temp, "../outside.mp4")
+            with self.assertRaises(ReferenceObservationError):
+                inspect_authorized_reference(temp, "/etc/passwd")
+            with self.assertRaises(ReferenceObservationError):
+                inspect_authorized_reference(temp, "film.mp4", bins=257)
+            (Path(temp)/"escaped.mp4").symlink_to("/etc/passwd")
+            with self.assertRaises(ReferenceObservationError):
+                inspect_authorized_reference(temp, "escaped.mp4")
 
     def test_no_audio_is_observed_not_invented(self):
         with tempfile.TemporaryDirectory() as temp:
