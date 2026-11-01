@@ -86,6 +86,25 @@ def create_research_server(*, allow_public_research=True, research_client=None,
                          "editing change and actual sound-energy graphs. Not a cinematic "
                          "quality score, video-semantic judgment or a YouTube download."),
             inputSchema=observation_schema))
+        from .pro_scene_detector import detect_authorized_shots
+        shots_schema = {"type":"object",
+            "properties":{
+                "reference":{"type":"string","minLength":1,"maxLength":1024},
+                "method":{"type":"string",
+                          "enum":["adaptive","content","fade_to_black"]},
+                "max_seconds":{"type":"integer","minimum":1,"maximum":86400}},
+            "required":["reference"],"additionalProperties":False}
+        def detect_shots(*, reference, method="adaptive", max_seconds=3600):
+            return detect_authorized_shots(
+                approved_root, reference, method=method, max_seconds=max_seconds)
+        operations["detect_authorized_reference_shots"] = (shots_schema, detect_shots)
+        tools.append(types.Tool(
+            name="detect_authorized_reference_shots",
+            description=("Perform actual full-frame PySceneDetect shot-boundary "
+                         "analysis of locally authorized reference video. "
+                         "Independent open-source algorithm, not a semantic/creative "
+                         "score or permission to download online media."),
+            inputSchema=shots_schema))
         if memory_path is not None:
             from .creative_evidence_memory import CreativeEvidenceMemory
             memory = CreativeEvidenceMemory(memory_path)
