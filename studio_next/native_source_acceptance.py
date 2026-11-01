@@ -260,51 +260,50 @@ def verify_original_footage_on_native_timeline(
             owner_hash = original_record["sha256"]
             original_duration = original_record["video_duration_seconds"]
             original = Path(previous)
-            for path_field in ("absolutePath", "path"):
-                asset_location = asset.get(path_field)
-                if not isinstance(asset_location, str) or not asset_location:
+            # Pinned Velorn src/services/exporter.js:getExportAssetPath
+            # prioritizes a nonempty absolutePath over path. The former
+            # verifier tried both independently: a forged invalid
+            # absolutePath could be "rescued" by a different, honest path
+            # even though the native renderer would select absolutePath.
+            # Never borrow source custody from a fallback that the actual
+            # application is not known to render.
+            absolute = asset.get("absolutePath")
+            asset_location = (absolute if isinstance(absolute, str) and
+                              absolute.strip() else asset.get("path"))
+            if not isinstance(asset_location, str) or not asset_location.strip():
+                continue
+            if "://" in asset_location:
+                continue
+            owned = Path(asset_location)
+            if not owned.is_absolute():
+                owned = project.parent / owned
+            owned = owned.resolve(strict=False)
+            if (owned == original or
+                    not owned.is_relative_to(project.parent) or
+                    not owned.is_file()):
+                continue
+            # A hard link aliases the original inode; the native project
+            # must own an independent copy before any edit is accepted.
+            if os.path.samefile(owned, original):
+                continue
+            if _sha256(owned) != owner_hash:
+                continue
+            for native_clip in placed[asset_id]:
+                # Original source frames must remain in-range after trim.
+                source_in = native_clip.get("trimStart", 0)
+                if (not _finite_real(source_in) or source_in < 0 or
+                        (checked_windows is not None and
+                         (original_duration is None or
+                          source_in >= original_duration))):
                     continue
-                if "://" in asset_location:
-                    continue
-                owned = Path(asset_location)
-                if not owned.is_absolute():
-                    owned = project.parent / owned
-                owned = owned.resolve(strict=False)
-                if (owned == original or
-                        not owned.is_relative_to(project.parent) or
-                        not owned.is_file()):
-                    continue
-                # A hard link is NOT a project-owned copy: it aliases the
-                # original inode. A later editor overwrite could change the
-                # owner's bytes, even though the path and SHA appear valid.
-                # Native import copies bytes, rather than hard-linking.
-                if os.path.samefile(owned, original):
-                    continue
-                if _sha256(owned) != owner_hash:
-                    continue
-                for native_clip in placed[asset_id]:
-                    # Velorn's exporter samples its media from trimStart
-                    # (default 0). Source ownership and time-window overlap
-                    # do not prove any source frame was available if the edit
-                    # points beyond the real video's decoded end.
-                    source_in = native_clip.get("trimStart", 0)
-                    if (not _finite_real(source_in) or source_in < 0 or
-                            (checked_windows is not None and
-                             (original_duration is None or
-                              source_in >= original_duration))):
-                        continue
-                    accepted.append({
-                        # Preserve only an owner-root-relative reference in
-                        # published CI artifacts; never disclose local absolute
-                        # media/project paths in technical provenance reports.
-                        "relative_native_project_file": str(project.relative_to(root)),
-                        "native_asset_id": asset_id,
-                        "native_clip_id": native_clip["id"],
-                        "source_trim_start_seconds": source_in,
-                        "source_sha256": owner_hash,
-                        "project_owned_copy_sha256": owner_hash,
-                    })
-                break
+                accepted.append({
+                    "relative_native_project_file": str(project.relative_to(root)),
+                    "native_asset_id": asset_id,
+                    "native_clip_id": native_clip["id"],
+                    "source_trim_start_seconds": source_in,
+                    "source_sha256": owner_hash,
+                    "project_owned_copy_sha256": owner_hash,
+                })
     return {
         "actual_original_video_used_on_native_timeline": bool(accepted),
         "physically_verified_native_source_clip_count": len(accepted),
