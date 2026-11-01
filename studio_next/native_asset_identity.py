@@ -40,7 +40,8 @@ def inventory_from_native_text(texts):
     returned = record.get("returnedAssetCount")
     if (not isinstance(rows, list) or type(total) is not int or
             type(returned) is not int or total < 0 or returned < 0 or
-            returned != len(rows) or returned > total or returned > 1000):
+            returned != len(rows) or returned > total or returned > 1000 or
+            (total > 0 and returned == 0)):
         raise NativeAssetEvidenceError("Inconsistent native asset count")
     identities, names = [], []
     seen = set()
