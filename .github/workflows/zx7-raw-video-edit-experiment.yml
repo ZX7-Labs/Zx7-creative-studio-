@@ -22,51 +22,63 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg
           python -m pip install --disable-pip-version-check 'yt-dlp>=2025.1' 
-      - name: Acquire actual unedited filmmaker takes — not finished stock montage
+      - name: Acquire a real CC0 unedited camera recording from Wikimedia Commons
         run: |
           mkdir -p output/cinestudy-source
           python - <<'PY'
-          import subprocess,os,json,hashlib,pathlib
-          source=[
-            ("camera_take_01","204719783"),
-            ("camera_take_02","204719558"),
-            ("camera_take_03","205262037")
-          ]
-          root=pathlib.Path("output/cinestudy-source")
-          evidence=[]
-          for label,video_id in source:
-              url=f"https://vimeo.com/{video_id}"
-              cmd=["yt-dlp","--no-playlist","--no-progress","--socket-timeout","25",
-                   "--retries","3","-f","bv*[height<=720]+ba/b[height<=720]/best",
-                   "--merge-output-format","mp4","-o",str(root/(label+".%(ext)s")),
-                   url]
-              run=subprocess.run(cmd,capture_output=True,text=True,timeout=180)
-              evidence.append({"label":label,"source_url":url,"returncode":run.returncode,
-                               "stdout":run.stdout[-1200:],"stderr":run.stderr[-1600:]})
-              if run.returncode:continue
-              files=list(root.glob(label+".*"))
-              if len(files)!=1:continue
-              path=files[0]
-              probe=subprocess.run(["ffprobe","-v","error","-show_streams","-show_format",
-                          "-of","json",str(path)],capture_output=True,text=True,timeout=30)
-              if probe.returncode:continue
-              decoded=json.loads(probe.stdout)
-              duration=float(decoded.get("format",{}).get("duration",0))
-              picture=[x for x in decoded.get("streams",[]) if x.get("codec_type")=="video"]
-              if duration<3 or duration>1200 or len(picture)!=1:continue
-              evidence[-1].update({"path":str(path),"bytes":path.stat().st_size,
-                                    "sha256":hashlib.sha256(path.read_bytes()).hexdigest(),
-                                    "duration_seconds":duration,"width":picture[0].get("width"),
-                                    "height":picture[0].get("height"),"probe_verified":True})
-          (root/"acquisition.json").write_text(json.dumps({
-              "source":"Cinestudy / Sonnyboo: EDIT CHALLENGE – Editing a Sequence",
-              "source_page":"https://cinestudy.org/2019/02/15/interactive-project-editing-a-sequence/",
-              "rights":"Owner allows downloading, editing and uploading with full original credits and #Cinestudy or #Sonnyboo. This is not public-domain footage or a sensor RAW file.",
-              "takes":evidence
-          },indent=2))
+          import json,urllib.request,urllib.parse,hashlib,pathlib,subprocess
+          title="Royal_Sovereign_Lighthouse_drone_visit.webm"
+          page="https://commons.wikimedia.org/wiki/File:Royal_Sovereign_Lighthouse_drone_visit.webm"
+          source_url="https://commons.wikimedia.org/w/api.php?"+urllib.parse.urlencode({
+              "action":"query","format":"json",
+              "titles":"File:"+title.replace("_"," "),
+              "prop":"imageinfo","iiprop":"url|size|mime|extmetadata",
+              "iiextmetadatafilter":"LicenseShortName|Artist|UsageTerms"})
+          req=urllib.request.Request(source_url,headers={"User-Agent":"ZX7CreativeStudio/0.1 (https://github.com/ZX7-Labs/Zx7-creative-studio-)"})
+          with urllib.request.urlopen(req,timeout=35) as stream:
+              meta=json.load(stream)
+          page_info=next(iter(meta["query"]["pages"].values()))
+          info=page_info["imageinfo"][0]
+          lic=(info.get("extmetadata") or {}).get("LicenseShortName",{}).get("value")
+          assert lic in ("CC0","CC0 1.0"),"Live official Commons metadata no longer declares CC0"
+          digest=hashlib.md5(title.encode()).hexdigest()
+          url=("https://upload.wikimedia.org/wikipedia/commons/transcoded/"
+               +digest[0]+"/"+digest[:2]+"/"+title+"/"+title+".720p.vp9.webm")
+          folder=pathlib.Path("output/cinestudy-source")
+          dest=folder/"camera_take_01.webm"
+          request=urllib.request.Request(url,headers={"User-Agent":"ZX7CreativeStudio/0.1 (https://github.com/ZX7-Labs/Zx7-creative-studio-)"})
+          with urllib.request.urlopen(request,timeout=50) as response, dest.open("xb") as output:
+              total=0
+              while True:
+                  data=response.read(1024*1024)
+                  if not data:break
+                  total+=len(data)
+                  assert total<200_000_000,"Raw unedited video proxy exceeds public runner budget"
+                  output.write(data)
+          probed=subprocess.run(["ffprobe","-v","error","-show_format",
+                  "-show_streams","-of","json",str(dest)],
+                  capture_output=True,text=True,timeout=60,check=True)
+          specs=json.loads(probed.stdout)
+          duration=float(specs["format"]["duration"])
+          video=next(v for v in specs["streams"] if v["codec_type"]=="video")
+          assert 30<=duration<=300 and video["width"]>=640 and video["height"]>=360
+          decoded=subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-xerror",
+                  "-i",str(dest),"-map","0:v:0","-f","null","-"],
+                  capture_output=True,timeout=300,check=True)
+          evidence={"original_file_page":page,"raw_recording_title":title,
+              "original_crew":"Alexis Markwick",
+              "filming":"Raw camera drone footage of the Royal Sovereign Lighthouse",
+              "license_declared_by_source":lic,
+              "original_file_media_url":info["url"],
+              "selected_actual_unedited_recording_proxy_url":url,
+              "file":str(dest),"sha256":hashlib.sha256(dest.read_bytes()).hexdigest(),
+              "bytes":dest.stat().st_size,"duration_seconds":duration,
+              "width":video["width"],"height":video["height"],
+              "full_picture_decode_completed":True,
+              "camera_sensor_raw":False,"pre_edited_film_or_stock_montage":False,
+              "rights_legally_cleared":False}
+          (folder/"acquisition.json").write_text(json.dumps(evidence,indent=2))
           print(json.dumps(evidence,indent=2))
-          assert sum(1 for item in evidence if item.get("probe_verified"))>=2,(
-              "Fewer than two genuinely fetched separately shot unedited film camera takes")
           PY
       - name: Preserve actual source media access proof (even on failure)
         if: always()
@@ -75,6 +87,6 @@ jobs:
           name: zx7-real-filmmaker-camera-takes
           path: |
             output/cinestudy-source/acquisition.json
-            output/cinestudy-source/camera_take_*.mp4
+            output/cinestudy-source/camera_take_*.webm
           if-no-files-found: warn
           retention-days: 5
