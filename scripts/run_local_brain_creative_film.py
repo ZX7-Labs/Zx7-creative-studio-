@@ -35,7 +35,8 @@ from studio_next.body_mlt_editor import export_owned_mlt
 from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
 from studio_next.model_film_revision import (
-    apply_model_selected_revision, encoded_film_contact_sheet)
+    ModelFilmRevisionError, apply_model_selected_revision,
+    encoded_film_contact_sheet)
 
 from scripts.run_native_model_trial import download, read_live_linux_model_peak_rss
 
@@ -427,7 +428,8 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
         raise RuntimeError("Observed visual preview is not bound to decoded export")
     schema = {
         "type": "object", "additionalProperties": False,
-        "required": ["action", "beat_index", "field", "value", "reason"],
+        "required": ["action", "beat_index", "field", "value",
+                     "expected_before", "reason"],
         "properties": {
             "action": {"type":"string", "enum":["keep", "revise"]},
             "beat_index": {"type":"integer", "minimum":0,
@@ -435,6 +437,7 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
             "field": {"type":"string",
                       "enum":["caption", "camera", "artwork", "weight"]},
             "value": {"type":"string", "minLength":1, "maxLength":100},
+            "expected_before": {"type":"string", "minLength":1, "maxLength":100},
             "reason": {"type":"string", "minLength":12, "maxLength":600},
         },
     }
@@ -457,7 +460,13 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
             "a concrete visual or pacing repair is warranted. If so, pick "
             "exactly one beat and one editable field to revise. Reply as "
             "{action:revise,beat_index:integer,field:caption|camera|artwork|weight,"
-            "value:string,reason:string}. The value is the proposed new "
+            "value:string,expected_before:string,reason:string}. "
+            "Beat N in the picture is beat_index=N-1 in the editable plan; "
+            "do not confuse the content of neighboring beats. "
+            "expected_before MUST exactly reproduce the current field value "
+            "at the chosen beat_index from current_edit_plan; this is a "
+            "source-state precondition, not an artistic opinion. "
+            "The value is the proposed new "
             "caption, registered camera name, decimal relative beat weight, "
             "or source inventory index as a string. If actual evidence does "
             "not justify an edit, choose action:keep; the other fields must "
@@ -501,9 +510,30 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
             "when a safe meaningful change is possible. Keep the original "
             "unchanged as version one. This is a technical alternate-cut "
             "request, not evidence that the original was artistically bad.")
-    decision = _call(brain, request, transcript, with_image=review_image)
-    revised, model_edit = apply_model_selected_revision(
-        plan, decision, asset_count=len(assets))
+    # A small local model has previously confused two neighboring beats and
+    # asserted a previous caption that was not on its selected target. Reject
+    # that stale or hallucinated before-value, and let the neural model inspect
+    # the actual native state again. Never invent or auto-apply a creative edit.
+    for review_attempt in range(3):
+        decision = _call(brain, request, transcript, with_image=review_image)
+        try:
+            revised, model_edit = apply_model_selected_revision(
+                plan, decision, asset_count=len(assets))
+        except ModelFilmRevisionError as exc:
+            transcript[-1]["source_precondition_or_edit_validation_failed"] = str(exc)
+            if review_attempt == 2:
+                raise
+            request["retry_feedback"] = {
+                "rejected_edit_reason":str(exc),
+                "read_actual_beat_index_and_exact_before_field":True,
+                "native_beats_now":[
+                    {"beat_index":i, **beat}
+                    for i, beat in enumerate(plan["beats"])
+                ],
+                "model_must_choose_its_own_correct_source_bound_edit":True,
+            }
+            continue
+        break
     (dest/"model-original-export-review.json").write_text(
         json.dumps({"visual_preview":preview, "model_decision":decision,
                     "validated_edit":model_edit,
