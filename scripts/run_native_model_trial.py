@@ -457,6 +457,12 @@ async def trial(args, lock, artifacts, command):
                     sha(movie) != movie_digest):
                 continue
             inputs = identity["selected"]
+            if not export_request_without_unverified_proxy(inputs):
+                # The model requested proxy input, or supplied a malformed
+                # proxy flag. A real verified MP4 still exists, but this
+                # source-clip receipt does not prove the proxy pixels came
+                # from the byte-verified original owner video.
+                continue
             start = inputs.get('startSeconds', 0)
             # Do not silently coerce an invalid model string, NaN or bool
             # into a plausible time origin; the editor remains the judge of
@@ -518,6 +524,20 @@ async def trial(args, lock, artifacts, command):
             'audit': audit,
             'acceptance_note': 'Source-chain and model-operation evidence only, not artistic acceptance'}
 
+
+
+def export_request_without_unverified_proxy(inputs):
+    """Do not infer original-video pixels from a substitute proxy decoder.
+
+    Pinned Velorn electron/mcpServer.js:resolveExportDeliveryPlan enables
+    useProxyMedia only for a source-ACKed explicit true. The renderer then
+    prefers a usable proxy URL over the original media URL. Project asset
+    SHA alone does not authenticate independently unverified proxy pixels.
+    Any malformed model flag is withheld from affirmative source proof.
+    """
+    if not isinstance(inputs, dict):
+        return False
+    return inputs.get("useProxyMedia", False) is False
 
 
 def preserve_native_trial_failure_audit(
