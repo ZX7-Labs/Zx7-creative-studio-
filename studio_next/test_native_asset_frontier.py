@@ -92,17 +92,15 @@ class ActualHostAssetProducerFrontierTests(unittest.IsolatedAsyncioTestCase):
                     reply.content[0].text = json.dumps(physical)
                 return reply
         editor = ObservedPlacedSource()
-        editor.tools.extend([
-            SimpleNamespace(name="export_timeline",
-                            description="Native rendered movie export",
-                            input_schema={"type": "object", "properties": {}}),
-            SimpleNamespace(name="zx7_verify_native_export",
-                            description="Validate physically generated video",
-                            input_schema={"type": "object", "properties": {}}),
-            SimpleNamespace(name="zx7_observe_verified_export_frame",
-                            description="Inspect actual verified export PNG",
-                            input_schema={"type": "object", "properties": {}}),
-        ])
+        # Base FakeSession already exposes both ZX7 verification sensors.
+        # Re-registering them made the actual tool catalog ambiguous and
+        # prevented the test from exercising model-facing discovery.
+        self.assertEqual(len(editor.tools),
+                         len({tool.name for tool in editor.tools}))
+        editor.tools.append(SimpleNamespace(
+            name="export_timeline",
+            description="Native rendered movie export",
+            input_schema={"type": "object", "properties": {}}))
         model = ScriptedModel([
             decision("search", query="export"),
             decision("search", query="observe verified video frame"),
