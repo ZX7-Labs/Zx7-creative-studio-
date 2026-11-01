@@ -13,6 +13,7 @@ dependencies = []
 [project.optional-dependencies]
 production = ["numpy>=1.26,<3", "Pillow>=10,<13", "opentimelineio>=0.17,<1", "fonttools>=4,<5"]
 editor = ["mcp==2.3.0", "jsonschema>=4.26,<5"]
+research = ["mcp==2.3.0", "jsonschema>=4.26,<5"]
 vfx_exr = ["OpenEXR>=3.3,<4", "numpy>=1.26,<3"]
 vfx_tracking = ["opencv-python-headless>=4.10,<5", "numpy>=1.26,<3", "Pillow>=10,<13"]
 
@@ -21,6 +22,7 @@ zx7-body = "studio_next.body_service:main"
 zx7-client = "studio_next.body_client:main"
 zx7-editor = "studio_next.body_editor_client:main"
 zx7-editor-mcp = "studio_next.body_editor_mcp:main"
+zx7-research-mcp = "studio_next.creative_research_mcp:main"
 zx7-desktop = "studio_next.body_desktop:main"
 zx7-tools = "studio_next.body_capabilities:main"
 zx7-archive = "studio_next.body_archive:main"
