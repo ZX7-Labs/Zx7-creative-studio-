@@ -269,6 +269,16 @@ def verify_original_footage_on_native_timeline(
                         clip.get("type") == "video" and
                         clip.get("enabled", True) is True and
                         _static_native_video_visibility(clip) and
+                        # With useCachedRenders enabled, pinned exporter.js
+                        # replaces even a VIDEO clip's actual source decoder
+                        # with clip.cacheUrl/cachePath when status='cached'.
+                        # An unverified baked/legacy cache can carry entirely
+                        # unrelated pixels. Its presence cannot certify that
+                        # owner-original BYTES entered the delivered movie.
+                        # Preserve project-only custody separately.
+                        not (checked_windows is not None and
+                             clip.get("cacheStatus") == "cached" and
+                             (clip.get("cacheUrl") or clip.get("cachePath"))) and
                         clip.get("trackId") in visible_video_tracks and
                         isinstance(clip.get("assetId"), str) and
                         playback_window is not None and
