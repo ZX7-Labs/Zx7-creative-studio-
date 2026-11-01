@@ -710,8 +710,11 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             decision("describe", tool="update_text_clip"),
             decision("finish", summary="Only source schema inspected"),
         ])
+        grants = {tool.name: ("write" if tool.name == "update_text_clip"
+                              else "read") for tool in session.tools}
         result = await NativeCreativeControl(
-            session, model, max_turns=3, catalog_mode="indexed").run(
+            session, model, max_turns=3, catalog_mode="indexed",
+            host_tool_access=grants).run(
             "Inspect editor native schema")
         self.assertEqual(result["status"], "model_finished_unverified")
         self.assertTrue(any(x["tool"] == "update_text_clip" for x in
