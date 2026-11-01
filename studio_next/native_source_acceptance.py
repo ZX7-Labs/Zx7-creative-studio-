@@ -226,7 +226,38 @@ def _static_native_video_visibility(clip: dict) -> bool:
     if not isinstance(transform, dict):
         return False
     opacity = transform.get("opacity", 100)
-    if not _finite_real(opacity) or opacity <= 0:
+    if not _finite_real(opacity):
+        return False
+    keyframes = clip.get("keyframes")
+    if keyframes is not None and not isinstance(keyframes, dict):
+        return False
+    animated_opacity = (keyframes.get("opacity")
+                        if isinstance(keyframes, dict) else None)
+    if animated_opacity is not None:
+        # Pinned src/utils/keyframes.js:getAnimatedTransform overrides
+        # transform.opacity whenever keyframes.opacity is a nonempty
+        # list. A clip with base opacity=100 and ONE zero alpha
+        # keyframe renders fully transparent for its *entire* lifespan.
+        # Any number of zero-valued keyframes also stays identically
+        # zero under the native easing/interpolation algebra.
+        # This rejects a source-known impossibility without guessing
+        # the artist's intended animation or rewriting its keyframes.
+        if (not isinstance(animated_opacity, list) or
+                len(animated_opacity) > 100_000):
+            return False
+        if animated_opacity:
+            if any(not isinstance(frame, dict) or
+                   not _finite_real(frame.get("time")) or
+                   not _finite_real(frame.get("value"))
+                   for frame in animated_opacity):
+                return False
+            if all(frame["value"] == 0 for frame in animated_opacity):
+                return False
+            # Positive keyframed alpha can override zero base alpha.
+            # This is only a possible-pixel-visibility gate: final
+            # output-frame sampling remains independently required.
+            opacity = max(frame["value"] for frame in animated_opacity)
+    if opacity <= 0:
         return False
     # Pinned exporter.js applyClipCrop clips against a nonnegative crop
     # rectangle. Opposing trims that consume the entire height/width leave
