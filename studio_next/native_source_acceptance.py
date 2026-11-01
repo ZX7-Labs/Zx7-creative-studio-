@@ -125,8 +125,10 @@ def verify_original_footage_on_native_timeline(
 
     If the trusted runner supplies source-bound physical export windows, each
     candidate clip must intersect one of those output intervals. A caller may
-    NOT populate these windows from unverified model text. With no windows,
-    report native-timeline custody only, not visible export-frame certainty.
+    NOT populate these windows from unverified model text. A verified export
+    selecting proxy media is NOT direct original-byte footage proof: pinned
+    Velorn may substitute unrelated asset.proxyUrl or proxyPath. Without
+    physical delivery windows, report project/timeline custody only.
     """
     root = Path(projects_root).resolve(strict=True)
     if not root.is_dir() or not isinstance(project_paths, list) or not isinstance(
@@ -180,11 +182,22 @@ def verify_original_footage_on_native_timeline(
         checked_windows = []
         for interval in host_verified_export_windows:
             if (not isinstance(interval, dict) or
-                    set(interval) != {"start_seconds", "end_seconds"} or
+                    not {"start_seconds", "end_seconds"} <= set(interval) or
+                    not set(interval) <= {
+                        "start_seconds", "end_seconds", "use_proxy_media"} or
                     not _finite_real(interval["start_seconds"]) or
                     not _finite_real(interval["end_seconds"]) or
-                    not 0 <= interval["start_seconds"] < interval["end_seconds"]):
+                    not 0 <= interval["start_seconds"] < interval["end_seconds"] or
+                    type(interval.get("use_proxy_media", False)) is not bool):
                 raise ValueError("Invalid independently verified export interval")
+            # Source-attested pinned exporter.js: a useProxyMedia:true
+            # delivery may render asset.proxyUrl/proxyPath instead of the
+            # SHA-bound original. A proxy export cannot independently prove
+            # original *bytes* were sampled, even if the proxy looks alike.
+            # An editor without a usable proxy might fall back to original:
+            # refusing it here is intentionally a conservative false negative.
+            if interval.get("use_proxy_media", False):
+                continue
             checked_windows.append((
                 interval["start_seconds"], interval["end_seconds"]))
     else:
