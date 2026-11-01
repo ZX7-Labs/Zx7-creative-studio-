@@ -96,7 +96,20 @@ def _static_native_video_visibility(clip: dict) -> bool:
     if not isinstance(transform, dict):
         return False
     opacity = transform.get("opacity", 100)
-    return _finite_real(opacity) and opacity > 0
+    if not _finite_real(opacity) or opacity <= 0:
+        return False
+    # Pinned exporter.js applyClipCrop clips against a nonnegative crop
+    # rectangle. Opposing trims that consume the entire height/width leave
+    # exactly ZERO original-video pixels, regardless of import provenance.
+    # getVisibleLocalRect also clamps crop percentages into [0,100].
+    for first, second in (("cropLeft", "cropRight"),
+                          ("cropTop", "cropBottom")):
+        a, b = transform.get(first, 0), transform.get(second, 0)
+        if not _finite_real(a) or not _finite_real(b):
+            return False
+        if max(0, min(100, a)) + max(0, min(100, b)) >= 100:
+            return False
+    return True
 
 
 def verify_original_footage_on_native_timeline(
