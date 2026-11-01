@@ -7,7 +7,9 @@ import subprocess
 import tempfile
 import unittest
 
-from PIL import Image
+from PIL import Image, ImageDraw
+
+from scripts.run_local_brain_creative_film import _fit_film_caption, _title_overlay
 
 from .model_film_revision import (
     ModelFilmRevisionError, apply_model_selected_revision,
@@ -91,6 +93,43 @@ class LocalFilmRevisionTests(unittest.TestCase):
                     apply_model_selected_revision(self.plan, decision, asset_count=2)
                 self.assertEqual(repr(self.plan), snapshot)
 
+
+
+    def test_full_neural_caption_respects_actual_final_movie_safe_area(self):
+        """Regress a visibly clipped source name in the prior 60-second film.
+
+        The renderer must measure and lay out the entire model-authored string,
+        not crop after 100 characters, break source metadata arbitrarily, or
+        hide overflowing text behind the progress line.
+        """
+        source_caption = (
+            "Pereslavl-Zalessky - Museum of Tricks and Ingenuity - "
+            "hand woodblock for textile printing 1"
+        )
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root) / "art-director-caption.png"
+            _title_overlay("Echoes in Vellum", source_caption, 2, 6, output)
+            with Image.open(output) as frame:
+                self.assertEqual(frame.size, (1280, 720))
+                self.assertEqual(frame.mode, "RGBA")
+                draw = ImageDraw.Draw(frame)
+                layout = _fit_film_caption(
+                    draw, source_caption, max_width=1128, max_height=112)
+                self.assertEqual(
+                    " ".join(layout["lines"]), source_caption)
+                self.assertLessEqual(
+                    layout["bbox"][2]-layout["bbox"][0],1128)
+                self.assertLessEqual(
+                    layout["bbox"][3]-layout["bbox"][1],112)
+                self.assertGreaterEqual(layout["font_px"],17)
+                self.assertLessEqual(len(layout["lines"]),2)
+                # Original composited title area and progress region cannot
+                # be in the same vertical band after physical rendering.
+                self.assertLess(514+(layout["bbox"][3]-layout["bbox"][1]),644)
+            with self.assertRaisesRegex(ValueError, "cannot fit"):
+                _fit_film_caption(
+                    ImageDraw.Draw(Image.new("RGBA", (1280,720))),
+                    "Z"*250, max_width=300, max_height=40)
 
     def test_actual_neural_foreign_museum_attribution_rejected(self):
         """Reproduce a real local-Qwen bug: it copied source 0's museum/date
