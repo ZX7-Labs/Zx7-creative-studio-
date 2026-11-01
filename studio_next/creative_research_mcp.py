@@ -45,8 +45,10 @@ _TOOL_DEFINITIONS = (
 
 
 def create_research_server(*, allow_public_research=True, research_client=None,
-                           research_hub=None, reference_root=None):
+                           research_hub=None, reference_root=None, memory_path=None):
     """Use official MCP SDK; requires an explicit host-side network grant."""
+    if memory_path is not None and reference_root is None:
+        raise PermissionError("Reference study memory requires host-granted local source folder")
     if type(allow_public_research) is not bool or (not allow_public_research and reference_root is None):
         raise PermissionError("Host must permit public research or grant local reference media")
     import anyio
@@ -84,6 +86,43 @@ def create_research_server(*, allow_public_research=True, research_client=None,
                          "editing change and actual sound-energy graphs. Not a cinematic "
                          "quality score, video-semantic judgment or a YouTube download."),
             inputSchema=observation_schema))
+        if memory_path is not None:
+            from .creative_evidence_memory import CreativeEvidenceMemory
+            memory = CreativeEvidenceMemory(memory_path)
+            def study(*, reference, bins=64):
+                report = inspect_authorized_reference(
+                    approved_root, reference, bins=bins)
+                receipt = memory.store(report)
+                return {**receipt, "source_sha256": report["source_sha256"],
+                        "schema": "ZX7_STORED_REFERENCE_STUDY_V1",
+                        "raw_video_or_audio_persisted": False,
+                        "trained_model_weights": False}
+            def recall(*, id):
+                record = memory.recall(id)
+                return {"found": record is not None, "evidence": record}
+            def recent(*, limit=10):
+                return {"records": memory.recent(limit=limit),
+                        "capacity": memory.usage()}
+            id_schema = {"type":"object",
+                "properties":{"id":{"type":"string","pattern":"^[0-9a-f]{64}$"}},
+                "required":["id"],"additionalProperties":False}
+            recent_schema = {"type":"object",
+                "properties":{"limit":{"type":"integer","minimum":1,"maximum":100}},
+                "additionalProperties":False}
+            additions = (
+                ("study_authorized_reference", observation_schema, study,
+                 "Observe host-authorized local video and persist only bounded "
+                 "compressed source-bound graphs. No video/audio bytes are retained."),
+                ("recall_reference_case", id_schema, recall,
+                 "Retrieve a previously physically measured reference case by exact case ID."),
+                ("recent_reference_cases", recent_schema, recent,
+                 "List bounded metadata of measured editing references in shared memory; "
+                 "not performance rankings or learned creative tastes."),
+            )
+            for name, schema, handler, description in additions:
+                operations[name] = (schema, handler)
+                tools.append(types.Tool(name=name, description=description,
+                                        inputSchema=schema))
     capacity = anyio.CapacityLimiter(2)
 
     async def list_tools(_context, _params=None):
@@ -123,11 +162,14 @@ def main(argv=None):
                         help="Host-owned kill switch for fixed public research endpoints")
     parser.add_argument("--reference-root",
                         help="Optional host-granted local media directory for actual reference-video observation")
+    parser.add_argument("--memory-path",
+                        help="Optional host-approved persistent SQLite measured-reference memory; requires --reference-root")
     args = parser.parse_args(argv)
     try:
         server = create_research_server(
             allow_public_research=not args.disable_public_research,
-            reference_root=args.reference_root)
+            reference_root=args.reference_root,
+            memory_path=args.memory_path)
     except PermissionError as exc:
         parser.error(str(exc))
     from mcp.server.stdio import stdio_server
