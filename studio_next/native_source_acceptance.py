@@ -214,6 +214,51 @@ def _native_source_frame_available_at_output_sample(
     return 0 <= source_time < original_duration
 
 
+def _native_shape_mask_certainly_excludes_original_picture(clip: dict) -> bool:
+    """Pinned Velorn non-inverted static shape entirely outside its raster.
+
+    src/utils/shapeMask.js normalizes rectangle/ellipse/rounded geometry
+    to a 1280x720 local mask raster. A zero-feather, non-inverted shape
+    whose bounding box is STRICTLY outside [0,100]% in either dimension
+    paints no white mask pixels. The exporter multiplies source alpha by
+    that mask before compositing: original video cannot enter the movie.
+    No geometry assumption is used for animated/rotated/spline masks.
+    """
+    mask = clip.get("shapeMask")
+    if (not isinstance(mask, dict) or
+            mask.get("shape") not in {"rectangle", "ellipse", "rounded"} or
+            mask.get("invert", False) is not False):
+        return False
+    props = clip.get("keyframes")
+    if isinstance(props, dict) and any(
+            key.startswith("shapeMask.") and bool(value)
+            for key, value in props.items()
+            if isinstance(key, str)):
+        return False
+    fields = {
+        "centerX": (50, -50, 150),
+        "centerY": (50, -50, 150),
+        "width": (60, 1, 200),
+        "height": (60, 1, 200),
+        "rotation": (0, -180, 180),
+        "feather": (5, 0, 50),
+    }
+    normalized = {}
+    for name, (default, low, high) in fields.items():
+        value = mask.get(name, default)
+        if not _finite_real(value):
+            return False
+        normalized[name] = max(low, min(high, value))
+    if normalized["feather"] != 0 or normalized["rotation"] != 0:
+        return False
+    return (
+        normalized["centerX"] + normalized["width"] / 2 < 0 or
+        normalized["centerX"] - normalized["width"] / 2 > 100 or
+        normalized["centerY"] + normalized["height"] / 2 < 0 or
+        normalized["centerY"] - normalized["height"] / 2 > 100
+    )
+
+
 def _static_native_video_visibility(clip: dict) -> bool:
     """Reject a source video invisible from its own saved transform.
 
@@ -296,7 +341,10 @@ def _static_native_video_visibility(clip: dict) -> bool:
             values.append(max(0, min(100, value)))
         if sum(values) >= 100:
             return False
-    return True
+    # Native shape masking happens after asset sampling. An off-raster
+    # zero-feather static non-inverted mask eliminates every original pixel,
+    # irrespective of a valid copied source or positive clip opacity.
+    return not _native_shape_mask_certainly_excludes_original_picture(clip)
 
 
 def _native_zero_alpha_at_all_exported_frame_centers(
