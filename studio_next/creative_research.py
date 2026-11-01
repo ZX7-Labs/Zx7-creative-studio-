@@ -69,7 +69,8 @@ def _public_api_json(url):
     """Allowlisted HTTPS GET, no ambient proxy, redirect, or unbounded JSON."""
     hosts = {"api.openverse.org", "api.crossref.org", "commons.wikimedia.org",
              "api.artic.edu", "sfxmint.com",
-             "openaccess-api.clevelandart.org", "en.wikipedia.org"}
+             "openaccess-api.clevelandart.org", "en.wikipedia.org",
+             "api.polyhaven.com", "ambientcg.com"}
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname not in hosts:
         raise CreativeResearchError("Research request is not an approved free API")
