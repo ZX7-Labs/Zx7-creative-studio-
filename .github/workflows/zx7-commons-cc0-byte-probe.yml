@@ -33,6 +33,11 @@ jobs:
           for page in data.get('query',{}).get('pages',{}).values():
             info=(page.get('imageinfo') or [{}])[0]
             md=info.get('extmetadata') or {}
+            if len(lic) < 2:
+              print('CC0 API RAW META',page.get('title'),
+                    'mime',info.get('mime'),
+                    'license',md.get('LicenseShortName'),
+                    'licenseurl',md.get('LicenseUrl'),flush=True)
             ln=(md.get('LicenseShortName') or {}).get('value')
             lic[str(ln)]=lic.get(str(ln),0)+1
             if not ln or ln.strip().upper() not in ('CC0','CC0 1.0'):
