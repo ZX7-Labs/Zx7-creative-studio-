@@ -60,6 +60,9 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
     def test_original_imported_video_must_have_physical_project_copy_and_clip(self):
         receipt = self.verify()
         self.assertTrue(receipt["actual_original_video_used_on_native_timeline"])
+        # A valid native *project* is not a verified delivered source frame.
+        self.assertFalse(receipt["actual_original_video_sampled_at_verified_output_frame"])
+        self.assertEqual(receipt["verified_output_sampled_original_clip_count"], 0)
         self.assertEqual(receipt["physically_verified_native_source_clip_count"], 1)
         self.assertFalse(receipt["professional_artistic_quality_approved"])
         self.assertEqual(receipt["verified_native_source_clip_proof"][0][
@@ -185,17 +188,26 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
                 clip["startTime"] = begin
                 clip["duration"] = length
                 self.save()
-                answer = self.verify([window])[
-                    "actual_original_video_used_on_native_timeline"]
+                receipt = self.verify([window])
+                answer = receipt["actual_original_video_used_on_native_timeline"]
                 self.assertEqual(answer, expected)
+                self.assertEqual(
+                    receipt["actual_original_video_sampled_at_verified_output_frame"],
+                    expected)
+                self.assertEqual(
+                    receipt["verified_output_sampled_original_clip_count"],
+                    int(expected))
         # The historical interval-only test describes project/timeline
         # placement, not independently verified export-frame sampling.
         clip["startTime"] = 0.023
         clip["duration"] = 0.01
         self.save()
-        self.assertTrue(self.verify([{
+        interval_only = self.verify([{
             "start_seconds": 0, "end_seconds": 1
-        }])["actual_original_video_used_on_native_timeline"])
+        }])
+        self.assertTrue(interval_only["actual_original_video_used_on_native_timeline"])
+        self.assertFalse(interval_only[
+            "actual_original_video_sampled_at_verified_output_frame"])
 
     def test_custom_export_sample_grid_uses_actual_range_origin(self):
         clip = self.project["timelines"][0]["clips"][0]
