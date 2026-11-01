@@ -149,10 +149,12 @@ def _native_source_frame_available_at_output_sample(
     if not _finite_real(trim_start) or trim_start < 0:
         return False
     source_scale = clip.get("sourceTimeScale")
-    if source_scale is None:
+    if source_scale is None or source_scale == 0:
+        # The pinned JS source selects the FPS ratio only when *both*
+        # timelineFps and sourceFps are truthy. One absent value => 1.
         timeline_fps, source_fps = (clip.get("timelineFps"),
                                     clip.get("sourceFps"))
-        if timeline_fps is not None or source_fps is not None:
+        if timeline_fps is not None and source_fps is not None:
             if (not _finite_real(timeline_fps) or
                     not _finite_real(source_fps) or
                     timeline_fps <= 0 or source_fps <= 0):
@@ -168,7 +170,11 @@ def _native_source_frame_available_at_output_sample(
     speed = speed if speed > 0 else 1
     if not math.isfinite(speed * source_scale):
         return False
-    source_end = clip.get("trimEnd", clip.get("sourceDuration"))
+    # Pinned JS uses ?? (nullish fallback) rather than a dict-key default:
+    # an EXPLICIT null trimEnd falls through to sourceDuration.
+    source_end = clip.get("trimEnd")
+    if source_end is None:
+        source_end = clip.get("sourceDuration")
     if source_end is None:
         source_end = trim_start + clip["duration"] * speed * source_scale
     if not _finite_real(source_end):
