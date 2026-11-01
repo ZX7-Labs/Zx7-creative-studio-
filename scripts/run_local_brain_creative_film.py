@@ -530,141 +530,190 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
         video_path, first_frames, review_image, fps=FPS)
     if preview["source_sha256"] != sha256_file(video_path):
         raise RuntimeError("Observed visual preview is not bound to decoded export")
-    schema = {
-        "type": "object", "additionalProperties": False,
-        "required": ["action", "beat_index", "field", "value",
-                     "expected_before", "reason"],
-        "properties": {
-            "action": {"type":"string", "enum":["keep", "revise"]},
-            "beat_index": {"type":"integer", "minimum":0,
-                           "maximum":len(plan["beats"])-1},
-            "field": {"type":"string",
-                      "enum":["caption", "camera", "artwork", "weight"]},
-            "value": {"type":"string", "minLength":1, "maxLength":100},
-            "expected_before": {"type":"string", "minLength":1, "maxLength":100},
-            "reason": {"type":"string", "minLength":12, "maxLength":600},
+    # A small vision model previously mixed up the fields of its desired
+    # revision: it proposed editing a camera but serialized "artwork" with a
+    # caption as its value. No neural text should have to copy the authoritative
+    # before-value; bind it at the host after the model has *chosen* its target.
+    # Keep model authorship of every artistic target and replacement value.
+    selection_schema = {
+        "type": "object", "additionalProperties":False,
+        "required":["action","beat_index","field","reason"],
+        "properties":{
+            "action":{"type":"string","enum":(
+                ["revise"] if alternate_cut_requested else ["keep","revise"])},
+            "beat_index":{"type":"integer","minimum":0,
+                          "maximum":len(plan["beats"])-1},
+            "field":{"type":"string",
+                     "enum":["caption","camera","artwork","weight"]},
+            "reason":{"type":"string","minLength":12,"maxLength":600},
         },
     }
-    brain.settings.sampling["response_format"] = {
+    brain.settings.sampling["response_format"]={
         "type":"json_schema",
-        "json_schema":{"name":"zx7_native_film_observation_revision",
-                       "strict":True, "schema":schema}
-    }
+        "json_schema":{"name":"zx7_source_bound_edit_target",
+                       "strict":True,"schema":selection_schema}}
     film_identity = sha256_file(video_path)
     request = {
-        "phase": "actual_encoded_output_review",
-        "task": (
-            "You are reviewing the real decoded output of the film that YOU "
-            "independently directed. The attached indexed storyboard samples "
-            "actual decoded frames at the center of every authored beat; it "
-            "is not original still artwork. Inspect composition, legibility, "
-            "visual continuity and editorial pacing. Sound measurements "
-            "describe physical levels only: you have NOT listened to the "
-            "music and must not claim you have. Independently decide whether "
-            "a concrete visual or pacing repair is warranted. If so, pick "
-            "exactly one beat and one editable field to revise. Reply as "
-            "{action:revise,beat_index:integer,field:caption|camera|artwork|weight,"
-            "value:string,expected_before:string,reason:string}. "
-            "Beat N in the picture is beat_index=N-1 in the editable plan; "
-            "do not confuse the content of neighboring beats. "
-            "expected_before MUST exactly reproduce the current field value "
-            "at the chosen beat_index from current_edit_plan; this is a "
-            "source-state precondition, not an artistic opinion. "
-            "When revising a caption, the artwork title/source inventory is "
-            "the only attached image's explicit factual metadata. Never "
-            "borrow the date, museum, origin or identity of another artwork, "
-            "or fabricate new dates, credits or numeric catalog identifiers. "
-            "Creative imagery and metaphors are allowed, but unverified "
-            "factual attribution will be rejected by the native host. "
-            "The value is the proposed new "
-            "caption, registered camera name, decimal relative beat weight, "
-            "or source inventory index as a string. If actual evidence does "
-            "not justify an edit, choose action:keep; the other fields must "
-            "still be present but no change will occur. You must not fabricate "
-            "frames, audio impressions, licenses, results or professional approval."
+        "phase":"choose_native_edit_target_from_actual_movie",
+        "task":(
+            "Review the actual encoded movie's decoded contact sheet. You "
+            "independently selected the artwork, story, camera, captions, "
+            "music, and pacing. The image contains one physically decoded "
+            "middle frame per original beat, not an imaginary storyboard. "
+            "Judge visual legibility and pacing cautiously; a contact sheet "
+            "does not prove continuous motion or musical listening. Choose "
+            "the actual zero-based beat_index and editable field of the "
+            "single strongest improvement, independently and precisely. "
+            "Do NOT supply a field value in this first turn. "
+            "The host will show you the exact existing value and registered "
+            "native choices in the next turn, so you cannot accidentally "
+            "edit another object's state. If you see no justified improvement "
+            "and no alternate was requested, choose keep. Your reason must "
+            "refer to actual observed content, not fabricated artists or "
+            "licenses. Return only action, beat_index, field and reason."
         ),
-        "actual_movie_sha256": film_identity,
-        "physical_delivery": {
-            "duration_seconds": observation["duration_seconds"],
+        "actual_movie_sha256":film_identity,
+        "physical_delivery":{
+            "duration_seconds":observation["duration_seconds"],
             "full_picture_and_sound_decoder_completed":
                 observation["full_picture_and_sound_decoder_completed"],
-            "audio_measurements": observation["audio_measurements"],
-            "audio_understanding_or_artistic_quality_approved": False,
+            "audio_measurements":observation["audio_measurements"],
+            "audio_understanding_or_artistic_quality_approved":False,
         },
-        "picture_evidence": [{
-            "job_id": film_identity,
-            "path": str(review_image),
-            "sha256": preview["preview_sha256"],
+        "picture_evidence":[{
+            "job_id":film_identity,"path":str(review_image),
+            "sha256":preview["preview_sha256"],
         }],
-        "preview_limitations": {
-            "temporal_sampling_only": True,
-            "continuous_motion_analysis_not_proven": True,
-            "audio_has_not_been_listened_to": True,
+        "preview_limitations":{
+            "temporal_sampling_only":True,
+            "continuous_motion_analysis_not_proven":True,
+            "audio_has_not_been_listened_to":True,
         },
-        "current_edit_plan": plan,
-        "source_inventory": [
-            {"index":i,"sha256":item["sha256"],"title":item["title"]}
-            for i,item in enumerate(assets)
-        ],
+        "current_edit_plan":plan,
+        "source_inventory":[{
+            "index":i,"sha256":item["sha256"],"title":item["title"]}
+            for i,item in enumerate(assets)],
+        "explicit_alternate_cut_requested":alternate_cut_requested,
     }
     if alternate_cut_requested:
-        # An explicitly requested version-two project is not the same as
-        # a subjective self-review. The model may independently select
-        # *which* editorial field to change, but it cannot turn a direct
-        # alternate-cut request into 'keep' and claim a version exists.
-        schema["properties"]["action"]["enum"] = ["revise"]
-        brain.settings.sampling["response_format"]["json_schema"]["schema"] = schema
-        # An explicit alternate-cut workload is different from an autonomous
-        # decision to self-revise. No author-picked field/value/scene is passed
-        # to the model, and a model refusal remains a real failed trial.
-        request["alternate_cut_experiment_requested"] = True
-        request["task"] = (
-            "The owner expressly requests a genuinely different alternate "
-            "editorial version after reviewing the actual encoded first cut. "
-            "A no-op or 'keep' cannot fulfill this request. You MUST author "
-            "one grounded, source-attested native revision. Independently "
-            "choose the beat, field and new creative value; the host does "
-            "not prescribe any aesthetic decision. Compare the real frames, "
-            "source inventory and original edit plan. Make an actual change "
-            "in camera, pace, source art or caption, with expected_before "
-            "copied EXACTLY from the chosen native beat's current field. "
-            "You have not listened to the soundtrack, and must not claim "
-            "that you have. No fabricated dates, artists, sources, rights "
-            "or professional aesthetic approvals. "
-            " Additional separate trial instruction: deliver one genuinely "
-            "different editorial version after seeing the source-attested "
-            "first render. Independently choose whichever native beat and "
-            "field would best strengthen your current idea. Prefer action:revise "
-            "when a safe meaningful change is possible. Keep the original "
-            "unchanged as version one. This is a technical alternate-cut "
-            "request, not evidence that the original was artistically bad.")
-    # A small local model has previously confused two neighboring beats and
-    # asserted a previous caption that was not on its selected target. Reject
-    # that stale or hallucinated before-value, and let the neural model inspect
-    # the actual native state again. Never invent or auto-apply a creative edit.
-    for review_attempt in range(3):
-        decision = _call(brain, request, transcript, with_image=review_image)
-        try:
-            revised, model_edit = apply_model_selected_revision(
-                plan, decision, asset_count=len(assets),
-                source_titles=[asset["title"] for asset in assets])
-        except ModelFilmRevisionError as exc:
-            transcript[-1]["source_precondition_or_edit_validation_failed"] = str(exc)
-            if review_attempt == 2:
-                raise
-            request["retry_feedback"] = {
-                "rejected_edit_reason":str(exc),
-                "read_actual_beat_index_and_exact_before_field":True,
-                "native_beats_now":[
-                    {"beat_index":i, **beat}
-                    for i, beat in enumerate(plan["beats"])
-                ],
-                "model_must_choose_its_own_correct_source_bound_edit":True,
-            }
-            continue
-        break
+        request["task"] += (
+            " The owner expressly requests a different editable version. "
+            "This task therefore requires action:revise, not keep. Choose "
+            "the beat and field yourself. Do not invent or preselect an edit "
+            "value yet; the next model turn provides the exact native schema.")
+    selection=_call(brain,request,transcript,with_image=review_image)
+    fields={"caption","camera","artwork","weight"}
+    if (not isinstance(selection,dict) or
+            set(selection)!={"action","beat_index","field","reason"}
+            or selection.get("action") not in ("keep","revise")
+            or type(selection.get("beat_index")) is not int
+            or not 0<=selection["beat_index"]<len(plan["beats"])
+            or not isinstance(selection.get("field"),str)
+            or selection["field"] not in fields
+            or not isinstance(selection.get("reason"),str)
+            or not 12<=len(selection["reason"].strip())<=600):
+        raise ModelFilmRevisionError(
+            "Local neural target selection is not a real native editable target")
+    if alternate_cut_requested and selection["action"]!="revise":
+        raise ModelFilmRevisionError(
+            "Explicit alternate cut was not selected by genuine neural author")
+    target_index=selection["beat_index"]
+    target_field=selection["field"]
+    actual_before=plan["beats"][target_index][target_field]
+    choice=None
+    if selection["action"]=="keep":
+        decision={**selection,"value":str(actual_before),
+                  "expected_before":str(actual_before)}
+        revised,model_edit=apply_model_selected_revision(
+            plan,decision,asset_count=len(assets),
+            source_titles=[asset["title"] for asset in assets])
+    else:
+        if target_field=="camera":
+            allowed=[value for value in (
+                "push","pull","drift_left","drift_right","still")
+                if value!=actual_before]
+            value_schema={"type":"string","enum":allowed}
+        elif target_field=="artwork":
+            value_schema={"type":"string","enum":[
+                str(i) for i in range(len(assets)) if i!=actual_before]}
+        elif target_field=="weight":
+            value_schema={"type":"string","minLength":1,"maxLength":48}
+        else:
+            value_schema={"type":"string","minLength":3,"maxLength":100}
+        value_response_schema={
+            "type":"object","additionalProperties":False,
+            "required":["new_value","reason"],
+            "properties":{
+                "new_value":value_schema,
+                "reason":{"type":"string","minLength":12,"maxLength":600},
+            },
+        }
+        brain.settings.sampling["response_format"]={
+            "type":"json_schema",
+            "json_schema":{"name":"zx7_author_native_edit_value",
+                           "strict":True,"schema":value_response_schema}}
+        value_request={
+            "phase":"author_exact_native_edit_value",
+            "task":(
+                "You independently chose the following exact native beat and "
+                "field after observing the real encoded movie. Now YOU author "
+                "a DIFFERENT valid new value for that ONE field, with an "
+                "explanation. The host shows the authoritative before-value "
+                "and applies it as an immutable compare-and-swap precondition. "
+                "Do not repeat the old value or switch field/beat. "
+                "Caption may use original metaphor but must not borrow "
+                "dates/museum/artist claims from a different source asset. "
+                "Source and camera values must be available in the supplied "
+                "inventory. Pacing weight must be a finite positive decimal. "
+                "Do not invent sound listening, aesthetic acceptance, or "
+                "rights clearance. Reply with new_value string and reason."
+            ),
+            "actual_movie_sha256":film_identity,
+            "target_beat_index":target_index,
+            "target_field":target_field,
+            "verified_current_value":actual_before,
+            "model_chosen_target_reason":selection["reason"],
+            "current_beat":plan["beats"][target_index],
+            "source_inventory":request["source_inventory"],
+            "supported_camera_controls":["push","pull","drift_left",
+                                         "drift_right","still"],
+            "picture_evidence":request["picture_evidence"],
+            "metadata_is_not_independent_rights_clearance":True,
+        }
+        for attempt in range(3):
+            choice=_call(brain,value_request,transcript,with_image=review_image)
+            try:
+                if (not isinstance(choice,dict)
+                        or set(choice)!={"new_value","reason"}
+                        or not isinstance(choice["new_value"],str)
+                        or not isinstance(choice["reason"],str)):
+                    raise ModelFilmRevisionError("Local model authored malformed native value")
+                # No host-selected artistic operation, field or value. Only
+                # authoritative *prior* native state is attached by the host.
+                decision={**selection,"value":choice["new_value"],
+                          "expected_before":str(actual_before),
+                          "reason":choice["reason"]}
+                revised,model_edit=apply_model_selected_revision(
+                    plan,decision,asset_count=len(assets),
+                    source_titles=[asset["title"] for asset in assets])
+                model_edit["previous_field_model_attested_to_host_state"]=False
+                model_edit["previous_field_bound_by_host_exact_native_state"]=True
+                break
+            except ModelFilmRevisionError as exc:
+                transcript[-1]["native_value_admission_failure"]=str(exc)
+                if attempt==2:
+                    raise
+                value_request["retry_feedback"]={
+                    "rejected_model_value_reason":str(exc),
+                    "actual_host_field":target_field,
+                    "actual_before_value":actual_before,
+                    "neural_model_must_author_a_valid_new_value":True,
+                }
     (dest/"model-original-export-review.json").write_text(
         json.dumps({"visual_preview":preview, "model_decision":decision,
+                    "neural_target_selection":selection,
+                    "neural_replacement_value":choice,
+                    "native_before_value_origin":"host_exact_state",
                     "validated_edit":model_edit,
                     "initial_movie":receipt(video_path),
                     "quality_certified":False}, indent=2, ensure_ascii=False))
