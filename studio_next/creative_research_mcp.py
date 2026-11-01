@@ -122,6 +122,13 @@ def create_research_server(*, allow_public_research=True, research_client=None,
             def recent(*, limit=10):
                 return {"records": memory.recent(limit=limit),
                         "capacity": memory.usage()}
+            def compare(*, first_id, second_id):
+                from .reference_comparison import compare_observed_cases
+                from .creative_evidence_memory import EvidenceMemoryError
+                a, b = memory.recall(first_id), memory.recall(second_id)
+                if a is None or b is None:
+                    raise EvidenceMemoryError("Unknown measured comparison identity")
+                return compare_observed_cases(first_id, a, second_id, b)
             id_schema = {"type":"object",
                 "properties":{"id":{"type":"string","pattern":"^[0-9a-f]{64}$"}},
                 "required":["id"],"additionalProperties":False}
@@ -137,6 +144,15 @@ def create_research_server(*, allow_public_research=True, research_client=None,
                 ("recent_reference_cases", recent_schema, recent,
                  "List bounded metadata of measured editing references in shared memory; "
                  "not performance rankings or learned creative tastes."),
+                ("compare_reference_cases", {"type":"object",
+                      "properties":{
+                         "first_id":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+                         "second_id":{"type":"string","pattern":"^[0-9a-f]{64}$"}},
+                      "required":["first_id","second_id"],
+                      "additionalProperties":False}, compare,
+                 "Compare grounded edit rhythm, motion, color and audio energy "
+                 "between two persisted video references, without aesthetic ranking "
+                 "or audience-causality claims."),
             )
             for name, schema, handler, description in additions:
                 operations[name] = (schema, handler)
