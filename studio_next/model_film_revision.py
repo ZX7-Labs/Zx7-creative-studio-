@@ -46,9 +46,20 @@ def _reject_cross_asset_attribution(caption, *, target_title, source_titles):
     candidate = [w.casefold() for w in _title_terms(caption)]
     target_words = set(target)
     for word in candidate:
-        if any(ch.isdigit() for ch in word) and word not in target_words:
-            raise ModelFilmRevisionError(
-                "Caption introduces unsupported numeric source provenance")
+        if not any(ch.isdigit() for ch in word):
+            continue
+        if word in target_words:
+            continue
+        # Commons source filenames may append image container suffixes
+        # directly to a catalog-number token, e.g. "1971.87img.jpg".
+        # Accept only that original numeric prefix before a known suffix,
+        # not an arbitrary number or a prefix of a different accession ID.
+        if any(raw.startswith(word) and
+               re.fullmatch(r"(?:img|image|jpg|jpeg|png|tif|tiff|webp)\\d*",
+                            raw[len(word):]) for raw in target):
+            continue
+        raise ModelFilmRevisionError(
+            "Caption introduces unsupported numeric source provenance")
     for source_title in source_titles:
         if source_title == target_title:
             continue
