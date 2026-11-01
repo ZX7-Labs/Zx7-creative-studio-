@@ -9,7 +9,7 @@ import json
 import unittest
 from types import SimpleNamespace
 
-from studio_next.native_creative_control import NativeCreativeControl
+from studio_next.native_creative_control import NativeCreativeControl, NativeCreativeControlError
 from studio_next.native_state_evidence import _PINNED_NO_IMAGE_SEQUENCE_ERROR
 from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
 from studio_next.test_native_creative_control import ScriptedModel, decision
@@ -77,6 +77,112 @@ class ActualHostAssetProducerFrontierTests(unittest.IsolatedAsyncioTestCase):
             "get_project", "get_assets", "get_timeline",
             "zx7_verify_native_export", "zx7_observe_verified_export_frame"}
             else "write") for t in session.tools}
+
+    async def test_real_nonempty_native_clip_exposes_technical_evidence_tools_not_edits(self):
+        # The host reports one real imported asset and one placed native
+        # clip. A small creative model may discover actual export/observation
+        # names without another exhaustive lexical search. None are executed.
+        class ObservedPlacedSource(HostObservedEmptyAssetSession):
+            async def call_tool(self, name, arguments):
+                reply = await super().call_tool(name, arguments)
+                if name == "get_project":
+                    physical = json.loads(reply.content[0].text)
+                    physical["assetCount"] = 1
+                    physical["currentTimeline"]["clipCount"] = 1
+                    reply.content[0].text = json.dumps(physical)
+                return reply
+        editor = ObservedPlacedSource()
+        editor.tools.extend([
+            SimpleNamespace(name="export_timeline",
+                            description="Native rendered movie export",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="zx7_verify_native_export",
+                            description="Validate physically generated video",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="zx7_observe_verified_export_frame",
+                            description="Inspect actual verified export PNG",
+                            input_schema={"type": "object", "properties": {}}),
+        ])
+        model = ScriptedModel([
+            decision("search", query="export"),
+            decision("search", query="observe verified video frame"),
+        ])
+        access = self.grants(editor)
+        required = ("native_write_acknowledged", "physical_export_verified",
+                    "verified_export_frame_observed")
+        out = await NativeCreativeControl(
+            editor, model, max_turns=2, catalog_mode="indexed",
+            host_tool_access=access, required_evidence=required,
+            host_completion_affordances={
+                "physical_export_verified": (
+                    "export_timeline", "zx7_verify_native_export"),
+                "verified_export_frame_observed": (
+                    "zx7_observe_verified_export_frame",),
+            }).run("Choose a real source edit and independently verify movie")
+        fact = model.observed[0]["host_completion_evidence_affordances"]
+        self.assertEqual(fact["host_observation"],
+                         "native_get_project_positive_clip_and_asset_counts")
+        self.assertEqual(fact["possible_tools_not_completion_proof"], {
+            "physical_export_verified": [
+                {"name": "export_timeline", "access": "write"},
+                {"name": "zx7_verify_native_export", "access": "read"}],
+            "verified_export_frame_observed": [
+                {"name": "zx7_observe_verified_export_frame",
+                 "access": "read"}],
+        })
+        self.assertTrue(fact["no_automatic_tool_invocation"])
+        self.assertNotIn("export_timeline",
+                         model.observed[0]["selectable_native_tools"])
+        self.assertEqual([n for n, _ in editor.calls], ["get_project"])
+        self.assertFalse(out["native_editing_capability_complete"])
+        self.assertTrue(audit_native_journal(
+            out["events"], host_tool_access=access,
+            expected_required_evidence=required)[
+                "journal_chain_structurally_valid"])
+
+    async def test_no_physical_placed_source_does_not_expose_output_shortcut(self):
+        # A present but empty project must not be treated as a renderable
+        # original-video edit merely because an export tool exists.
+        editor = HostObservedEmptyAssetSession()
+        editor.tools.append(SimpleNamespace(
+            name="export_timeline", description="Native film export",
+            input_schema={"type": "object", "properties": {}}))
+        access = self.grants(editor)
+        model = ScriptedModel([decision("search", query="export_timeline")])
+        outcome = await NativeCreativeControl(
+            editor, model, max_turns=1, catalog_mode="indexed",
+            host_tool_access=access,
+            required_evidence=("physical_export_verified",),
+            host_completion_affordances={
+                "physical_export_verified": ("export_timeline",)},
+        ).run("Only original placed footage can satisfy film requirements")
+        self.assertIsNone(
+            model.observed[0]["host_completion_evidence_affordances"])
+        self.assertEqual([n for n, _ in editor.calls], ["get_project"])
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=access,
+            expected_required_evidence=("physical_export_verified",))[
+                "journal_chain_structurally_valid"])
+
+    async def test_completion_affordance_configuration_must_reference_real_grants(self):
+        editor = HostObservedEmptyAssetSession()
+        access = self.grants(editor)
+        required = ("physical_export_verified",)
+        for forged in (
+            "export_timeline",
+            {"wrong_completed_requirement": ("get_project",)},
+            {"physical_export_verified": ("host_not_granted",)},
+            {"physical_export_verified": ("get_project", "get_project")},
+            {"physical_export_verified": ()},
+            {"physical_export_verified": ({"name": "get_project"},)},
+        ):
+            with self.subTest(forged=repr(forged)):
+                with self.assertRaises(NativeCreativeControlError):
+                    NativeCreativeControl(
+                        editor, ScriptedModel([]),
+                        host_tool_access=access, required_evidence=required,
+                        catalog_mode="indexed",
+                        host_completion_affordances=forged)
 
     async def test_import_possibilities_are_visible_before_any_failed_model_write(self):
         # This is a scripted protocol oracle, not a creative demonstration.
