@@ -259,10 +259,36 @@ def _static_native_video_visibility(clip: dict) -> bool:
     # getVisibleLocalRect also clamps crop percentages into [0,100].
     for first, second in (("cropLeft", "cropRight"),
                           ("cropTop", "cropBottom")):
-        a, b = transform.get(first, 0), transform.get(second, 0)
-        if not _finite_real(a) or not _finite_real(b):
-            return False
-        if max(0, min(100, a)) + max(0, min(100, b)) >= 100:
+        values = []
+        for key in (first, second):
+            value = transform.get(key, 0)
+            if not _finite_real(value):
+                return False
+            animated = (keyframes.get(key)
+                        if isinstance(keyframes, dict) else None)
+            if animated is not None:
+                # Like opacity, getAnimatedTransform overrides static crop
+                # with the per-frame keyframed value. A constant animated
+                # crop of 100% can remove *all* source pixels even when
+                # the saved base transform says 0% crop.
+                if not isinstance(animated, list) or len(animated) > 100_000:
+                    return False
+                if animated:
+                    if any(not isinstance(frame, dict) or
+                           not _finite_real(frame.get("time")) or
+                           not _finite_real(frame.get("value"))
+                           for frame in animated):
+                        return False
+                    values_set = {frame["value"] for frame in animated}
+                    if len(values_set) == 1:
+                        value = next(iter(values_set))
+                    else:
+                        # Dynamic crops can be invisible at some frames but
+                        # require source-synchronized frame evidence before
+                        # stronger claims; this is a conservative static gate.
+                        value = transform.get(key, 0)
+            values.append(max(0, min(100, value)))
+        if sum(values) >= 100:
             return False
     return True
 
