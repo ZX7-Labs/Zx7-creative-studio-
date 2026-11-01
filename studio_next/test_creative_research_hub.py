@@ -184,6 +184,36 @@ class FederatedCreativeResearchTests(unittest.TestCase):
         self.assertEqual(set(x["source"] for x in r["results"]),
                          {"polyhaven_models","ambientcg_models"})
 
+    def test_nasa_video_is_research_reference_not_automatically_licensed(self):
+        from studio_next.creative_research_sources import nasa_video_references
+        def fetch(url):
+            self.assertEqual(urlsplit(url).hostname, "images-api.nasa.gov")
+            return {"collection":{"items":[
+                {"data":[{"nasa_id":"Apollo_16","title":"Moon camera",
+                          "media_type":"video"}]},
+                {"data":[{"nasa_id":"Bad/Asset","title":"Bad ID",
+                          "media_type":"video"}]},
+            ]}}
+        results=nasa_video_references(fetch,"moon footage",3)
+        self.assertEqual(len(results),1)
+        self.assertTrue(results[0]["source_reuse_not_authorized"])
+        self.assertTrue(results[0]["model_has_not_watched_video"])
+
+    def test_europe_pmc_abstract_is_limited_and_not_scientific_acceptance(self):
+        from studio_next.creative_research_sources import europe_pmc_abstracts
+        def fetch(url):
+            self.assertEqual(urlsplit(url).hostname,"www.ebi.ac.uk")
+            return {"resultList":{"result":[
+                {"id":"123456","source":"MED","title":"Narrative attentional capture",
+                 "pubYear":"2024","abstractText":"<b>Methods</b> " + "A"*2000},
+                {"id":"bad/path","source":"MED","title":"Unknown"},
+            ]}}
+        results=europe_pmc_abstracts(fetch,"visual attention",3)
+        self.assertEqual(len(results),1)
+        self.assertLessEqual(len(results[0]["abstract_excerpt"]),320)
+        self.assertFalse(results[0]["study_results_verified"])
+        self.assertTrue(results[0]["abstract_is_unreviewed_source_text"])
+
     def test_body_catalog_has_no_extra_creative_research_setup(self):
         def arts(q,n):
             return [{"title":"Lighting",
