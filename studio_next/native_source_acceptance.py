@@ -492,6 +492,58 @@ def _native_original_source_with_alpha_at_same_output_frame(
         clip, physical_segment)
 
 
+def _native_source_is_guaranteed_culled_by_upper_layer(
+        source_clip: dict, timeline: dict,
+        visible_video_tracks: set[str]) -> bool:
+    """Reject a source hidden by a pinned native hard lower-layer cutoff.
+
+    Velorn exporter.js:getActiveClipsAtTime sorts video track indices in
+    descending order (bottom first). layerCompositing.js then iterates the
+    array BACKWARDS (top first), and compositeLowerLayers:'off' always
+    stops the array before the owner's lower-layer source can be rendered.
+    This admits a negative proof only if the upper cutoff clip spans the
+    ENTIRE original source playback window and no transitions/track mattes
+    can change the set of drawn entries. The actual creative layer order
+    is never modified or inferred from synthetic clip IDs.
+    """
+    tracks = timeline.get("tracks")
+    clips = timeline.get("clips")
+    if not isinstance(tracks, list) or not isinstance(clips, list):
+        return False
+    # Transition clips are protected from native layer culling, and mattes
+    # can consume an upper clip as a mask rather than a visible layer.
+    if timeline.get("transitions") or any(
+            isinstance(clip, dict) and clip.get("trackMatte")
+            for clip in clips):
+        return False
+    source_window = _native_clip_playback_window(source_clip)
+    if source_window is None:
+        return False
+    index_by_track = {
+        track["id"]: i for i, track in enumerate(tracks)
+        if isinstance(track, dict) and isinstance(track.get("id"), str)}
+    source_index = index_by_track.get(source_clip.get("trackId"))
+    if source_index is None:
+        return False
+    for upper in clips:
+        if (not isinstance(upper, dict) or
+                upper.get("id") == source_clip.get("id") or
+                upper.get("compositeLowerLayers") != "off" or
+                upper.get("enabled", True) is not True):
+            continue
+        track_id = upper.get("trackId")
+        upper_index = index_by_track.get(track_id)
+        if (upper_index is None or upper_index >= source_index or
+                track_id not in visible_video_tracks):
+            continue
+        upper_window = _native_clip_playback_window(upper)
+        if (upper_window is not None and
+                upper_window[0] <= source_window[0] and
+                upper_window[1] >= source_window[1]):
+            return True
+    return False
+
+
 def verify_original_footage_on_native_timeline(
         projects_root: Path, project_paths: list[Path],
         caller_source_assets: list[dict],
@@ -701,6 +753,8 @@ def verify_original_footage_on_native_timeline(
                         clip.get("type") == "video" and
                         clip.get("enabled", True) is True and
                         _static_native_video_visibility(clip) and
+                        not _native_source_is_guaranteed_culled_by_upper_layer(
+                            clip, timeline, visible_video_tracks) and
                         # With useCachedRenders enabled, pinned exporter.js
                         # replaces even a VIDEO clip's actual source decoder
                         # with clip.cacheUrl/cachePath when status='cached'.
