@@ -96,6 +96,32 @@ class CreativeResearchTests(unittest.TestCase):
         self.assertEqual(params["filter"],["type:journal-article"])
         self.assertEqual(urlsplit(provider.calls[0]).hostname,"api.crossref.org")
 
+    def test_artic_filter_excludes_copyrighted_artworks(self):
+        provider = FakePublicAPIs()
+        provider.response = {"data": [
+            {"id": 123, "title": "Public art", "is_public_domain": True,
+             "image_id": "12345678-1234-1234-1234-123456789abc"},
+            {"id": 456, "title": "Restricted", "is_public_domain": False,
+             "image_id": "12345678-1234-1234-1234-123456789abc"}]}
+        found = CreativeResearch(provider)._artic_images("artwork", 5)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["rights_status"], "candidate_unverified")
+        self.assertEqual(urlsplit(provider.calls[0]).hostname, "api.artic.edu")
+
+    def test_sfx_search_ignores_non_cc0_records(self):
+        provider = FakePublicAPIs()
+        provider.response = {"matches": [
+            {"title": "Whoosh", "license": "CC0",
+             "page_url": "https://sfxmint.com/sounds/whoosh"},
+            {"title": "Other", "license": "custom",
+             "page_url": "https://sfxmint.com/sounds/other"}]}
+        found = CreativeResearch(provider)._sfxmint_audio("whoosh", 3)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["declared_license"], "CC0")
+        uri = urlsplit(provider.calls[0])
+        self.assertEqual(uri.hostname, "sfxmint.com")
+        self.assertEqual(uri.path, "/api/v1/search")
+
     def test_query_budget_and_media_rejection_do_not_contact_provider(self):
         provider = FakePublicAPIs()
         research=CreativeResearch(provider)
