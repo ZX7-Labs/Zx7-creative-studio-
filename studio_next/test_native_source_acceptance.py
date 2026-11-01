@@ -204,7 +204,9 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         for key in ("cacheUrl", "cachePath"):
             clip["cacheStatus"] = "cached"
             clip["cacheKind"] = "full"
-            clip[key] = "file:///unverified/foreign-baked-media.mp4"
+            clip[key] = ("file:///unverified/foreign-baked-media.mp4"
+                         if key == "cacheUrl" else "unverified-foreign-bake.mp4")
+            self.save()
             with self.subTest(active_cache=key):
                 self.assertTrue(self.verify()[
                     "actual_original_video_used_on_native_timeline"])
