@@ -134,7 +134,11 @@ NATIVE_CREATIVE_DECISION_SCHEMA = {
             "type": "string",
             "enum": ["search", "describe", "invoke", "discover", "finish"],
         },
-        "arguments": {"type": "object"},
+        # Explicit true is required: some llama.cpp JSON-schema grammar
+        # releases default to CLOSED objects when properties are absent,
+        # which would silently forbid every actual model-selected tool
+        # argument. This is a decision ENVELOPE, not the native tool schema.
+        "arguments": {"type": "object", "additionalProperties": True},
         "reason": {"type": "string"},
     },
     "required": ["action", "arguments", "reason"],
