@@ -114,6 +114,100 @@ def _export_samples_original_clip(playback_window, export_interval) -> bool:
 
 
 
+
+def _native_source_frame_available_at_output_sample(
+        clip: dict, export_interval, original_duration: float) -> bool:
+    """Conservatively bind a sampled OUTPUT frame to in-range SOURCE media.
+
+    The pinned src/utils/clipPlaybackTiming.js maps output timeline time to
+    source time via trimStart, speed, sourceTimeScale and reverse, then clamps
+    into the authored trim range. The exporter uses a 0.001-second decode
+    end offset. An output center that lands on a clip is NOT itself proof of
+    source media: a trim can seek wholly past the last original frame.
+
+    For optional speed-ramp keyframes, use the upstream <=16x ramp speed
+    envelope (src/utils/timeRemap.js) and the clip's scalar fallback speed
+    to prove a frame fits even with runtime ramp enabled/disabled. Where the
+    bounds cannot prove source custody, withhold a positive verdict instead
+    of approximating a model-authored creative retime.
+    """
+    if not _finite_real(original_duration) or original_duration <= 0:
+        return False
+    window = _native_clip_playback_window(clip)
+    start, end, fps, count = export_interval
+    if window is None or fps is None or count is None:
+        return False
+    begin, finish = window
+    first = max(0, math.ceil((begin - start) * fps - 0.5))
+    last = min(count - 1, math.ceil((finish - start) * fps - 0.5) - 1)
+    if first > last:
+        return False
+    reverse = clip.get("reverse", False)
+    if type(reverse) is not bool:
+        return False
+    trim_start = clip.get("trimStart", 0)
+    if not _finite_real(trim_start) or trim_start < 0:
+        return False
+    source_scale = clip.get("sourceTimeScale")
+    if source_scale is None:
+        timeline_fps, source_fps = (clip.get("timelineFps"),
+                                    clip.get("sourceFps"))
+        if timeline_fps is not None or source_fps is not None:
+            if (not _finite_real(timeline_fps) or
+                    not _finite_real(source_fps) or
+                    timeline_fps <= 0 or source_fps <= 0):
+                return False
+            source_scale = timeline_fps / source_fps
+        else:
+            source_scale = 1
+    if not _finite_real(source_scale) or not 0 < source_scale <= 1000:
+        return False
+    speed = clip.get("speed", 1)
+    if not _finite_real(speed):
+        return False
+    speed = speed if speed > 0 else 1
+    if not math.isfinite(speed * source_scale):
+        return False
+    source_end = clip.get("trimEnd", clip.get("sourceDuration"))
+    if source_end is None:
+        source_end = trim_start + clip["duration"] * speed * source_scale
+    if not _finite_real(source_end):
+        return False
+    lower, upper = min(trim_start, source_end), max(trim_start, source_end)
+    safe_max = max(lower, upper - 0.001)
+    # Native playback has monotone source time under a constant-speed clip.
+    # The first forward or last reverse eligible output frame minimizes the
+    # resulting source timestamp. Proving this one frame in-range suffices.
+    sample_index = last if reverse else first
+    output_time = start + (sample_index + 0.5) / fps
+    clip_local_time = output_time - clip["startTime"]
+    if not 0 <= clip_local_time <= clip["duration"]:
+        return False
+    keyframes = clip.get("keyframes")
+    ramp = (not reverse and isinstance(keyframes, dict) and
+            isinstance(keyframes.get("speed"), list) and
+            bool(keyframes["speed"]))
+    if ramp:
+        # Renderer ramps are nonnegative and capped at 16x; its runtime
+        # speed-ramp switch can also fall back to this clip's scalar speed.
+        # Use a guaranteed upper bound, not a guessed interpolation.
+        raw_upper = (trim_start + clip_local_time * source_scale *
+                     max(16, speed))
+        if not math.isfinite(raw_upper):
+            return False
+        raw_source = raw_upper
+    elif reverse:
+        raw_source = source_end - clip_local_time * source_scale * speed
+    else:
+        raw_source = trim_start + clip_local_time * source_scale * speed
+    if not math.isfinite(raw_source):
+        return False
+    # For ramps, this is a worst-case upper bound; a trim-clamped source
+    # sample can only be at or BELOW it. For normal clips this is exact.
+    source_time = max(lower, min(raw_source, safe_max))
+    return 0 <= source_time < original_duration
+
+
 def _static_native_video_visibility(clip: dict) -> bool:
     """Reject a source video invisible from its own saved transform.
 
@@ -374,8 +468,7 @@ def verify_original_footage_on_native_timeline(
                         playback_window is not None and
                         bool(matching_export_windows)):
                     placed.setdefault(clip["assetId"], []).append((
-                        clip, any(window[2] is not None
-                                  for window in matching_export_windows)))
+                        clip, matching_export_windows))
         if not found_active:
             raise ValueError("Active native timeline was not saved")
         for asset in data["assets"]:
@@ -427,7 +520,19 @@ def verify_original_footage_on_native_timeline(
                 continue
             if _sha256(owned) != owner_hash:
                 continue
-            for native_clip, output_frame_sampled in placed[asset_id]:
+            for native_clip, matched_windows in placed[asset_id]:
+                # An MP4 frame centered on an active clip may still decode
+                # *past EOF* of the owner-original video. Check the pinned
+                # source-time mapping separately from timeline visibility.
+                grids = [window for window in matched_windows
+                         if window[2] is not None]
+                output_frame_sampled = any(
+                    _native_source_frame_available_at_output_sample(
+                        native_clip, window, original_duration)
+                    for window in grids)
+                if grids and not output_frame_sampled and not any(
+                        window[2] is None for window in matched_windows):
+                    continue
                 # Original source frames must remain in-range after trim.
                 source_in = native_clip.get("trimStart", 0)
                 if (not _finite_real(source_in) or source_in < 0 or
