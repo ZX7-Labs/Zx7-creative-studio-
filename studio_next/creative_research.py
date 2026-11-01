@@ -119,13 +119,23 @@ class CreativeResearch:
         query = _check(query, limit)
         if media not in ("image", "audio", "video"):
             raise CreativeResearchError("Supported asset types: image, audio, video")
+        failures = []
         if media == "video":
-            items, provider = self._commons_video(query, limit), "wikimedia_commons"
+            items, provider = self._commons_media(query, media, limit), "wikimedia_commons"
         else:
-            items, provider = self._openverse(query, media, limit), "openverse"
+            try:
+                items, provider = self._openverse(query, media, limit), "openverse"
+            except CreativeResearchError:
+                # A real public API can be down or rate-limited. The fallback
+                # is explicit evidence, not a fabricated successful Openverse
+                # response or weaker copyright policy.
+                failures.append("openverse_unavailable_or_invalid")
+                items, provider = self._commons_media(query, media, limit), "wikimedia_commons"
         return {
             "kind": "research_asset_candidates",
             "provider": provider,
+            "provider_failures": failures,
+            "fallback_used": bool(failures),
             "media": media,
             "query": query,
             "results": items,
@@ -143,7 +153,8 @@ class CreativeResearch:
             "query.bibliographic": query, "filter": "type:journal-article",
             "rows": limit, "select": "DOI,title,container-title,published,type"})
         payload = self._fetch(url)
-        raw = (payload.get("message") or {}).get("items")
+        message = payload.get("message")
+        raw = message.get("items") if isinstance(message, dict) else None
         if not isinstance(raw, list):
             raise CreativeResearchError("Crossref scholarly metadata is malformed")
         out = []
@@ -208,14 +219,17 @@ class CreativeResearch:
                 "media_type": media})
         return items
 
-    def _commons_video(self, query, limit):
+    def _commons_media(self, query, media, limit):
+        filetype = {"image": "bitmap", "audio": "audio", "video": "video"}[media]
         url = _request_params("https://commons.wikimedia.org/w/api.php", {
             "action": "query", "format": "json", "generator": "search",
-            "gsrsearch": "filetype:video " + query,
+            "gsrsearch": "filetype:" + filetype + " " + query,
             "gsrnamespace": 6, "gsrlimit": limit,
             "prop": "imageinfo", "iiprop": "url|mime|extmetadata",
             "iiextmetadatafilter": "LicenseShortName|LicenseUrl"})
-        pages = (self._fetch(url).get("query") or {}).get("pages", {})
+        result = self._fetch(url)
+        query_data = result.get("query", {})
+        pages = query_data.get("pages", {}) if isinstance(query_data, dict) else None
         if not isinstance(pages, dict):
             raise CreativeResearchError("Commons media metadata is malformed")
         items = []
@@ -226,13 +240,17 @@ class CreativeResearch:
             if not isinstance(imageinfo, list) or not imageinfo or not isinstance(imageinfo[0], dict):
                 continue
             info = imageinfo[0]
-            if not isinstance(info.get("mime"), str) or not info["mime"].startswith("video/"):
+            if not isinstance(info.get("mime"), str) or not info["mime"].startswith(media + "/"):
                 continue
             meta = info.get("extmetadata")
             if not isinstance(meta, dict):
                 continue
-            license_name = _plain((meta.get("LicenseShortName") or {}).get("value"), 60)
-            license_url = _public_https((meta.get("LicenseUrl") or {}).get("value"))
+            label = meta.get("LicenseShortName")
+            evidence = meta.get("LicenseUrl")
+            if not isinstance(label, dict) or not isinstance(evidence, dict):
+                continue
+            license_name = _plain(label.get("value"), 60)
+            license_url = _public_https(evidence.get("value"))
             if (license_name.upper() not in ("CC0", "CC0 1.0") or
                     license_url not in (
                         "https://creativecommons.org/publicdomain/zero/1.0/",
@@ -246,5 +264,5 @@ class CreativeResearch:
                 "source_page": page, "declared_license": "CC0",
                 "license_evidence_source": "commons_file_metadata",
                 "rights_status": "candidate_unverified",
-                "media_type": "video"})
+                "media_type": media})
         return items[:limit]
