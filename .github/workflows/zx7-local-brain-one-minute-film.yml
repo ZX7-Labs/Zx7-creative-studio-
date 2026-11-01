@@ -32,6 +32,34 @@ jobs:
             ffmpeg melt frei0r-plugins fonts-dejavu-core
           python -m pip install --no-cache-dir '.[production]'
           python -m compileall -q scripts/run_local_brain_creative_film.py studio_next
+      - name: Prove the real CC0 artwork image bytes are accessible before model download
+        run: |
+          python - <<'PY'
+          import urllib.parse, urllib.request
+          from scripts.run_local_brain_creative_film import _api_json
+          params=urllib.parse.urlencode({"q":"landscape","cc0":"","has_image":1,"limit":5})
+          payload=_api_json("https://openaccess-api.clevelandart.org/api/artworks/?"+params)
+          works=[w for w in payload["data"] if w.get("share_license_status")=="CC0"
+                 and (w.get("images") or {}).get("web",{}).get("url")]
+          assert works, "CMA CC0 metadata has no accessible image records"
+          fetched=False
+          for work in works:
+              url=work["images"]["web"]["url"]
+              print("OFFICIAL CMA IMAGE HOST",urllib.parse.urlsplit(url).hostname,flush=True)
+              try:
+                  with urllib.request.urlopen(url,timeout=15) as response:
+                      head=response.read(4096)
+                      print("REAL CC0 IMAGE HTTP",response.status,
+                            "bytes",len(head),"content-type",
+                            response.headers.get("Content-Type"),flush=True)
+                  if head.startswith(b"\xff\xd8\xff"):
+                      fetched=True
+                      break
+              except Exception as exc:
+                  print("CMA IMAGE DIAGNOSTIC",type(exc).__name__,
+                        getattr(exc,"code",None),flush=True)
+          assert fetched,"Metadata alone is not actual public-domain image access"
+          PY
       - name: Run source-pinned genuine free local Qwen, model-directed editing and native MLT
         run: |
           python -u scripts/run_local_brain_creative_film.py \
