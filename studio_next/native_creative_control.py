@@ -1338,6 +1338,9 @@ class NativeCreativeControl:
                 try:
                     decision = self._decision(await self._infer(context))
                 except LocalModelOutputError as exc:
+                    # A rejected model message cannot postpone single-use
+                    # consent to a later unverified project state.
+                    self._pending_native_preview_apply = None
                     # Exact observed CPU trial: Qwen emitted duplicate JSON
                     # fields on turn 9. Reject entirely, no decoded partial
                     # command, and give the REAL model at most two fresh turns
@@ -1374,6 +1377,7 @@ class NativeCreativeControl:
                                   "creative_quality_independently_approved": False})
                     raise
                 except BaseException as exc:
+                    self._pending_native_preview_apply = None
                     # Transport, native, schema and unexpected model failures
                     # remain terminal. No automatic retry after uncertain work.
                     failed_ms = round((time.monotonic_ns() - model_started) / 1_000_000, 3)
@@ -2219,7 +2223,13 @@ class NativeCreativeControl:
                                         for x in texts],
                                     "host_reported_preview_only": True,
                                     "no_accepted_write_evidence": True,
-                                    "human_or_artistic_quality_approved": False})
+                                    "human_or_artistic_quality_approved": False,
+                                    **({"source_suggested_apply_inputs_sha256":
+                                        hashlib.sha256(_wire(
+                                            self._pending_native_preview_apply[
+                                                "arguments"]).encode()).hexdigest()}
+                                       if self._pending_native_preview_apply is not None
+                                       else {})})
                                 continue
                             self._append({
                                 "kind": "native_tool_reported_error", "turn": turn,
