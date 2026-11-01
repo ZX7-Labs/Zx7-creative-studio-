@@ -25,19 +25,24 @@ def editing_signature(observation):
             or not isinstance(graph, list) or not 8 <= len(graph) <= 256):
         raise ReferenceComparisonError("Malformed reference graph evidence")
 
+    if any(not isinstance(item, dict) for item in graph):
+        raise ReferenceComparisonError("Editing graph contains malformed bins")
+
     def average(name):
         readings = [item.get(name) for item in graph]
         chosen = [value for value in readings
                   if type(value) in (int, float) and math.isfinite(value)]
         if any(value is not None and
-               (type(value) not in (int, float) or not math.isfinite(value))
+               (type(value) not in (int, float) or not math.isfinite(value)
+                or not 0 <= value <= 1)
                for value in readings):
             raise ReferenceComparisonError("Untrusted numeric graph entry")
         return round(sum(chosen)/len(chosen), 5) if chosen else None
 
     audio_values = [item.get("audio_rms_dbfs") for item in graph]
     if any(value is not None and
-           (type(value) not in (int, float) or not math.isfinite(value))
+           (type(value) not in (int, float) or not math.isfinite(value)
+            or not -160 <= value <= 120)
            for value in audio_values):
         raise ReferenceComparisonError("Non-finite audio graph")
     # dBFS values represent logarithmic energy, NOT linearly averaged decibels.
