@@ -157,12 +157,19 @@ class ActualHostAssetProducerFrontierTests(unittest.IsolatedAsyncioTestCase):
                  "tool_names_for_discovery"] = ["ungranted_import"]
         with self.assertRaises(NativeJournalError):
             audit_native_journal(forged, host_tool_access=access)
+        nonexistent_project = copy.deepcopy(outcome["events"])
+        next(e for e in nonexistent_project if e["kind"] ==
+             "host_project_bootstrap_observation")[
+                 "project_presence"] = "absent"
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(nonexistent_project, host_tool_access=access)
 
     async def test_unverified_or_empty_asset_inventory_never_creates_placement_options(self):
         for case in (
             {"assets": []}, {"malformed": True},
             {"missing_status": True},
             {"assets": [{"id": "duplicate"}, {"id": "duplicate"}]},
+            {"assets": [{"id": f"asset-{i}"} for i in range(1001)]},
         ):
             with self.subTest(case=case):
                 editor = HostObservedImportedButUnplacedSource(**case)
