@@ -65,6 +65,64 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertEqual(receipt["verified_native_source_clip_proof"][0][
             "source_sha256"], self.manifest[0]["sha256"])
 
+    def test_proxy_export_never_proves_original_source_bytes(self):
+        # An export with useProxyMedia:true may choose asset.proxyUrl or
+        # proxyPath instead of the SHA-verified original. Even if the proxy
+        # looks indistinguishable, this is not physical original-byte proof.
+        asset = self.project["assets"][0]
+        asset["proxyUrl"] = "file:///untrusted/different-video.mp4"
+        asset["proxyPath"] = "media/proxy.mp4"
+        self.save()
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+            "use_proxy_media": True
+        }])["actual_original_video_used_on_native_timeline"])
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+            "use_proxy_media": False
+        }])["actual_original_video_used_on_native_timeline"])
+
+        # Any proxy-only matching interval stays unproven; an independently
+        # verified ORIGINAL export in a different range can still count.
+        only_proxy = [
+            {"start_seconds": 0, "end_seconds": 4, "use_proxy_media": True},
+            {"start_seconds": 6, "end_seconds": 8, "use_proxy_media": False},
+        ]
+        self.assertFalse(self.verify(only_proxy)[
+            "actual_original_video_used_on_native_timeline"])
+        original_and_proxy = [
+            {"start_seconds": 0, "end_seconds": 4, "use_proxy_media": True},
+            {"start_seconds": 0, "end_seconds": 4, "use_proxy_media": False},
+        ]
+        self.assertTrue(self.verify(original_and_proxy)[
+            "actual_original_video_used_on_native_timeline"])
+
+        # No proxy field in old trusted unit fixtures retains direct-source
+        # default; the production trial ALWAYS supplies the actual boolean.
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4
+        }])["actual_original_video_used_on_native_timeline"])
+        for value in (None, 0, 1, "true", [], {}):
+            with self.subTest(untrusted_proxy_flag=repr(value)):
+                with self.assertRaisesRegex(ValueError, "export interval"):
+                    self.verify([{
+                        "start_seconds": 0, "end_seconds": 4,
+                        "use_proxy_media": value
+                    }])
+
+    def test_pinned_editor_proxy_export_selection_is_real_alternative_media(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn"
+        server = (root / "electron/mcpServer.js").read_text(
+            encoding="utf-8")
+        exporter = (root / "src/services/exporter.js").read_text(
+            encoding="utf-8")
+        self.assertIn("useProxyMedia: args.useProxyMedia === true", server)
+        self.assertIn("clip.type === 'video' && useProxyMedia && asset",
+                      exporter)
+        self.assertIn("getExportProxyUrl(asset, projectHandle)", exporter)
+        self.assertIn("const sourceUrl = overrideUrl || resolvedUrl", exporter)
+        self.assertIn("const resolvedUrl = proxyUrl ||", exporter)
+
     def test_original_source_clip_must_overlap_actual_export_window(self):
         # Pinned renderer may extend a full export beyond timeline.duration;
         # the *actual verified output interval* is the correct acceptance bound.
