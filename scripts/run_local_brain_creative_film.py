@@ -652,24 +652,72 @@ def produce(args):
                 timeout_seconds=300,
                 sampling={"temperature":.65,"max_tokens":1536}),SYSTEM)
             topic=None
-            for attempt in range(3):
-                decision=_call(brain,{"phase":"creative_research",
-                    "task":"Choose original title, concept, and 3 artistic search themes "
-                           "for a 60-second film made from public-domain museum visual artwork. "
-                           "Return JSON: {\"working_title\":string,\"search_queries\":[string,string,string]}. "
-                           "Choose freely; no preset genre or story."},transcript)
+            assets=None
+            source_trials=[]
+            for attempt in range(4):
+                task={
+                    "phase":"creative_research",
+                    "task":"Choose an original film title, concept, and 3 artistic "
+                           "source search themes for a one-minute public-domain "
+                           "museum-art film. Use broad, concrete, independently "
+                           "searchable 1–3 word subjects, not multi-clause visual "
+                           "prompts, camera instructions or scene descriptions. "
+                           "Actual images must match your artistic intentions "
+                           "and self-declare CC0 at their source page. "
+                           "Return JSON: {\"working_title\":string,"
+                           "\"search_queries\":[string,string,string]}. "
+                           "You choose all subjects; there is no host-selected genre.",
+                }
+                if source_trials:
+                    task["previous_trials"] = source_trials[-2:]
+                    task["failure_feedback"] = (
+                        "Your previous independent Commons source search "
+                        "did not yield enough real CC0-downloadable images. "
+                        "Choose NEW broad concrete topics with more likely "
+                        "public-source coverage; do not invent source URLs, "
+                        "license clearance or search results.")
+                decision=_call(brain,task,transcript)
                 try:
                     queries=decision["search_queries"]
-                    if not isinstance(queries,list) or not 2<=len(queries)<=5 or any(
-                            not isinstance(q,str) or not 2<=len(q)<=160 for q in queries):
-                        raise ValueError("Invalid creative research queries")
-                    topic=decision
-                    break
-                except (ValueError,KeyError,TypeError):
+                    if (not isinstance(queries,list) or
+                            not 2<=len(queries)<=5 or
+                            any(not isinstance(q,str) or
+                                not 2<=len(q)<=160 for q in queries)):
+                        raise ValueError("Unusable creative source-query format")
+                except (ValueError,KeyError,TypeError) as exc:
+                    source_trials.append({
+                        "attempt":attempt + 1,"status":"invalid_model_queries",
+                        "failure":str(exc)})
+                    transcript[-1]["research_validation_failure"]=str(exc)
                     continue
-            if topic is None:
-                raise RuntimeError("Local creative Brain did not author valid asset research")
-            assets=_museum_images(topic["search_queries"],art)
+                # Never replace the neural model's subject with engineer-
+                # chosen stock footage. New research is another *actual*
+                # local neural decision. Retain all failed source trials.
+                attempt_dir=art/f"model-search-{attempt + 1:02d}"
+                attempt_dir.mkdir(exist_ok=False)
+                try:
+                    current_assets=_museum_images(queries,attempt_dir)
+                except (ValueError,OSError) as exc:
+                    source_trials.append({
+                        "attempt":attempt + 1,
+                        "status":"no_sufficient_rights-declared_physical_assets",
+                        "model_queries":queries,
+                        "failure_type":type(exc).__name__,
+                        "failure":str(exc)[:240]})
+                    transcript[-1]["research_source_failure"]=str(exc)[:240]
+                    continue
+                topic=decision
+                assets=current_assets
+                source_trials.append({
+                    "attempt":attempt + 1,"status":"physically_downloaded",
+                    "model_queries":queries,
+                    "source_count":len(assets)})
+                break
+            evidence["model_selected_source_trials"]=source_trials
+            if topic is None or assets is None:
+                raise RuntimeError(
+                    "Local creative Brain could not identify sufficient "
+                    "physical CC0-declared source artwork after explicit retries")
             (dest/"source-asset-evidence.json").write_text(
                 json.dumps(assets,indent=2,ensure_ascii=False))
             sheet=effects/"contact-sheet.png"
