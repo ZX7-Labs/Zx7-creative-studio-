@@ -167,9 +167,25 @@ def _field(value: Any, name: str, default=None):
     return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
 
 
+def _native_mcp_error_status(result):
+    """An actual MCP reply must carry consistent strict boolean status.
+
+    Never turn absent, coerced, or contradictory transport flags into a
+    committed native write or trustworthy state observation.
+    """
+    missing = object()
+    values = [_field(result, key, missing) for key in ("is_error", "isError")]
+    present = [v for v in values if v is not missing]
+    if (not present or any(type(v) is not bool for v in present)
+            or len(set(present)) != 1):
+        raise NativeCreativeControlError(
+            "Native MCP response has missing or contradictory boolean status")
+    return present[0]
+
+
 def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], list[tuple[str, bytes]]]:
     """Unpack genuine bounded data without trusting a model-produced label."""
-    if _field(result, "is_error", _field(result, "isError", False)):
+    if _native_mcp_error_status(result):
         return [], [], []
     blocks = _field(result, "content", ())
     if not isinstance(blocks, (list, tuple)):
@@ -767,7 +783,7 @@ class NativeCreativeControl:
             return
         try:
             reply = await self.session.call_tool("get_assets", {"limit": 1000})
-            if _field(reply, "is_error", _field(reply, "isError", False)):
+            if _native_mcp_error_status(reply):
                 raise NativeCreativeControlError("Native asset inventory read failed")
             texts, images, audio = _native_content(reply)
             if len(texts) != 1 or images or audio:
@@ -1166,8 +1182,7 @@ class NativeCreativeControl:
                         try:
                             snapshot_reply = await self.session.call_tool(
                                 "get_project", {})
-                            if _field(snapshot_reply, "is_error",
-                                      _field(snapshot_reply, "isError", False)):
+                            if _native_mcp_error_status(snapshot_reply):
                                 raise NativeCreativeControlError(
                                     "Native state summary read reported error")
                             snapshot_texts, snapshot_images, snapshot_audio = (
@@ -1726,8 +1741,7 @@ class NativeCreativeControl:
                     try:
                         raw_assets = await self.session.call_tool(
                             "get_assets", {"limit": 1000})
-                        if _field(raw_assets, "is_error",
-                                  _field(raw_assets, "isError", False)):
+                        if _native_mcp_error_status(raw_assets):
                             raise NativeCreativeControlError(
                                 "Native project asset inventory read returned an error")
                         inventory_texts, inventory_images, inventory_audio = (
@@ -1843,8 +1857,7 @@ class NativeCreativeControl:
                             "get_timeline", {"includeClips": True,
                                              "includeTransitions": False,
                                              "limit": 1000})
-                        if _field(timeline_reply, "is_error",
-                                  _field(timeline_reply, "isError", False)):
+                        if _native_mcp_error_status(timeline_reply):
                             raise NativeCreativeControlError(
                                 "Native timeline reference inventory read failed")
                         timeline_texts, timeline_images, timeline_audio = (
