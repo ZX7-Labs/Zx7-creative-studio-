@@ -24,6 +24,7 @@ from .creative_research import (
     _request_params,
 )
 from .creative_research_3d import poly_haven_assets, ambientcg_assets
+from .creative_research_sources import nasa_video_references, europe_pmc_abstracts
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,11 @@ class CreativeResearchHub:
                            lambda q, n: base.studies(query=q, limit=n)["results"]),
             CreativeSource("wikipedia_reference", "knowledge", frozenset({"all"}),
                            lambda q, n: _wikipedia_reference(base._fetch, q, n)),
+            CreativeSource("nasa_archival_video_reference", "knowledge",
+                           frozenset({"video"}),
+                           lambda q, n: nasa_video_references(base._fetch, q, n)),
+            CreativeSource("europepmc_abstracts", "scholarship", frozenset({"all"}),
+                           lambda q, n: europe_pmc_abstracts(base._fetch, q, n)),
         ])
 
     def discover(self):
@@ -173,7 +179,11 @@ class CreativeResearchHub:
                                            "study_results_verified",
                                            "peer_review_independently_verified",
                                            "abstract_or_full_text_reviewed",
-                                           "license_evidence_source", "provider_credit", "asset_kind")}}
+                                           "license_evidence_source", "provider_credit", "asset_kind",
+                                           "reference_type", "source_reuse_not_authorized",
+                                           "model_has_not_watched_video",
+                                           "abstract_excerpt", "abstract_is_unreviewed_source_text",
+                                           "research_not_a_media_reuse_license")}}
                         results.append(result)
                         count += 1
                     outcomes.append({"source": item.id, "state": "responded",
