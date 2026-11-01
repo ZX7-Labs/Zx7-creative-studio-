@@ -686,6 +686,45 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertTrue(self.verify(first_second + later)[
             "actual_original_video_sampled_at_verified_output_frame"])
 
+    def test_pinned_hold_easing_keeps_source_invisible_until_next_keyframe(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {"opacity": 100}
+        clip["keyframes"] = {"opacity": [
+            {"time": 0, "value": 0, "easing": "hold"},
+            {"time": 1, "value": 100},
+        ]}
+        self.save()
+        hidden = [{
+            "start_seconds": 0, "end_seconds": 1,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 24,
+        }]
+        first_visible = [{
+            "start_seconds": 1, "end_seconds": 2,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 24,
+        }]
+        self.assertFalse(self.verify(hidden)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        self.assertFalse(self.verify(hidden)[
+            "actual_original_video_used_on_native_timeline"])
+        self.assertTrue(self.verify(first_visible)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        # Source-pinned hold is not a generic easing assumption: switching
+        # to linear creates a nonzero alpha at the physical frame centers.
+        clip["keyframes"]["opacity"][0]["easing"] = "linear"
+        self.save()
+        self.assertTrue(self.verify(hidden)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        # A pixel sampled exactly at the following keyframe has opacity 100;
+        # the strictly-before-boundary guard must not misclassify it.
+        exact = [{
+            "start_seconds": 0.5, "end_seconds": 1.5,
+            "video_frame_rate": 1, "decoded_video_frame_count": 1,
+        }]
+        clip["keyframes"]["opacity"][0]["easing"] = "hold"
+        self.save()
+        self.assertTrue(self.verify(exact)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
     def test_animated_source_alpha_single_keyframe_is_effective_all_frames(self):
         clip = self.project["timelines"][0]["clips"][0]
         clip["transform"] = {"opacity": 0}
