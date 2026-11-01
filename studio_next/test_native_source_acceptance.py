@@ -583,6 +583,81 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
             "start_seconds": 0, "end_seconds": 4
         }])["actual_original_video_used_on_native_timeline"])
 
+    def test_native_upper_layer_hard_cutoff_excludes_original_source_pixels(self):
+        # Pinned layerCompositing.js has an unconditional 'off' cutoff,
+        # even for alpha-transparent upper shapes: a genuine lower video
+        # is never drawn when the overlay is active for its entire lifetime.
+        source_track = self.project["timelines"][0]["tracks"][0]
+        timeline = self.project["timelines"][0]
+        upper_track = {
+            "id": "upper-video-track", "type": "video", "visible": True}
+        timeline["tracks"].insert(0, upper_track)
+        blocker = {
+            "id": "covering-native-clip", "type": "shape",
+            "trackId": "upper-video-track", "enabled": True,
+            "startTime": 0, "duration": 4,
+            "compositeLowerLayers": "off",
+        }
+        timeline["clips"].append(blocker)
+        proof = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24, "decoded_video_frame_count": 96,
+        }]
+        self.save()
+        self.assertFalse(self.verify(proof)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        self.assertFalse(self.verify()[
+            "actual_original_video_used_on_native_timeline"])
+        for change in (
+            {"compositeLowerLayers": "on"},
+            {"compositeLowerLayers": "auto"},
+            {"duration": 2},
+            {"enabled": False},
+        ):
+            with self.subTest(change=change):
+                candidate = {**blocker, **change}
+                timeline["clips"][-1] = candidate
+                self.save()
+                self.assertTrue(self.verify(proof)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+        timeline["clips"][-1] = blocker
+        # An explicitly muted/hidden covering track cannot cut the
+        # visible original source, because native compositor removes it.
+        for change in ({"visible": False}, {"muted": True}):
+            with self.subTest(track_change=change):
+                upper_track.update(change)
+                self.save()
+                self.assertTrue(self.verify(proof)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+                upper_track.update({"visible": True, "muted": False})
+        # A transition may protect the upper clip from automatic
+        # lower-layer culling; reject no footage only when certain.
+        timeline["transitions"] = [{
+            "id": "transition-protects-clip",
+            "clipId": blocker["id"], "type": "fade-black"}]
+        self.save()
+        self.assertTrue(self.verify(proof)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        timeline.pop("transitions")
+        # Restore native ordering so the supposed blocker is BELOW the
+        # source: it must never falsify source visibility.
+        timeline["tracks"] = [source_track, upper_track]
+        self.save()
+        self.assertTrue(self.verify(proof)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_layer_cutoff_is_bound_to_actual_pinned_native_compositor(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        exporter = (root / "services/exporter.js").read_text(encoding="utf-8")
+        layer = (root / "utils/layerCompositing.js").read_text(
+            encoding="utf-8")
+        self.assertIn("return indexB - indexA", exporter)
+        self.assertIn("cullVisualLayerEntries(matteVisibleLayerClips", exporter)
+        self.assertIn("for (let index = entries.length - 1;", layer)
+        self.assertIn("if (mode === CLIP_COMPOSITE_MODE.OFF) return true", layer)
+        self.assertIn("if (transitionClipIds.has(clip.id)) continue", layer)
+        self.assertIn("if (shouldStopAtClipForLowerLayers(clip, options))", layer)
+
     def test_offcanvas_native_shape_mask_cannot_prove_original_pixels(self):
         # Physically imported original video remains on the active timeline,
         # but Velorn's luma shape mask has NO white mask pixels to retain.
