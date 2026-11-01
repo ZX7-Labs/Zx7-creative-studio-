@@ -1,0 +1,176 @@
+"""Creative-research source independence, permissions and future-domain tests.
+
+Fixture responses are NEVER evidence of live creativity or lawful asset reuse.
+"""
+import tempfile
+import unittest
+from urllib.parse import urlsplit, parse_qs
+
+from studio_next.creative_research import CreativeResearchError
+from studio_next.creative_research_hub import (
+    CreativeResearchHub, CreativeSource, _cleveland_images,
+    _wikipedia_reference,
+)
+from studio_next.body_integration import body_catalog
+
+
+class FederatedCreativeResearchTests(unittest.TestCase):
+    def test_all_creative_domains_accept_source_plugins_without_core_changes(self):
+        calls = []
+        def textile(query, count):
+            calls.append(("textile", query, count))
+            return [{"title": "Fabric study",
+                     "source_page": "https://example.org/fabric",
+                     "declared_license": "CC0",
+                     "rights_status": "candidate_unverified",
+                     "media_type": "3d"}]
+        def title_facts(query, count):
+            return [{"title": "Visual rhythm",
+                     "source_page": "https://example.org/visual-rhythm"}]
+        hub = CreativeResearchHub([
+            CreativeSource("textile_reference", "assets", frozenset({"3d"}), textile),
+            CreativeSource("visual_rhythm", "knowledge", frozenset({"all"}), title_facts)])
+        output = hub.research(query="fabric shape and rhythm", domain="all")
+        self.assertEqual(len(output["results"]), 2)
+        self.assertEqual(len(output["source_outcomes"]), 2)
+        self.assertFalse(output["rights_verified"])
+        self.assertFalse(output["import_authorized"])
+        self.assertFalse(output["human_preference_inferred"])
+        self.assertEqual(calls,[("textile","fabric shape and rhythm",12)])
+        self.assertEqual(len(hub.research(query="fabric shape and rhythm",
+                                          domain="assets",media="3d")["results"]), 1)
+
+    def test_provider_failures_do_not_erase_independent_creative_sources(self):
+        def unavailable(q,n):
+            raise ConnectionError("Provider outage")
+        def useful(q,n):
+            return [{"title": "Auditory perspective",
+                     "source_page": "https://example.org/ear"}]
+        hub = CreativeResearchHub([
+            CreativeSource("broken_source", "knowledge", frozenset({"all"}), unavailable),
+            CreativeSource("useful_source", "knowledge", frozenset({"all"}), useful)])
+        result=hub.research(query="sound storytelling")
+        self.assertEqual(len(result["results"]),1)
+        self.assertEqual([s["state"] for s in result["source_outcomes"]],
+                         ["failed","responded"])
+        self.assertFalse(result["all_sources_exhausted"])
+
+    def test_one_large_source_does_not_monopolize_all_results(self):
+        def a(q,n):
+            return [{"title": "A","source_page": f"https://a.example.org/{i}"} for i in range(6)]
+        def b(q,n):
+            return [{"title": "B","source_page": f"https://b.example.org/{i}"} for i in range(6)]
+        hub = CreativeResearchHub([
+            CreativeSource("first", "knowledge", frozenset({"all"}),a),
+            CreativeSource("second","knowledge",frozenset({"all"}),b)])
+        r = hub.research(query="story arc",limit=4)
+        self.assertEqual([v["source"] for v in r["results"]],
+                         ["first","second","first","second"])
+
+    def test_cache_only_successful_records_and_isolated_copies(self):
+        calls=[]
+        def source(q,n):
+            calls.append(q)
+            return [{"title":"Edit reference","source_page":"https://example.org/edit"}]
+        now=[10.0]
+        hub = CreativeResearchHub([
+            CreativeSource("source_1","knowledge",frozenset({"all"}),source)],
+            cache_seconds=30,clock=lambda: now[0])
+        first=hub.research(query="camera edit")
+        first["results"].clear()
+        second=hub.research(query="camera edit")
+        self.assertEqual(len(second["results"]),1)
+        self.assertEqual(len(calls),1)
+        now[0]+=31
+        hub.research(query="camera edit")
+        self.assertEqual(len(calls),2)
+
+    def test_discovery_not_paid_or_license_approval(self):
+        hub = CreativeResearchHub([
+            CreativeSource("custom_motion","assets",
+                           frozenset({"video","3d"}),lambda q,n:[])])
+        names=hub.discover()
+        self.assertEqual(names[0]["id"],"custom_motion")
+        self.assertFalse(names[0]["paid_inference_required"])
+        self.assertFalse(names[0]["rights_attested_by_this_tool"])
+
+    def test_unsafe_or_non_cc0_media_is_not_admitted_even_from_buggy_provider(self):
+        def source(q,n):
+            return [
+                {"source_page":"https://good.example.org/one",
+                 "declared_license":"CC-BY","rights_status":"candidate_unverified"},
+                {"source_page":"https://127.0.0.1/secret","declared_license":"CC0",
+                 "rights_status":"candidate_unverified"},
+                {"source_page":"https://good.example.org/two","declared_license":"CC0",
+                 "rights_status":"candidate_unverified"},
+            ]
+        hub = CreativeResearchHub([
+            CreativeSource("media_source","assets",frozenset({"image"}),source)])
+        output = hub.research(query="graphics",domain="assets",media="image")
+        self.assertEqual(len(output["results"]),1)
+        self.assertEqual(output["results"][0]["source_page"],
+                         "https://good.example.org/two")
+
+    def test_explicit_cc0_cleveland_metadata_and_public_image(self):
+        urls=[]
+        def fetch(url):
+            urls.append(url)
+            return {"data":[
+                {"id":1,"accession_number":"1923.1","title":"Light",
+                 "share_license_status":"CC0",
+                 "images":{"web":{"url":"https://images.example.org/a.jpg"}}},
+                {"id":2,"accession_number":"1923.2","title":"Not public",
+                 "share_license_status":"Copyrighted",
+                 "images":{"web":{"url":"https://images.example.org/b.jpg"}}},
+                {"id":3,"accession_number":"1923.3","title":"No image",
+                 "share_license_status":"CC0", "images":{}},
+            ]}
+        found=_cleveland_images(fetch,"light",5)
+        self.assertEqual(len(found),1)
+        self.assertEqual(found[0]["source_page"],
+                         "https://www.clevelandart.org/art/1923.1")
+        self.assertEqual(found[0]["rights_status"],"candidate_unverified")
+        self.assertEqual(parse_qs(urlsplit(urls[0]).query,
+                                  keep_blank_values=True)["cc0"],[""])
+
+    def test_wikipedia_technique_research_not_mistaken_for_cc0_asset(self):
+        def fetch(url):
+            return {"query":{"search":[
+                {"title":"Film editing"},
+                {"title":"Cinematography"}]}}
+        records=_wikipedia_reference(fetch,"cinema",2)
+        self.assertEqual(len(records),2)
+        self.assertEqual(records[0]["source_page"],
+                         "https://en.wikipedia.org/wiki/Film_editing")
+        self.assertTrue(records[0]["research_not_a_reuse_license"])
+
+    def test_body_catalog_has_no_extra_creative_research_setup(self):
+        def arts(q,n):
+            return [{"title":"Lighting",
+                     "source_page":"https://example.org/lighting"}]
+        hub=CreativeResearchHub([
+            CreativeSource("creative_lighting","knowledge",frozenset({"all"}),arts)])
+        with tempfile.TemporaryDirectory() as root:
+            c=body_catalog(root,research_hub=hub)
+            self.assertIn("body.research_creative",
+                          {x["id"] for x in c.discover()})
+            with self.assertRaises(PermissionError):
+                c.invoke("body.research_creative",{"query":"lighting"})
+            result=c.invoke("body.research_creative",
+                            {"query":"lighting"},allowed_access={"network"})
+            self.assertEqual(len(result["results"]),1)
+
+    def test_malformed_creative_query_fails_without_network(self):
+        calls=[]
+        hub=CreativeResearchHub([
+            CreativeSource("light_source","knowledge",frozenset({"all"}),
+                           lambda q,n:calls.append(q) or [])])
+        with self.assertRaises(CreativeResearchError):
+            hub.research(query="gorgeous",domain="unknown")
+        with self.assertRaises(CreativeResearchError):
+            hub.research(query="gorgeous",limit=0)
+        self.assertFalse(calls)
+
+
+if __name__ == "__main__":
+    unittest.main()
