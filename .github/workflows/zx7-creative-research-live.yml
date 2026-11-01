@@ -28,24 +28,38 @@ jobs:
           python - <<'PY'
           from studio_next.creative_research import CreativeResearch
           research = CreativeResearch()
+          checks = []
           for media, query in (
               ("image", "landscape"),
               ("audio", "ambient"),
               ("video", "nature"),
           ):
-              result = research.assets(query=query, media=media, limit=3)
-              assert result["kind"] == "research_asset_candidates"
-              assert not result["rights_verified"]
-              assert not result["import_authorized"]
-              assert all(asset["declared_license"] == "CC0" and
-                         asset["rights_status"] == "candidate_unverified"
-                         for asset in result["results"])
-              print(f"REAL {result['provider']}/{media}: "
-                    f"{len(result['results'])} metadata candidates; no files imported")
-          papers = research.studies(query="narrative transportation film editing",
-                                    limit=3)
-          assert papers["kind"] == "creative_audience_research"
-          assert all(not paper["study_results_verified"] for paper in papers["results"])
-          print(f"REAL crossref: {len(papers['results'])} DOI metadata records, "
-                "no audience effect fabricated")
+              try:
+                  result = research.assets(query=query, media=media, limit=3)
+                  assert result["kind"] == "research_asset_candidates"
+                  assert not result["rights_verified"]
+                  assert not result["import_authorized"]
+                  assert all(asset["declared_license"] == "CC0" and
+                             asset["rights_status"] == "candidate_unverified"
+                             for asset in result["results"])
+                  print(f"REAL {result['provider']}/{media}: "
+                        f"{len(result['results'])} metadata candidates; no files imported",
+                        flush=True)
+                  checks.append((media, True))
+              except Exception as exc:
+                  print(f"REAL {media}: FAILED {type(exc).__name__}: {exc}", flush=True)
+                  checks.append((media, False))
+          try:
+              papers = research.studies(query="narrative transportation film editing",limit=3)
+              assert papers["kind"] == "creative_audience_research"
+              assert all(not paper["study_results_verified"] for paper in papers["results"])
+              print(f"REAL crossref: {len(papers['results'])} DOI records, "
+                    "no audience effect fabricated", flush=True)
+              checks.append(("studies", True))
+          except Exception as exc:
+              print(f"REAL studies: FAILED {type(exc).__name__}: {exc}", flush=True)
+              checks.append(("studies", False))
+          print("Provider status:", checks, flush=True)
+          if not all(success for _, success in checks):
+              raise SystemExit("Free public API live contracts have unresolved failures")
           PY
