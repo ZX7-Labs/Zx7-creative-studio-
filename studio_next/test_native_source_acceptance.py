@@ -745,6 +745,67 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertTrue(self.verify(first_second + later)[
             "actual_original_video_sampled_at_verified_output_frame"])
 
+    def test_source_frame_must_overlap_opaque_alpha_on_same_export_frame(self):
+        # An apparently valid timeline edit can use the original source
+        # ONLY on its first decoded frame, with opacity held at zero then.
+        # The old two-existential checks reported source visibility merely
+        # because alpha became nonzero 1 second AFTER original source EOF.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["trimStart"] = 3.95
+        clip["speed"] = 1
+        clip["transform"] = {"opacity": 100}
+        clip["keyframes"] = {"opacity": [
+            {"time": 0, "value": 0, "easing": "hold"},
+            {"time": 1, "value": 100},
+        ]}
+        window = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24, "decoded_video_frame_count": 96,
+        }]
+        self.save()
+        self.assertFalse(self.verify(window)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        self.assertFalse(self.verify(window)[
+            "actual_original_video_used_on_native_timeline"])
+        # If the model chooses an independently visible first frame, the
+        # SAME original-source sample is now eligible for certification.
+        clip["keyframes"]["opacity"][0]["value"] = 100
+        self.save()
+        self.assertTrue(self.verify(window)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        # The original media's full lifetime (rather than its last 50ms)
+        # leaves plenty of nontransparent decoded source frames later.
+        clip["trimStart"] = 0
+        clip["keyframes"]["opacity"][0]["value"] = 0
+        self.save()
+        self.assertTrue(self.verify(window)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_reversed_source_eof_and_alpha_must_have_common_frame(self):
+        # Reverse-time source mapping admits only later frames when the
+        # model starts beyond the owner original's end. Any early opaque
+        # frames occur outside source custody and cannot prove original
+        # footage in the encoded movie.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["reverse"] = True
+        clip["trimStart"] = 0
+        clip["trimEnd"] = 5
+        clip["keyframes"] = {"opacity": [
+            {"time": 0, "value": 100, "easing": "hold"},
+            {"time": 1, "value": 0},
+        ]}
+        rendered = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24, "decoded_video_frame_count": 96
+        }]
+        self.save()
+        self.assertFalse(self.verify(rendered)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["keyframes"]["opacity"][1]["value"] = 50
+        self.save()
+        self.assertTrue(self.verify(rendered)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
     def test_pinned_hold_easing_keeps_source_invisible_until_next_keyframe(self):
         clip = self.project["timelines"][0]["clips"][0]
         clip["transform"] = {"opacity": 100}
