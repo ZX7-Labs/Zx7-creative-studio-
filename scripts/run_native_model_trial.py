@@ -479,18 +479,36 @@ async def trial(args, lock, artifacts, command):
             # all valid native actions.
             if type(start) not in (int, float) or not math.isfinite(start) or start < 0:
                 continue
-            raw_duration = subprocess.check_output([
-                'ffprobe', '-v', 'error', '-select_streams', 'v:0',
-                '-show_entries', 'stream=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                str(movie)], timeout=30).decode('utf-8').strip()
+            # Pinned native compositor renders frames at their centers.
+            # Decode the REAL output's frame count and stream frame rate,
+            # rather than treating a sub-frame overlap as visible owner
+            # footage. These are ffprobe facts from the SHA-verified movie.
+            # Any missing/ambiguous stream facts withhold proof.
+            from fractions import Fraction
+            stream_info = json.loads(subprocess.check_output([
+                'ffprobe', '-v', 'error', '-count_frames',
+                '-select_streams', 'v:0', '-show_entries',
+                'stream=duration,avg_frame_rate,nb_read_frames',
+                '-of', 'json', str(movie)], timeout=30).decode('utf-8'))
+            streams = stream_info.get('streams')
+            if not isinstance(streams, list) or len(streams) != 1:
+                continue
+            stream = streams[0]
             try:
-                duration = float(raw_duration)
-            except ValueError:
+                duration = float(stream['duration'])
+                frame_rate = float(Fraction(stream['avg_frame_rate']))
+                frame_count = int(stream['nb_read_frames'])
+            except (KeyError, TypeError, ValueError, ZeroDivisionError,
+                    OverflowError):
                 continue
-            if not math.isfinite(duration) or duration <= 0:
-                continue
-            if not math.isfinite(start + duration):
+            if (not math.isfinite(duration) or not 0 < duration <= 100_000
+                    or not math.isfinite(frame_rate) or
+                    not 0 < frame_rate <= 1000 or
+                    not 0 < frame_count <= 10_000_000 or
+                    str(frame_count) != stream['nb_read_frames'] or
+                    abs(duration - frame_count / frame_rate) >
+                        max(2 / frame_rate, 0.05) or
+                    not math.isfinite(start + duration)):
                 continue
             # Pinned electron/mcpServer.js:resolveExportDeliveryPlan
             # sets useProxyMedia ONLY for the literal boolean true. Pinned
@@ -500,7 +518,9 @@ async def trial(args, lock, artifacts, command):
             # configuration, not a guessed render setting.
             host_verified_export_windows.append({
                 'start_seconds': start, 'end_seconds': start + duration,
-                'use_proxy_media': inputs.get('useProxyMedia') is True})
+                'use_proxy_media': inputs.get('useProxyMedia') is True,
+                'video_frame_rate': frame_rate,
+                'decoded_video_frame_count': frame_count})
             native_export_project_bindings.add((
                 identity["native_project_path_sha256"],
                 identity["native_timeline_id"]))
