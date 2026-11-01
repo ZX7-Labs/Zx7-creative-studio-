@@ -98,7 +98,8 @@ class ProviderTests(unittest.TestCase):
             "search", "describe", "invoke", "discover", "finish"})
         # This schema never specifies what file, clip, scene or tool the brain
         # may create. Actual host tools must still be discovered and granted.
-        self.assertEqual(schema["properties"]["arguments"], {"type": "object"})
+        self.assertEqual(schema["properties"]["arguments"], {
+            "type": "object", "additionalProperties": True})
         self.assertNotIn("tool", json.dumps(schema))
         self.assertNotIn("previewOnly", json.dumps(schema))
         response_format = {"type": "json_schema", "schema": schema}
