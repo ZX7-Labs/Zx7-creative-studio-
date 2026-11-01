@@ -84,6 +84,36 @@ def _native_clip_playback_window(clip: dict) -> tuple[float, float] | None:
     return beginning, finish
 
 
+
+
+def _export_samples_original_clip(playback_window, export_interval) -> bool:
+    """Require a *real output frame sample* to land inside the source clip.
+
+    Velorn src/services/exporter.js by default samples frame centers:
+    rangeStart + (frameIndex + 0.5) / fps. The host runner supplies the
+    independently measured H.264 video stream frame rate and decoded frame
+    count. Merely overlapping an export interval for one microsecond does
+    not prove any rendered frame used the original source video.
+    Legacy timeline-only window fixtures without frame measurements retain
+    interval-overlap custody, but CANNOT be called frame-sample proof.
+    """
+    begin, finish = playback_window
+    start, end, fps, frame_count = export_interval
+    if not (begin < end and finish > start):
+        return False
+    if fps is None or frame_count is None:
+        return True
+    # Solve the finite constant-frame-rate grid analytically instead of
+    # probing a long video frame-by-frame. Frame 0 samples at half a frame.
+    # The first candidate whose center is >= source clip beginning.
+    earliest = max(0, math.ceil((begin - start) * fps - 0.5))
+    if earliest >= frame_count:
+        return False
+    sample_time = start + (earliest + 0.5) / fps
+    return begin <= sample_time < finish and sample_time < end
+
+
+
 def _static_native_video_visibility(clip: dict) -> bool:
     """Reject a source video invisible from its own saved transform.
 
@@ -184,12 +214,31 @@ def verify_original_footage_on_native_timeline(
             if (not isinstance(interval, dict) or
                     not {"start_seconds", "end_seconds"} <= set(interval) or
                     not set(interval) <= {
-                        "start_seconds", "end_seconds", "use_proxy_media"} or
+                        "start_seconds", "end_seconds", "use_proxy_media",
+                        "video_frame_rate", "decoded_video_frame_count"} or
                     not _finite_real(interval["start_seconds"]) or
                     not _finite_real(interval["end_seconds"]) or
                     not 0 <= interval["start_seconds"] < interval["end_seconds"] or
                     type(interval.get("use_proxy_media", False)) is not bool):
                 raise ValueError("Invalid independently verified export interval")
+            # The trial measures these against the *actual decoded
+            # output*, not against model text or native project preferences.
+            # Both fields must be present together; missing measurements in
+            # historical timeline-only fixtures cannot claim frame coverage.
+            has_rate = "video_frame_rate" in interval
+            has_count = "decoded_video_frame_count" in interval
+            if has_rate != has_count:
+                raise ValueError("Invalid independently verified export frame grid")
+            rate = interval.get("video_frame_rate")
+            count = interval.get("decoded_video_frame_count")
+            if has_rate and (
+                    not _finite_real(rate) or
+                    not 0 < rate <= 1000 or
+                    type(count) is not int or not 0 < count <= 10_000_000 or
+                    abs((interval["end_seconds"] -
+                         interval["start_seconds"]) - count / rate) >
+                            max(2 / rate, 0.05)):
+                raise ValueError("Invalid independently verified export frame grid")
             # Source-attested pinned exporter.js: a useProxyMedia:true
             # delivery may render asset.proxyUrl/proxyPath instead of the
             # SHA-bound original. A proxy export cannot independently prove
@@ -199,7 +248,8 @@ def verify_original_footage_on_native_timeline(
             if interval.get("use_proxy_media", False):
                 continue
             checked_windows.append((
-                interval["start_seconds"], interval["end_seconds"]))
+                interval["start_seconds"], interval["end_seconds"],
+                rate if has_rate else None, count if has_count else None))
     else:
         checked_windows = None
     accepted = []
@@ -266,7 +316,7 @@ def verify_original_footage_on_native_timeline(
                     if math.isfinite(end):
                         full_export_end = max(full_export_end, end)
             effective_windows = (checked_windows if checked_windows is not None
-                                 else [(0, full_export_end)])
+                                 else [(0, full_export_end, None, None)])
             # The actual pinned renderer filters tracks with
             # src/utils/videoTrackVisibility.js:isVideoTrackVisible.
             # A video track marked muted contributes NO pixels, and an
@@ -318,9 +368,9 @@ def verify_original_footage_on_native_timeline(
                         clip.get("trackId") in visible_video_tracks and
                         isinstance(clip.get("assetId"), str) and
                         playback_window is not None and
-                        any(playback_window[0] < finish and
-                            playback_window[1] > begin
-                            for begin, finish in effective_windows)):
+                        any(_export_samples_original_clip(
+                                playback_window, interval)
+                            for interval in effective_windows)):
                     placed.setdefault(clip["assetId"], []).append(clip)
         if not found_active:
             raise ValueError("Active native timeline was not saved")
