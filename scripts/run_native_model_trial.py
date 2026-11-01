@@ -360,8 +360,25 @@ async def trial(args, lock, artifacts, command):
                 resolved = Path(output_path).resolve()
                 # Exact trial output root, not a model-authored arbitrary path.
                 if resolved.is_relative_to(outputs.resolve()):
-                    exported_after_revision.add(resolved)
-                    export_inputs_by_path[resolved] = selected
+                    # Pin the application-ACKed output identity to the
+                    # model-requested path. The controller hashes the real
+                    # Velorn reply rather than trusting model text.
+                    native_output_sha = hashlib.sha256(
+                        output_path.encode("utf-8")).hexdigest()
+                    if (event.get("native_export_output_path_sha256") ==
+                            native_output_sha and
+                            isinstance(event.get("native_export_project_path_sha256"),
+                                       str) and
+                            isinstance(event.get("native_export_timeline_id"),
+                                       str)):
+                        exported_after_revision.add(resolved)
+                        export_inputs_by_path[resolved] = {
+                            "selected": selected,
+                            "native_project_path_sha256":
+                                event["native_export_project_path_sha256"],
+                            "native_timeline_id":
+                                event["native_export_timeline_id"],
+                        }
         verified = event.get('independently_verified_export_sha256')
         if (last_revision >= 0 and verified and verified not in observed_sources
                 and movies.get(verified, set()) & exported_after_revision):
@@ -385,11 +402,15 @@ async def trial(args, lock, artifacts, command):
     # SHA-256, a real acknowledged export path, and its decoded VIDEO stream
     # duration. Nothing is inferred from an unverified model claim.
     host_verified_export_windows = []
+    native_export_project_bindings = set()
     for movie_digest in sorted(set(revised_exports)):
         for movie in sorted(movies.get(movie_digest, set()) & exported_after_revision):
-            inputs = export_inputs_by_path.get(movie)
-            if not isinstance(inputs, dict) or sha(movie) != movie_digest:
+            identity = export_inputs_by_path.get(movie)
+            if (not isinstance(identity, dict) or
+                    not isinstance(identity.get("selected"), dict) or
+                    sha(movie) != movie_digest):
                 continue
+            inputs = identity["selected"]
             start = inputs.get('startSeconds', 0)
             # Do not silently coerce an invalid model string, NaN or bool
             # into a plausible time origin; the editor remains the judge of
@@ -411,8 +432,28 @@ async def trial(args, lock, artifacts, command):
                 continue
             host_verified_export_windows.append({
                 'start_seconds': start, 'end_seconds': start + duration})
+            native_export_project_bindings.add((
+                identity["native_project_path_sha256"],
+                identity["native_timeline_id"]))
+    # A video exported from project A does not inherit an unrelated original
+    # source clip later saved on project B, or a DIFFERENT active timeline.
+    # Only the actual pinned editor's export ACK plus physical video digest
+    # can bind one final saved project's active timeline to this delivery.
+    # Source verifier itself continues to enforce owner-copy SHA and temporal
+    # overlap against the physically verified export time windows.
+    bound_native_projects = []
+    for project_path in native_projects:
+        relative_path = str(project_path)
+        native_path_sha = hashlib.sha256(
+            relative_path.encode("utf-8")).hexdigest()
+        # Never open an arbitrary path claimed by an untrusted export reply.
+        # Only read trial-owned projects enumerated by the trusted host.
+        native_state = json.loads(project_path.read_text(encoding="utf-8"))
+        active = native_state.get("currentTimelineId")
+        if ((native_path_sha, active) in native_export_project_bindings):
+            bound_native_projects.append(project_path)
     original_footage = verify_original_footage_on_native_timeline(
-        projects, native_projects, source_assets,
+        projects, bound_native_projects, source_assets,
         host_verified_export_windows=host_verified_export_windows)
     def decoded_frames(path):
         raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(path),
@@ -429,6 +470,8 @@ async def trial(args, lock, artifacts, command):
             'decoded_frame_sequence_changed': changed_pixels,
             'verified_exports_after_final_revision': revised_exports,
             'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects],
+            'native_projects_bound_to_actual_export': [
+                str(path.relative_to(artifacts)) for path in bound_native_projects],
             'original_source_footage_on_native_timeline_verified':
                 original_footage['actual_original_video_used_on_native_timeline'],
             'native_original_source_clip_proof':
