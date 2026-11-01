@@ -29,6 +29,8 @@ from pathlib import Path
 from urllib.parse import urlsplit,unquote,parse_qs
 
 from .body_capabilities import operational_tool_summary,explain_operational_tool
+from .creative_research_hub import CreativeResearchHub
+from .creative_research import CreativeResearchError
 from .body_affordances import BodyAffordanceSurface
 from .body_sensory import sense_body_job
 from .body_integration import body_catalog
@@ -693,6 +695,26 @@ def make_body_http_handler(coordinator,token):
         def do_POST(self):
             if not self._authorized():return
             path=urlsplit(self.path).path
+            if path == "/v1/research":
+                # Built into the authenticated loopback BODY. No additional
+                # research daemon/API key/configuration required after the
+                # host and model are connected. Only fixed, vetted public
+                # metadata endpoints can receive a user/model-created query.
+                try:
+                    length=int(self.headers.get("Content-Length","0"))
+                    if not 0 < length <= 2048:
+                        raise ValueError("Creative research requires bounded request")
+                    payload=json.loads(self.rfile.read(length))
+                    if (not isinstance(payload,dict) or
+                            not set(payload).issubset(
+                                {"query","domain","media","limit"}) or
+                            "query" not in payload):
+                        raise ValueError("Only registered creative research fields are allowed")
+                    result=CreativeResearchHub.installed().research(**payload)
+                    return self._reply(200,result)
+                except (CreativeResearchError,ValueError,TypeError,
+                        RecursionError) as exc:
+                    return self._reply(400,{"error":str(exc)})
             if path.startswith("/v1/creative-sessions/") and path.endswith("/stop"):
                 manager=getattr(coordinator,"creative_sessions",None)
                 if manager is None:
