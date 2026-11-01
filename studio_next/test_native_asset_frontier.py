@@ -71,12 +71,133 @@ class CreateNativeProjectThenObserveEmptyAssets(ActualNativeObservationSession):
         return await super().call_tool(name, arguments)
 
 
+class HostObservedImportedButUnplacedSource(HostObservedEmptyAssetSession):
+    """Physical project and imported asset, no actual placed native clip."""
+    def __init__(self, *, assets=None, missing_status=False, malformed=False):
+        super().__init__()
+        self.assets = ([{"id": "real-native-import-1",
+                         "name": "original-imported-video.mp4"}]
+                       if assets is None else assets)
+        self.missing_status = missing_status
+        self.malformed = malformed
+        self.tools.append(SimpleNamespace(
+            name="add_assets_to_timeline",
+            description="Place multiple imported assets on the actual timeline",
+            input_schema={"type": "object", "properties": {
+                "assetIds": {"type": "array", "items": {"type": "string"}},
+                "previewOnly": {"type": "boolean"}}}))
+
+    async def call_tool(self, name, arguments):
+        if name == "get_assets":
+            self.calls.append((name, arguments))
+            receipt = {
+                "count": len(self.assets), "limitApplied": False,
+                "assets": self.assets}
+            if self.malformed:
+                receipt["limitApplied"] = True
+            data = {"content": [SimpleNamespace(
+                type="text", text=json.dumps(receipt))]}
+            if not self.missing_status:
+                data["is_error"] = False
+            return SimpleNamespace(**data)
+        reply = await super().call_tool(name, arguments)
+        if name == "get_project":
+            snapshot = json.loads(reply.content[0].text)
+            snapshot["assetCount"] = max(1, len(self.assets))
+            snapshot["currentTimeline"]["clipCount"] = 0
+            reply.content[0].text = json.dumps(snapshot)
+        return reply
+
+
 class ActualHostAssetProducerFrontierTests(unittest.IsolatedAsyncioTestCase):
     def grants(self, session):
         return {t.name: ("read" if t.name in {
             "get_project", "get_assets", "get_timeline",
             "zx7_verify_native_export", "zx7_observe_verified_export_frame"}
             else "write") for t in session.tools}
+
+    async def test_real_imported_source_without_clip_exposes_only_granted_placement_tool_options(self):
+        editor = HostObservedImportedButUnplacedSource()
+        model = ScriptedModel([
+            decision("search", query="add_asset_to_timeline"),
+            decision("finish", summary="Model inspected a possibility; no clip applied"),
+        ])
+        access = self.grants(editor)
+        outcome = await NativeCreativeControl(
+            editor, model, max_turns=2, catalog_mode="indexed",
+            host_tool_access=access,
+            host_possible_effects={
+                "add_asset_to_timeline": ["native_source_clip_placed"],
+                "add_assets_to_timeline": ["native_source_clip_placed"]},
+            host_preconditions={
+                "add_asset_to_timeline": ["project_open"],
+                "add_assets_to_timeline": ["project_open"]},
+        ).run("Independently choose native scene editing operations")
+        options = model.observed[0][
+            "host_attested_unplaced_source_tool_options"]
+        self.assertEqual(options["observed_project_asset_count"], 1)
+        self.assertEqual(options["observed_current_timeline_clip_count"], 0)
+        self.assertEqual(
+            {x["tool"] for x in options["possible_native_tools_for_model_discovery_only"]},
+            {"add_asset_to_timeline", "add_assets_to_timeline"})
+        self.assertTrue(options["host_did_not_choose_or_execute_an_edit"])
+        self.assertNotIn("add_asset_to_timeline",
+                         model.observed[0]["selectable_native_tools"])
+        self.assertEqual([name for name, _ in editor.calls],
+                         ["get_project", "get_assets"])
+        host_events = [x for x in outcome["events"] if x["kind"] ==
+                       "host_native_unplaced_asset_frontier"]
+        self.assertEqual(len(host_events), 1)
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=access)[
+                "journal_chain_structurally_valid"])
+        forged = copy.deepcopy(outcome["events"])
+        next(x for x in forged if x["kind"] ==
+             "host_native_unplaced_asset_frontier")[
+                 "tool_names_for_discovery"] = ["ungranted_import"]
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(forged, host_tool_access=access)
+
+    async def test_unverified_or_empty_asset_inventory_never_creates_placement_options(self):
+        for case in (
+            {"assets": []}, {"malformed": True},
+            {"missing_status": True},
+            {"assets": [{"id": "duplicate"}, {"id": "duplicate"}]},
+        ):
+            with self.subTest(case=case):
+                editor = HostObservedImportedButUnplacedSource(**case)
+                model = ScriptedModel([decision(
+                    "search", query="add_asset_to_timeline")])
+                access = self.grants(editor)
+                result = await NativeCreativeControl(
+                    editor, model, max_turns=1, catalog_mode="indexed",
+                    host_tool_access=access,
+                    host_possible_effects={"add_asset_to_timeline": [
+                        "native_source_clip_placed"]},
+                ).run("Do not invent source presence")
+                self.assertIsNone(model.observed[0][
+                    "host_attested_unplaced_source_tool_options"])
+                self.assertFalse(any(x["kind"] ==
+                    "host_native_unplaced_asset_frontier"
+                    for x in result["events"]))
+                self.assertTrue(audit_native_journal(
+                    result["events"], host_tool_access=access)[
+                        "journal_chain_structurally_valid"])
+
+    async def test_no_host_declared_placement_effect_never_invents_a_tool(self):
+        editor = HostObservedImportedButUnplacedSource()
+        model = ScriptedModel([decision("search", query="video clips")])
+        access = self.grants(editor)
+        outcome = await NativeCreativeControl(
+            editor, model, max_turns=1, catalog_mode="indexed",
+            host_tool_access=access, host_possible_effects={}).run(
+                "Respect real operation capabilities")
+        self.assertIsNone(model.observed[0][
+            "host_attested_unplaced_source_tool_options"])
+        self.assertEqual([name for name, _ in editor.calls], ["get_project"])
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=access)[
+                "journal_chain_structurally_valid"])
 
     async def test_real_nonempty_native_clip_exposes_technical_evidence_tools_not_edits(self):
         # The host reports one real imported asset and one placed native
