@@ -6,6 +6,7 @@ traces are returned, not private original frames or PCM audio.
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from .reference_observatory import ReferenceObservationError, observe_reference
 
@@ -32,7 +33,7 @@ def inspect_authorized_reference(reference_root, reference, *, bins=64):
     visual = [{"count": 0, "difference_total": 0., "difference_max": 0.,
                "luma_total": 0., "chroma_total": 0.,
                "rgb_total": [0., 0., 0.]} for _ in range(bins)]
-    sound = [{"count": 0, "rms_dbfs_total": 0., "peak_dbfs_max": -120.}
+    sound = [{"sample_count": 0, "rms_power_total": 0., "peak_dbfs_max": -120.}
              for _ in range(bins)]
     for item in report["visual_observations"]:
         index = min(bins-1, int(item["second"]*bins/duration))
@@ -47,8 +48,11 @@ def inspect_authorized_reference(reference_root, reference, *, bins=64):
     for item in report["audio_observations"]:
         index = min(bins-1, int(item["second"]*bins/duration))
         value = sound[index]
-        value["count"] += 1
-        value["rms_dbfs_total"] += item["rms_dbfs"]
+        # Sound pressure is not additive in decibels. Aggregate decoded PCM
+        # duration-weighted linear mean-square energy, then report dBFS.
+        samples = item["sample_count"]
+        value["sample_count"] += samples
+        value["rms_power_total"] += (10 ** (item["rms_dbfs"] / 10.)) * samples
         value["peak_dbfs_max"] = max(value["peak_dbfs_max"], item["peak_dbfs"])
     graph = []
     for index, (v, a) in enumerate(zip(visual, sound)):
@@ -65,9 +69,11 @@ def inspect_authorized_reference(reference_root, reference, *, bins=64):
             "mean_rgb":
                 [round(x/v["count"], 4) for x in v["rgb_total"]] if v["count"] else None,
             "audio_rms_dbfs":
-                round(a["rms_dbfs_total"]/a["count"], 2) if a["count"] else None,
+                round(10 * math.log10(max(a["rms_power_total"] /
+                                        a["sample_count"], 1e-12)), 2)
+                if a["sample_count"] else None,
             "audio_peak_dbfs":
-                round(a["peak_dbfs_max"], 2) if a["count"] else None,
+                round(a["peak_dbfs_max"], 2) if a["sample_count"] else None,
         })
     cut_times = report["cut_candidates_seconds"]
     return {
