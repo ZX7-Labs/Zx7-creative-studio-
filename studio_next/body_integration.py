@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .contracts import ToolSpec
 from .creative_research import CreativeResearch
+from .creative_research_hub import CreativeResearchHub
 from .registry import ToolCatalog
 from .edit_timeline import render_edit,_path_within
 from .editorial_interchange import export_editable_timeline
@@ -344,7 +345,7 @@ def _commit_actual_body_output(final_path,render):
         stage.unlink(missing_ok=True)
 
 
-def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=None):
+def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=None,research_hub=None):
     """Attach native editor operations only through a host-configured client.
 
     The host owns its grants and argument/path policy. Project/model arguments
@@ -358,7 +359,22 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     # Its explicit 'network' permission is not included in ordinary read grants.
     # The caller can attach an independently configured trusted client.
     researcher = research_client if research_client is not None else CreativeResearch()
+    hub = research_hub if research_hub is not None else CreativeResearchHub.installed()
     for operation_id, description, required, properties, runner in (
+        ("body.research_creative",
+         "Open-ended independent creative research over installed free-source "
+         "adapters. Images, videos, audio, 3D research, storytelling, "
+         "animation, design, editorial, visual culture and audience studies "
+         "are open to the model's query. Sources remain separately evidenced; "
+         "no automatic copyright clearance, source import or audience approval.",
+         ["query"],
+         {"query": {"type": "string"},
+          "domain": {"type": "string"}, "media": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1}},
+         lambda args: hub.research(
+             query=args["query"], domain=args.get("domain", "all"),
+             media=args.get("media", "all"),
+             limit=args.get("limit", 12))),
         ("body.research_assets",
          "Search CC0 candidate image/audio/video metadata. No download, "
          "no verified license, no automatic source import; original rights review required.",
