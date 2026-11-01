@@ -589,6 +589,11 @@ class NativeCreativeControl:
         self._native_state_refresh_due = False
         self._latest_native_state_facts: dict | None = None
         self._host_source_frontier: dict | None = None
+        # A successful native import ACK may identify a new project asset.
+        # Preserve its native ID across later metadata/tool calls so a small
+        # model need not guess an external source path as an opaque asset ID.
+        # This is a *provisional receipt*, not get_assets source custody.
+        self._last_native_import_asset_hint: dict | None = None
         self._model_output_rejections = 0
         self._last_audio: list[tuple[str, bytes]] = []
         self._last_audio_evidence: dict | None = None
@@ -1089,6 +1094,8 @@ class NativeCreativeControl:
                         if self._capabilities is not None else None),
                     "last_capability_search_result": self._last_search_result,
                     "host_attested_source_asset_producers": self._host_source_frontier,
+                    "last_imported_native_asset_receipt_for_lookup_only":
+                        self._last_native_import_asset_hint,
                     "completion_does_not_certify_artistic_quality": True,
                     "required_completion_evidence": sorted(self.required_evidence),
                     "missing_completion_evidence": self._missing_completion_evidence(),
@@ -2043,6 +2050,26 @@ class NativeCreativeControl:
                 self._last_native_texts = texts
                 self._last_images, self._last_hashes = images, hashes
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
+                if native_name in ("create_project", "open_project"):
+                    self._last_native_import_asset_hint = None
+                if (native_name == "import_asset_from_path" and
+                        self.host_tool_access is not None and
+                        self.host_tool_access.get(native_name) == "write"):
+                    imported = (host_result.get("asset")
+                                if isinstance(host_result, dict) else None)
+                    identity = imported.get("id") if isinstance(imported, dict) else None
+                    if (isinstance(identity, str) and identity.strip() and
+                            len(identity) <= 512):
+                        name = imported.get("name")
+                        self._last_native_import_asset_hint = {
+                            "assetId": identity,
+                            "assetName": name[:120] if isinstance(name, str) else "",
+                            "origin": "native_import_application_ack",
+                            "provisional_until_get_assets_confirms_identity": True,
+                            "not_an_automatic_edit_or_tool_grant": True,
+                        }
+                    else:
+                        self._last_native_import_asset_hint = None
                 self._append({"kind": "native_tool_result", "turn": turn,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
