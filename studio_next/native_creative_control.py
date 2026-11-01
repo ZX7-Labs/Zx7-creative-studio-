@@ -167,9 +167,25 @@ def _field(value: Any, name: str, default=None):
     return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
 
 
+def _native_mcp_error_status(result):
+    """An actual MCP reply must carry consistent strict boolean status.
+
+    Never turn absent, coerced, or contradictory transport flags into a
+    committed native write or trustworthy state observation.
+    """
+    missing = object()
+    values = [_field(result, key, missing) for key in ("is_error", "isError")]
+    present = [v for v in values if v is not missing]
+    if (not present or any(type(v) is not bool for v in present)
+            or len(set(present)) != 1):
+        raise NativeCreativeControlError(
+            "Native MCP response has missing or contradictory boolean status")
+    return present[0]
+
+
 def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], list[tuple[str, bytes]]]:
     """Unpack genuine bounded data without trusting a model-produced label."""
-    if _field(result, "is_error", _field(result, "isError", False)):
+    if _native_mcp_error_status(result):
         return [], [], []
     blocks = _field(result, "content", ())
     if not isinstance(blocks, (list, tuple)):
@@ -767,7 +783,7 @@ class NativeCreativeControl:
             return
         try:
             reply = await self.session.call_tool("get_assets", {"limit": 1000})
-            if _field(reply, "is_error", _field(reply, "isError", False)):
+            if _native_mcp_error_status(reply):
                 raise NativeCreativeControlError("Native asset inventory read failed")
             texts, images, audio = _native_content(reply)
             if len(texts) != 1 or images or audio:
@@ -1072,14 +1088,21 @@ class NativeCreativeControl:
                                   "tool": "get_project", "host_attested_read_only": True,
                                   "error_type": type(exc).__name__})
                 else:
-                    if _field(native_bootstrap, "is_error",
-                              _field(native_bootstrap, "isError", False)):
+                    try:
+                        bootstrap_error = _native_mcp_error_status(native_bootstrap)
+                    except NativeCreativeControlError:
+                        self._append({"kind": "host_project_bootstrap_error",
+                                      "tool": "get_project",
+                                      "host_attested_read_only": True,
+                                      "error_type": "UntrustedMCPStatusEnvelope"})
+                        bootstrap_error = None
+                    if bootstrap_error is True:
                         digest, oversized = _bounded_error_digest(native_bootstrap)
                         self._append({"kind": "host_project_bootstrap_error",
                                       "tool": "get_project", "host_attested_read_only": True,
                                       "error_sha256": digest,
                                       "error_text_exceeded_evidence_budget": oversized})
-                    else:
+                    elif bootstrap_error is False:
                         try:
                             texts, images, audio = _native_content(native_bootstrap)
                             if images or audio:
@@ -1166,8 +1189,7 @@ class NativeCreativeControl:
                         try:
                             snapshot_reply = await self.session.call_tool(
                                 "get_project", {})
-                            if _field(snapshot_reply, "is_error",
-                                      _field(snapshot_reply, "isError", False)):
+                            if _native_mcp_error_status(snapshot_reply):
                                 raise NativeCreativeControlError(
                                     "Native state summary read reported error")
                             snapshot_texts, snapshot_images, snapshot_audio = (
@@ -1726,8 +1748,7 @@ class NativeCreativeControl:
                     try:
                         raw_assets = await self.session.call_tool(
                             "get_assets", {"limit": 1000})
-                        if _field(raw_assets, "is_error",
-                                  _field(raw_assets, "isError", False)):
+                        if _native_mcp_error_status(raw_assets):
                             raise NativeCreativeControlError(
                                 "Native project asset inventory read returned an error")
                         inventory_texts, inventory_images, inventory_audio = (
@@ -1843,8 +1864,7 @@ class NativeCreativeControl:
                             "get_timeline", {"includeClips": True,
                                              "includeTransitions": False,
                                              "limit": 1000})
-                        if _field(timeline_reply, "is_error",
-                                  _field(timeline_reply, "isError", False)):
+                        if _native_mcp_error_status(timeline_reply):
                             raise NativeCreativeControlError(
                                 "Native timeline reference inventory read failed")
                         timeline_texts, timeline_images, timeline_audio = (
@@ -1916,7 +1936,21 @@ class NativeCreativeControl:
                     raise
                 native_ms = round((time.monotonic_ns() - call_started) / 1_000_000, 3)
                 self._native_mcp_wall_ms_total += native_ms
-                if _field(result, "is_error", _field(result, "isError", False)):
+                try:
+                    native_error = _native_mcp_error_status(result)
+                except NativeCreativeControlError:
+                    # A write may have been applied even if the MCP envelope
+                    # is malformed. Never infer success or replay an edit.
+                    self._append({"kind": "native_tool_uncertain_outcome",
+                                  "turn": turn, "tool": native_name,
+                                  "measured_native_mcp_wall_ms": native_ms,
+                                  "uncertainty_reason":
+                                      "untrusted_mcp_status_envelope",
+                                  "must_reconcile_native_state": True,
+                                  "no_automatic_retry": True})
+                    outcome = "native_error_requires_state_reconciliation"
+                    break
+                if native_error:
                     digest, out_of_budget = _bounded_error_digest(result)
                     if (self.host_tool_access is not None and
                             self.host_tool_access[native_name] == "read"):
@@ -2457,8 +2491,24 @@ class NativeCreativeControl:
                                           "no_model_selected_mutation": True,
                                           "error_type": type(exc).__name__})
                             break
-                        if _field(refreshed, "is_error",
-                                  _field(refreshed, "isError", False)):
+                        try:
+                            refreshed_error = _native_mcp_error_status(refreshed)
+                        except NativeCreativeControlError:
+                            self._project_presence = "unknown"
+                            self._post_write_state_warning = {
+                                "read_only_reconciliation_incomplete": True,
+                                "project_state_unknown": True,
+                                "must_inspect_native_project": True}
+                            self._append({
+                                "kind": "host_project_post_write_error",
+                                "tool": "get_project",
+                                "triggered_by_native_tool": native_name,
+                                "read_attempt": read_attempt,
+                                "host_attested_read_only": True,
+                                "no_model_selected_mutation": True,
+                                "error_type": "UntrustedMCPStatusEnvelope"})
+                            break
+                        if refreshed_error:
                             digest, oversized = _bounded_error_digest(refreshed)
                             self._project_presence = "unknown"
                             self._post_write_state_warning = {
