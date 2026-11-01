@@ -286,6 +286,10 @@ def _validate_decision(plan,assets):
     beats=plan.get("beats")
     if not isinstance(beats,list) or not 6 <= len(beats) <= 12:
         raise ValueError("Model must author 6–12 original editorial beats")
+    title_probe = ImageDraw.Draw(Image.new("RGBA",SIZE))
+    if title_probe.textbbox((0,0),title.upper(),font=_font(19))[2] > (
+            SIZE[0]-2*max(48,round(SIZE[0]*.06))):
+        raise ValueError("Model film title exceeds actual physical safe area")
     for beat in beats:
         if not isinstance(beat,dict):
             raise ValueError("Creative beat must be a real object")
@@ -294,6 +298,13 @@ def _validate_decision(plan,assets):
         caption=beat.get("caption")
         if not isinstance(caption,str) or not 3<=len(caption)<=100:
             raise ValueError("Each original visual beat needs an authored short thought")
+        # Check actual native typography *before* expensive source video
+        # rendering. A rejected model caption is retried by the neural
+        # planning loop, never silently truncated or clipped in a film.
+        _fit_film_caption(
+            title_probe, caption,
+            max_width=SIZE[0]-2*max(48,round(SIZE[0]*.06)),
+            max_height=112)
         if beat.get("camera") not in ("push","pull","drift_left","drift_right","still"):
             raise ValueError("Model requested a camera control unavailable in the physical editor")
         if (type(beat.get("weight")) not in (int,float) or
@@ -434,43 +445,72 @@ def _render_segment(image, overlay, camera, nframes, dest):
     if not dest.is_file() or dest.stat().st_size < 8000:
         raise RuntimeError("Native visual segment not rendered")
 
-def _render_music(music, output):
-    root, bpm=music["root_midi"],music["bpm"]
-    mode=music["mode"]
-    degrees=[0,2,3,5,7,8,10] if mode=="minor" else [0,2,4,5,7,9,11]
-    progression=music["progression"]
-    sample_rate=48000
-    n=SECONDS*sample_rate
-    t=np.arange(n,dtype=np.float64)/sample_rate
-    beat=60/bpm
-    bar=beat*4
-    chord_idx=(t/bar).astype(np.int32)%len(progression)
-    audio=np.zeros(n,dtype=np.float64)
-    def pitch(midi):return 440*2**((midi-69)/12)
+def _render_music(music, output, *, duration_seconds=SECONDS, sample_rate=48000):
+    """Physically continuous score from the model's chosen harmonic direction.
+
+    The model authors the composition parameters. The native renderer makes
+    transitions sample-continuous rather than inserting audible discontinuities
+    at chord and beat boundaries. This is not a mastering or artistic review.
+    """
+    if (type(duration_seconds) is not int or not 1 <= duration_seconds <= 7200
+            or type(sample_rate) is not int or not 8000 <= sample_rate <= 192000):
+        raise ValueError("Score must have bounded positive sample and time clocks")
+    root, bpm = music["root_midi"], music["bpm"]
+    mode = music["mode"]
+    degrees = [0,2,3,5,7,8,10] if mode=="minor" else [0,2,4,5,7,9,11]
+    progression = music["progression"]
+    n = duration_seconds * sample_rate
+    t = np.arange(n,dtype=np.float64) / sample_rate
+    beat = 60 / bpm
+    bar = beat * 4
+    bar_idx = np.floor(t/bar).astype(np.int32)
+    barphase = np.mod(t,bar)
+    current = bar_idx % len(progression)
+    following = (bar_idx + 1) % len(progression)
+
+    # Raised-slope smoothstep crossfade ends at the bar boundary. At that
+    # boundary the upcoming chord is already at full gain and the outgoing
+    # chord at zero, eliminating the prior 0->1 hard mask discontinuity.
+    transition_seconds = min(.12, bar / 8)
+    alpha = np.clip((barphase - (bar-transition_seconds)) /
+                    transition_seconds, 0, 1)
+    alpha = alpha*alpha*(3-2*alpha)
+    audio = np.zeros(n,dtype=np.float64)
+    def pitch(midi):
+        return 440 * 2**((midi-69)/12)
     for index, degree in enumerate(progression):
-        active=(chord_idx==index).astype(np.float64)
-        barphase=(t%bar)/bar
-        envelope=(0.38+0.62*np.minimum(1,barphase*6))
-        key=root+degrees[degree]
-        tones=(key,key+7,key+12)
-        pad=sum(np.sin(2*np.pi*pitch(note)*t + (j*.37))*
-                (0.31 if j==0 else .20) for j,note in enumerate(tones))
-        audio+=pad*active*envelope
-    pulse=(t%beat)/beat
-    bassfreq=pitch(root-12)
-    audio+=.14*np.sin(2*np.pi*bassfreq*t)*np.exp(-pulse*7)
-    audio+=.05*np.sin(2*np.pi*(660+1200*pulse)*t)*np.exp(-pulse*24)
-    fade=np.minimum(1,np.minimum(t/2.2,(SECONDS-t)/3.2)).clip(0,1)
-    audio*=fade*.42
-    mx=max(.01,np.max(np.abs(audio)))
-    audio=np.clip(audio/max(1,mx/0.83),-.95,.95)
-    left=audio
-    right=.97*audio+.03*np.roll(audio,97)
-    stereo=np.stack((left,right),axis=1)
+        gain = ((current==index)*(1-alpha) +
+                (following==index)*alpha)
+        key = root+degrees[degree]
+        pad = sum(np.sin(2*np.pi*pitch(note)*t + j*.37) *
+                  (.31 if j==0 else .20)
+                  for j, note in enumerate((key,key+7,key+12)))
+        audio += pad*gain
+
+    pulse_seconds = np.mod(t,beat)
+    pulse = pulse_seconds/beat
+    # Both beat transients have zero-amplitude boundary conditions.
+    # Previously the instant envelope reset produced 0.1+ full-scale jumps
+    # in actually decoded samples, a genuine audible click source.
+    bass_envelope = (-np.expm1(-pulse*36)) * np.exp(-pulse*5) * (1-pulse)**2
+    audio += (.14 * np.sin(2*np.pi*pitch(root-12)*t) * bass_envelope)
+    audio += (.05 * np.sin(2*np.pi*(660+1200*pulse)*pulse_seconds) *
+              np.exp(-pulse*24))
+    fade = np.minimum(1,np.minimum(t/2.2,(duration_seconds-t)/3.2)).clip(0,1)
+    audio *= fade*.42
+    peak=max(.01,np.max(np.abs(audio)))
+    audio=np.clip(audio/max(1,peak/.83),-.95,.95)
+
+    # Delay only real samples; np.roll() would incorrectly leak audio from
+    # the end of the soundtrack back into its beginning.
+    right = .97*audio + .03*np.concatenate((np.zeros(97),audio[:-97]))
+    stereo=np.stack((audio,right),axis=1)
     frames=(stereo*32767).astype("<i2")
-    with wave.open(str(output),"wb") as w:
-        w.setnchannels(2);w.setsampwidth(2)
-        w.setframerate(sample_rate);w.writeframes(frames.tobytes())
+    with wave.open(str(output),"wb") as sound:
+        sound.setnchannels(2)
+        sound.setsampwidth(2)
+        sound.setframerate(sample_rate)
+        sound.writeframes(frames.tobytes())
 
 
 def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
@@ -568,11 +608,29 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
         ],
     }
     if alternate_cut_requested:
+        # An explicitly requested version-two project is not the same as
+        # a subjective self-review. The model may independently select
+        # *which* editorial field to change, but it cannot turn a direct
+        # alternate-cut request into 'keep' and claim a version exists.
+        schema["properties"]["action"]["enum"] = ["revise"]
+        brain.settings.sampling["response_format"]["json_schema"]["schema"] = schema
         # An explicit alternate-cut workload is different from an autonomous
         # decision to self-revise. No author-picked field/value/scene is passed
         # to the model, and a model refusal remains a real failed trial.
         request["alternate_cut_experiment_requested"] = True
-        request["task"] += (
+        request["task"] = (
+            "The owner expressly requests a genuinely different alternate "
+            "editorial version after reviewing the actual encoded first cut. "
+            "A no-op or 'keep' cannot fulfill this request. You MUST author "
+            "one grounded, source-attested native revision. Independently "
+            "choose the beat, field and new creative value; the host does "
+            "not prescribe any aesthetic decision. Compare the real frames, "
+            "source inventory and original edit plan. Make an actual change "
+            "in camera, pace, source art or caption, with expected_before "
+            "copied EXACTLY from the chosen native beat's current field. "
+            "You have not listened to the soundtrack, and must not claim "
+            "that you have. No fabricated dates, artists, sources, rights "
+            "or professional aesthetic approvals. "
             " Additional separate trial instruction: deliver one genuinely "
             "different editorial version after seeing the source-attested "
             "first render. Independently choose whichever native beat and "
