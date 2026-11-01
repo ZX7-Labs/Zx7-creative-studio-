@@ -53,7 +53,8 @@ def detect_authorized_shots(reference_root, reference, *,
     }
     try:
         scenes = scenedetect.detect(str(movie), detectors[method](),
-                                   show_progress=False, backend="opencv")
+                                   show_progress=False, backend="opencv",
+                                   start_in_scene=True)
     except Exception as exc:
         raise ReferenceObservationError("Open-source shot detector could not decode input") from exc
     if not scenes:
@@ -63,7 +64,7 @@ def detect_authorized_shots(reference_root, reference, *,
     starts, ranges = [], []
     last_end = None
     for i, (start, end) in enumerate(scenes):
-        s, e = float(start.get_seconds()), float(end.get_seconds())
+        s, e = float(start.seconds), float(end.seconds)
         if (not math.isfinite(s) or not math.isfinite(e)
                 or s < 0 or e <= s
                 or (last_end is not None and abs(s-last_end) > 0.2)):
