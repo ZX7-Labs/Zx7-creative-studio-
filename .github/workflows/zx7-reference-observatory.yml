@@ -8,6 +8,8 @@ on:
       - "studio_next/reference_observatory.py"
       - "studio_next/reference_evidence_tools.py"
       - "studio_next/creative_research_mcp.py"
+      - "studio_next/creative_evidence_memory.py"
+      - "studio_next/test_creative_evidence_memory.py"
       - "studio_next/test_reference_observatory.py"
       - ".github/workflows/zx7-reference-observatory.yml"
   workflow_dispatch:
@@ -34,7 +36,7 @@ jobs:
       - name: Compile reference observatory and regression tests
         run: |
           python -m py_compile studio_next/reference_observatory.py studio_next/reference_evidence_tools.py studio_next/creative_research_mcp.py studio_next/test_reference_observatory.py
-          python -m unittest -v studio_next.test_reference_observatory
+          python -m unittest -v studio_next.test_reference_observatory studio_next.test_creative_evidence_memory
       - name: Verify repository source syntax inventory
         run: |
           python -m compileall -q studio_next scripts
