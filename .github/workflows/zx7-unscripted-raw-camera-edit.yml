@@ -1,0 +1,65 @@
+name: ZX7 Unscripted Local AI Edits Real Raw Camera Video
+on:
+  push:
+    branches: ["experiment/unedited-live-action-neural-edit-20261102"]
+    paths:
+      - "scripts/run_raw_video_neural_edit_test.py"
+      - ".github/workflows/zx7-unscripted-raw-camera-edit.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: zx7-unscripted-raw-camera-real-editor
+  cancel-in-progress: true
+jobs:
+  model-autonomous-editor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Load actual edit engine source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locally owned native editor, audio, video and font engines
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg melt frei0r-plugins fonts-dejavu-core
+          python -m pip install --disable-pip-version-check '.[production]'
+          python -m compileall -q scripts/run_raw_video_neural_edit_test.py studio_next
+      - name: Get actually downloaded legally reusable raw camera take from prior successful run
+        uses: actions/download-artifact@v4
+        with:
+          name: zx7-real-filmmaker-camera-takes
+          run-id: 41348347870
+          github-token: ${{ github.token }}
+          repository: ZX7-Labs/Zx7-creative-studio-
+          path: output/cinestudy-source
+      - name: Run real pinned local AI with no creative guidance other than Edit this video
+        run: |
+          python -u scripts/run_raw_video_neural_edit_test.py \
+            --source output/cinestudy-source/camera_take_01.webm \
+            --rights output/cinestudy-source/acquisition.json \
+            --model-lock engines/velorn/local-model-trial.lock.json \
+            --model-runtime "$RUNNER_TEMP/zx7-local-unedited-video-model" \
+            --output "$GITHUB_WORKSPACE/output/actual-unscripted-raw-edit"
+      - name: Publish physical evidence including failures, not invented success
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-unscripted-raw-camera-edited-original
+          path: |
+            output/actual-unscripted-raw-edit/edit-evidence.json
+            output/actual-unscripted-raw-edit/local-model-transcript.json
+            output/actual-unscripted-raw-edit/model-authored-raw-video-edit.json
+            output/actual-unscripted-raw-edit/ZX7-GENUINE-RAW-VIDEO-SELF-DIRECTED-EDIT.mp4
+            output/actual-unscripted-raw-edit/workspace/camera-original-contact-sheet.png
+            output/actual-unscripted-raw-edit/workspace/self-directed-camera-edit.mlt
+            output/actual-unscripted-raw-edit/workspace/model-authored-native-edit.json
+            output/actual-unscripted-raw-edit/workspace/author-title-*.png
+          if-no-files-found: warn
+          retention-days: 14
