@@ -350,8 +350,19 @@ def _native_zero_alpha_at_all_exported_frame_centers(
     before = max(0, bisect_right(ordered_times, first_local) - 1)
     after = min(len(ordered) - 1,
                 bisect_left(ordered_times, last_local))
-    return all(kf["value"] == 0 for kf in
-               ordered[min(before, after):max(before, after) + 1])
+    if all(kf["value"] == 0 for kf in
+           ordered[min(before, after):max(before, after) + 1]):
+        return True
+    # Pinned getValueAtTime has an explicit 'hold' case: its value stays
+    # EXACTLY at the previous keyframe until the next keyframe's instant.
+    # A model may animate 0% -> 100% via hold at second 1 and export
+    # [0, 1); every physical frame is still completely transparent.
+    # The final sample must be strictly BEFORE that positive keyframe.
+    return (
+        after > before and last_local < ordered[after]["time"] and
+        ordered[after - 1].get("easing") == "hold" and
+        all(kf["value"] == 0 for kf in ordered[before:after])
+    )
 
 
 def verify_original_footage_on_native_timeline(
