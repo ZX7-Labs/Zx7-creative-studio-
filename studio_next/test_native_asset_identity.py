@@ -130,6 +130,51 @@ class AssetIdentityPureTests(unittest.TestCase):
                 self.assertIsNotNone(proof)
                 self.assertTrue(proof["no_native_dispatch"])
 
+    def test_replacement_primary_asset_id_has_native_precedence(self):
+        # Pinned mcpActions.js replacement resolves assetId first, alias
+        # replacementAssetId only if primary is omitted.
+        stock = {"count": 2, "limitApplied": False, "assets": [
+            {"id": "native-a", "name": "A.mp4"},
+            {"id": "native-b", "name": "B.mp4"}]}
+        ok = ({"assetId": "native-a"},
+              {"assetId": "native-a", "replacementAssetId": "missing"},
+              {"assetId": "native-a", "assetName": "missing"},
+              {"replacementAssetId": "native-b"},
+              {"replacementAssetName": "B"})
+        for inputs in ok:
+            with self.subTest(inputs=inputs):
+                self.assertIsNone(assess_native_asset_selection(
+                    "replace_clip_with_asset", inputs, stock))
+        bad = ({"assetId": "unknown"},
+               {"assetId": "unknown", "replacementAssetId": "native-b"},
+               {"assetId": "/owner/staging/source.mp4"},
+               {"replacementAssetId": "unknown"},
+               {"assetName": "missing"},
+               {"replacementAssetName": "missing"})
+        for inputs in bad:
+            with self.subTest(inputs=inputs):
+                response = assess_native_asset_selection(
+                    "replace_clip_with_asset", inputs, stock)
+                self.assertEqual(response["validation_keyword"],
+                                 "native_asset_not_imported")
+                self.assertTrue(response["no_native_dispatch"])
+
+    def test_duplicate_native_catalog_ids_cannot_decide_which_media_gets_edited(self):
+        duplicate = {"count": 2, "limitApplied": False, "assets": [
+            {"id": "same-id", "name": "Owner original video.mp4"},
+            {"id": "same-id", "name": "Unrelated substitute.mp4"}]}
+        for tool, selection in (
+            ("add_asset_to_timeline", {"assetId": "same-id"}),
+            ("replace_clip_with_asset", {"assetId": "same-id"}),
+            ("add_assets_to_timeline", {"assetIds": ["same-id"]}),
+        ):
+            with self.subTest(tool=tool):
+                response = assess_native_asset_selection(
+                    tool, selection, duplicate)
+                self.assertEqual(response["validation_keyword"],
+                                 "native_asset_inventory_unverified")
+                self.assertTrue(response["no_native_dispatch"])
+
     def test_untrusted_or_incomplete_inventory_never_proves_absence(self):
         for stock in (
             {"count": "one", "limitApplied": False, "assets": []},
