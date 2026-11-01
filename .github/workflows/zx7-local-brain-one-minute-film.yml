@@ -100,6 +100,7 @@ jobs:
             output/one-minute-neural-film/workspace/zx7-model-native-edit-revised.mlt
             output/one-minute-neural-film/workspace/model-to-native-mlt-revised.json
             output/one-minute-neural-film/workspace/effects/first-encoded-film-preview.png
+            output/one-minute-neural-film/workspace/effects/focused-original-beat-*.png
             output/one-minute-neural-film/workspace/revision-01/
             output/one-minute-neural-film/workspace/zx7-model-native-edit.mlt
             output/one-minute-neural-film/workspace/model-to-native-mlt.json
