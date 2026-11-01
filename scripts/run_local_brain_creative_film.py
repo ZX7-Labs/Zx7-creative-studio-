@@ -85,22 +85,26 @@ def _museum_images(queries, folder):
     if (not isinstance(queries,list) or not 2<=len(queries)<=5 or
             any(not isinstance(q,str) or not 2<=len(q)<=160 for q in queries)):
         raise ValueError("Model-authored creative search themes invalid")
-    phrases=[]
-    for phrase in queries:
-        tokens=re.findall(r"[A-Za-z]{4,}",phrase)
-        phrases.extend(tokens[:4])
-    phrases.append("") # A broad CC0 catalog for concepts with no literal title matches
+    # Search the model's actual research topics. Category:CC-Zero is an
+    # alphabetical category listing, NOT a search index; using its sort-key
+    # prefix previously supplied unrelated images under a valid CC0 license.
+    themes=[]
+    for qi, phrase in enumerate(queries):
+        tokens=re.findall(r"[A-Za-z]{3,}",phrase)
+        if len(tokens)<2:
+            raise ValueError("Creative source theme lacks meaningful search terms")
+        for term in dict.fromkeys((phrase," ".join(tokens[:2]))):
+            themes.append((qi,term))
     records={}
-    for term in list(dict.fromkeys(phrases))[:14]:
+    query_pools=[[] for _ in queries]
+    for qi,term in themes:
         params={
             "action":"query","format":"json",
-            "generator":"categorymembers","gcmtitle":"Category:CC-Zero",
-            "gcmtype":"file","gcmlimit":50,
+            "generator":"search","gsrsearch":term,
+            "gsrnamespace":6,"gsrlimit":50,
             "prop":"imageinfo","iiprop":"url|mime|extmetadata",
             "iiurlwidth":1280,
             "iiextmetadatafilter":"LicenseShortName|LicenseUrl"}
-        if term:
-            params["gcmstartsortkeyprefix"]=term
         try:
             payload=_api_json("https://commons.wikimedia.org/w/api.php?" +
                               urllib.parse.urlencode(params))
@@ -112,7 +116,7 @@ def _museum_images(queries, folder):
         if not isinstance(pages,dict):
             raise ValueError("Commons query returned invalid media index")
         admitted=0
-        for rec in pages.values():
+        for rec in sorted(pages.values(),key=lambda p: p.get("index",10000) if isinstance(p,dict) else 10000):
             if not isinstance(rec,dict):
                 continue
             info=(rec.get("imageinfo") or [{}])[0]
@@ -156,22 +160,36 @@ def _museum_images(queries, folder):
             ident=rec.get("pageid")
             if type(ident) is not int or ident<=0:
                 continue
-            records[ident]={
-                "id":ident,"title":str(rec.get("title","")).removeprefix("File:")[:150],
-                "artist":"","image_url":image,"page":page,
-                "public_domain_flag":True,"declared_license":"CC0",
-                "license_url":urlstr,
-                "provider":"Wikimedia_Commons_CC_Zero",
-                "original_mime":info["mime"]}
+            if ident not in records:
+                records[ident]={
+                    "id":ident,"title":str(rec.get("title","")).removeprefix("File:")[:150],
+                    "artist":"","image_url":image,"page":page,
+                    "public_domain_flag":True,"declared_license":"CC0",
+                    "license_url":urlstr,
+                    "provider":"Wikimedia_Commons_CC_Zero",
+                    "original_mime":info["mime"],
+                    "search_hit_for_queries":[]}
+            if queries[qi] not in records[ident]["search_hit_for_queries"]:
+                records[ident]["search_hit_for_queries"].append(queries[qi])
+            if ident not in query_pools[qi]:
+                query_pools[qi].append(ident)
             admitted+=1
-        print("Live Commons category CC0 search",repr(term),
-              "CC0 candidate images",admitted,"overall",len(records),flush=True)
-        if len(records)>=100:
-            break
-    if len(records)<12:
-        raise ValueError("Official Commons CC0 index supplied too few genuine images")
+        print("Live Commons topic search",repr(term),
+              "CC0 eligible matches",admitted,"overall",len(records),flush=True)
+    covered=sum(bool(pool) for pool in query_pools)
+    if len(records)<6 or covered<2:
+        raise ValueError("Not enough CC0 media matched distinct creative search themes; refusing unrelated substitutes")
+    # Diversify across the director's search intentions instead of filling
+    # nine consecutive source slots from the first lexicographic neighborhood.
+    candidate_ids=[]
+    seen=set()
+    for offset in range(max(map(len,query_pools),default=0)):
+        for pool in query_pools:
+            if offset<len(pool) and pool[offset] not in seen:
+                seen.add(pool[offset])
+                candidate_ids.append(pool[offset])
     source=[]
-    for record in list(records.values())[:90]:
+    for record in (records[i] for i in candidate_ids[:90]):
         url=record["image_url"]
         try:
             req=urllib.request.Request(url,headers={
