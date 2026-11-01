@@ -167,6 +167,8 @@ def observe_reference(movie, *, sample_fps=8, max_duration_seconds=28800,
             type(max_video_samples) is not int or max_video_samples <= 0):
         raise ReferenceObservationError("Invalid physical observation budget")
     source = _local_source(movie)
+    with source.open("rb") as initial_source:
+        initial_digest = hashlib.file_digest(initial_source, "sha256").hexdigest()
     seconds, has_audio, stream = _probe(source)
     if seconds > max_duration_seconds or math.ceil(seconds*sample_fps) > max_video_samples:
         raise ReferenceObservationError("Reference exceeds bounded scan budget")
@@ -180,6 +182,8 @@ def observe_reference(movie, *, sample_fps=8, max_duration_seconds=28800,
     candidates = [x["second"] for x in video[1:] if x["frame_difference"] >= threshold]
     with source.open("rb") as stream_bytes:
         digest = hashlib.file_digest(stream_bytes, "sha256").hexdigest()
+    if initial_digest != digest:
+        raise ReferenceObservationError("Original media mutated during physical observation")
     result = {
         "schema": "ZX7_REFERENCE_OBSERVATION_V1",
         "source_sha256": digest,
