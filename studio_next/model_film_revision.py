@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import math
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -27,7 +28,55 @@ _CAMERA_CONTROLS = frozenset({
 })
 
 
-def apply_model_selected_revision(plan, decision, *, asset_count):
+def _title_terms(title):
+    """Normalized lexical metadata tokens; source names remain nonauthoritative
+    for rights, visual interpretation and facts *not* explicitly named there.
+    """
+    return re.findall(r"[^\\W_]+", title, re.UNICODE)
+
+
+def _reject_cross_asset_attribution(caption, *, target_title, source_titles):
+    """Reject measurable provenance contamination from another source title.
+
+    This is a narrow *negative* proof, not automatic semantic fact checking.
+    Artist-written metaphors are not prescribed. Source claims containing a
+    new year/identity from another image cannot silently attach to this one.
+    """
+    target = [w.casefold() for w in _title_terms(target_title)]
+    candidate = [w.casefold() for w in _title_terms(caption)]
+    target_words = set(target)
+    for word in candidate:
+        if any(ch.isdigit() for ch in word) and word not in target_words:
+            raise ModelFilmRevisionError(
+                "Caption introduces unsupported numeric source provenance")
+    for source_title in source_titles:
+        if source_title == target_title:
+            continue
+        actual = _title_terms(source_title)
+        tokens = [t.casefold() for t in actual]
+        for width in (2, 3, 4):
+            if len(tokens) < width:
+                continue
+            for idx in range(len(tokens) - width + 1):
+                phrase = tokens[idx:idx + width]
+                has_identity = any(
+                    any(ch.isdigit() for ch in token) or
+                    (original[:1].isupper() and len(original) >= 3)
+                    for token, original in zip(phrase, actual[idx:idx + width])
+                )
+                if not has_identity:
+                    continue
+                if any(target[j:j + width] == phrase
+                       for j in range(max(0, len(target) - width + 1))):
+                    continue
+                if any(candidate[j:j + width] == phrase
+                       for j in range(max(0, len(candidate) - width + 1))):
+                    raise ModelFilmRevisionError(
+                        "Caption borrows an unsupported identity/date from another asset")
+
+
+def apply_model_selected_revision(plan, decision, *, asset_count,
+                                  source_titles=None):
     """Return a *new* plan and a truthfully classified sparse edit receipt.
 
     The caller must still validate full film semantics, render, decode and
@@ -74,6 +123,17 @@ def apply_model_selected_revision(plan, decision, *, asset_count):
     if field == "caption":
         if not 3 <= len(value) <= 100 or not value.strip():
             raise ModelFilmRevisionError("Caption revision must be visible and bounded")
+        if (not isinstance(source_titles, (list, tuple))
+                or len(source_titles) != asset_count
+                or any(not isinstance(title, str) or not title
+                       for title in source_titles)
+                or type(beat.get("artwork")) is not int
+                or not 0 <= beat["artwork"] < asset_count):
+            raise ModelFilmRevisionError(
+                "Caption revision requires trusted target source metadata")
+        _reject_cross_asset_attribution(
+            value, target_title=source_titles[beat["artwork"]],
+            source_titles=source_titles)
         replacement = value
     elif field == "camera":
         if value not in _CAMERA_CONTROLS:
@@ -105,6 +165,8 @@ def apply_model_selected_revision(plan, decision, *, asset_count):
         "field": field, "before": previous, "after": replacement,
         "previous_field_model_attested_to_host_state":True,
         "model_reason_is_not_independently_verified_artistic_quality":True,
+        "cross_asset_attribution_checked":field == "caption",
+        "semantic_fact_check_or_legal_rights_certified":False,
         "changed_fields": [f"beats[{beat_index}].{field}"]
     }
 
