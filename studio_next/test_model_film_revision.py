@@ -6,10 +6,12 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import wave
 
+import numpy as np
 from PIL import Image, ImageDraw
 
-from scripts.run_local_brain_creative_film import _fit_film_caption, _title_overlay
+from scripts.run_local_brain_creative_film import (_fit_film_caption, _title_overlay, _render_music, _validate_decision)
 
 from .model_film_revision import (
     ModelFilmRevisionError, apply_model_selected_revision,
@@ -94,6 +96,51 @@ class LocalFilmRevisionTests(unittest.TestCase):
                 self.assertEqual(repr(self.plan), snapshot)
 
 
+
+
+    def test_original_model_score_has_no_bar_or_beat_clicks(self):
+        """Observed prior production soundtrack had 0.16-FS sample jumps at
+        2.727, 5.455, 10.909 seconds at its exact neural 88-BPM boundaries.
+        The actual PCM executor now crossfades chords and zero-anchors beats,
+        without changing the original model's pitch or chord decisions.
+        """
+        choices = {"bpm":88, "root_midi":57, "mode":"minor",
+                   "progression":[0,3,4,2]}
+        with tempfile.TemporaryDirectory() as root:
+            wav_path=Path(root)/"model-composed-soundtrack.wav"
+            _render_music(choices,wav_path,duration_seconds=8,sample_rate=48000)
+            with wave.open(str(wav_path),"rb") as snd:
+                self.assertEqual(snd.getnframes(),8*48000)
+                self.assertEqual(snd.getframerate(),48000)
+                self.assertEqual(snd.getnchannels(),2)
+                self.assertEqual(snd.getsampwidth(),2)
+                pcm=np.frombuffer(snd.readframes(snd.getnframes()),
+                                  dtype="<i2").reshape(-1,2)
+            left=pcm[:,0].astype(np.float64)/32768
+            right=pcm[:,1].astype(np.float64)/32768
+            differences=np.abs(np.diff(left))
+            # Independent sample oracle, not authored by the synthesizer.
+            self.assertLess(float(np.max(differences)),0.05)
+            self.assertGreater(float(np.max(np.abs(left))),0.06)
+            self.assertFalse(np.array_equal(left,right),
+                             "Real source stereo must not be falsely duplicated")
+            # At the instant of the historical 4/4 chord boundary there is
+            # no discontinuity above the physical single-sample limit.
+            for bar_time in (4*60/88,8*60/88):
+                frame=int(bar_time*48000)
+                self.assertLess(
+                    float(np.max(differences[frame-2:frame+2])),0.05)
+
+    def test_invalid_title_or_unbreakable_caption_rejected_before_render(self):
+        plan=dict(self.plan)
+        plan["beats"]=[dict(x) for x in self.plan["beats"]]
+        with self.assertRaisesRegex(ValueError, "cannot fit"):
+            plan["beats"][1]["caption"]="Z"*100
+            _validate_decision(plan,[{},{}])
+        with self.assertRaisesRegex(ValueError, "title exceeds"):
+            plan["beats"][1]["caption"]="A fit caption"
+            plan["title"]="M"*70
+            _validate_decision(plan,[{},{}])
 
     def test_full_neural_caption_respects_actual_final_movie_safe_area(self):
         """Regress a visibly clipped source name in the prior 60-second film.
