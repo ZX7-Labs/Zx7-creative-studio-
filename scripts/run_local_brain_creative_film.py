@@ -36,7 +36,7 @@ from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
 from studio_next.model_film_revision import (
     ModelFilmRevisionError, apply_model_selected_revision,
-    encoded_film_contact_sheet)
+    audit_editorial_reprises, encoded_film_contact_sheet)
 
 from scripts.run_native_model_trial import download, read_live_linux_model_peak_rss
 
@@ -1020,8 +1020,39 @@ def produce(args):
                 try:
                     plan=_validate_decision(decision,assets)
                     _weights_to_frames(plan["beats"])
+                    editorial_audit=audit_editorial_reprises(plan["beats"])
+                    transcript[-1]["deterministic_reprise_audit"]=editorial_audit
+                    # Never invent a judgement of creative merit. Flag only
+                    # mechanically identical 3+ shot passages observed in an
+                    # actual model-produced film. Ask the neural author to
+                    # reconsider before expensive rendering, but preserve
+                    # deliberate original repetition if it persists.
+                    if (editorial_audit[
+                            "requires_explicit_editorial_intent_review"] and
+                            attempt<2):
+                        repeats=editorial_audit["repeated_visual_sequences"]
+                        first=repeats[0]
+                        last_validation_failure=(
+                            "A factual edit-integrity review found an exact "
+                            "repetition of "+str(first["beat_count"])+
+                            " consecutive shots: earlier zero-based indices "+
+                            str(first["earlier_indices"])+
+                            " repeat identically at "+
+                            str(first["reprise_indices"])+
+                            " (same artwork, caption and camera). This is NOT "
+                            "an aesthetic ban. If the reprise is intentional, "
+                            "explain its new dramatic meaning in your story. "
+                            "Otherwise independently make the later editorial "
+                            "pass distinct in source, camera or narration. "
+                            "Do not invent evidence or copy a preset edit.")
+                        transcript[-1]["nonblocking_editorial_warning"] = (
+                            last_validation_failure)
+                        plan=None
+                        continue
+                    evidence["editorial_reprise_audit"]=editorial_audit
                     break
-                except (ValueError,KeyError,TypeError) as exc:
+                except (ValueError,KeyError,TypeError,
+                        ModelFilmRevisionError) as exc:
                     transcript[-1]["validation_failure"]=str(exc)
                     last_validation_failure=str(exc)
                     plan=None
