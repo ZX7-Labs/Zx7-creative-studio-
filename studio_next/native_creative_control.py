@@ -1854,6 +1854,11 @@ class NativeCreativeControl:
                     # that acknowledgment before a write counts as evidence;
                     # contradictory, missing or malformed receipts leave the
                     # state uncertain and must not be automatically replayed.
+                    # Always reset per-operation receipt identity;
+                    # READ operations never enter the write ACK decoder.
+                    # Without initialization a genuine read raised
+                    # UnboundLocalError in 21 source-gate tests.
+                    host_response = None
                     if (self.host_tool_access is not None and
                             self.host_tool_access.get(native_name) == "write"):
                         try:
