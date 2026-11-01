@@ -32,33 +32,43 @@ jobs:
             ffmpeg melt frei0r-plugins fonts-dejavu-core
           python -m pip install --no-cache-dir '.[production]'
           python -m compileall -q scripts/run_local_brain_creative_film.py studio_next
-      - name: Prove the real CC0 artwork image bytes are accessible before model download
+      - name: Verify real Commons CC0 source bytes before loading the local model
         run: |
           python - <<'PY'
-          import urllib.parse, urllib.request
-          from scripts.run_local_brain_creative_film import _api_json
-          params=urllib.parse.urlencode({"q":"landscape","cc0":"","has_image":1,"limit":5})
-          payload=_api_json("https://openaccess-api.clevelandart.org/api/artworks/?"+params)
-          works=[w for w in payload["data"] if w.get("share_license_status")=="CC0"
-                 and (w.get("images") or {}).get("web",{}).get("url")]
-          assert works, "CMA CC0 metadata has no accessible image records"
-          fetched=False
-          for work in works:
-              url=work["images"]["web"]["url"]
-              print("OFFICIAL CMA IMAGE HOST",urllib.parse.urlsplit(url).hostname,flush=True)
+          import json,urllib.parse,urllib.request
+          data=urllib.parse.urlencode({
+              "action":"query","format":"json",
+              "generator":"categorymembers","gcmtitle":"Category:CC-Zero",
+              "gcmtype":"file","gcmlimit":12,
+              "prop":"imageinfo","iiprop":"url|mime|extmetadata",
+              "iiurlwidth":1280,
+              "iiextmetadatafilter":"LicenseShortName|LicenseUrl"})
+          url="https://commons.wikimedia.org/w/api.php?"+data
+          with urllib.request.urlopen(urllib.request.Request(url,headers={
+                  "User-Agent":"ZX7-LocalCreativeFilm/0.1"}),timeout=20) as r:
+              result=json.load(r)
+          cleared=[]
+          for asset in (result.get("query") or {}).get("pages",{}).values():
+              info=(asset.get("imageinfo") or [{}])[0]
+              license=(info.get("extmetadata") or {}).get("LicenseShortName",{}).get("value")
+              if license not in ("CC0","CC0 1.0"):continue
+              address=info.get("thumburl") or info.get("url")
+              if address and urllib.parse.urlsplit(address).hostname in (
+                      "thumb.wikimedia.org","upload.wikimedia.org"):
+                  cleared.append(address)
+          assert cleared,"No real source images from official CC0 category"
+          evidence=0
+          for address in cleared[:5]:
               try:
-                  with urllib.request.urlopen(url,timeout=15) as response:
-                      head=response.read(4096)
-                      print("REAL CC0 IMAGE HTTP",response.status,
-                            "bytes",len(head),"content-type",
-                            response.headers.get("Content-Type"),flush=True)
-                  if head.startswith(b"\xff\xd8\xff"):
-                      fetched=True
-                      break
+                  with urllib.request.urlopen(urllib.request.Request(address,headers={
+                         "User-Agent":"ZX7-LocalCreativeFilm/0.1"}),timeout=12) as r:
+                      sample=r.read(8192)
+                  if sample.startswith((b"\xff\xd8\xff",b"\x89PNG\r\n\x1a\n")):
+                      evidence+=1
               except Exception as exc:
-                  print("CMA IMAGE DIAGNOSTIC",type(exc).__name__,
-                        getattr(exc,"code",None),flush=True)
-          assert fetched,"Metadata alone is not actual public-domain image access"
+                  print("CC0 image unavailable",type(exc).__name__,flush=True)
+          assert evidence>0,"CC0 licensing metadata without accessible physical image bytes"
+          print("ACTUAL ACCESSIBLE OFFICIAL CC0 IMAGE SOURCES",evidence,flush=True)
           PY
       - name: Run source-pinned genuine free local Qwen, model-directed editing and native MLT
         run: |
