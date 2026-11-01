@@ -305,6 +305,16 @@ def verify_original_footage_on_native_timeline(
                         not (checked_windows is not None and
                              clip.get("cacheStatus") == "cached" and
                              (clip.get("cacheUrl") or clip.get("cachePath"))) and
+                        # A second cache substitution exists even without
+                        # cacheStatus/cached flags. Pinned exporter.js uses
+                        # opticalFlowSources.get(clip.id)?.url ahead of the
+                        # imported asset when frameSampling is optical-flow.
+                        # That derived/cache file is NOT the byte-verified
+                        # caller source, so delivery-bound original-source
+                        # proof must withhold acceptance until the cache
+                        # independently binds to the original media bytes.
+                        not (checked_windows is not None and
+                             clip.get("frameSampling") == "optical-flow") and
                         clip.get("trackId") in visible_video_tracks and
                         isinstance(clip.get("assetId"), str) and
                         playback_window is not None and
