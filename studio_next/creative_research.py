@@ -67,7 +67,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def _public_api_json(url):
     """Allowlisted HTTPS GET, no ambient proxy, redirect, or unbounded JSON."""
-    hosts = {"api.openverse.org", "api.crossref.org", "commons.wikimedia.org"}
+    hosts = {"api.openverse.org", "api.crossref.org", "commons.wikimedia.org",
+             "api.artic.edu", "sfxmint.com"}
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname not in hosts:
         raise CreativeResearchError("Research request is not an approved free API")
@@ -126,11 +127,19 @@ class CreativeResearch:
             try:
                 items, provider = self._openverse(query, media, limit), "openverse"
             except CreativeResearchError:
-                # A real public API can be down or rate-limited. The fallback
-                # is explicit evidence, not a fabricated successful Openverse
-                # response or weaker copyright policy.
                 failures.append("openverse_unavailable_or_invalid")
-                items, provider = self._commons_media(query, media, limit), "wikimedia_commons"
+                # These are independent, free, GET-only candidate libraries.
+                # No paid generation or third-party asset download exists.
+                alternatives = (("art_institute_chicago", self._artic_images)
+                                if media == "image" else
+                                ("sfxmint_free_library", self._sfxmint_audio))
+                name, adapter = alternatives
+                try:
+                    items, provider = adapter(query, limit), name
+                except CreativeResearchError:
+                    failures.append(name + "_unavailable_or_invalid")
+                    items, provider = self._commons_media(
+                        query, media, limit), "wikimedia_commons"
         return {
             "kind": "research_asset_candidates",
             "provider": provider,
@@ -217,6 +226,59 @@ class CreativeResearch:
                 "license_evidence_source": "openverse_index_metadata",
                 "rights_status": "candidate_unverified",
                 "media_type": media})
+        return items
+
+    def _artic_images(self, query, limit):
+        """Museum artwork leads, only works explicitly marked public-domain."""
+        url = _request_params("https://api.artic.edu/api/v1/artworks/search", {
+            "q": query, "query[term][is_public_domain]": "true",
+            "fields": "id,title,image_id,is_public_domain", "limit": limit})
+        data = self._fetch(url).get("data")
+        if not isinstance(data, list):
+            raise CreativeResearchError("Museum public-domain metadata is malformed")
+        items = []
+        for record in data[:limit]:
+            if not isinstance(record, dict) or record.get("is_public_domain") is not True:
+                continue
+            aid, image_id = record.get("id"), record.get("image_id")
+            if (type(aid) is not int or aid <= 0 or
+                    not isinstance(image_id, str) or
+                    not re.fullmatch(r"[0-9a-fA-F-]{36}", image_id)):
+                continue
+            items.append({
+                "title": _plain(record.get("title")) or "Untitled",
+                "source_page": "https://www.artic.edu/artworks/" + str(aid),
+                "declared_license": "CC0",
+                "license_evidence_source": "artic_public_domain_flag_and_open_access_policy",
+                "rights_status": "candidate_unverified", "media_type": "image"})
+        return items
+
+    def _sfxmint_audio(self, query, limit):
+        """Search only the no-key CC0 library; never use paid sound generation."""
+        url = _request_params("https://sfxmint.com/api/v1/search", {
+            "q": query, "limit": limit, "response": "structured"})
+        result = self._fetch(url)
+        # The API can evolve between structured response families; reject any
+        # unknown shape rather than pretending source results were verified.
+        raw = next((result[key] for key in ("matches", "results", "sounds", "exact")
+                    if isinstance(result.get(key), list)), None)
+        if raw is None:
+            raise CreativeResearchError("SFX public-library schema is unavailable")
+        items = []
+        for sound in raw[:limit]:
+            if not isinstance(sound, dict):
+                continue
+            license_name = str(sound.get("license", "")).lower().replace(" ", "")
+            if license_name not in ("cc0", "cc01.0", "cc0-1.0"):
+                continue
+            page = _public_https(sound.get("page_url"))
+            if not page or urllib.parse.urlsplit(page).hostname != "sfxmint.com":
+                continue
+            items.append({
+                "title": _plain(sound.get("title")) or "Untitled SFX",
+                "source_page": page, "declared_license": "CC0",
+                "license_evidence_source": "sfxmint_free_library_metadata",
+                "rights_status": "candidate_unverified", "media_type": "audio"})
         return items
 
     def _commons_media(self, query, media, limit):
