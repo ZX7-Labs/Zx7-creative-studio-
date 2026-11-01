@@ -68,8 +68,11 @@ def native_projects_bound_to_export(project_paths, bindings):
     matches = []
     for path in project_paths:
         path = Path(path)
+        # Velorn projectStore.js stores the native PROJECT DIRECTORY in
+        # project.path, not its child project.comfystudio JSON file. Its
+        # exportTimeline ACK repeats that directory as projectPath.
         project_sha256 = hashlib.sha256(
-            str(path).encode("utf-8")).hexdigest()
+            str(path.parent).encode("utf-8")).hexdigest()
         saved = read_bounded_native_trial_project(path)
         if ((project_sha256, saved.get("currentTimelineId")) in bindings):
             matches.append(path)
