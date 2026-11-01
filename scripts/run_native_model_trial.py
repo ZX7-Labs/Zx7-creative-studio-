@@ -36,6 +36,46 @@ def sha(path):
     return digest.hexdigest()
 
 
+
+def read_bounded_native_trial_project(path):
+    """Read only saved native project metadata under a strict resource cap.
+
+    The local model is not authority to allocate arbitrary parser resources
+    or define ambiguous duplicate JSON fields. Native export's identity is
+    checked against this exact final saved project before source certification.
+    """
+    from studio_next.native_source_acceptance import (
+        _unique_project_json_fields)
+    path = Path(path)
+    if path.stat().st_size > 32 * 1024 * 1024:
+        raise ValueError("Native trial saved project exceeds read size limit")
+    data = json.loads(path.read_text(encoding="utf-8"),
+                      object_pairs_hook=_unique_project_json_fields)
+    if not isinstance(data, dict):
+        raise ValueError("Native trial saved project must be a JSON object")
+    return data
+
+
+def native_projects_bound_to_export(project_paths, bindings):
+    """Match only actual host-enumerated saved projects to editor ACK IDs.
+
+    `bindings` contains SHA-256 of the Velorn application's *own* project
+    path and its active timeline ID, never paths suggested by the neural model.
+    This never opens a path from the native receipt or any network address.
+    """
+    if not isinstance(project_paths, list) or not isinstance(bindings, set):
+        raise ValueError("Native export project binding inputs invalid")
+    matches = []
+    for path in project_paths:
+        path = Path(path)
+        project_sha256 = hashlib.sha256(
+            str(path).encode("utf-8")).hexdigest()
+        saved = read_bounded_native_trial_project(path)
+        if ((project_sha256, saved.get("currentTimelineId")) in bindings):
+            matches.append(path)
+    return matches
+
+
 def parse_linux_proc_peak_rss(status_text):
     """Peak RSS of one live model-server PID; never extrapolate system RAM.
 
@@ -385,8 +425,11 @@ async def trial(args, lock, artifacts, command):
             revised_exports.append(verified)
         if event.get('image_sha256') and event.get('observed_export_sha256'):
             observed_sources.add(event['observed_export_sha256'])
-    native_projects = [path for path in projects.glob('*/project.comfystudio')
-        if any(timeline.get('clips') for timeline in json.loads(path.read_text()).get('timelines', []))]
+    native_projects = [
+        path for path in projects.glob('*/project.comfystudio')
+        if any(isinstance(timeline, dict) and timeline.get('clips')
+               for timeline in read_bounded_native_trial_project(path).get(
+                   'timelines', []))]
     # A project, animated synthetic background, or typography alone is not
     # proof that the creative model edited the ORIGINAL caller-supplied videos.
     # The pinned editor stores sourcePath and project-owned copied media after
@@ -441,17 +484,8 @@ async def trial(args, lock, artifacts, command):
     # can bind one final saved project's active timeline to this delivery.
     # Source verifier itself continues to enforce owner-copy SHA and temporal
     # overlap against the physically verified export time windows.
-    bound_native_projects = []
-    for project_path in native_projects:
-        relative_path = str(project_path)
-        native_path_sha = hashlib.sha256(
-            relative_path.encode("utf-8")).hexdigest()
-        # Never open an arbitrary path claimed by an untrusted export reply.
-        # Only read trial-owned projects enumerated by the trusted host.
-        native_state = json.loads(project_path.read_text(encoding="utf-8"))
-        active = native_state.get("currentTimelineId")
-        if ((native_path_sha, active) in native_export_project_bindings):
-            bound_native_projects.append(project_path)
+    bound_native_projects = native_projects_bound_to_export(
+        native_projects, native_export_project_bindings)
     original_footage = verify_original_footage_on_native_timeline(
         projects, bound_native_projects, source_assets,
         host_verified_export_windows=host_verified_export_windows)
