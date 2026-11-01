@@ -44,7 +44,8 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                             "detect_authorized_reference_shots",
                             "study_authorized_reference",
                             "recall_reference_case",
-                            "recent_reference_cases"])
+                            "recent_reference_cases",
+                            "compare_reference_cases"])
                         result = await session.call_tool(
                             "observe_authorized_reference",
                             {"reference": "sample.mp4", "bins": 16})
@@ -85,6 +86,19 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                             "recent_reference_cases", {"limit":10})
                         self.assertEqual(len(json.loads(
                             recent.content[0].text)["records"]), 1)
+                        measured = await session.call_tool(
+                            "compare_reference_cases",
+                            {"first_id":identity, "second_id":identity})
+                        self.assertFalse(measured.is_error)
+                        comparison = json.loads(measured.content[0].text)
+                        self.assertEqual(comparison["first_observed"],
+                                         comparison["second_observed"])
+                        self.assertTrue(comparison[
+                            "comparison_is_not_aesthetic_quality_score"])
+                        denied_compare = await session.call_tool(
+                            "compare_reference_cases",
+                            {"first_id": identity, "second_id":"f"*64})
+                        self.assertTrue(denied_compare.is_error)
                         denied_study = await session.call_tool(
                             "study_authorized_reference", {"reference":"../private.mp4"})
                         self.assertTrue(denied_study.is_error)
