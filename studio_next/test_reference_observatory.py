@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import tempfile
 import unittest
@@ -51,6 +52,45 @@ class ReferenceObservatoryTests(unittest.TestCase):
             (Path(temp)/"escaped.mp4").symlink_to("/etc/passwd")
             with self.assertRaises(ReferenceObservationError):
                 inspect_authorized_reference(temp, "escaped.mp4")
+
+    def test_real_mixed_audio_is_averaged_by_linear_sample_energy(self):
+        """16s encoded soundtrack: one loud second, fifteen quieter seconds.
+
+        Graph bin 0 contains 2 decoded seconds. Averaging their dBFS labels
+        instead of PCM energy misrepresents the stronger segment by ~7 dB.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            movie = Path(temp) / "mixed-levels.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=blue:s=128x72:r=8:d=16",
+                "-f", "lavfi", "-i",
+                "sine=frequency=440:sample_rate=8000:duration=1",
+                "-f", "lavfi", "-i",
+                "sine=frequency=440:sample_rate=8000:duration=15",
+                "-filter_complex",
+                "[2:a]volume=0.1[quiet];"
+                "[1:a][quiet]concat=n=2:v=0:a=1[sound]",
+                "-map", "0:v", "-map", "[sound]",
+                "-c:v", "libx264", "-c:a", "aac", str(movie)],
+                check=True, timeout=45)
+            physical = observe_reference(movie)["audio_observations"]
+            self.assertGreaterEqual(len(physical), 16)
+            first_two = physical[:2]
+            self.assertEqual([row["sample_count"] for row in first_two],
+                             [8000, 8000])
+            self.assertGreater(first_two[0]["rms_dbfs"] -
+                               first_two[1]["rms_dbfs"], 15)
+            graph = inspect_authorized_reference(temp, "mixed-levels.mp4", bins=8)
+            total_samples = sum(row["sample_count"] for row in first_two)
+            actual_mean_square = sum(
+                10 ** (row["rms_dbfs"] / 10.) * row["sample_count"]
+                for row in first_two) / total_samples
+            expected_dbfs = 10 * math.log10(actual_mean_square)
+            observed_dbfs = graph["graph"][0]["audio_rms_dbfs"]
+            self.assertAlmostEqual(observed_dbfs, expected_dbfs, delta=0.03)
+            false_dbfs = sum(row["rms_dbfs"] for row in first_two) / 2
+            self.assertGreater(abs(observed_dbfs - false_dbfs), 4)
 
     def test_no_audio_is_observed_not_invented(self):
         with tempfile.TemporaryDirectory() as temp:
