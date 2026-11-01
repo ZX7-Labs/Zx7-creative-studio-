@@ -1,0 +1,29 @@
+name: ZX7 Genuine Raw Camera Edit Physical Regression
+on:
+  push:
+    branches: ["experiment/unedited-live-action-neural-edit-20261102"]
+    paths:
+      - "studio_next/test_raw_video_neural_edit.py"
+      - ".github/workflows/zx7-raw-video-edit-regression.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  physically-decoded-original-camera-editor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install installed real raw-input graphics and audio engines
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          python -m pip install --disable-pip-version-check '.[production]'
+          python -m compileall -q studio_next scripts/run_raw_video_neural_edit_test.py
+      - name: Test no prescribed style, original camera frame evidence and actual encoded graphic output
+        run: python -m unittest -v studio_next.test_raw_video_neural_edit
