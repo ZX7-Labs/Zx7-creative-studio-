@@ -30,7 +30,8 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                 "-c:v", "libx264", "-c:a", "aac", str(movie)],
                 check=True, timeout=35)
             server = create_research_server(
-                allow_public_research=False, reference_root=root)
+                allow_public_research=False, reference_root=root,
+                memory_path=root / "case-memory.sqlite3")
             async with create_client_server_memory_streams() as (client, host):
                 async with anyio.create_task_group() as group:
                     group.start_soon(server.run, *host,
@@ -38,7 +39,11 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                     async with ClientSession(*client) as session:
                         await session.initialize()
                         names = [x.name for x in (await session.list_tools()).tools]
-                        self.assertEqual(names, ["observe_authorized_reference"])
+                        self.assertEqual(names, [
+                            "observe_authorized_reference",
+                            "study_authorized_reference",
+                            "recall_reference_case",
+                            "recent_reference_cases"])
                         result = await session.call_tool(
                             "observe_authorized_reference",
                             {"reference": "sample.mp4", "bins": 16})
@@ -53,6 +58,27 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                             denied = await session.call_tool(
                                 "observe_authorized_reference",bad)
                             self.assertTrue(denied.is_error)
+                        studied = await session.call_tool(
+                            "study_authorized_reference",
+                            {"reference":"sample.mp4","bins":16})
+                        self.assertFalse(studied.is_error)
+                        identity = json.loads(studied.content[0].text)["id"]
+                        repeated = await session.call_tool(
+                            "study_authorized_reference",
+                            {"reference":"sample.mp4","bins":16})
+                        self.assertTrue(json.loads(
+                            repeated.content[0].text)["deduplicated"])
+                        recalled = await session.call_tool(
+                            "recall_reference_case", {"id":identity})
+                        self.assertFalse(recalled.is_error)
+                        self.assertTrue(json.loads(recalled.content[0].text)["found"])
+                        recent = await session.call_tool(
+                            "recent_reference_cases", {"limit":10})
+                        self.assertEqual(len(json.loads(
+                            recent.content[0].text)["records"]), 1)
+                        denied_study = await session.call_tool(
+                            "study_authorized_reference", {"reference":"../private.mp4"})
+                        self.assertTrue(denied_study.is_error)
                         denied = await session.call_tool("research_creative", {"query":"x"})
                         self.assertTrue(denied.is_error)
                     group.cancel_scope.cancel()
