@@ -2655,6 +2655,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             "native_declared_preview_control"]["field"], "previewOnly")
         self.assertEqual(model.observed[1]["missing_completion_evidence"],
                          ["native_write_acknowledged"])
+        option = model.observed[1]["last_native_preview_feedback"][
+            "native_plan_apply_option"]
+        self.assertEqual(option["tool"], "add_asset_to_timeline")
+        self.assertEqual(option["arguments"], {
+            "assetName": "owner-original.mp4", "previewOnly": False})
+        self.assertTrue(option["independent_model_consent_required"])
+        self.assertTrue(option["not_executed_by_host"])
         self.assertEqual(sum(e["kind"] == "native_tool_preview"
                              for e in outcome["events"]), 1)
         self.assertEqual(sum(e["kind"] == "native_tool_result" and
@@ -2665,6 +2672,27 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             expected_required_evidence=("native_write_acknowledged",))[
                 "journal_chain_structurally_valid"])
         self.assertFalse(outcome["native_editing_capability_complete"])
+
+        # A model can decline; an application plan is not a committed edit.
+        declined_editor = DirectNativePlan()
+        declined_model = ScriptedModel([
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetName": "owner-original.mp4"}),
+            decision("finish", summary="No placement was approved"),
+        ])
+        declined = await NativeCreativeControl(
+            declined_editor, declined_model, host_tool_access=grants,
+            max_turns=2).run("Review then decline the real placement plan")
+        self.assertEqual(declined["status"], "model_finished_unverified")
+        self.assertEqual([args.get("previewOnly") for name, args in
+                          declined_editor.calls if name == "add_asset_to_timeline"],
+                         [None])
+        self.assertFalse(any(e.get("kind") == "native_tool_result" and
+                             e.get("tool") == "add_asset_to_timeline"
+                             for e in declined["events"]))
+        self.assertTrue(audit_native_journal(
+            declined["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
 
         for malformed in ("success_true", "mismatched_plan",
                           "mismatched_apply", "wrong_apply_flag", "no_plan",
