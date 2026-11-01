@@ -55,7 +55,7 @@ def _reject_cross_asset_attribution(caption, *, target_title, source_titles):
         # Accept only that original numeric prefix before a known suffix,
         # not an arbitrary number or a prefix of a different accession ID.
         if any(raw.startswith(word) and
-               re.fullmatch(r"(?:img|image|jpg|jpeg|png|tif|tiff|webp)\\d*",
+               re.fullmatch(r"(?:img|image|jpg|jpeg|png|tif|tiff|webp)\d*",
                             raw[len(word):]) for raw in target):
             continue
         raise ModelFilmRevisionError(
