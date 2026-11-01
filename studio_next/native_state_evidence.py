@@ -106,9 +106,16 @@ def native_model_consent_apply_affordance(name, model_inputs, receipt):
     if not isinstance(suggestion, dict) or suggestion.get("tool") != name:
         return None
     args = suggestion.get("arguments")
+    def same_serialized_value(left, right):
+        # Python equality alone would mistakenly equate True and 1.
+        try:
+            return json.dumps(left, sort_keys=True, allow_nan=False) == (
+                json.dumps(right, sort_keys=True, allow_nan=False))
+        except (TypeError, ValueError, OverflowError):
+            return False
     if (not isinstance(args, dict) or args.get("previewOnly") is not False or
             any(k != "previewOnly" and
-                (k not in args or args[k] != value)
+                (k not in args or not same_serialized_value(args[k], value))
                 for k, value in model_inputs.items())):
         return None
     try:
