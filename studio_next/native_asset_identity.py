@@ -49,26 +49,49 @@ def assess_native_asset_selection(tool_name: str, inputs: dict,
              if isinstance(item.get("name"), str)]
     selected_ids = []
     selected_names = []
-    for field in ("assetId", "replacementAssetId"):
-        if field in inputs and isinstance(inputs[field], str) and inputs[field].strip():
-            selected_ids.append(inputs[field].strip())
-    for field in ("assetName", "replacementAssetName"):
-        if field in inputs and isinstance(inputs[field], str) and inputs[field].strip():
-            selected_names.append(inputs[field].strip().casefold())
+
+    def collect_selector(entry):
+        # The pinned native resolver checks assetId before assetName for EACH
+        # entry, not once across the entire batch. A valid first entry must
+        # not conceal an invalid name/path on a second entry.
+        if not isinstance(entry, dict):
+            return
+        exact_id = entry.get("assetId")
+        if isinstance(exact_id, str) and exact_id.strip():
+            selected_ids.append(exact_id.strip())
+            return
+        name = entry.get("assetName")
+        if isinstance(name, str) and name.strip():
+            selected_names.append(name.strip().casefold())
+
+    if tool_name == "replace_clip_with_asset":
+        collect_selector({"assetId": inputs.get("replacementAssetId"),
+                          "assetName": inputs.get("replacementAssetName")})
+    else:
+        collect_selector(inputs)
     if tool_name == "add_assets_to_timeline":
-        batch = inputs.get("assets")
-        if isinstance(batch, list):
-            for item in batch:
-                if isinstance(item, dict):
-                    if isinstance(item.get("assetId"), str) and item["assetId"].strip():
-                        selected_ids.append(item["assetId"].strip())
-                    if isinstance(item.get("assetName"), str) and item["assetName"].strip():
-                        selected_names.append(item["assetName"].strip().casefold())
+        # Exact pinned Velorn resolveAssetsForTimelineBatchPlacement
+        # collects ALL THREE native input forms: assets, assetIds, assetNames.
+        # Ignoring assetIds let real Qwen3.5-4B run #41258639051 pass two
+        # filesystem .mp4 paths as native IDs and hit a terminal write error,
+        # despite an actual imported asset being in the project.
+        for item in inputs.get("assets", []):
+            if isinstance(item, str) and item.strip():
+                selected_ids.append(item.strip())
+            else:
+                collect_selector(item)
+        for asset_id in inputs.get("assetIds", []):
+            if isinstance(asset_id, str) and asset_id.strip():
+                selected_ids.append(asset_id.strip())
+        for asset_name in inputs.get("assetNames", []):
+            if isinstance(asset_name, str) and asset_name.strip():
+                selected_names.append(asset_name.strip().casefold())
     missing_ids = sorted(set(selected_ids) - ids)
-    # Explicit IDs have precedence over secondary alias/name hints in Velorn.
-    unresolved_names = ([] if selected_ids else [
+    # IDs take precedence within an entry, but separate batch selectors
+    # are additive. Every independently nominated name must also resolve.
+    unresolved_names = [
         name for name in selected_names
-        if not any(name in actual for actual in names)])
+        if not any(name in actual for actual in names)]
     if (missing_ids or unresolved_names or not assets):
         keyword = ("native_asset_inventory_incomplete" if incomplete else
                    "native_asset_not_imported")
