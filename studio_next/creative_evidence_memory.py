@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 import threading
@@ -43,6 +44,17 @@ class CreativeEvidenceMemory:
             raise EvidenceMemoryError("Host must provide a safe memory budget")
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.is_symlink():
+            raise EvidenceMemoryError("Database cannot be a symlink")
+        if not self.path.exists():
+            try:
+                descriptor = os.open(self.path, os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600)
+            except FileExistsError:
+                if self.path.is_symlink():
+                    raise EvidenceMemoryError("Database cannot be a symlink")
+            else:
+                os.close(descriptor)
+        self.path.chmod(0o600)
         self.limit = max_compressed_bytes
         self._lock = threading.RLock()
         self.db = sqlite3.connect(str(self.path), timeout=15,
@@ -71,24 +83,34 @@ class CreativeEvidenceMemory:
         checksum = hashlib.sha256(raw).hexdigest()
         identity = hashlib.sha256(
             (document["source_sha256"] + ":" + checksum).encode()).hexdigest()
-        with self._lock, self.db:
-            exists = self.db.execute("SELECT 1 FROM evidence WHERE id=?",
-                                     (identity,)).fetchone()
-            if exists:
-                return {"id": identity, "deduplicated": True,
-                        "compressed_bytes": len(packed)}
-            used = self.db.execute(
-                "SELECT COALESCE(SUM(compressed_bytes),0) FROM evidence").fetchone()[0]
-            if used + len(packed) > self.limit:
-                raise EvidenceMemoryError(
-                    "Evidence storage budget exhausted; no previous knowledge deleted")
-            self.db.execute(
-                "INSERT INTO evidence(id,source_sha256,compressed,content_sha256,"
-                "uncompressed_bytes,compressed_bytes) VALUES(?,?,?,?,?,?)",
-                (identity, document["source_sha256"], packed, checksum,
-                 len(raw), len(packed)))
-            return {"id": identity, "deduplicated": False,
-                    "compressed_bytes": len(packed)}
+        with self._lock:
+            # BEGIN IMMEDIATE serializes quota checks across processes and
+            # prevents two writers overcommitting one shared storage budget.
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
+                exists = self.db.execute("SELECT 1 FROM evidence WHERE id=?",
+                                         (identity,)).fetchone()
+                if exists:
+                    result = {"id": identity, "deduplicated": True,
+                              "compressed_bytes": len(packed)}
+                else:
+                    used = self.db.execute(
+                        "SELECT COALESCE(SUM(compressed_bytes),0) FROM evidence").fetchone()[0]
+                    if used + len(packed) > self.limit:
+                        raise EvidenceMemoryError(
+                            "Evidence storage budget exhausted; no previous knowledge deleted")
+                    self.db.execute(
+                        "INSERT INTO evidence(id,source_sha256,compressed,content_sha256,"
+                        "uncompressed_bytes,compressed_bytes) VALUES(?,?,?,?,?,?)",
+                        (identity, document["source_sha256"], packed, checksum,
+                         len(raw), len(packed)))
+                    result = {"id": identity, "deduplicated": False,
+                              "compressed_bytes": len(packed)}
+                self.db.commit()
+                return result
+            except BaseException:
+                self.db.rollback()
+                raise
 
     def recall(self, identity):
         if (not isinstance(identity, str) or len(identity) != 64 or
@@ -100,6 +122,8 @@ class CreativeEvidenceMemory:
                 "FROM evidence WHERE id=?", (identity,)).fetchone()
         if row is None:
             return None
+        if not 0 < row[2] <= 2_000_000 or len(row[0]) > 2_000_000:
+            raise EvidenceMemoryError("Untrusted database record size")
         try:
             decoder = zlib.decompressobj()
             decoded = decoder.decompress(row[0], row[2]+1)
