@@ -238,6 +238,96 @@ def apply_model_selected_revision(plan, decision, *, asset_count,
     }
 
 
+
+def encoded_beat_motion_pair(movie, beat_frames, beat_index, destination, *,
+                             fps, sample_width=560):
+    """Show ONLY the real selected beat at its 25% and 75% film instants.
+
+    A small local vision model confused adjacent beats when reading a 12-tile
+    contact sheet. A close, bound early/late pair lets it inspect the chosen
+    scene's physical imagery and motion before authoring any native change.
+    This does NOT prove continuous visual understanding or artistic merit.
+    """
+    if (not isinstance(beat_frames,list) or not 1<=len(beat_frames)<=32
+            or any(type(n) is not int or n<2 for n in beat_frames)
+            or type(beat_index) is not int
+            or not 0<=beat_index<len(beat_frames)
+            or type(fps) is not int or not 1<=fps<=120
+            or type(sample_width) is not int or
+            not 128<=sample_width<=640):
+        raise ModelFilmRevisionError("Focused temporal evidence has invalid exact beat timing")
+    movie=Path(movie).resolve(strict=True)
+    if not movie.is_file():
+        raise ModelFilmRevisionError("Focused evidence needs the actual encoded movie")
+    with movie.open("rb") as stream:
+        first_sha=hashlib.file_digest(stream,"sha256").hexdigest()
+    start=sum(beat_frames[:beat_index])
+    frames=beat_frames[beat_index]
+    picks=(start+max(0,frames//4),
+           start+min(frames-1,(3*frames)//4))
+    tile_height=round(sample_width*9/16)
+    sheet=Image.new("RGB",(2*sample_width,tile_height+34),"#10151d")
+    draw=ImageDraw.Draw(sheet)
+    from io import BytesIO
+    for index,frame_no in enumerate(picks):
+        at=frame_no/fps
+        argv=["ffmpeg","-hide_banner","-loglevel","error","-xerror",
+              "-nostdin","-protocol_whitelist","file,pipe",
+              "-ss",format(at,".9f"),"-i",str(movie),
+              "-map","0:v:0","-frames:v","1","-an",
+              "-vf",f"scale={sample_width}:{tile_height}:flags=fast_bilinear",
+              "-f","image2pipe","-vcodec","mjpeg","pipe:1"]
+        try:
+            decoded=subprocess.run(
+                argv,capture_output=True,timeout=45,check=True)
+        except (OSError,subprocess.SubprocessError) as exc:
+            raise ModelFilmRevisionError(
+                "Cannot independently decode the selected physical beat") from exc
+        if not 200<=len(decoded.stdout)<=2_000_000:
+            raise ModelFilmRevisionError("Selected movie frame missing or oversized")
+        try:
+            with Image.open(BytesIO(decoded.stdout)) as picture:
+                picture.load()
+                if picture.size!=(sample_width,tile_height):
+                    raise ModelFilmRevisionError("Focused frame has wrong geometry")
+                sheet.paste(picture.convert("RGB"),(index*sample_width,0))
+        except (OSError,ValueError) as exc:
+            raise ModelFilmRevisionError("Focused decoded frame is malformed") from exc
+        draw.text((index*sample_width+8,tile_height+8),
+                  f"Beat {beat_index+1} | {'EARLY' if index==0 else 'LATE'} "
+                  f"| {at:.2f}s",fill="#f2f2f2")
+    with movie.open("rb") as stream:
+        final_sha=hashlib.file_digest(stream,"sha256").hexdigest()
+    if first_sha!=final_sha:
+        raise ModelFilmRevisionError("Encoded movie changed during focused temporal observation")
+    destination=Path(destination)
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,"O_NOFOLLOW",0)
+    try:
+        descriptor=os.open(destination,flags,0o600)
+    except OSError as exc:
+        raise ModelFilmRevisionError(
+            "Focused evidence must never overwrite an existing output") from exc
+    try:
+        with os.fdopen(descriptor,"wb") as sink:
+            sheet.save(sink,format="PNG")
+            sink.flush()
+            os.fsync(sink.fileno())
+    except BaseException:
+        destination.unlink(missing_ok=True)
+        raise
+    if destination.stat().st_size>3_000_000:
+        raise ModelFilmRevisionError("Focused vision evidence exceeds local model's actual input budget")
+    with destination.open("rb") as stream:
+        png_sha=hashlib.file_digest(stream,"sha256").hexdigest()
+    return {"source_sha256":first_sha,"preview_sha256":png_sha,
+            "preview_path":str(destination),"beat_index":beat_index,
+            "selected_frame_indices":list(picks),
+            "actual_decoded_frame_count":2,"fps":fps,
+            "temporal_sample_not_semantic_motion_certification":True,
+            "audio_not_heard":True,
+            "human_artistic_quality_not_verified":True}
+
+
 def encoded_film_contact_sheet(movie, beat_frames, destination, *, fps,
                                sample_width=320):
     """Sample actual encoded middle frames, not source stills or plan mockups.
