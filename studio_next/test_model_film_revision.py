@@ -15,7 +15,7 @@ from scripts.run_local_brain_creative_film import (_fit_film_caption, _title_ove
 
 from .model_film_revision import (
     ModelFilmRevisionError, apply_model_selected_revision,
-    encoded_film_contact_sheet,
+    audit_editorial_reprises, encoded_film_contact_sheet,
 )
 
 
@@ -41,6 +41,43 @@ class LocalFilmRevisionTests(unittest.TestCase):
                 "reason": "The actual second shot needs a deliberate wider resolution."}
         base.update(kw)
         return base
+
+
+    def test_real_model_artifact_repeated_four_shots_is_evidence_not_judgement(self):
+        # Reconstructed from a real 12-beat source-custodied one-minute edit:
+        # beats 0..3 were repeated at 8..11 with exactly identical source,
+        # caption and camera, despite differing duration weights.
+        first=[
+            {"artwork":i,"caption":f"Visual {i}", "camera":"push",
+             "weight":100} for i in range(4)]
+        middle=[
+            {"artwork":4+i,"caption":f"Middle {i}","camera":"still",
+             "weight":50} for i in range(4)]
+        repeated=[{**b,"weight":50} for b in first]
+        receipt=audit_editorial_reprises(first+middle+repeated)
+        self.assertTrue(receipt["requires_explicit_editorial_intent_review"])
+        self.assertEqual(receipt["repeated_visual_sequences"][0][
+            "earlier_indices"],[0,1,2,3])
+        self.assertEqual(receipt["repeated_visual_sequences"][0][
+            "reprise_indices"],[8,9,10,11])
+        self.assertIsNone(receipt["independent_aesthetic_score"])
+        self.assertFalse(receipt["artistic_quality_approved"])
+        self.assertTrue(receipt["deliberate_repetition_is_allowed"])
+
+    def test_intentional_single_shot_recurrence_not_misclassified_as_sequence(self):
+        first=[
+            {"artwork":i,"caption":f"motif {i}","camera":"still"}
+            for i in range(6)]
+        first[-1]=dict(first[0]) # One repeated image can be a deliberate motif.
+        self.assertEqual(
+            audit_editorial_reprises(first)["repeated_visual_sequences"],[])
+        # A changed caption/camera is a materially different treatment.
+        copied=[dict(x) for x in first[:3]]
+        copied[1]["caption"]="Evolved emotional meaning"
+        self.assertEqual(
+            audit_editorial_reprises(first+copied)["repeated_visual_sequences"],[])
+        with self.assertRaises(ModelFilmRevisionError):
+            audit_editorial_reprises([{"artwork":"0","caption":"x","camera":"still"}])
 
     def test_model_can_choose_only_one_real_sparse_typed_change(self):
         original = repr(self.plan)
