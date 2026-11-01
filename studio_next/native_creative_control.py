@@ -427,6 +427,46 @@ def _nonduplicated_native_input_hints(hints, model_events):
             if isinstance(entry, dict) and entry.get("tool") not in covered]
 
 
+def _model_rejection_feedback_after_other_schema(rejection, events):
+    """Keep source-grounded failure facts, not obsolete 8-KiB schema copies.
+
+    Physical CPU 2B run #41287797627 repeatedly described native export after
+    an earlier failed adjustment-clip proposal. Its per-turn model context
+    still repeated the *unrelated* 4.7-KiB adjustment schema, even after the
+    full export schema was freshly described. This removes only that stale
+    duplicated schema in MODEL context, never the host ABI, journal, schema
+    validation, grants, or the originally rejected event. The model can
+    always select the genuine describe operation to inspect the old schema.
+    """
+    if not isinstance(rejection, dict) or not isinstance(events, list):
+        return rejection
+    schema = rejection.get("actual_host_input_schema")
+    tool = rejection.get("tool")
+    if not isinstance(schema, dict) or not isinstance(tool, str):
+        return rejection
+    latest_rejection = max((
+        i for i, e in enumerate(events)
+        if e.get("kind") == "model_action_rejected" and e.get("tool") == tool
+    ), default=-1)
+    if latest_rejection < 0:
+        return rejection
+    # Only an ACTUAL later model-selected describe with a complete DIFFERENT
+    # native tool's schema makes the old schema copy obsolete. A mere search
+    # or host-only machine hint is not an equivalent new schema.
+    superseded = any(
+        e.get("kind") == "native_tool_schema" and
+        e.get("tool") != tool and
+        isinstance(e.get("input_schema"), dict)
+        for e in events[latest_rejection + 1:])
+    if not superseded:
+        return rejection
+    return {
+        **{key: value for key, value in rejection.items()
+           if key != "actual_host_input_schema"},
+        "previous_tool_schema_available_by_model_describe": True,
+    }
+
+
 def _model_event_window(events):
     """Loss-aware, bounded model working memory over an *unaltered* journal.
 
@@ -1218,7 +1258,9 @@ class NativeCreativeControl:
                     # of burning another costly inference on metadata discovery,
                     # expose the exact bounded host schema for independent
                     # model correction. No model action is selected here.
-                    "last_rejected_native_action_feedback": self._last_preflight_feedback,
+                    "last_rejected_native_action_feedback":
+                        _model_rejection_feedback_after_other_schema(
+                            self._last_preflight_feedback, self.events),
                     "last_native_preview_feedback": self._last_native_preview_feedback,
                     "last_rejected_model_output_feedback": self._last_model_output_feedback,
                     # Evidence-based progress facts persist beyond the 8-event
