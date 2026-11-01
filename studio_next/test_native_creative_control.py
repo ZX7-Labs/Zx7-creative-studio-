@@ -2685,6 +2685,10 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     data.pop("previewOnly")
                 if self.variant == "wrong_inner_preview":
                     data["result"]["previewOnly"] = False
+                if self.variant == "inner_success_true":
+                    data["result"]["success"] = True
+                if self.variant == "inner_reported_error":
+                    data["result"]["error"] = "A previous native write may have happened"
                 return SimpleNamespace(is_error=False,
                     content=[SimpleNamespace(type="text", text=json.dumps(data))])
             @staticmethod
@@ -2715,7 +2719,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             output["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
         for variant in ("outer_action_mismatch", "inner_action_mismatch",
                         "contradictory_success", "missing_outer_preview",
-                        "wrong_inner_preview"):
+                        "wrong_inner_preview", "inner_success_true",
+                        "inner_reported_error"):
             with self.subTest(variant=variant):
                 session = NativeMcpPreview(variant)
                 model = ScriptedModel([

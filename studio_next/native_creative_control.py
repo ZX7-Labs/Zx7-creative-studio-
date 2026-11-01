@@ -1853,7 +1853,15 @@ class NativeCreativeControl:
                             host_response.get("action") == native_name and
                             "plan" not in host_response and
                             isinstance(host_result, dict) and
-                            host_result.get("action") == native_name)
+                            host_result.get("action") == native_name and
+                            # The pinned renderer wrapper ORs the request's
+                            # previewOnly with its actual result flag. A host
+                            # that reports a committed/failed inner action
+                            # under a preview-looking outer envelope must not
+                            # authorize replay of a possibly completed write.
+                            preview is True and
+                            host_result.get("success") is not True and
+                            host_result.get("error") in (None, "", False))
                         from .native_state_evidence import (
                             pinned_direct_native_plan_preview,
                             pinned_legacy_project_preview)
