@@ -143,7 +143,7 @@ class NativeExportProjectIdentityBoundaryTests(unittest.TestCase):
                 }), encoding="utf-8")
                 paths.append(project)
             binding = {(hashlib.sha256(
-                str(paths[1]).encode("utf-8")).hexdigest(),
+                str(paths[1].parent).encode("utf-8")).hexdigest(),
                 "actual-export-timeline")}
             self.assertEqual(native_projects_bound_to_export(paths, binding),
                              [paths[1]])
@@ -152,7 +152,7 @@ class NativeExportProjectIdentityBoundaryTests(unittest.TestCase):
             self.assertNotIn(paths[0],
                              native_projects_bound_to_export(paths, binding))
             stale = {(hashlib.sha256(
-                str(paths[1]).encode("utf-8")).hexdigest(),
+                str(paths[1].parent).encode("utf-8")).hexdigest(),
                 "other-active-timeline")}
             self.assertEqual(native_projects_bound_to_export(paths, stale), [])
             self.assertEqual(native_projects_bound_to_export(paths, set()), [])
