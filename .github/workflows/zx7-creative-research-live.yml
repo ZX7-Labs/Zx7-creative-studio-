@@ -66,3 +66,23 @@ jobs:
           if not all(success for _, success in checks):
               raise SystemExit("Free public API live contracts have unresolved failures")
           PY
+      - name: Observe real federated CC0 models, graphics and creative knowledge
+        run: |
+          python - <<'PY'
+          from studio_next.creative_research_hub import CreativeResearchHub
+          hub=CreativeResearchHub.installed()
+          for label,domain,media,query in (
+              ('3d','assets','3d','wooden chair'),
+              ('image','assets','image','vintage art'),
+              ('knowledge','knowledge','all','film editing'),
+          ):
+              result=hub.research(query=query,domain=domain,media=media,limit=8)
+              print('REAL FEDERATED',label,'candidates',len(result['results']),flush=True)
+              print('PROVIDERS',[(x['source'],x['state'],x['candidate_count'])
+                                for x in result['source_outcomes']],flush=True)
+              assert not result['rights_verified']
+              assert not result['import_authorized']
+              assert not result['human_preference_inferred']
+              if label=='3d':
+                  assert len(result['results'])>0, 'No real free 3D assets found'
+          PY
