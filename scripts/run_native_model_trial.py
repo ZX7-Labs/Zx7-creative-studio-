@@ -544,6 +544,8 @@ async def trial(args, lock, artifacts, command):
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
               and original_footage['actual_original_video_used_on_native_timeline']
+              and original_footage[
+                  'actual_original_video_sampled_at_verified_output_frame']
               and bool(revised_exports) and changed_pixels)
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
@@ -554,6 +556,9 @@ async def trial(args, lock, artifacts, command):
                 str(path.relative_to(artifacts)) for path in bound_native_projects],
             'original_source_footage_on_native_timeline_verified':
                 original_footage['actual_original_video_used_on_native_timeline'],
+            'original_video_sampled_in_actual_verified_export_frame':
+                original_footage[
+                    'actual_original_video_sampled_at_verified_output_frame'],
             'native_original_source_clip_proof':
                 original_footage['verified_native_source_clip_proof'],
             'host_bound_verified_export_time_windows':
