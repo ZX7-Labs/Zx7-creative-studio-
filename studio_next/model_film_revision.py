@@ -86,6 +86,62 @@ def _reject_cross_asset_attribution(caption, *, target_title, source_titles):
                         "Caption borrows an unsupported identity/date from another asset")
 
 
+
+def audit_editorial_reprises(beats, *, minimum_span=3):
+    """Report repeated, *identically authored* shot sequences without ranking art.
+
+    A reprise can be an intentional storytelling device. This deterministic
+    receipt supplies the AI with where repeated image/caption/camera sequences
+    occur and asks for conscious intent or creative variation. It never invents
+    an aesthetic score, rewrite, or a fixed genre/camera policy. Timing differs
+    independently, so weights are excluded from the visual signature.
+    """
+    if (not isinstance(beats,list) or not 1 <= len(beats) <= 128
+            or type(minimum_span) is not int or not 2 <= minimum_span <= 128
+            or any(not isinstance(item,dict) or
+                   type(item.get("artwork")) is not int or
+                   not isinstance(item.get("caption"),str) or
+                   not isinstance(item.get("camera"),str)
+                   for item in beats)):
+        raise ModelFilmRevisionError("Reprise audit needs source-bound typed beats")
+    signatures=[(beat["artwork"], beat["caption"].strip().casefold(),
+                 beat["camera"]) for beat in beats]
+    candidates=[]
+    for left in range(len(beats)):
+        for right in range(left+minimum_span,len(beats)):
+            width=0
+            while (left+width<right and right+width<len(beats) and
+                   signatures[left+width]==signatures[right+width]):
+                width+=1
+            if width>=minimum_span:
+                candidates.append({"earlier_start":left,
+                                   "reprise_start":right,"beat_count":width,
+                                   "earlier_indices":list(range(left,left+width)),
+                                   "reprise_indices":list(range(right,right+width))})
+    # Avoid reporting every shorter substring of a single repeated passage.
+    candidates.sort(key=lambda x:(-x["beat_count"],x["earlier_start"],
+                                  x["reprise_start"]))
+    chosen=[]
+    for item in candidates:
+        if any(item["earlier_start"]>=x["earlier_start"] and
+               item["reprise_start"]>=x["reprise_start"] and
+               item["earlier_start"]+item["beat_count"]<=
+                    x["earlier_start"]+x["beat_count"] and
+               item["reprise_start"]+item["beat_count"]<=
+                    x["reprise_start"]+x["beat_count"]
+               for x in chosen):
+            continue
+        chosen.append(item)
+    return {
+        "inspected_beats":len(beats),
+        "repeated_visual_sequences":chosen[:16],
+        "requires_explicit_editorial_intent_review":bool(chosen),
+        "deliberate_repetition_is_allowed":True,
+        "artistic_quality_approved":False,
+        "independent_aesthetic_score":None,
+    }
+
+
 def apply_model_selected_revision(plan, decision, *, asset_count,
                                   source_titles=None):
     """Return a *new* plan and a truthfully classified sparse edit receipt.
