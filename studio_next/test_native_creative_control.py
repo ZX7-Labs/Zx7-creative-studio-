@@ -2521,5 +2521,63 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
 
 
 
+    async def test_actual_native_asset_inventory_blocks_fabricated_tool_as_media_id(self):
+        """Source files in staging are not registered assets; no blind writes."""
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class EmptyNativeMediaSession(FakeSession):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    body = {"project": {"name": "Open edit"},
+                            "mcp": {"hasProject": True}}
+                elif name == "get_assets":
+                    body = {"assets": [], "totalAssetCount": 0,
+                            "returnedAssetCount": 0}
+                else:
+                    raise AssertionError("No editor mutation was authorized")
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(body))])
+
+        session = EmptyNativeMediaSession()
+        session.tools += [
+            SimpleNamespace(name="get_project", description="Read real project",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="get_assets", description="Read actual imported assets",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="add_asset_to_timeline",
+                            description="Place an imported asset on a timeline",
+                            input_schema={"type":"object","properties":{
+                                "assetId":{"type":"string"},
+                                "assetName":{"type":"string"}}}),
+        ]
+        grants = {x.name: ("write" if x.name == "add_asset_to_timeline"
+                          else "read") for x in session.tools}
+        model = ScriptedModel([
+            decision("search", query="add_asset_to_timeline"),
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetId":"native/add_asset_to_timeline",
+                             "assetName":"raw-gradient-0.mp4"}),
+            decision("finish", summary="Missing imported source; no fake edit made"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, host_tool_access=grants,
+            host_preconditions={"add_asset_to_timeline":
+                                ["project_open", "assets_present"]},
+            catalog_mode="indexed", max_turns=3).run("Edit original owner footage")
+        self.assertEqual(session.calls,
+                         [("get_project", {}), ("get_assets", {})])
+        self.assertEqual(model.observed[2][
+            "last_rejected_native_action_feedback"]["reason"],
+                         "native_project_has_no_imported_assets")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(len([e for e in result["events"]
+                              if e["kind"]=="native_tool_submitted"]), 0)
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
