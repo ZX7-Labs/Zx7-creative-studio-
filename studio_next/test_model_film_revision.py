@@ -56,7 +56,8 @@ class LocalFilmRevisionTests(unittest.TestCase):
         caption, _ = apply_model_selected_revision(
             self.plan, self.decision(field="caption", value="A fresh original sentence",
                                         expected_before="Motion emerges"),
-            asset_count=2)
+            asset_count=2, source_titles=[
+                "Sunrise painting", "Motion capture abstract sculpture"])
         self.assertEqual(caption["beats"][1]["caption"], "A fresh original sentence")
         kept, claim = apply_model_selected_revision(
             self.plan, self.decision(action="keep"), asset_count=2)
@@ -89,6 +90,50 @@ class LocalFilmRevisionTests(unittest.TestCase):
                 with self.assertRaises(ModelFilmRevisionError):
                     apply_model_selected_revision(self.plan, decision, asset_count=2)
                 self.assertEqual(repr(self.plan), snapshot)
+
+
+    def test_actual_neural_foreign_museum_attribution_rejected(self):
+        """Reproduce a real local-Qwen bug: it copied source 0's museum/date
+        into source 1's newly edited textile-block caption, despite correct
+        beat index, previous caption and successful native MP4 export.
+        """
+        original = self.plan["beats"][1]
+        original["caption"] = "Textile Printing Block MET 1971.87"
+        titles = [
+            "Frog on Lilypad, Chinese, 19th century, gouache on paper - Fitchburg Art Museum",
+            "Textile Printing Block MET 1971.87img.jpg",
+        ]
+        hallucinated = self.decision(
+            field="caption",
+            expected_before=original["caption"],
+            value="Textile Block MET 1971.87 - Carved in Stone, 19th century - Fitchburg Art Museum",
+        )
+        before = repr(self.plan)
+        with self.assertRaisesRegex(ModelFilmRevisionError,
+                                    "unsupported|borrows"):
+            apply_model_selected_revision(
+                self.plan, hallucinated, asset_count=2, source_titles=titles)
+        self.assertEqual(before, repr(self.plan))
+        # A model's original creative caption may be changed without borrowing
+        # another source's named provenance, dates or invented identifiers.
+        safe = self.decision(
+            field="caption", expected_before=original["caption"],
+            value="Textile Printing Block MET 1971.87 - Patterns of memory",
+        )
+        revised, evidence = apply_model_selected_revision(
+            self.plan, safe, asset_count=2, source_titles=titles)
+        self.assertEqual(revised["beats"][1]["caption"], safe["value"])
+        self.assertTrue(evidence["cross_asset_attribution_checked"])
+        self.assertFalse(evidence["semantic_fact_check_or_legal_rights_certified"])
+        with self.assertRaisesRegex(ModelFilmRevisionError, "source metadata"):
+            apply_model_selected_revision(
+                self.plan, safe, asset_count=2)
+        with self.assertRaisesRegex(ModelFilmRevisionError, "numeric"):
+            apply_model_selected_revision(
+                self.plan, self.decision(
+                    field="caption", expected_before=original["caption"],
+                    value="Textile Printing Block MET 1971.87 - invented provenance 1889",
+                ), asset_count=2, source_titles=titles)
 
     def test_real_encoded_movie_frames_and_source_hash_are_bound_to_preview(self):
         with tempfile.TemporaryDirectory() as tmp:
