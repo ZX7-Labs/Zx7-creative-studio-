@@ -226,7 +226,7 @@ def _static_native_video_visibility(clip: dict) -> bool:
     if not isinstance(transform, dict):
         return False
     opacity = transform.get("opacity", 100)
-    if not _finite_real(opacity):
+    if not _finite_real(opacity) or opacity <= 0:
         return False
     keyframes = clip.get("keyframes")
     if keyframes is not None and not isinstance(keyframes, dict):
@@ -253,12 +253,6 @@ def _static_native_video_visibility(clip: dict) -> bool:
                 return False
             if all(frame["value"] == 0 for frame in animated_opacity):
                 return False
-            # Positive keyframed alpha can override zero base alpha.
-            # This is only a possible-pixel-visibility gate: final
-            # output-frame sampling remains independently required.
-            opacity = max(frame["value"] for frame in animated_opacity)
-    if opacity <= 0:
-        return False
     # Pinned exporter.js applyClipCrop clips against a nonnegative crop
     # rectangle. Opposing trims that consume the entire height/width leave
     # exactly ZERO original-video pixels, regardless of import provenance.
