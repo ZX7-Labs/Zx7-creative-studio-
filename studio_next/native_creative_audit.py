@@ -622,6 +622,22 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         not isinstance(event.get("image_sha256"), list) or
                         any(not _sha(d) for d in event["image_sha256"])):
                     raise NativeJournalError("Native data has malformed source checksums")
+                # The editor's export application ACK uniquely identifies
+                # which physical native project/timeline initiated rendering.
+                # A later saved project with a different active timeline may
+                # NOT borrow the original-source proof of this output.
+                project_binding = event.get("native_export_project_path_sha256")
+                output_binding = event.get("native_export_output_path_sha256")
+                timeline_binding = event.get("native_export_timeline_id")
+                if any(value is not None for value in (
+                        project_binding, output_binding, timeline_binding)):
+                    if (tool != "export_timeline" or access != "write" or
+                            not _sha(project_binding) or
+                            not _sha(output_binding) or
+                            not isinstance(timeline_binding, str) or
+                            not 1 <= len(timeline_binding) <= 512):
+                        raise NativeJournalError(
+                            "Native export project/timeline receipt is incomplete or forged")
                 new_sha = event.get("independently_verified_export_sha256")
                 seen_sha = event.get("observed_export_sha256")
                 if access == "write":
