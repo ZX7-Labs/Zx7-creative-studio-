@@ -5,6 +5,7 @@ on:
     branches:
       - "proof/local-brain-60s-native-film-20261101"
       - "fix/reference-*"
+      - "feature/real-model-observe-revise-film-20261102"
     paths:
       - "studio_next/reference_observatory.py"
       - "studio_next/reference_evidence_tools.py"
@@ -20,6 +21,8 @@ on:
       - "scripts/repo_audit.py"
       - "scripts/test_repo_audit.py"
       - "studio_next/test_reference_observatory.py"
+      - "studio_next/model_film_revision.py"
+      - "studio_next/test_model_film_revision.py"
       - ".github/workflows/zx7-reference-observatory.yml"
   workflow_dispatch:
 
@@ -47,11 +50,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg
           ffmpeg -version | head -n 1
       - name: Install and independently test official MCP research transport
-        run: python -m pip install --disable-pip-version-check -e '.[research,research_video]'
+        run: python -m pip install --disable-pip-version-check -e '.[production,research,research_video]'
       - name: Compile reference observatory and regression tests
         run: |
           python -m py_compile studio_next/reference_observatory.py studio_next/reference_evidence_tools.py studio_next/creative_research_mcp.py studio_next/test_reference_observatory.py
-          python -m unittest -v studio_next.test_reference_observatory studio_next.test_creative_evidence_memory studio_next.test_reference_mcp studio_next.test_pro_scene_detector studio_next.test_reference_comparison
+          python -m unittest -v studio_next.test_reference_observatory studio_next.test_creative_evidence_memory studio_next.test_reference_mcp studio_next.test_pro_scene_detector studio_next.test_reference_comparison studio_next.test_model_film_revision
       - name: Verify repository source syntax inventory
         run: |
           python -m compileall -q studio_next scripts

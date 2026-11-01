@@ -3,8 +3,11 @@ on:
   push:
     branches:
       - "proof/local-brain-60s-native-film-20261101"
+      - "feature/real-model-observe-revise-film-20261102"
     paths:
       - "scripts/run_local_brain_creative_film.py"
+      - "studio_next/model_film_revision.py"
+      - "studio_next/test_model_film_revision.py"
       - ".github/workflows/zx7-local-brain-one-minute-film.yml"
   workflow_dispatch:
 permissions:
@@ -70,12 +73,15 @@ jobs:
           assert evidence>0,"CC0 licensing metadata without accessible physical image bytes"
           print("ACTUAL ACCESSIBLE OFFICIAL CC0 IMAGE SOURCES",evidence,flush=True)
           PY
+      - name: Regress sparse model-driven edits against real encoded movies
+        run: python -m unittest studio_next.test_model_film_revision -v
       - name: Run source-pinned genuine free local Qwen, model-directed editing and native MLT
         run: |
           python -u scripts/run_local_brain_creative_film.py \
             --model-lock engines/velorn/local-model-trial.lock.json \
             --runtime "$RUNNER_TEMP/zx7-local-model" \
-            --output "$GITHUB_WORKSPACE/output/one-minute-neural-film"
+            --output "$GITHUB_WORKSPACE/output/one-minute-neural-film" \
+            --alternate-cut
       - name: Preserve model decisions, source artwork provenance, native project, soundtrack, video and failures
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,9 +91,17 @@ jobs:
             output/one-minute-neural-film/evidence.json
             output/one-minute-neural-film/actual-model-transcript.json
             output/one-minute-neural-film/model-authored-film-plan.json
+            output/one-minute-neural-film/model-authored-revised-film-plan.json
+            output/one-minute-neural-film/model-original-export-review.json
             output/one-minute-neural-film/source-asset-evidence.json
             output/one-minute-neural-film/FINAL-MOVIE-RECEIPT.json
             output/one-minute-neural-film/workspace/ZX7-LOCAL-AI-ONE-MINUTE.mp4
+            output/one-minute-neural-film/workspace/ZX7-LOCAL-AI-ONE-MINUTE-REVISED.mp4
+            output/one-minute-neural-film/workspace/zx7-model-native-edit-revised.mlt
+            output/one-minute-neural-film/workspace/model-to-native-mlt-revised.json
+            output/one-minute-neural-film/workspace/effects/first-encoded-film-preview.png
+            output/one-minute-neural-film/workspace/effects/focused-original-beat-*.png
+            output/one-minute-neural-film/workspace/revision-01/
             output/one-minute-neural-film/workspace/zx7-model-native-edit.mlt
             output/one-minute-neural-film/workspace/model-to-native-mlt.json
             output/one-minute-neural-film/workspace/source/

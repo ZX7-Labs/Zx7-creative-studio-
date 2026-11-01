@@ -34,6 +34,10 @@ from studio_next.media_vault import MediaVault, sha256_file
 from studio_next.body_mlt_editor import export_owned_mlt
 from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
+from studio_next.model_film_revision import (
+    ModelFilmRevisionError, apply_model_selected_revision,
+    audit_editorial_reprises, encoded_beat_motion_pair,
+    encoded_film_contact_sheet)
 
 from scripts.run_native_model_trial import download, read_live_linux_model_peak_rss
 
@@ -91,7 +95,7 @@ def _museum_images(queries, folder):
     themes=[]
     for qi, phrase in enumerate(queries):
         tokens=re.findall(r"[A-Za-z]{3,}",phrase)
-        if len(tokens)<2:
+        if len(tokens)<1:
             raise ValueError("Creative source theme lacks meaningful search terms")
         for term in dict.fromkeys((phrase," ".join(tokens[:2]))):
             themes.append((qi,term))
@@ -283,6 +287,10 @@ def _validate_decision(plan,assets):
     beats=plan.get("beats")
     if not isinstance(beats,list) or not 6 <= len(beats) <= 12:
         raise ValueError("Model must author 6–12 original editorial beats")
+    title_probe = ImageDraw.Draw(Image.new("RGBA",SIZE))
+    if title_probe.textbbox((0,0),title.upper(),font=_font(19))[2] > (
+            SIZE[0]-2*max(48,round(SIZE[0]*.06))):
+        raise ValueError("Model film title exceeds actual physical safe area")
     for beat in beats:
         if not isinstance(beat,dict):
             raise ValueError("Creative beat must be a real object")
@@ -291,6 +299,13 @@ def _validate_decision(plan,assets):
         caption=beat.get("caption")
         if not isinstance(caption,str) or not 3<=len(caption)<=100:
             raise ValueError("Each original visual beat needs an authored short thought")
+        # Check actual native typography *before* expensive source video
+        # rendering. A rejected model caption is retried by the neural
+        # planning loop, never silently truncated or clipped in a film.
+        _fit_film_caption(
+            title_probe, caption,
+            max_width=SIZE[0]-2*max(48,round(SIZE[0]*.06)),
+            max_height=112)
         if beat.get("camera") not in ("push","pull","drift_left","drift_right","still"):
             raise ValueError("Model requested a camera control unavailable in the physical editor")
         if (type(beat.get("weight")) not in (int,float) or
@@ -322,23 +337,87 @@ def _weights_to_frames(beats):
         raise ValueError("Model selected an invisible beat with no physical video frames")
     return ints
 
+def _fit_film_caption(draw, caption, *, max_width, max_height,
+                      largest_px=42, smallest_px=17):
+    """Fit the *whole* neural caption inside an available typographic box.
+
+    Never truncate text, shrink outside explicit legibility bounds, or
+    silently paint text beyond the frame. Return exact measured geometry.
+    Caption words are creative data; no fixed script or artistic sentences.
+    """
+    if (not isinstance(caption, str) or not caption.strip() or
+            "\n" in caption or "\\r" in caption or
+            not 50 <= max_width <= 10_000 or
+            not 20 <= max_height <= 10_000):
+        raise ValueError("Invalid physical caption or title-safe geometry")
+    text = caption.strip()
+    for px in range(largest_px, smallest_px-1, -1):
+        font = _font(px)
+        lines = []
+        current = ""
+        for word in text.split():
+            proposed = f"{current} {word}" if current else word
+            if draw.textbbox((0, 0), proposed, font=font)[2] <= max_width:
+                current = proposed
+            else:
+                if not current:
+                    break  # A single unbreakable word exceeds the safe area.
+                lines.append(current)
+                current = word
+        else:
+            if current:
+                lines.append(current)
+            if 1 <= len(lines) <= 2:
+                spacing = max(5, round(px*0.16))
+                block = "\n".join(lines)
+                left, top, right, bottom = draw.multiline_textbbox(
+                    (0, 0), block, font=font, spacing=spacing)
+                if (right-left <= max_width and
+                        bottom-top <= max_height and
+                        all(draw.textbbox((0,0), line, font=font)[2]
+                            <= max_width for line in lines)):
+                    return {
+                        "text":block,"font":font, "font_px":px,
+                        "spacing":spacing,"bbox":(left, top, right, bottom),
+                        "lines":lines,
+                    }
+    raise ValueError(
+        "Model-authored caption cannot fit without clipping or unreadable type")
+
+
 def _title_overlay(title, caption, number, count, dest):
-    W,H=SIZE
-    im=Image.new("RGBA",(W,H))
-    px=im.load()
-    # Bottom gradient for readable real credits over varied artwork.
+    W,H = SIZE
+    im = Image.new("RGBA", (W,H))
+    draw = ImageDraw.Draw(im)
+    # Bottom gradient for reliable foreground contrast on source images.
+    # This is a renderer safety layer, not the model's visual-art direction.
     for y in range(370,H):
-        a=int(205*((y-370)/(H-370))**1.4)
-        ImageDraw.Draw(im).line((0,y,W,y),fill=(8,11,19,a),width=1)
-    draw=ImageDraw.Draw(im)
-    draw.text((76,478),title.upper(),font=_font(19),fill=(215,206,187,225))
-    cap=caption[:100]
-    draw.text((76,526),cap,font=_font(35 if len(cap)>42 else 42),fill=(255,252,247,245))
-    draw.rectangle((76,644,76+int(1128*(number+1)/count),647),
+        alpha=int(205*((y-370)/(H-370))**1.4)
+        draw.line((0,y,W,y),fill=(8,11,19,alpha),width=1)
+    gutter=max(48,round(W*.06))
+    right=W-gutter
+    if type(number) is not int or type(count) is not int or not 0<=number<count:
+        raise ValueError("Invalid actual native editorial beat index")
+    if not isinstance(title,str) or not title.strip():
+        raise ValueError("Missing original model-authored film title")
+    headline_font = _font(19)
+    headline = title.upper()
+    box = draw.textbbox((0,0),headline,font=headline_font)
+    if box[2]-box[0] > right-gutter:
+        raise ValueError("Film title exceeds measured safe area")
+    draw.text((gutter,478),headline,font=headline_font,fill=(215,206,187,225))
+    layout = _fit_film_caption(
+        draw,caption,max_width=right-gutter,max_height=112)
+    draw.multiline_text(
+        (gutter,514-layout["bbox"][1]),layout["text"],
+        font=layout["font"],spacing=layout["spacing"],
+        fill=(255,252,247,245))
+    draw.rectangle((gutter,644,gutter+int((right-gutter)*(number+1)/count),647),
                    fill=(214,167,106,225))
-    draw.text((76,667),f"{number+1:02d} / {count:02d}",
+    draw.text((gutter,667),f"{number+1:02d} / {count:02d}",
               font=_font(15),fill=(223,224,225,218))
-    im.save(dest)
+    im.save(dest,format="PNG")
+
 
 def _render_segment(image, overlay, camera, nframes, dest):
     import shlex
@@ -367,43 +446,386 @@ def _render_segment(image, overlay, camera, nframes, dest):
     if not dest.is_file() or dest.stat().st_size < 8000:
         raise RuntimeError("Native visual segment not rendered")
 
-def _render_music(music, output):
-    root, bpm=music["root_midi"],music["bpm"]
-    mode=music["mode"]
-    degrees=[0,2,3,5,7,8,10] if mode=="minor" else [0,2,4,5,7,9,11]
-    progression=music["progression"]
-    sample_rate=48000
-    n=SECONDS*sample_rate
-    t=np.arange(n,dtype=np.float64)/sample_rate
-    beat=60/bpm
-    bar=beat*4
-    chord_idx=(t/bar).astype(np.int32)%len(progression)
-    audio=np.zeros(n,dtype=np.float64)
-    def pitch(midi):return 440*2**((midi-69)/12)
+def _render_music(music, output, *, duration_seconds=SECONDS, sample_rate=48000):
+    """Physically continuous score from the model's chosen harmonic direction.
+
+    The model authors the composition parameters. The native renderer makes
+    transitions sample-continuous rather than inserting audible discontinuities
+    at chord and beat boundaries. This is not a mastering or artistic review.
+    """
+    if (type(duration_seconds) is not int or not 1 <= duration_seconds <= 7200
+            or type(sample_rate) is not int or not 8000 <= sample_rate <= 192000):
+        raise ValueError("Score must have bounded positive sample and time clocks")
+    root, bpm = music["root_midi"], music["bpm"]
+    mode = music["mode"]
+    degrees = [0,2,3,5,7,8,10] if mode=="minor" else [0,2,4,5,7,9,11]
+    progression = music["progression"]
+    n = duration_seconds * sample_rate
+    t = np.arange(n,dtype=np.float64) / sample_rate
+    beat = 60 / bpm
+    bar = beat * 4
+    bar_idx = np.floor(t/bar).astype(np.int32)
+    barphase = np.mod(t,bar)
+    current = bar_idx % len(progression)
+    following = (bar_idx + 1) % len(progression)
+
+    # Raised-slope smoothstep crossfade ends at the bar boundary. At that
+    # boundary the upcoming chord is already at full gain and the outgoing
+    # chord at zero, eliminating the prior 0->1 hard mask discontinuity.
+    transition_seconds = min(.12, bar / 8)
+    alpha = np.clip((barphase - (bar-transition_seconds)) /
+                    transition_seconds, 0, 1)
+    alpha = alpha*alpha*(3-2*alpha)
+    audio = np.zeros(n,dtype=np.float64)
+    def pitch(midi):
+        return 440 * 2**((midi-69)/12)
     for index, degree in enumerate(progression):
-        active=(chord_idx==index).astype(np.float64)
-        barphase=(t%bar)/bar
-        envelope=(0.38+0.62*np.minimum(1,barphase*6))
-        key=root+degrees[degree]
-        tones=(key,key+7,key+12)
-        pad=sum(np.sin(2*np.pi*pitch(note)*t + (j*.37))*
-                (0.31 if j==0 else .20) for j,note in enumerate(tones))
-        audio+=pad*active*envelope
-    pulse=(t%beat)/beat
-    bassfreq=pitch(root-12)
-    audio+=.14*np.sin(2*np.pi*bassfreq*t)*np.exp(-pulse*7)
-    audio+=.05*np.sin(2*np.pi*(660+1200*pulse)*t)*np.exp(-pulse*24)
-    fade=np.minimum(1,np.minimum(t/2.2,(SECONDS-t)/3.2)).clip(0,1)
-    audio*=fade*.42
-    mx=max(.01,np.max(np.abs(audio)))
-    audio=np.clip(audio/max(1,mx/0.83),-.95,.95)
-    left=audio
-    right=.97*audio+.03*np.roll(audio,97)
-    stereo=np.stack((left,right),axis=1)
+        gain = ((current==index)*(1-alpha) +
+                (following==index)*alpha)
+        key = root+degrees[degree]
+        pad = sum(np.sin(2*np.pi*pitch(note)*t + j*.37) *
+                  (.31 if j==0 else .20)
+                  for j, note in enumerate((key,key+7,key+12)))
+        audio += pad*gain
+
+    pulse_seconds = np.mod(t,beat)
+    pulse = pulse_seconds/beat
+    # Both beat transients have zero-amplitude boundary conditions.
+    # Previously the instant envelope reset produced 0.1+ full-scale jumps
+    # in actually decoded samples, a genuine audible click source.
+    bass_envelope = (-np.expm1(-pulse*36)) * np.exp(-pulse*5) * (1-pulse)**2
+    audio += (.14 * np.sin(2*np.pi*pitch(root-12)*t) * bass_envelope)
+    audio += (.05 * np.sin(2*np.pi*(660+1200*pulse)*pulse_seconds) *
+              np.exp(-pulse*24))
+    fade = np.minimum(1,np.minimum(t/2.2,(duration_seconds-t)/3.2)).clip(0,1)
+    audio *= fade*.42
+    peak=max(.01,np.max(np.abs(audio)))
+    audio=np.clip(audio/max(1,peak/.83),-.95,.95)
+
+    # Delay only real samples; np.roll() would incorrectly leak audio from
+    # the end of the soundtrack back into its beginning.
+    right = .97*audio + .03*np.concatenate((np.zeros(97),audio[:-97]))
+    stereo=np.stack((audio,right),axis=1)
     frames=(stereo*32767).astype("<i2")
-    with wave.open(str(output),"wb") as w:
-        w.setnchannels(2);w.setsampwidth(2)
-        w.setframerate(sample_rate);w.writeframes(frames.tobytes())
+    with wave.open(str(output),"wb") as sound:
+        sound.setnchannels(2)
+        sound.setsampwidth(2)
+        sound.setframerate(sample_rate)
+        sound.writeframes(frames.tobytes())
+
+
+def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
+                                    native, music_att, video_path,
+                                    observation, workspace, vault,
+                                    transcript, dest, alternate_cut_requested=False):
+    """Actual encoded visual evidence -> independent model-selected native edit.
+
+    Keep both native project versions and both decoded movies. No host-authored
+    creative revision, no automatic approval and no invented soundtrack hearing.
+    A model's decision to retain its first edit is recorded, not treated as
+    proof of an actual post-observation edit.
+    """
+    first_frames = [n for n, _ in ordered]
+    review_image = workspace/"effects"/"first-encoded-film-preview.png"
+    preview = encoded_film_contact_sheet(
+        video_path, first_frames, review_image, fps=FPS)
+    if preview["source_sha256"] != sha256_file(video_path):
+        raise RuntimeError("Observed visual preview is not bound to decoded export")
+    # A small vision model previously mixed up the fields of its desired
+    # revision: it proposed editing a camera but serialized "artwork" with a
+    # caption as its value. No neural text should have to copy the authoritative
+    # before-value; bind it at the host after the model has *chosen* its target.
+    # Keep model authorship of every artistic target and replacement value.
+    selection_schema = {
+        "type": "object", "additionalProperties":False,
+        "required":["action","beat_index","field","reason"],
+        "properties":{
+            "action":{"type":"string","enum":(
+                ["revise"] if alternate_cut_requested else ["keep","revise"])},
+            "beat_index":{"type":"integer","minimum":0,
+                          "maximum":len(plan["beats"])-1},
+            "field":{"type":"string",
+                     "enum":["caption","camera","artwork","weight"]},
+            "reason":{"type":"string","minLength":12,"maxLength":600},
+        },
+    }
+    brain.settings.sampling["response_format"]={
+        "type":"json_schema",
+        "json_schema":{"name":"zx7_source_bound_edit_target",
+                       "strict":True,"schema":selection_schema}}
+    film_identity = sha256_file(video_path)
+    request = {
+        "phase":"choose_native_edit_target_from_actual_movie",
+        "task":(
+            "Review the actual encoded movie's decoded contact sheet. You "
+            "independently selected the artwork, story, camera, captions, "
+            "music, and pacing. The image contains one physically decoded "
+            "middle frame per original beat, not an imaginary storyboard. "
+            "Judge visual legibility and pacing cautiously; a contact sheet "
+            "does not prove continuous motion or musical listening. Choose "
+            "the actual zero-based beat_index and editable field of the "
+            "single strongest improvement, independently and precisely. "
+            "Do NOT supply a field value in this first turn. "
+            "The host will show you the exact existing value and registered "
+            "native choices in the next turn, so you cannot accidentally "
+            "edit another object's state. If you see no justified improvement "
+            "and no alternate was requested, choose keep. Your reason must "
+            "refer to actual observed content, not fabricated artists or "
+            "licenses. Return only action, beat_index, field and reason."
+        ),
+        "actual_movie_sha256":film_identity,
+        "physical_delivery":{
+            "duration_seconds":observation["duration_seconds"],
+            "full_picture_and_sound_decoder_completed":
+                observation["full_picture_and_sound_decoder_completed"],
+            "audio_measurements":observation["audio_measurements"],
+            "audio_understanding_or_artistic_quality_approved":False,
+        },
+        "picture_evidence":[{
+            "job_id":film_identity,"path":str(review_image),
+            "sha256":preview["preview_sha256"],
+        }],
+        "preview_limitations":{
+            "temporal_sampling_only":True,
+            "continuous_motion_analysis_not_proven":True,
+            "audio_has_not_been_listened_to":True,
+        },
+        "current_edit_plan":plan,
+        "source_inventory":[{
+            "index":i,"sha256":item["sha256"],"title":item["title"]}
+            for i,item in enumerate(assets)],
+        "explicit_alternate_cut_requested":alternate_cut_requested,
+    }
+    if alternate_cut_requested:
+        request["task"] += (
+            " The owner expressly requests a different editable version. "
+            "This task therefore requires action:revise, not keep. Choose "
+            "the beat and field yourself. Do not invent or preselect an edit "
+            "value yet; the next model turn provides the exact native schema.")
+    selection=_call(brain,request,transcript,with_image=review_image)
+    fields={"caption","camera","artwork","weight"}
+    if (not isinstance(selection,dict) or
+            set(selection)!={"action","beat_index","field","reason"}
+            or selection.get("action") not in ("keep","revise")
+            or type(selection.get("beat_index")) is not int
+            or not 0<=selection["beat_index"]<len(plan["beats"])
+            or not isinstance(selection.get("field"),str)
+            or selection["field"] not in fields
+            or not isinstance(selection.get("reason"),str)
+            or not 12<=len(selection["reason"].strip())<=600):
+        raise ModelFilmRevisionError(
+            "Local neural target selection is not a real native editable target")
+    if alternate_cut_requested and selection["action"]!="revise":
+        raise ModelFilmRevisionError(
+            "Explicit alternate cut was not selected by genuine neural author")
+    target_index=selection["beat_index"]
+    target_field=selection["field"]
+    actual_before=plan["beats"][target_index][target_field]
+    choice=None
+    focus=None
+    if selection["action"]=="keep":
+        decision={**selection,"value":str(actual_before),
+                  "expected_before":str(actual_before)}
+        revised,model_edit=apply_model_selected_revision(
+            plan,decision,asset_count=len(assets),
+            source_titles=[asset["title"] for asset in assets])
+    else:
+        focus_path=workspace/"effects"/f"focused-original-beat-{target_index:02d}.png"
+        focus=encoded_beat_motion_pair(
+            video_path,first_frames,target_index,focus_path,fps=FPS)
+        if focus["source_sha256"]!=film_identity:
+            raise RuntimeError("Focused physical beat does not match exact rendered movie")
+        if target_field=="camera":
+            allowed=[value for value in (
+                "push","pull","drift_left","drift_right","still")
+                if value!=actual_before]
+            value_schema={"type":"string","enum":allowed}
+        elif target_field=="artwork":
+            value_schema={"type":"string","enum":[
+                str(i) for i in range(len(assets)) if i!=actual_before]}
+        elif target_field=="weight":
+            value_schema={"type":"string","minLength":1,"maxLength":48}
+        else:
+            value_schema={"type":"string","minLength":3,"maxLength":100}
+        value_response_schema={
+            "type":"object","additionalProperties":False,
+            "required":["new_value","reason"],
+            "properties":{
+                "new_value":value_schema,
+                "reason":{"type":"string","minLength":12,"maxLength":600},
+            },
+        }
+        brain.settings.sampling["response_format"]={
+            "type":"json_schema",
+            "json_schema":{"name":"zx7_author_native_edit_value",
+                           "strict":True,"schema":value_response_schema}}
+        value_request={
+            "phase":"author_exact_native_edit_value",
+            "task":(
+                "You independently chose the following exact native beat and "
+                "field after observing the real encoded movie. Now YOU author "
+                "a DIFFERENT valid new value for that ONE field, with an "
+                "explanation. The host shows the authoritative before-value "
+                "and applies it as an immutable compare-and-swap precondition. "
+                "Do not repeat the old value or switch field/beat. "
+                "Caption may use original metaphor but must not borrow "
+                "dates/museum/artist claims from a different source asset. "
+                "Source and camera values must be available in the supplied "
+                "inventory. Pacing weight must be a finite positive decimal. "
+                "Do not invent sound listening, aesthetic acceptance, or "
+                "rights clearance. Reply with new_value string and reason."
+            ),
+            "actual_movie_sha256":film_identity,
+            "target_beat_index":target_index,
+            "target_field":target_field,
+            "verified_current_value":actual_before,
+            "model_chosen_target_reason":selection["reason"],
+            "current_beat":plan["beats"][target_index],
+            "source_inventory":request["source_inventory"],
+            "supported_camera_controls":["push","pull","drift_left",
+                                         "drift_right","still"],
+            "picture_evidence":[{
+                "job_id":film_identity,
+                "path":str(focus_path),
+                "sha256":focus["preview_sha256"],
+            }],
+            "selected_beat_actual_early_late_evidence":focus,
+            "source_frame_selection_cannot_be_inferred_from_contact_sheet":True,
+            "metadata_is_not_independent_rights_clearance":True,
+        }
+        for attempt in range(3):
+            choice=_call(brain,value_request,transcript,with_image=focus_path)
+            try:
+                if (not isinstance(choice,dict)
+                        or set(choice)!={"new_value","reason"}
+                        or not isinstance(choice["new_value"],str)
+                        or not isinstance(choice["reason"],str)):
+                    raise ModelFilmRevisionError("Local model authored malformed native value")
+                # No host-selected artistic operation, field or value. Only
+                # authoritative *prior* native state is attached by the host.
+                decision={**selection,"value":choice["new_value"],
+                          "expected_before":str(actual_before),
+                          "reason":choice["reason"]}
+                revised,model_edit=apply_model_selected_revision(
+                    plan,decision,asset_count=len(assets),
+                    source_titles=[asset["title"] for asset in assets])
+                model_edit["previous_field_model_attested_to_host_state"]=False
+                model_edit["previous_field_bound_by_host_exact_native_state"]=True
+                break
+            except ModelFilmRevisionError as exc:
+                transcript[-1]["native_value_admission_failure"]=str(exc)
+                if attempt==2:
+                    raise
+                value_request["retry_feedback"]={
+                    "rejected_model_value_reason":str(exc),
+                    "actual_host_field":target_field,
+                    "actual_before_value":actual_before,
+                    "neural_model_must_author_a_valid_new_value":True,
+                }
+    (dest/"model-original-export-review.json").write_text(
+        json.dumps({"visual_preview":preview, "model_decision":decision,
+                    "neural_target_selection":selection,
+                    "neural_replacement_value":choice,
+                    "selected_beat_focused_temporal_preview":focus,
+                    "native_before_value_origin":"host_exact_state",
+                    "validated_edit":model_edit,
+                    "initial_movie":receipt(video_path),
+                    "quality_certified":False}, indent=2, ensure_ascii=False))
+    if not model_edit["revision_applied"]:
+        return {"status":("model_declined_requested_alternate_cut"
+                          if alternate_cut_requested else
+                          "model_kept_original_after_visual_review"),
+                "visual_preview":preview, "model_selected_edit":model_edit,
+                "post_observation_native_write":False,
+                "semantic_audio_review_verified":False}
+
+    _validate_decision(revised, assets)
+    frame_lengths = _weights_to_frames(revised["beats"])
+    selected_index = model_edit["beat_index"]
+    revision_dir = workspace/"revision-01"
+    revision_dir.mkdir(exist_ok=False)
+    shot_dir = revision_dir/"source"
+    shot_dir.mkdir()
+    effect_dir = revision_dir/"effects"
+    effect_dir.mkdir()
+    actual_revisions = []
+    new_ordered = []
+    for index,(beat, frames) in enumerate(zip(revised["beats"],frame_lengths)):
+        if beat == plan["beats"][index] and frames == first_frames[index]:
+            new_ordered.append(ordered[index])
+            continue
+        asset = assets[beat["artwork"]]
+        overlay = effect_dir / f"titles-{index:02d}.png"
+        _title_overlay(revised["title"], beat["caption"], index,
+                       len(frame_lengths), overlay)
+        shot = shot_dir / f"model-revised-shot-{index:02d}.mp4"
+        _render_segment(asset["local"], overlay, beat["camera"], frames, shot)
+        att = vault.ingest(
+            shot, mime="video/mp4", rights="generated_original",
+            source_type="trusted_renderer",
+            source_id="zx7-local-model-source-custodied-revision",
+            evidence=(f"Real post-observation selected native revision beat={selected_index} "
+                      f"changed_rendered_beat={index}; Commons source id={asset['id']} "
+                      f"art_sha256={asset['sha256']}; CC0 metadata is not legal clearance"),
+            owner_or_generator="ZX7 BODY local-model selected original visual revision")
+        new_ordered.append((frames, att))
+        actual_revisions.append({
+            "beat":index, "source_art_sha256":asset["sha256"],
+            "previous_asset_id":ordered[index][1]["asset_id"],
+            "revised_asset_id":att["asset_id"], "source_shot":receipt(shot),
+            "reused_original_source":False,
+        })
+    if not actual_revisions:
+        raise RuntimeError("Model-selected revision generated no new native shot")
+    cursor = 0
+    clips = []
+    for nframes, att in new_ordered:
+        clips.append({"source":"zx7:sha256:"+att["asset_id"],
+                      "asset_id":att["asset_id"],
+                      "attestation_id":att["attestation_id"],
+                      "position_frame":cursor, "first_frame":0,
+                      "end_frame":nframes, "audio":"intentional_silence"})
+        cursor += nframes
+    if cursor != FRAMES:
+        raise RuntimeError("Revision breaks the exact rational native picture clock")
+    second_native = {
+        "frame_rate":native["frame_rate"],"frame_size":native["frame_size"],
+        "tracks":[{"clips":clips}],
+        "audio_tracks":native["audio_tracks"],
+    }
+    plan_file = workspace/"model-to-native-mlt-revised.json"
+    plan_file.write_text(json.dumps(second_native, indent=2))
+    second_project = workspace/"zx7-model-native-edit-revised.mlt"
+    native_receipt = export_owned_mlt(
+        plan_file, workspace, workspace/"vault", second_project)
+    second_movie = workspace/"ZX7-LOCAL-AI-ONE-MINUTE-REVISED.mp4"
+    render_receipt = render_owned_mlt(second_project,workspace,second_movie)
+    decoded = full_decode_inspection(second_movie, expected={
+        "width":SIZE[0],"height":SIZE[1],"duration_seconds":SECONDS,
+        "require_audio":True,
+    })
+    if not decoded["technical_delivery_verified"]:
+        raise RuntimeError("Model-selected revision did not pass full A/V decode")
+    if sha256_file(second_movie) == film_identity:
+        raise RuntimeError("Model selected edit but actual decoded export has unchanged bytes")
+    revised_plan_path = dest/"model-authored-revised-film-plan.json"
+    revised_plan_path.write_text(json.dumps(revised, indent=2, ensure_ascii=False))
+    return {
+        "status":"model_revised_real_native_edit_after_visual_review",
+        "visual_preview":preview, "model_selected_edit":model_edit,
+        "revised_plan":receipt(revised_plan_path),
+        "native_project":native_receipt,
+        "native_render":render_receipt,
+        "full_decode":decoded,
+        "movie":receipt(second_movie),
+        "project":receipt(second_project),
+        "source_revisions":actual_revisions,
+        "source_movie_preserved":receipt(video_path),
+        "independent_artistic_quality_certified":False,
+        "semantic_audio_review_verified":False,
+        "post_observation_native_write":True,
+        "alternate_cut_experiment":alternate_cut_requested,
+    }
 
 def _await_model(lock, runtime, logfile):
     from scripts.run_native_model_trial import sha
@@ -468,24 +890,72 @@ def produce(args):
                 timeout_seconds=300,
                 sampling={"temperature":.65,"max_tokens":1536}),SYSTEM)
             topic=None
-            for attempt in range(3):
-                decision=_call(brain,{"phase":"creative_research",
-                    "task":"Choose original title, concept, and 3 artistic search themes "
-                           "for a 60-second film made from public-domain museum visual artwork. "
-                           "Return JSON: {\"working_title\":string,\"search_queries\":[string,string,string]}. "
-                           "Choose freely; no preset genre or story."},transcript)
+            assets=None
+            source_trials=[]
+            for attempt in range(4):
+                task={
+                    "phase":"creative_research",
+                    "task":"Choose an original film title, concept, and 3 artistic "
+                           "source search themes for a one-minute public-domain "
+                           "museum-art film. Use broad, concrete, independently "
+                           "searchable 1–3 word subjects, not multi-clause visual "
+                           "prompts, camera instructions or scene descriptions. "
+                           "Actual images must match your artistic intentions "
+                           "and self-declare CC0 at their source page. "
+                           "Return JSON: {\"working_title\":string,"
+                           "\"search_queries\":[string,string,string]}. "
+                           "You choose all subjects; there is no host-selected genre.",
+                }
+                if source_trials:
+                    task["previous_trials"] = source_trials[-2:]
+                    task["failure_feedback"] = (
+                        "Your previous independent Commons source search "
+                        "did not yield enough real CC0-downloadable images. "
+                        "Choose NEW broad concrete topics with more likely "
+                        "public-source coverage; do not invent source URLs, "
+                        "license clearance or search results.")
+                decision=_call(brain,task,transcript)
                 try:
                     queries=decision["search_queries"]
-                    if not isinstance(queries,list) or not 2<=len(queries)<=5 or any(
-                            not isinstance(q,str) or not 2<=len(q)<=160 for q in queries):
-                        raise ValueError("Invalid creative research queries")
-                    topic=decision
-                    break
-                except (ValueError,KeyError,TypeError):
+                    if (not isinstance(queries,list) or
+                            not 2<=len(queries)<=5 or
+                            any(not isinstance(q,str) or
+                                not 2<=len(q)<=160 for q in queries)):
+                        raise ValueError("Unusable creative source-query format")
+                except (ValueError,KeyError,TypeError) as exc:
+                    source_trials.append({
+                        "attempt":attempt + 1,"status":"invalid_model_queries",
+                        "failure":str(exc)})
+                    transcript[-1]["research_validation_failure"]=str(exc)
                     continue
-            if topic is None:
-                raise RuntimeError("Local creative Brain did not author valid asset research")
-            assets=_museum_images(topic["search_queries"],art)
+                # Never replace the neural model's subject with engineer-
+                # chosen stock footage. New research is another *actual*
+                # local neural decision. Retain all failed source trials.
+                attempt_dir=art/f"model-search-{attempt + 1:02d}"
+                attempt_dir.mkdir(exist_ok=False)
+                try:
+                    current_assets=_museum_images(queries,attempt_dir)
+                except (ValueError,OSError) as exc:
+                    source_trials.append({
+                        "attempt":attempt + 1,
+                        "status":"no_sufficient_rights-declared_physical_assets",
+                        "model_queries":queries,
+                        "failure_type":type(exc).__name__,
+                        "failure":str(exc)[:240]})
+                    transcript[-1]["research_source_failure"]=str(exc)[:240]
+                    continue
+                topic=decision
+                assets=current_assets
+                source_trials.append({
+                    "attempt":attempt + 1,"status":"physically_downloaded",
+                    "model_queries":queries,
+                    "source_count":len(assets)})
+                break
+            evidence["model_selected_source_trials"]=source_trials
+            if topic is None or assets is None:
+                raise RuntimeError(
+                    "Local creative Brain could not identify sufficient "
+                    "physical CC0-declared source artwork after explicit retries")
             (dest/"source-asset-evidence.json").write_text(
                 json.dumps(assets,indent=2,ensure_ascii=False))
             sheet=effects/"contact-sheet.png"
@@ -564,8 +1034,39 @@ def produce(args):
                 try:
                     plan=_validate_decision(decision,assets)
                     _weights_to_frames(plan["beats"])
+                    editorial_audit=audit_editorial_reprises(plan["beats"])
+                    transcript[-1]["deterministic_reprise_audit"]=editorial_audit
+                    # Never invent a judgement of creative merit. Flag only
+                    # mechanically identical 3+ shot passages observed in an
+                    # actual model-produced film. Ask the neural author to
+                    # reconsider before expensive rendering, but preserve
+                    # deliberate original repetition if it persists.
+                    if (editorial_audit[
+                            "requires_explicit_editorial_intent_review"] and
+                            attempt<2):
+                        repeats=editorial_audit["repeated_visual_sequences"]
+                        first=repeats[0]
+                        last_validation_failure=(
+                            "A factual edit-integrity review found an exact "
+                            "repetition of "+str(first["beat_count"])+
+                            " consecutive shots: earlier zero-based indices "+
+                            str(first["earlier_indices"])+
+                            " repeat identically at "+
+                            str(first["reprise_indices"])+
+                            " (same artwork, caption and camera). This is NOT "
+                            "an aesthetic ban. If the reprise is intentional, "
+                            "explain its new dramatic meaning in your story. "
+                            "Otherwise independently make the later editorial "
+                            "pass distinct in source, camera or narration. "
+                            "Do not invent evidence or copy a preset edit.")
+                        transcript[-1]["nonblocking_editorial_warning"] = (
+                            last_validation_failure)
+                        plan=None
+                        continue
+                    evidence["editorial_reprise_audit"]=editorial_audit
                     break
-                except (ValueError,KeyError,TypeError) as exc:
+                except (ValueError,KeyError,TypeError,
+                        ModelFilmRevisionError) as exc:
                     transcript[-1]["validation_failure"]=str(exc)
                     last_validation_failure=str(exc)
                     plan=None
@@ -625,13 +1126,41 @@ def produce(args):
                 raise RuntimeError("One-minute original film did not pass complete audiovisual decode and clock")
             evidence["film_seconds"]=SECONDS
             evidence["native_mlt_rendered"]=True
-            evidence["status"]="rendered_not_art_director_approved"
+            # This stage is driven by an actual separate local neural turn
+            # supplied with the exact rendered movie's decoded preview.
+            evidence["post_export_creative_review"] = _review_encoded_film_and_revise(
+                brain=brain, plan=plan, assets=assets, ordered=ordered,
+                native=native, music_att=music_att, video_path=video_path,
+                observation=observation, workspace=workspace, vault=vault,
+                transcript=transcript, dest=dest,
+                alternate_cut_requested=args.alternate_cut)
+            if args.alternate_cut and not evidence[
+                    "post_export_creative_review"]["post_observation_native_write"]:
+                raise RuntimeError(
+                    "Explicit alternate-cut trial requested, but the genuine "
+                    "model chose no native revision; refusing a false proof")
+            evidence["status"] = (
+                "rendered_revised_not_art_director_approved"
+                if evidence["post_export_creative_review"]["post_observation_native_write"]
+                else "rendered_not_art_director_approved")
             # Independent source comparison: every movie frame can be decoded.
             # Do NOT claim source rights or creative quality independently proven.
+            final_receipts = {
+                "original_movie":receipt(video_path),
+                "original_native_project":receipt(project_path),
+                "original_model_plan":receipt(dest/"model-authored-film-plan.json"),
+                "original_music":receipt(music_path),
+                "creative_quality_independently_approved":False,
+            }
+            if evidence["post_export_creative_review"]["post_observation_native_write"]:
+                final_receipts["model_selected_revised_movie"] = (
+                    evidence["post_export_creative_review"]["movie"])
+                final_receipts["revised_native_project"] = (
+                    evidence["post_export_creative_review"]["project"])
+                final_receipts["revised_model_plan"] = (
+                    evidence["post_export_creative_review"]["revised_plan"])
             (dest/"FINAL-MOVIE-RECEIPT.json").write_text(
-                json.dumps({"movie":receipt(video_path),"native_project":receipt(project_path),
-                            "model_plan":receipt(dest/"model-authored-film-plan.json"),
-                            "music":receipt(music_path)},indent=2))
+                json.dumps(final_receipts,indent=2))
     except BaseException as exc:
         evidence["failure_type"]=type(exc).__name__
         evidence["failure_text"]=str(exc)[:1200]
@@ -647,7 +1176,9 @@ def produce(args):
             except subprocess.TimeoutExpired:
                 model_process.kill();model_process.wait()
         (dest/"evidence.json").write_text(json.dumps(evidence,indent=2,ensure_ascii=False))
-    if evidence["status"]!="rendered_not_art_director_approved":
+    if evidence["status"] not in (
+            "rendered_not_art_director_approved",
+            "rendered_revised_not_art_director_approved"):
         raise RuntimeError("No actual full one-minute neural-directed ZX7 native film was produced")
 
 
@@ -656,6 +1187,9 @@ def main(argv=None):
     p.add_argument("--model-lock",required=True)
     p.add_argument("--runtime",required=True)
     p.add_argument("--output",required=True)
+    p.add_argument("--alternate-cut",action="store_true",
+                   help="Explicit experimental request for a neural alternative "
+                        "after reviewing the genuinely encoded first film")
     args=p.parse_args(argv)
     produce(args)
 
