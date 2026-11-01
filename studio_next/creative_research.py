@@ -181,7 +181,13 @@ class CreativeResearch:
             publication = item.get("container-title")
             journal = _plain(publication[0], 140) if isinstance(
                 publication, list) and publication else ""
-            dates = (item.get("published") or {}).get("date-parts") or []
+            # Crossref records originate outside ZX7's trust boundary.
+            # Missing/wrong-typed published metadata is an unknown year,
+            # not permission to throw an AttributeError from the MCP server
+            # or invent a publication date.
+            published = item.get("published")
+            dates = (published.get("date-parts") if
+                     isinstance(published, dict) else []) or []
             year = (dates[0][0] if isinstance(dates, list) and dates and
                     isinstance(dates[0], list) and dates[0] and
                     type(dates[0][0]) is int and 1000 <= dates[0][0] <= 3000
