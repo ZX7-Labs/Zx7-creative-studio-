@@ -73,7 +73,7 @@ def _public_api_json(url):
         raise CreativeResearchError("Research request is not an approved free API")
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
     request = urllib.request.Request(url, headers={
-        "User-Agent": "ZX7-BODY-CreativeResearch/0.1 (source-respecting; no scraping)",
+        "User-Agent": "ZX7-BODY-CreativeResearch/0.1 (https://github.com/ZX7-Labs/Zx7-creative-studio-; metadata-only)",
         "Accept": "application/json"})
     try:
         with opener.open(request, timeout=10) as response:
