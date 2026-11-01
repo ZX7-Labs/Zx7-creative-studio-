@@ -814,14 +814,21 @@ class NativeCreativeControl:
                                   "tool": "get_project", "host_attested_read_only": True,
                                   "error_type": type(exc).__name__})
                 else:
-                    if _field(native_bootstrap, "is_error",
-                              _field(native_bootstrap, "isError", False)):
+                    try:
+                        bootstrap_error = _native_mcp_error_status(native_bootstrap)
+                    except NativeCreativeControlError:
+                        self._append({"kind": "host_project_bootstrap_error",
+                                      "tool": "get_project",
+                                      "host_attested_read_only": True,
+                                      "error_type": "UntrustedMCPStatusEnvelope"})
+                        bootstrap_error = None
+                    if bootstrap_error is True:
                         digest, oversized = _bounded_error_digest(native_bootstrap)
                         self._append({"kind": "host_project_bootstrap_error",
                                       "tool": "get_project", "host_attested_read_only": True,
                                       "error_sha256": digest,
                                       "error_text_exceeded_evidence_budget": oversized})
-                    else:
+                    elif bootstrap_error is False:
                         try:
                             texts, images, audio = _native_content(native_bootstrap)
                             if images or audio:
