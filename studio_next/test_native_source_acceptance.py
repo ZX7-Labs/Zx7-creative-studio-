@@ -209,6 +209,93 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertFalse(interval_only[
             "actual_original_video_sampled_at_verified_output_frame"])
 
+    def test_output_frame_on_clip_but_past_original_source_eof_is_not_proof(self):
+        # The delivered video frame exists and intersects this visual clip,
+        # yet its FIRST video source decoder time is beyond original 4s EOF.
+        # Native renderer applies trimStart + localTime * sourceTimeScale *
+        # speed; a mere trimStart < duration check was a false positive.
+        clip = self.project["timelines"][0]["clips"][0]
+        frame_grid = {"start_seconds": 0, "end_seconds": 4,
+                      "video_frame_rate": 24,
+                      "decoded_video_frame_count": 96}
+        clip.update(trimStart=3.99, trimEnd=8, speed=1)
+        self.save()
+        verdict = self.verify([frame_grid])
+        self.assertFalse(verdict["actual_original_video_used_on_native_timeline"])
+        self.assertFalse(verdict[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        # Real slow motion gives a valid first source frame near 3.99 sec.
+        clip["speed"] = 0.05
+        self.save()
+        valid = self.verify([frame_grid])
+        self.assertTrue(valid["actual_original_video_used_on_native_timeline"])
+        self.assertTrue(valid[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_source_time_mapping_observes_reverse_and_native_source_scale(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        output = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        clip.update(reverse=True, trimStart=0, trimEnd=8, speed=1)
+        self.save()
+        self.assertFalse(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["trimEnd"] = 4
+        self.save()
+        self.assertTrue(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip.update(reverse=False, trimStart=3.99,
+                    trimEnd=8, sourceTimeScale=2)
+        self.save()
+        self.assertFalse(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["sourceTimeScale"] = 0.1
+        self.save()
+        self.assertTrue(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_host_duration_and_speed_ramp_source_bound_is_conservative(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        export = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        clip.update(trimStart=0, trimEnd=4, keyframes={
+            "speed": [{"time": 0, "value": 16},
+                      {"time": 4, "value": 0.05}]})
+        self.save()
+        self.assertTrue(self.verify([export])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["trimStart"] = 3.9
+        clip["trimEnd"] = 8
+        self.save()
+        # The runtime ramp may be as fast as 16x (or switched off to scalar
+        # fallback). Without a precise source-bound receipt, refuse to
+        # invent a guaranteed original-source frame near EOF.
+        self.assertFalse(self.verify([export])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip.pop("keyframes")
+        clip["speed"] = "fast"
+        self.save()
+        self.assertFalse(self.verify([export])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_pinned_native_video_source_time_mapping_matches_verified_abi(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/src/utils/clipPlaybackTiming.js"
+                  ).read_text(encoding="utf-8")
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js"
+                    ).read_text(encoding="utf-8")
+        ramp = (Path(__file__).resolve().parents[1] /
+                "third_party/velorn/src/utils/timeRemap.js"
+                ).read_text(encoding="utf-8")
+        self.assertIn("const timeScale = baseScale * speedScale", source)
+        self.assertIn("const reverse = !!clip.reverse", source)
+        self.assertIn("const trimStart = clip.trimStart || 0", source)
+        self.assertIn("const safeMaxTime = Math.max(minTime, maxTime - endOffset)", source)
+        self.assertIn("getClipPlaybackTimingAtTimeline(clip, time, 0.001", exporter)
+        self.assertIn("const MAX_RAMP_SPEED = 16", ramp)
+        self.assertIn("getRampedSourceOffset(clip, localTime) * baseScale", source)
+
     def test_custom_export_sample_grid_uses_actual_range_origin(self):
         clip = self.project["timelines"][0]["clips"][0]
         clip["startTime"] = 12
