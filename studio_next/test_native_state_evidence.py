@@ -16,6 +16,7 @@ from studio_next.native_state_evidence import (
     _PINNED_NO_IMAGE_SEQUENCE_ERROR,
     pinned_forced_image_sequence_absent_error,
     pinned_native_export_identity,
+    native_model_consent_apply_affordance,
     _PINNED_UNKNOWN_BETWEEN_TRANSITION_CLIPS,
     pinned_unknown_between_transition_clips)
 from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
@@ -386,6 +387,54 @@ class SourcePreviewContracts(unittest.TestCase):
                      encoding="utf-8")
         self.assertIn("const projectHandleOrPath = await createProjectFolder(", store)
         self.assertIn("path: typeof projectHandleOrPath === 'string'", store)
+
+    def test_native_plan_apply_option_cannot_modify_model_chosen_inputs(self):
+        model_choice = {
+            "path": "/host/staging/original.mp4",
+            "asSequence": False, "category": "video",
+        }
+        good_receipt = {
+            "previewOnly": True, "action": "import_asset_from_path",
+            "suggestedApplyCall": {
+                "tool": "import_asset_from_path",
+                "arguments": {**model_choice, "previewOnly": False}},
+        }
+        offer = native_model_consent_apply_affordance(
+            "import_asset_from_path", model_choice, good_receipt)
+        self.assertEqual(offer["tool"], "import_asset_from_path")
+        self.assertEqual(offer["arguments"]["previewOnly"], False)
+        self.assertTrue(offer["independent_model_consent_required"])
+        self.assertTrue(offer["not_executed_by_host"])
+        self.assertTrue(offer["not_a_native_write_ack"])
+        import copy
+        for field, value in (
+            ("tool", "delete_clips"),
+            ("arguments", {**model_choice, "previewOnly": True}),
+            ("arguments", {**model_choice, "path": "/private/other",
+                           "previewOnly": False}),
+            ("arguments", {**model_choice, "asSequence": 0,
+                           "previewOnly": False}),
+            ("arguments", {**model_choice, "previewOnly": False,
+                           "data": "x" * 5000}),
+        ):
+            with self.subTest(changed=field, value=str(value)[:45]):
+                wrong = copy.deepcopy(good_receipt)
+                wrong["suggestedApplyCall"][field] = value
+                self.assertIsNone(native_model_consent_apply_affordance(
+                    "import_asset_from_path", model_choice, wrong))
+        for bad in (
+            {"previewOnly": False, **good_receipt},
+            {**good_receipt, "action": "delete_clips"},
+            {**good_receipt, "previewOnly": "true"},
+            {**good_receipt, "suggestedApplyCall": None},
+        ):
+            with self.subTest(invalid=str(bad)[:75]):
+                self.assertIsNone(native_model_consent_apply_affordance(
+                    "import_asset_from_path", model_choice, bad))
+        self.assertIsNone(native_model_consent_apply_affordance(
+            "import_asset_from_path",
+            {**model_choice, "previewOnly": False},
+            good_receipt))
 
     def test_pinned_export_receipt_binds_native_project_timeline_and_target(self):
         import hashlib
