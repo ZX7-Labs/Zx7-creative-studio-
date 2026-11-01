@@ -73,6 +73,33 @@ def trace():
 
 
 class NativeCreativeAuditTests(unittest.TestCase):
+    def test_real_read_only_native_asset_receipts_cannot_forge_media_proof(self):
+        events = trace()
+        inventory = {"sequence": 1, "kind":"host_native_asset_inventory",
+                     "turn":0, "tool":"get_assets",
+                     "host_attested_read_only":True,
+                     "actual_imported_asset_total": 0,
+                     "source_identities_count": 0,
+                     "complete_inventory": True,
+                     "text_sha256": [C],
+                     "no_native_edit_dispatched": True}
+        events.insert(1,inventory)
+        for idx, record in enumerate(events):
+            record["sequence"]=idx
+        grants={**HOST,"get_assets":"read"}
+        baseline=audit_native_journal(events,host_tool_access=grants)
+        self.assertTrue(baseline["journal_chain_structurally_valid"])
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(events,host_tool_access=HOST)
+        for field,value in (("host_attested_read_only",False),
+                            ("source_identities_count",1),
+                            ("text_sha256",["invalid"]),
+                            ("no_native_edit_dispatched",False)):
+            mutated=copy.deepcopy(events)
+            mutated[1][field]=value
+            with self.subTest(field=field),self.assertRaises(NativeJournalError):
+                audit_native_journal(mutated,host_tool_access=grants)
+
     def test_new_edit_invalidates_previous_export_and_frame_completion_proofs(self):
         def review_audit(events, **kwargs):
             return audit_native_journal(
