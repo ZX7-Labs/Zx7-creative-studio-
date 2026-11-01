@@ -177,7 +177,7 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
             (0.023, 0.01, False),
             (0.06, 0.004, True),
             (0.065, 0.008, False),
-            (0.98, 0.015, True),
+            (0.978, 0.015, True),
             (0.995, 0.01, False),
             (1.0, 0.1, False),
         ):
