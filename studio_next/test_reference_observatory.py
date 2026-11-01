@@ -74,6 +74,26 @@ class ReferenceObservatoryTests(unittest.TestCase):
             self.assertGreater(graph["graph"][0]["mean_chroma"], 0.5)
             self.assertEqual(graph["graph"][0]["audio_rms_dbfs"], None)
 
+    def test_source_mutation_during_decode_blocks_false_identity(self):
+        from unittest.mock import patch
+        from . import reference_observatory as measured
+        with tempfile.TemporaryDirectory() as temp:
+            movie = Path(temp) / "changing.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f",
+                "lavfi", "-i", "color=c=blue:s=128x72:r=24:d=1",
+                "-c:v", "libx264", str(movie)], check=True, timeout=35)
+            original_decode = measured._decode_video
+            def mutate_after_observation(*args):
+                rows = original_decode(*args)
+                with movie.open("ab") as stream:
+                    stream.write(b"ZX7_SOURCE_CHANGED")
+                return rows
+            with patch.object(measured, "_decode_video",
+                              side_effect=mutate_after_observation):
+                with self.assertRaisesRegex(ReferenceObservationError, "mutated"):
+                    observe_reference(movie)
+
     def test_invalid_reference_fails_closed(self):
         with self.assertRaises((ReferenceObservationError, FileNotFoundError)):
             observe_reference("/not/existing/reference.mp4")
