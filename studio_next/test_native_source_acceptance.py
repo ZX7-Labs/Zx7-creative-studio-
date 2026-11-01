@@ -583,6 +583,65 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
             "start_seconds": 0, "end_seconds": 4
         }])["actual_original_video_used_on_native_timeline"])
 
+    def test_offcanvas_native_shape_mask_cannot_prove_original_pixels(self):
+        # Physically imported original video remains on the active timeline,
+        # but Velorn's luma shape mask has NO white mask pixels to retain.
+        clip = self.project["timelines"][0]["clips"][0]
+        export = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 96
+        }]
+        offscreen = {
+            "shape": "rectangle", "centerX": -50, "centerY": 50,
+            "width": 10, "height": 20, "feather": 0,
+            "rotation": 0, "invert": False,
+        }
+        for shape in ("rectangle", "rounded", "ellipse"):
+            with self.subTest(shape=shape):
+                clip["shapeMask"] = {**offscreen, "shape": shape}
+                self.save()
+                self.assertFalse(self.verify(export)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+                self.assertFalse(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+        for mask_edit in (
+            {"centerX": 50},
+            {"invert": True},
+            {"feather": 2},
+            {"rotation": 45},
+            {"shape": "spline"},
+        ):
+            with self.subTest(change=mask_edit):
+                clip["shapeMask"] = {**offscreen, **mask_edit}
+                self.save()
+                self.assertTrue(self.verify(export)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+        # Native keyframes can move a static off-raster source mask into
+        # frame. Do not declare it permanently invisible from the base.
+        clip["shapeMask"] = dict(offscreen)
+        clip["keyframes"] = {"shapeMask.centerX": [
+            {"time": 0, "value": -50},
+            {"time": 4, "value": 50},
+        ]}
+        self.save()
+        self.assertTrue(self.verify(export)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_native_shape_mask_visibility_rule_is_source_pinned(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        mask = (root / "utils/shapeMask.js").read_text(encoding="utf-8")
+        exporter = (root / "services/exporter.js").read_text(encoding="utf-8")
+        self.assertIn("centerX: clampNumber(mask.centerX, -50, 150", mask)
+        self.assertIn("width: clampNumber(mask.width, 1, 200", mask)
+        self.assertIn("height: clampNumber(mask.height, 1, 200", mask)
+        self.assertIn("feather: clampNumber(mask.feather, 0, 50", mask)
+        self.assertIn("const normalized = normalizeShapeMask(mask)", mask)
+        self.assertIn("ctx.fillStyle = '#ffffff'", mask)
+        self.assertIn("lumaCtx.fillStyle = '#000000'", mask)
+        self.assertIn("getShapeMaskCanvases(animatedShapeMask)", exporter)
+        self.assertIn("maskEffect.invertMask ? (255 - luminance) : luminance",
+                      exporter)
+
     def test_native_opacity_animation_can_hide_entire_original_source(self):
         # Actual pinned keyframes getValueAtTime: a sole alpha keyframe
         # overrides static 100% for the entire clip, including before/after
