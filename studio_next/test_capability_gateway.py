@@ -233,6 +233,28 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
                          "write_uncertain_reconciliation_required")
         self.assertEqual(len(engine.calls), 1)
 
+    async def test_conflicting_and_nonboolean_native_mcp_status_is_never_success(self):
+        for malformed in (
+            {"is_error": False, "isError": True, "content": []},
+            {"is_error": True, "isError": False, "content": []},
+            {"is_error": 0, "content": []},
+            {"isError": "false", "content": []},
+            SimpleNamespace(is_error=False, isError=True, content=[]),
+        ):
+            with self.subTest(status=repr(malformed)[:100]):
+                engine = Engine([tool("commit_edit")])
+                engine.result = malformed
+                gateway = CapabilityGateway(
+                    {"video": (engine, {"commit_edit": "write"})})
+                revision = (await gateway.refresh())["revision"]
+                with self.assertRaisesRegex(
+                        CapabilityExecutionError, "boolean status envelope"):
+                    await gateway.invoke("video/commit_edit",
+                                         revision=revision, inputs={})
+                self.assertEqual(len(engine.calls), 1)
+                self.assertEqual(gateway.evidence()[0]["state"],
+                                 "write_uncertain_reconciliation_required")
+
     async def test_nonfinite_and_oversized_model_payloads_do_not_dispatch(self):
         engine = Engine([tool("draw", {"meta": {"type": "object"}})])
         g = CapabilityGateway({"graphics": (engine, {"draw": "write"})})
