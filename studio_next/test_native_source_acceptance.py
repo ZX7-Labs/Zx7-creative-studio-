@@ -629,6 +629,83 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
                 self.assertFalse(self.verify(output)[
                     "actual_original_video_sampled_at_verified_output_frame"])
 
+    def test_animated_alpha_overrides_zero_static_alpha_at_exported_frames(self):
+        # Pinned getAnimatedTransform overrides opacity with getValueAtTime:
+        # saved base opacity zero does NOT hide a valid animated source.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {"opacity": 0}
+        output = [{"start_seconds": 0, "end_seconds": 4,
+                   "video_frame_rate": 24.0,
+                   "decoded_video_frame_count": 96}]
+        self.save()
+        self.assertFalse(self.verify(output)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["keyframes"] = {"opacity": [
+            {"time": 0, "value": 0},
+            {"time": 4, "value": 100},
+        ]}
+        self.save()
+        self.assertTrue(self.verify(output)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        self.assertTrue(self.verify()[
+            "actual_original_video_used_on_native_timeline"])
+
+    def test_source_alpha_nonzero_only_outside_delivered_frames_cannot_pass(self):
+        # Model can animate a legitimate imported source fully transparent
+        # for the ENTIRE exported interval, while leaving nonzero opacity
+        # later on the native timeline. This was a false-positive sample
+        # custody case with the earlier all-zero-keyframes-only check.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {"opacity": 100}
+        clip["keyframes"] = {"opacity": [
+            {"time": -3, "value": 75},
+            {"time": 0, "value": 0, "easing": "hold"},
+            {"time": 1, "value": 0, "easing": "cubic-bezier(0,1,1,0)"},
+            {"time": 3, "value": 100},
+        ]}
+        self.save()
+        first_second = [{
+            "start_seconds": 0, "end_seconds": 1,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 24,
+        }]
+        later = [{
+            "start_seconds": 1, "end_seconds": 2,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 24,
+        }]
+        hidden = self.verify(first_second)
+        self.assertFalse(hidden[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        self.assertFalse(hidden[
+            "actual_original_video_used_on_native_timeline"])
+        self.assertTrue(self.verify()[
+            "actual_original_video_used_on_native_timeline"])
+        # Following 1.0 second, upstream getValueAtTime interpolates to
+        # positive alpha. That portion must remain eligible.
+        self.assertTrue(self.verify(later)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        self.assertTrue(self.verify(first_second + later)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_animated_source_alpha_single_keyframe_is_effective_all_frames(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {"opacity": 0}
+        clip["keyframes"] = {"opacity": [{
+            "time": 7, "value": 100, "easing": "hold",
+        }]}
+        self.save()
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24, "decoded_video_frame_count": 96,
+        }])["actual_original_video_sampled_at_verified_output_frame"])
+        clip["keyframes"] = {"opacity": [{
+            "time": 7, "value": 0, "easing": "hold",
+        }]}
+        self.save()
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24, "decoded_video_frame_count": 96,
+        }])["actual_original_video_sampled_at_verified_output_frame"])
+
     def test_constant_animated_native_crop_can_remove_every_source_pixel(self):
         clip = self.project["timelines"][0]["clips"][0]
         clip["transform"] = {
