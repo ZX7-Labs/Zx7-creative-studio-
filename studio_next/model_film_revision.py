@@ -32,7 +32,7 @@ def _title_terms(title):
     """Normalized lexical metadata tokens; source names remain nonauthoritative
     for rights, visual interpretation and facts *not* explicitly named there.
     """
-    return re.findall(r"[^\\W_]+", title, re.UNICODE)
+    return re.findall(r"[^\W_]+", title, re.UNICODE)
 
 
 def _reject_cross_asset_attribution(caption, *, target_title, source_titles):
