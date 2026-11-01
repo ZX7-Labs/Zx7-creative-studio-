@@ -2096,6 +2096,14 @@ class NativeCreativeControl:
                         }
                     else:
                         self._last_native_import_asset_hint = None
+                # Only the PINNED EDITOR APPLICATION ACK binds a chosen
+                # export to its physical project path and active timeline.
+                # Model-selected output paths and final saved project names
+                # alone do not establish the relationship. Hash all private
+                # filesystem paths in the journal, preserve timeline ID.
+                from .native_state_evidence import pinned_native_export_identity
+                native_export_identity = (
+                    pinned_native_export_identity(native_name, host_response) or {})
                 self._append({"kind": "native_tool_result", "turn": turn,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
@@ -2118,6 +2126,7 @@ class NativeCreativeControl:
                               "image_sha256": hashes,
                               "audio_sha256": audio_evidence["wav_sha256"] if audio_evidence else None,
                               "independently_verified_export_sha256": new_export_sha,
+                              **native_export_identity,
                               "observed_export_sha256": observed_export_sha,
                               "audio_sent_to_model_for_next_decision": bool(audio),
                               "audio_semantically_heard": False,
