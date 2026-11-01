@@ -1,8 +1,12 @@
 name: ZX7 Genuine Local Model Native BODY Experiment
 on:
   push:
-    branches: ["feature/**"]
-    paths: [".github/workflows/zx7-real-local-model-creative-proof.yml"]
+    branches: ["feature/**", "proof/local-brain-60s-native-film-20261101"]
+    paths:
+      - ".github/workflows/zx7-real-local-model-creative-proof.yml"
+      - "scripts/run_native_model_trial.py"
+      - "studio_next/native_creative_control.py"
+      - "studio_next/native_asset_identity.py"
   workflow_dispatch:
 permissions:
   contents: read
