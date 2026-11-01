@@ -80,7 +80,8 @@ jobs:
           python -u scripts/run_local_brain_creative_film.py \
             --model-lock engines/velorn/local-model-trial.lock.json \
             --runtime "$RUNNER_TEMP/zx7-local-model" \
-            --output "$GITHUB_WORKSPACE/output/one-minute-neural-film"
+            --output "$GITHUB_WORKSPACE/output/one-minute-neural-film" \
+            --alternate-cut
       - name: Preserve model decisions, source artwork provenance, native project, soundtrack, video and failures
         if: always()
         uses: actions/upload-artifact@v4
