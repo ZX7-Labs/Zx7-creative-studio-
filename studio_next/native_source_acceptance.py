@@ -217,11 +217,27 @@ def verify_original_footage_on_native_timeline(
                         full_export_end = max(full_export_end, end)
             effective_windows = (checked_windows if checked_windows is not None
                                  else [(0, full_export_end)])
+            # The actual pinned renderer filters tracks with
+            # src/utils/videoTrackVisibility.js:isVideoTrackVisible.
+            # A video track marked muted contributes NO pixels, and an
+            # independently soloed video track hides every other video
+            # track even when their eye/visible flag remains true.
+            # Do not claim caller-original footage when the native
+            # compositor cannot select that track.
+            any_video_solo = any(
+                isinstance(track, dict) and
+                track.get("type") == "video" and
+                track.get("solo", False) is True
+                for track in tracks)
             visible_video_tracks = {
                 track["id"] for track in tracks
                 if isinstance(track, dict) and
                 isinstance(track.get("id"), str) and
-                track.get("type") == "video" and track.get("visible", True) is True}
+                track.get("type") == "video" and
+                track.get("visible", True) is True and
+                track.get("muted", False) is False and
+                type(track.get("solo", False)) is bool and
+                (not any_video_solo or track.get("solo", False) is True)}
             for clip in timeline["clips"]:
                 if (isinstance(clip, dict) and
                         clip.get("type") == "video" and
