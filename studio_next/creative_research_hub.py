@@ -23,6 +23,7 @@ from .creative_research import (
     CreativeResearch, CreativeResearchError, _plain, _public_https, _check,
     _request_params,
 )
+from .creative_research_3d import poly_haven_assets, ambientcg_assets
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,18 @@ class CreativeResearchHub:
                            lambda q, n: base._commons_media(q, "video", n)),
             CreativeSource("sfxmint_audio", "assets", frozenset({"audio"}),
                            base._sfxmint_audio),
+            CreativeSource("polyhaven_models", "assets", frozenset({"3d"}),
+                           lambda q, n: poly_haven_assets(base._fetch, q, n, type_name="models")),
+            CreativeSource("polyhaven_textures", "assets", frozenset({"image"}),
+                           lambda q, n: poly_haven_assets(base._fetch, q, n, type_name="textures")),
+            CreativeSource("polyhaven_hdris", "assets", frozenset({"image"}),
+                           lambda q, n: poly_haven_assets(base._fetch, q, n, type_name="hdris")),
+            CreativeSource("ambientcg_models", "assets", frozenset({"3d"}),
+                           lambda q, n: ambientcg_assets(base._fetch, q, n, type_name="3d-model")),
+            CreativeSource("ambientcg_materials", "assets", frozenset({"image"}),
+                           lambda q, n: ambientcg_assets(base._fetch, q, n, type_name="material")),
+            CreativeSource("ambientcg_hdris", "assets", frozenset({"image"}),
+                           lambda q, n: ambientcg_assets(base._fetch, q, n, type_name="hdri")),
             CreativeSource("crossref_studies", "scholarship", frozenset({"all"}),
                            lambda q, n: base.studies(query=q, limit=n)["results"]),
             CreativeSource("wikipedia_reference", "knowledge", frozenset({"all"}),
@@ -160,7 +173,7 @@ class CreativeResearchHub:
                                            "study_results_verified",
                                            "peer_review_independently_verified",
                                            "abstract_or_full_text_reviewed",
-                                           "license_evidence_source")}}
+                                           "license_evidence_source", "provider_credit", "asset_kind")}}
                         results.append(result)
                         count += 1
                     outcomes.append({"source": item.id, "state": "responded",
