@@ -2682,6 +2682,104 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 "journal_chain_structurally_valid"])
         self.assertFalse(outcome["native_editing_capability_complete"])
 
+        # The model can consent with the *short exact preview SHA*, not
+        # manually retype a long host-provided JSON object. This must be a
+        # distinct real model action; the host must NOT commit automatically.
+        from copy import deepcopy
+        class ExplicitApprovalModel(ScriptedModel):
+            def __init__(self):
+                super().__init__([])
+            def decide(self, context):
+                self.observed.append(context)
+                turn = len(self.observed) - 1
+                if turn == 0:
+                    return decision("invoke", tool="add_asset_to_timeline",
+                                    inputs={"assetName": "owner-original.mp4"})
+                if turn == 1:
+                    feedback = context["last_native_preview_feedback"]
+                    token = feedback["native_model_consent_receipt_sha256"]
+                    assert len(token) == 64
+                    return decision("apply_preview", receipt_sha256=token)
+                return decision("finish", summary="Approved actual native plan as a separate decision")
+
+        consent_editor = DirectNativePlan()
+        brain = ExplicitApprovalModel()
+        consented = await NativeCreativeControl(
+            consent_editor, brain, host_tool_access=grants, max_turns=3,
+            required_evidence=("native_write_acknowledged",)).run(
+            "Edit after independently choosing whether to apply a real native preview")
+        self.assertEqual(consented["status"], "model_finished_unverified")
+        self.assertEqual([args.get("previewOnly") for name, args in
+                          consent_editor.calls if name == "add_asset_to_timeline"],
+                         [None, False])
+        actual_preview = next(e for e in consented["events"]
+                              if e["kind"] == "native_tool_preview")
+        applied = [e for e in consented["events"]
+                   if e["kind"] == "native_tool_submitted" and e["turn"] == 1]
+        self.assertEqual(len(applied), 1)
+        self.assertEqual(applied[0]["model_approved_preview_receipt_sha256"],
+                         actual_preview["text_sha256"][0])
+        self.assertEqual(applied[0]["inputs_sha256"],
+                         actual_preview["source_suggested_apply_inputs_sha256"])
+        self.assertTrue(audit_native_journal(
+            consented["events"], host_tool_access=grants,
+            expected_required_evidence=("native_write_acknowledged",))[
+                "journal_chain_structurally_valid"])
+        self.assertFalse(consented["native_editing_capability_complete"])
+        for key, value in (
+            ("model_approved_preview_receipt_sha256", "0" * 64),
+            ("inputs_sha256", "0" * 64),
+        ):
+            with self.subTest(forged_key=key):
+                forged = deepcopy(consented["events"])
+                next(e for e in forged if e["kind"] == "native_tool_submitted"
+                     and e["turn"] == 1)[key] = value
+                with self.assertRaisesRegex(Exception, "approval|preview|plan"):
+                    audit_native_journal(
+                        forged, host_tool_access=grants,
+                        expected_required_evidence=("native_write_acknowledged",))
+
+        # Consent is one-shot and may NOT outlive even a harmless catalog
+        # search. The model must preview again before any later shorthand.
+        class StaleApprovalModel(ScriptedModel):
+            def __init__(self):
+                super().__init__([])
+                self.token = None
+            def decide(self, context):
+                self.observed.append(context)
+                turn = len(self.observed) - 1
+                if turn == 0:
+                    return decision("invoke", tool="add_asset_to_timeline",
+                                    inputs={"assetName": "owner-original.mp4"})
+                if turn == 1:
+                    self.token = context[
+                        "last_native_preview_feedback"][
+                            "native_model_consent_receipt_sha256"]
+                    return decision("search", query="add_asset_to_timeline")
+                return decision("apply_preview", receipt_sha256=self.token)
+
+        stale_editor = DirectNativePlan()
+        with self.assertRaisesRegex(NativeCreativeControlError,
+                                    "No exact current native preview"):
+            await NativeCreativeControl(
+                stale_editor, StaleApprovalModel(),
+                host_tool_access=grants, max_turns=3,
+                catalog_mode="indexed").run("Review a real plan, search, then try stale consent")
+        self.assertEqual(len([1 for name, _ in stale_editor.calls
+                              if name == "add_asset_to_timeline"]), 1)
+
+        # No original source preview means no approval shortcut at all.
+        no_preview = DirectNativePlan()
+        with self.assertRaisesRegex(NativeCreativeControlError,
+                                    "No exact current native preview"):
+            await NativeCreativeControl(
+                no_preview, ScriptedModel([
+                    decision("apply_preview", receipt_sha256="0" * 64)]),
+                host_tool_access=grants, max_turns=1).run(
+                    "Never fabricate consent for a missing native preview")
+        self.assertFalse(any(name == "add_asset_to_timeline"
+                             for name, _ in no_preview.calls))
+
         # A model can decline; an application plan is not a committed edit.
         declined_editor = DirectNativePlan()
         declined_model = ScriptedModel([
