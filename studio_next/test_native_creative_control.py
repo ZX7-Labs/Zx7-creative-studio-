@@ -2836,6 +2836,69 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
 
 
 
+    def test_obsolete_native_schema_is_not_repeated_after_different_real_describe(self):
+        # Physical run #41287797627 retained an old add_adjustment_clip
+        # schema (4.7 KiB) after the model independently described export.
+        # The journal and exact native schemas are never touched.
+        from studio_next.native_creative_control import (
+            _model_rejection_feedback_after_other_schema)
+        obsolete = {
+            "tool": "add_adjustment_clip",
+            "validation_keyword": "additionalProperties",
+            "actual_host_input_schema": {
+                "type": "object",
+                "properties": {"doNotInvent": {"type": "string"}},
+                "description": "owner-independent real native schema " * 110,
+            },
+            "no_native_dispatch": True,
+        }
+        source_history = [
+            {"kind": "native_tool_schema", "turn": 3,
+             "tool": "add_adjustment_clip", "input_schema":
+             obsolete["actual_host_input_schema"]},
+            {"kind": "model_action_rejected", "turn": 9,
+             "tool": "add_adjustment_clip"},
+            {"kind": "capability_searched", "turn": 10,
+             "result_tool_names": ["export_timeline"]},
+        ]
+        self.assertIs(_model_rejection_feedback_after_other_schema(
+            obsolete, source_history), obsolete)
+        source_history.append({
+            "kind": "native_tool_schema", "turn": 11,
+            "tool": "add_adjustment_clip",
+            "input_schema": obsolete["actual_host_input_schema"],
+        })
+        self.assertIs(_model_rejection_feedback_after_other_schema(
+            obsolete, source_history), obsolete)
+        source_history.append({
+            "kind": "native_tool_schema", "turn": 12,
+            "tool": "export_timeline",
+            "input_schema": {"properties": {"target": {"type": "string"}}},
+        })
+        reduced = _model_rejection_feedback_after_other_schema(
+            obsolete, source_history)
+        self.assertNotIn("actual_host_input_schema", reduced)
+        self.assertTrue(reduced["previous_tool_schema_available_by_model_describe"])
+        self.assertEqual(reduced["tool"], obsolete["tool"])
+        self.assertEqual(reduced["validation_keyword"],
+                         obsolete["validation_keyword"])
+        self.assertTrue(reduced["no_native_dispatch"])
+        self.assertIn("actual_host_input_schema", obsolete)
+        self.assertEqual(source_history[0]["input_schema"],
+                         obsolete["actual_host_input_schema"])
+        self.assertGreater(len(json.dumps(obsolete)) -
+                           len(json.dumps(reduced)), 2500)
+        # A newer failure of the OLD tool takes precedence over a previous
+        # unrelated describe. Its current schema must remain accessible.
+        source_history.append({
+            "kind": "model_action_rejected", "turn": 13,
+            "tool": "add_adjustment_clip",
+        })
+        self.assertIs(_model_rejection_feedback_after_other_schema(
+            obsolete, source_history), obsolete)
+        self.assertEqual(_model_rejection_feedback_after_other_schema(
+            None, source_history), None)
+
     async def test_pinned_marker_color_constraints_reject_bad_model_args_before_native_rpc(self):
         # Reproduce actual physical Qwen3.5-2B run #41177861285:
         # create_project was ACKed, then model passed color="000000"
