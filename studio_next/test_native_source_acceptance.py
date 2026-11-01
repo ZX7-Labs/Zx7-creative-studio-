@@ -79,6 +79,62 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
                     "start_seconds": 0, "end_seconds": 60
                 }])["actual_original_video_used_on_native_timeline"], visible)
 
+    def test_pinned_video_track_visibility_contract_in_exporter(self):
+        # This exception must fail on a future Velorn change instead of
+        # persisting an invented understanding of native solo/mute behavior.
+        source = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        visibility = (source / "utils/videoTrackVisibility.js").read_text(
+            encoding="utf-8")
+        eligible = (source / "utils/exportVideoClipEligibility.js").read_text(
+            encoding="utf-8")
+        exporter = (source / "services/exporter.js").read_text(
+            encoding="utf-8")
+        self.assertIn("track.solo === true", visibility)
+        self.assertIn("if (track.visible === false) return false", visibility)
+        self.assertIn("if (track.muted === true) return false", visibility)
+        self.assertIn("if (anySolo && track.solo !== true) return false", visibility)
+        self.assertIn("hasVideoSolo(tracks)", eligible)
+        self.assertIn("isVideoTrackVisible(track, anyVideoSolo)", eligible)
+        self.assertIn("getRenderableVideoClipIds({", exporter)
+
+    def test_original_video_track_mute_and_solo_require_actual_visibility(self):
+        # Both lanes are legal original native video tracks. Solo monitoring
+        # overrides the normal visible/eye flag without changing the saved
+        # original source clip, so the verifier must honor the renderer's
+        # chosen active visual lane.
+        timeline = self.project["timelines"][0]
+        source_track = timeline["tracks"][0]
+        another_track = {"id": "video-2", "type": "video", "visible": True}
+        timeline["tracks"].append(another_track)
+        def check(expected):
+            self.save()
+            proof = self.verify([{"start_seconds": 0, "end_seconds": 4}])
+            self.assertEqual(
+                proof["actual_original_video_used_on_native_timeline"], expected)
+            self.assertEqual(
+                proof["physically_verified_native_source_clip_count"],
+                int(expected))
+        check(True)
+        source_track["muted"] = True
+        check(False)
+        source_track["muted"] = False
+        check(True)
+        source_track["muted"] = "false"
+        check(False)
+        source_track["muted"] = False
+        another_track["solo"] = True
+        check(False)
+        source_track["solo"] = True
+        check(True)
+        source_track["solo"] = False
+        check(False)
+        another_track["solo"] = False
+        check(True)
+        source_track["solo"] = 1
+        check(False)
+        source_track["solo"] = False
+        check(True)
+
     def test_completely_transparent_native_source_does_not_count_as_visible(self):
         # Pinned exporter treats transform.opacity as percent, so zero
         # hides the imported footage even when its track is visible.
