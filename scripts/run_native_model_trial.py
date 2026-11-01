@@ -220,6 +220,9 @@ async def trial(args, lock, artifacts, command):
         'Your model supports text and images, not native WAV listening; do not claim hearing. '
         'Known exporter limitation: at least one imported image/video must appear on the visual timeline. '
         f'Projects folder: {projects}. Output folder: {outputs}. '
+        'Staged source paths are NOT imported native assets; obtain actual '
+        'editor asset IDs by inspecting permitted native tools after the '
+        'import operation. An MCP tool ID is never a media asset ID. '
         'Available source assets: ' + json.dumps(source_assets))
     (artifacts / 'brief.txt').write_text(brief)
     params = [str(ROOT / 'engines/velorn/mcp.mjs'), '--source', str(args.source),
@@ -259,14 +262,17 @@ async def trial(args, lock, artifacts, command):
                     host_tool_access=host, catalog_mode="indexed",
                     host_preconditions={
                         "import_asset_from_path": ["project_open"],
-                        "add_asset_to_timeline": ["project_open"],
-                        "add_assets_to_timeline": ["project_open"],
+                        # Native media placement must be source-bound to
+                        # independently read back project imports, not staged
+                        # basenames or model-invented asset IDs.
+                        "add_asset_to_timeline": ["project_open", "assets_present"],
+                        "add_assets_to_timeline": ["project_open", "assets_present"],
                         # The second physical 2B trial attempted a native
                         # replacement after an acknowledged create but before
                         # the project was independently observable. A write
                         # with no native timeline must not be dispatched;
                         # fail preflight and let the model re-inspect reality.
-                        "replace_clip_with_asset": ["project_open"],
+                        "replace_clip_with_asset": ["project_open", "assets_present"],
                         "add_text_clip": ["project_open"],
                         "save_project": ["project_open"],
                         "export_timeline": ["project_open"],
