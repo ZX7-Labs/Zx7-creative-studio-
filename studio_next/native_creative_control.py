@@ -1226,6 +1226,8 @@ class NativeCreativeControl:
             if self._project_presence == "present":
                 await self._offer_source_attested_empty_asset_frontier(
                     validators, turn=0)
+                await self._offer_attested_unplaced_asset_frontier(
+                    validators, turn=0)
             for turn in range(self.max_turns):
                 # Snapshot-only read after a genuine acknowledged native write.
                 # The previous native result (or verified pixels/WAV) is kept
