@@ -106,7 +106,11 @@ class CreativeBrainModel:
         return self._invoke(context)
 
     def decide_with_images(self, context, images):
-        """Model sees only SHA-checked owner-approved actual visual evidence."""
+        """Reject unconsented external media BEFORE any credential or budget use."""
+        if (self.settings.mode == "openai_compatible_remote" and
+                not self.settings.remote_owner_media_approved):
+            raise CreativeBrainConnectionError(
+                "Remote upload of owner visual evidence requires explicit owner consent")
         return self._invoke(context, images=images)
 
     def _invoke(self, context, *, images=()):
