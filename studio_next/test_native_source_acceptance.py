@@ -222,6 +222,33 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         clip["cacheKind"] = "mask"
         self.assertFalse(covered())
 
+    def test_wholly_cropped_native_video_cannot_prove_original_picture(self):
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js").read_text(
+                        encoding="utf-8")
+        self.assertIn("export const applyClipCrop = (ctx, rect, transform) => {",
+                      exporter)
+        self.assertIn("Math.max(0, rect.width - left - right)", exporter)
+        self.assertIn("Math.max(0, rect.height - top - bottom)", exporter)
+        self.assertIn("const getVisibleLocalRect =", exporter)
+        clip = self.project["timelines"][0]["clips"][0]
+        def visible(left=0, right=0, top=0, bottom=0):
+            clip["transform"] = {"cropLeft": left, "cropRight": right,
+                                 "cropTop": top, "cropBottom": bottom}
+            self.save()
+            return self.verify([{"start_seconds": 0, "end_seconds": 4}])[
+                "actual_original_video_used_on_native_timeline"]
+        self.assertTrue(visible())
+        self.assertTrue(visible(left=45, right=45))
+        self.assertFalse(visible(left=50, right=50))
+        self.assertFalse(visible(left=100))
+        self.assertFalse(visible(top=100))
+        self.assertFalse(visible(top=60, bottom=40))
+        self.assertTrue(visible(top=49, bottom=50))
+        for invalid in (None, "0", True, float("inf"), float("nan")):
+            with self.subTest(invalid=repr(invalid)):
+                self.assertFalse(visible(left=invalid))
+
     def test_completely_transparent_native_source_does_not_count_as_visible(self):
         # Pinned exporter treats transform.opacity as percent, so zero
         # hides the imported footage even when its track is visible.
