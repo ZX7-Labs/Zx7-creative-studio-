@@ -995,6 +995,26 @@ class NativeCreativeControl:
                         else:
                             self._last_native_texts = texts
                             self._project_presence = _native_project_presence_from_text(texts)
+                            # The same exact host-authorized get_project READ
+                            # can expose bounded native object counts on turn
+                            # zero. Previously counts existed only after a
+                            # model-selected explicit read or a later write,
+                            # making real existing footage invisible to the
+                            # evidence-affordance discovery context. Never
+                            # infer counts from invented model text or a
+                            # malformed/double-key native reply.
+                            if len(texts) == 1:
+                                try:
+                                    snapshot_data = _strict_receipt(
+                                        texts, "native bootstrap project state")
+                                except NativeCreativeControlError:
+                                    pass
+                                else:
+                                    from .native_state_evidence import pinned_snapshot_summary
+                                    summary = pinned_snapshot_summary(snapshot_data)
+                                    if (summary is not None and
+                                            summary["project_presence"] == self._project_presence):
+                                        self._latest_native_state_facts = summary
                             self._append({"kind": "host_project_bootstrap_observation",
                                           "tool": "get_project", "host_attested_read_only": True,
                                           "text_sha256": [hashlib.sha256(x.encode()).hexdigest()
