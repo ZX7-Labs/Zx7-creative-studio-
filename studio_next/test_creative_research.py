@@ -224,7 +224,6 @@ class CreativeResearchTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec("mcp") is not None,
                      "Optional research MCP SDK is not installed")
-
 class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
     def test_host_network_permission_is_mandatory(self):
         from studio_next.creative_research_mcp import create_research_server
