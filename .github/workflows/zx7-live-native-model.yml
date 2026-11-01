@@ -15,9 +15,18 @@ on:
     # The edit event allows a maintainer to opt in after source CI is green.
     types: [opened, synchronize, reopened, edited]
     branches: [main]
+    # A title marker is not sufficient if GitHub path filtering discards
+    # controller-only PRs before evaluating the opt-in job condition.
+    # Keep this source surface aligned with what can change the real trial.
     paths:
       - ".github/workflows/zx7-live-native-model.yml"
-      - "engines/velorn/local-model-trial-4b.candidate.json"
+      - "engines/velorn/**"
+      - "scripts/run_native_model_trial.py"
+      - "studio_next/native_*.py"
+      - "studio_next/body_editor_*.py"
+      - "studio_next/body_integration.py"
+      - "studio_next/capability_*.py"
+      - "studio_next/providers.py"
   push:
     branches: [main]
     paths:
