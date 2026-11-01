@@ -413,6 +413,85 @@ def _native_zero_alpha_at_all_exported_frame_centers(
     )
 
 
+def _native_original_source_with_alpha_at_same_output_frame(
+        clip: dict, export_interval: tuple, original_duration: float) -> bool:
+    """Require the usable owner-source and visible alpha to coincide.
+
+    Native clip source-time validity and native opacity were formerly two
+    separate *existence* proofs. They can refer to DIFFERENT physical frames:
+    source bytes present only at frame 0, but animation opaque only after
+    frame 20 would wrongly count as original picture. Use the source-pinned
+    monotone trim/speed mapping to isolate the actual eligible output-frame
+    segment (logarithmic tests, not a 10-million-frame scan), then apply
+    the independently proved alpha-zero keyframe envelope ONLY there.
+    """
+    if not _native_source_frame_available_at_output_sample(
+            clip, export_interval, original_duration):
+        return False
+    keyframes = clip.get("keyframes")
+    animated = keyframes.get("opacity") if isinstance(keyframes, dict) else None
+    if not isinstance(animated, list) or not animated:
+        # Actual native override is absent; the static alpha guard has
+        # already rejected a zero-opacity clip.
+        return True
+    playback = _native_clip_playback_window(clip)
+    if playback is None:
+        return False
+    start, _end, fps, count = export_interval
+    if fps is None or count is None:
+        return False
+    first = max(0, math.ceil((playback[0] - start) * fps - 0.5))
+    last = min(count - 1,
+               math.ceil((playback[1] - start) * fps - 0.5) - 1)
+    if first > last:
+        return False
+
+    def source_at(index):
+        frame_start = start + index / fps
+        frame_end = start + (index + 1) / fps
+        return _native_source_frame_available_at_output_sample(
+            clip, (frame_start, frame_end, fps, 1), original_duration)
+
+    reverse = clip.get("reverse", False)
+    if type(reverse) is not bool:
+        return False
+    if reverse:
+        # Native reverse trim maps output time to monotonically DECREASING
+        # original source time; find the earliest in-range source sample.
+        if not source_at(last):
+            return False
+        low, high = first, last
+        while low < high:
+            middle = (low + high) // 2
+            if source_at(middle):
+                high = middle
+            else:
+                low = middle + 1
+        first = low
+    else:
+        # Forward clip source time is nondecreasing. Once the decoded
+        # source EOF is crossed, later alpha must not restore provenance.
+        if not source_at(first):
+            return False
+        low, high = first, last
+        while low < high:
+            middle = (low + high + 1) // 2
+            if source_at(middle):
+                low = middle
+            else:
+                high = middle - 1
+        last = low
+
+    physical_segment = (
+        start + first / fps,
+        start + (last + 1) / fps,
+        fps,
+        last - first + 1,
+    )
+    return not _native_zero_alpha_at_all_exported_frame_centers(
+        clip, physical_segment)
+
+
 def verify_original_footage_on_native_timeline(
         projects_root: Path, project_paths: list[Path],
         caller_source_assets: list[dict],
@@ -706,7 +785,7 @@ def verify_original_footage_on_native_timeline(
                 grids = [window for window in matched_windows
                          if window[2] is not None]
                 output_frame_sampled = any(
-                    _native_source_frame_available_at_output_sample(
+                    _native_original_source_with_alpha_at_same_output_frame(
                         native_clip, window, original_duration)
                     for window in grids)
                 if grids and not output_frame_sampled and not any(
