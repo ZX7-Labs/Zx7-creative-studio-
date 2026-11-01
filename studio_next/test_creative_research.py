@@ -228,7 +228,7 @@ class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
     def test_host_network_permission_is_mandatory(self):
         from studio_next.creative_research_mcp import create_research_server
         with self.assertRaises(PermissionError):
-            create_research_server()
+            create_research_server(allow_public_research=False)
 
     async def test_real_mcp_protocol_exposes_only_bounded_readonly_research(self):
         import anyio
@@ -260,7 +260,7 @@ class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
                     await session.initialize()
                     tools = (await session.list_tools()).tools
                     self.assertEqual({tool.name for tool in tools},
-                                     {"research_assets", "research_studies"})
+                                     {"research_creative", "research_assets", "research_studies"})
                     response = await session.call_tool(
                         "research_assets", {"query": "light", "media": "video"})
                     self.assertFalse(response.is_error)
