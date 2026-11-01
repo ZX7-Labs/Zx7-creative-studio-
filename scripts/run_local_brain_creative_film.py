@@ -128,8 +128,20 @@ def _museum_images(queries, folder):
                 continue
             licurl=meta.get("LicenseUrl")
             urlstr=licurl.get("value") if isinstance(licurl,dict) else ""
-            if (not isinstance(urlstr,str) or
-                    not urlstr.startswith("https://creativecommons.org/publicdomain/zero/1.0/")):
+            # Commons often records the *canonical Creative Commons license*
+            # as http:// rather than https://. A page URL is NOT fetched by
+            # this check: require the exact CC0 license host and path, not a
+            # risky startswith() comparison or a provider-controlled domain.
+            if not isinstance(urlstr,str):
+                continue
+            license_uri=urllib.parse.urlsplit(urlstr)
+            if (license_uri.scheme not in ("http","https")
+                    or license_uri.hostname!="creativecommons.org"
+                    or license_uri.username or license_uri.password
+                    or license_uri.query or license_uri.fragment
+                    or license_uri.path not in (
+                        "/publicdomain/zero/1.0/",
+                        "/publicdomain/zero/1.0/deed.en")):
                 continue
             image=info.get("thumburl") or info.get("url")
             page=info.get("descriptionurl")
