@@ -2629,6 +2629,12 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 elif self.malformed == "nested_generic":
                     response["result"] = {
                         "previewOnly": True, "action": name}
+                elif self.malformed == "unadvertised_apply_key":
+                    # The source reply remains a real *preview*, but its
+                    # suggested apply must never bypass the actual native
+                    # tool's published schema.
+                    response["suggestedApplyCall"]["arguments"][
+                        "inventedEditorKey"] = "ignore_the_contract"
                 return SimpleNamespace(is_error=False, content=[
                     SimpleNamespace(type="text", text=json.dumps(response))])
 
@@ -2662,6 +2668,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             "assetName": "owner-original.mp4", "previewOnly": False})
         self.assertTrue(option["independent_model_consent_required"])
         self.assertTrue(option["not_executed_by_host"])
+        self.assertTrue(option["current_host_schema_validated"])
+        self.assertTrue(
+            option["next_model_invoke_must_use_exact_suggested_arguments"])
         self.assertEqual(sum(e["kind"] == "native_tool_preview"
                              for e in outcome["events"]), 1)
         self.assertEqual(sum(e["kind"] == "native_tool_result" and
@@ -2692,6 +2701,31 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                              for e in declined["events"]))
         self.assertTrue(audit_native_journal(
             declined["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+
+        # Malformed host suggestions are not executable instructions. The
+        # model may inspect, decline or choose a new schema-valid native
+        # command; no automatic action or faulty plan is promoted.
+        proposed = DirectNativePlan("unadvertised_apply_key")
+        observer = ScriptedModel([
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetName": "owner-original.mp4"}),
+            decision("finish", summary="Reject unverifiable plan arguments"),
+        ])
+        rejected_plan = await NativeCreativeControl(
+            proposed, observer, host_tool_access=grants,
+            max_turns=2).run("Only consent to valid native editor plans")
+        self.assertEqual(rejected_plan["status"], "model_finished_unverified")
+        self.assertTrue(observer.observed[1]["last_native_preview_feedback"][
+            "native_plan_requires_new_model_review"])
+        self.assertNotIn("native_plan_apply_option",
+                         observer.observed[1]["last_native_preview_feedback"])
+        self.assertEqual([v.get("previewOnly") for name, v in proposed.calls
+                          if name == "add_asset_to_timeline"], [None])
+        self.assertFalse(any(e["kind"] == "native_tool_result"
+                             for e in rejected_plan["events"]))
+        self.assertTrue(audit_native_journal(
+            rejected_plan["events"], host_tool_access=grants)[
                 "journal_chain_structurally_valid"])
 
         for malformed in ("success_true", "mismatched_plan",
