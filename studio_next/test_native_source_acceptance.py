@@ -613,6 +613,9 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
             {"compositeLowerLayers": "auto"},
             {"duration": 2},
             {"enabled": False},
+            # Upstream native cullVisualLayerEntries explicitly skips
+            # adjustment clips even with a forced 'off' composite flag.
+            {"type": "adjustment"},
         ):
             with self.subTest(change=change):
                 candidate = {**blocker, **change}
@@ -655,6 +658,7 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertIn("cullVisualLayerEntries(matteVisibleLayerClips", exporter)
         self.assertIn("for (let index = entries.length - 1;", layer)
         self.assertIn("if (mode === CLIP_COMPOSITE_MODE.OFF) return true", layer)
+        self.assertIn("if (!clip || clip.type === 'adjustment') continue", layer)
         self.assertIn("if (transitionClipIds.has(clip.id)) continue", layer)
         self.assertIn("if (shouldStopAtClipForLowerLayers(clip, options))", layer)
 
