@@ -360,6 +360,27 @@ class SourcePreviewContracts(unittest.TestCase):
                 self.assertFalse(pinned_forced_image_sequence_absent_error(
                     name, candidate))
 
+    def test_native_export_ack_really_emits_project_timeline_and_output(self):
+        # Source-pin this identity exception to the exact vendored editor.
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/electron/mcpServer.js")
+        js = source.read_text(encoding="utf-8")
+        start = js.index("  async exportTimeline(")
+        end = js.index("  async exportDeliveryBatch(", start)
+        method = js[start:end]
+        for source_binding in (
+            "projectPath: plan.projectPath",
+            "outputPath,",
+            "timeline: plan.timeline",
+            "success: true",
+            "...exportPlan",
+        ):
+            self.assertIn(source_binding, method)
+        self.assertLess(method.index("const exportPlan = {"),
+                        method.index("await this.performAction({"))
+        self.assertLess(method.index("await this.performAction({"),
+                        method.rindex("return textResult({"))
+
     def test_pinned_export_receipt_binds_native_project_timeline_and_target(self):
         import hashlib
         receipt = {
