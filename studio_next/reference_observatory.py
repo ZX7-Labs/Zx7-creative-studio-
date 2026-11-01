@@ -63,11 +63,11 @@ def _read_exact(pipe, count):
 
 def _decode_video(path, fps, max_samples):
     width, height = 96, 54
-    frame_size = width * height
+    frame_size = width * height * 3
     args = ["ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe",
             "-i", str(path), "-map", "0:v:0", "-an",
-            "-vf", f"fps={fps},scale={width}:{height}:flags=fast_bilinear,format=gray",
-            "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"]
+            "-vf", f"fps={fps},scale={width}:{height}:flags=fast_bilinear,format=rgb24",
+            "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
     try:
         proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError as exc:
@@ -83,11 +83,18 @@ def _decode_video(path, fps, max_samples):
                 raise ReferenceObservationError("Video decoder returned an incomplete frame")
             if len(rows) >= max_samples:
                 raise ReferenceObservationError("Reference exceeds configured observation budget")
-            brightness = sum(frame)/(255.0*frame_size)
+            red = sum(frame[0::3])/(255.0*width*height)
+            green = sum(frame[1::3])/(255.0*width*height)
+            blue = sum(frame[2::3])/(255.0*width*height)
+            brightness = 0.2126*red + 0.7152*green + 0.0722*blue
+            chroma = sum(max(frame[i:i+3])-min(frame[i:i+3])
+                         for i in range(0, len(frame), 3))/(255.0*width*height)
             difference = (sum(abs(a-b) for a, b in zip(frame, previous)) /
                           (255.0*frame_size)) if previous is not None else 0.0
             rows.append({"second": round(len(rows)/fps, 4),
                          "luma": round(brightness, 4),
+                         "mean_rgb": [round(red, 4), round(green, 4), round(blue, 4)],
+                         "mean_chroma": round(chroma, 4),
                          "frame_difference": round(difference, 4)})
             previous = frame
         if proc.wait(timeout=30):
