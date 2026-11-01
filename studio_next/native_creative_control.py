@@ -520,7 +520,8 @@ class NativeCreativeControl:
                  host_possible_effects: dict | None = None,
                  host_once_after_acknowledged_write: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
-                 host_content_revision_tools: tuple[str, ...] = ()):
+                 host_content_revision_tools: tuple[str, ...] = (),
+                 host_completion_affordances: dict | None = None):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
             raise NativeCreativeControlError("Native model session requires finite turn budget")
         if not callable(getattr(model, "decide", None)):
@@ -545,6 +546,25 @@ class NativeCreativeControl:
             raise NativeCreativeControlError(
                 "Completion evidence must be a unique trusted host requirement")
         self.required_evidence = frozenset(required_evidence)
+        # Host-owned possible completion affordances are discovery metadata:
+        # never an instruction, a suggested aesthetic choice, or evidence of
+        # an applied write. A wrong tool/evidence mapping is a configuration
+        # error, never a license for a small model to hallucinate an API.
+        claimed = host_completion_affordances or {}
+        if (not isinstance(claimed, dict) or
+                (claimed and host_tool_access is None) or
+                any(key not in self.required_evidence or
+                    not isinstance(names, (list, tuple)) or
+                    not 1 <= len(names) <= 6 or
+                    len(names) != len(set(names)) or
+                    any(not isinstance(name, str) or
+                        name not in host_tool_access
+                        for name in names)
+                    for key, names in claimed.items())):
+            raise NativeCreativeControlError(
+                "Completion affordances must reference required evidence and live host grants")
+        self._host_completion_affordances = {
+            key: tuple(names) for key, names in claimed.items()}
         if (not isinstance(host_content_revision_tools, (list, tuple, frozenset)) or
                 any(not isinstance(name, str) or not name
                     for name in host_content_revision_tools) or
@@ -1120,6 +1140,37 @@ class NativeCreativeControl:
                         if self._capabilities is not None else None),
                     "last_capability_search_result": self._last_search_result,
                     "host_attested_source_asset_producers": self._host_source_frontier,
+                    # Host-verified project content makes a real export or
+                    # observation physically possible, but the editor may
+                    # still reject the chosen action. Expose the NAMES of
+                    # relevant live, host-granted tools; the model MUST
+                    # discover their schema and choose every input itself.
+                    # Actual creative edits are never selected here.
+                    "host_completion_evidence_affordances": ({
+                        "host_observation":
+                            "native_get_project_positive_clip_and_asset_counts",
+                        "possible_tools_not_completion_proof": {
+                            fact: [
+                                {"name": name,
+                                 "access": self.host_tool_access[name]}
+                                for name in names if name in self.tools]
+                            for fact, names in
+                                self._host_completion_affordances.items()
+                            if fact in self._missing_completion_evidence()
+                        },
+                        "no_automatic_tool_invocation": True,
+                    } if (self._host_completion_affordances and
+                          self._project_presence == "present" and
+                          isinstance(self._latest_native_state_facts, dict) and
+                          type(self._latest_native_state_facts.get(
+                              "current_timeline_clip_count")) is int and
+                          self._latest_native_state_facts[
+                              "current_timeline_clip_count"] > 0 and
+                          type(self._latest_native_state_facts.get(
+                              "native_project_asset_count")) is int and
+                          self._latest_native_state_facts[
+                              "native_project_asset_count"] > 0)
+                       else None),
                     "last_imported_native_asset_receipt_for_lookup_only":
                         self._last_native_import_asset_hint,
                     "completion_does_not_certify_artistic_quality": True,
