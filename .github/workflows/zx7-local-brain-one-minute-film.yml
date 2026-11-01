@@ -1,0 +1,60 @@
+name: ZX7 60-second Genuine Local Brain Native Film
+on:
+  push:
+    branches:
+      - "proof/local-brain-60s-native-film-20261101"
+    paths:
+      - "scripts/run_local_brain_creative_film.py"
+      - ".github/workflows/zx7-local-brain-one-minute-film.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-local-brain-one-minute-film-proof
+  cancel-in-progress: true
+
+jobs:
+  model-directed-public-domain-60s:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout exact public ZX7 BODY source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install original audio/visual native film engines and full BODY
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg melt frei0r-plugins fonts-dejavu-core
+          python -m pip install --no-cache-dir '.[production]'
+          python -m compileall -q scripts/run_local_brain_creative_film.py studio_next
+      - name: Run source-pinned genuine free local Qwen, model-directed editing and native MLT
+        run: |
+          python -u scripts/run_local_brain_creative_film.py \
+            --model-lock engines/velorn/local-model-trial.lock.json \
+            --runtime "$RUNNER_TEMP/zx7-local-model" \
+            --output "$GITHUB_WORKSPACE/output/one-minute-neural-film"
+      - name: Preserve model decisions, source artwork provenance, native project, soundtrack, video and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-actual-local-ai-60s-proof
+          path: |
+            output/one-minute-neural-film/evidence.json
+            output/one-minute-neural-film/actual-model-transcript.json
+            output/one-minute-neural-film/model-authored-film-plan.json
+            output/one-minute-neural-film/source-asset-evidence.json
+            output/one-minute-neural-film/FINAL-MOVIE-RECEIPT.json
+            output/one-minute-neural-film/workspace/ZX7-LOCAL-AI-ONE-MINUTE.mp4
+            output/one-minute-neural-film/workspace/zx7-model-native-edit.mlt
+            output/one-minute-neural-film/workspace/model-to-native-mlt.json
+            output/one-minute-neural-film/workspace/source/
+            output/one-minute-neural-film/workspace/art/
+            output/one-minute-neural-film/workspace/vault/
+            output/one-minute-neural-film/model-server.log
+          if-no-files-found: warn
+          retention-days: 14
