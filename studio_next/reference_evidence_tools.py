@@ -30,7 +30,8 @@ def inspect_authorized_reference(reference_root, reference, *, bins=64):
     report = observe_reference(path)
     duration = report["duration_seconds"]
     visual = [{"count": 0, "difference_total": 0., "difference_max": 0.,
-               "luma_total": 0.} for _ in range(bins)]
+               "luma_total": 0., "chroma_total": 0.,
+               "rgb_total": [0., 0., 0.]} for _ in range(bins)]
     sound = [{"count": 0, "rms_dbfs_total": 0., "peak_dbfs_max": -120.}
              for _ in range(bins)]
     for item in report["visual_observations"]:
@@ -39,6 +40,8 @@ def inspect_authorized_reference(reference_root, reference, *, bins=64):
         value["count"] += 1
         value["difference_total"] += item["frame_difference"]
         value["luma_total"] += item["luma"]
+        value["chroma_total"] += item["mean_chroma"]
+        value["rgb_total"] = [a+b for a,b in zip(value["rgb_total"], item["mean_rgb"])]
         value["difference_max"] = max(value["difference_max"],
                                       item["frame_difference"])
     for item in report["audio_observations"]:
@@ -57,6 +60,10 @@ def inspect_authorized_reference(reference_root, reference, *, bins=64):
                 round(v["difference_max"], 4) if v["count"] else None,
             "mean_luminance":
                 round(v["luma_total"]/v["count"], 4) if v["count"] else None,
+            "mean_chroma":
+                round(v["chroma_total"]/v["count"], 4) if v["count"] else None,
+            "mean_rgb":
+                [round(x/v["count"], 4) for x in v["rgb_total"]] if v["count"] else None,
             "audio_rms_dbfs":
                 round(a["rms_dbfs_total"]/a["count"], 2) if a["count"] else None,
             "audio_peak_dbfs":
