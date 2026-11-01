@@ -298,6 +298,61 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.save()
         self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
 
+    def test_native_exporter_path_precedence_cannot_borrow_other_project_copy(self):
+        # A valid secondary 'path' must not rescue a malicious/invalid
+        # absolutePath when pinned Velorn selects absolutePath first.
+        asset = self.project["assets"][0]
+        asset["path"] = "media/original.mp4"
+        for bad_absolute in (
+            str(self.sources / "unrelated.mp4"),
+            str(self.src),
+            str(self.projects / "other-project" / "lost.mp4"),
+        ):
+            with self.subTest(absolute=bad_absolute):
+                asset["absolutePath"] = bad_absolute
+                self.save()
+                self.assertFalse(self.verify([{
+                    "start_seconds": 0, "end_seconds": 4
+                }])["actual_original_video_used_on_native_timeline"])
+        wrong_copy = self.owned / "media" / "another.mp4"
+        wrong_copy.write_bytes(b"not the caller original frames")
+        asset["absolutePath"] = str(wrong_copy)
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+        # When the authoritative absolutePath genuinely resolves to the
+        # right copied file, an unrelated secondary field must not hijack it.
+        asset["absolutePath"] = str(self.copy)
+        asset["path"] = "media/does-not-exist.mp4"
+        self.save()
+        self.assertTrue(self.verify()["actual_original_video_used_on_native_timeline"])
+
+        # Absence/empty absolutePath legitimately enables the relative path
+        # branch in getExportAssetPath. It still stays under the owned root.
+        for absence in (None, "", "   "):
+            with self.subTest(absence=repr(absence)):
+                if absence is None:
+                    asset.pop("absolutePath", None)
+                else:
+                    asset["absolutePath"] = absence
+                asset["path"] = "media/original.mp4"
+                self.save()
+                self.assertTrue(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+
+    def test_vendored_native_exporter_has_authoritative_path_precedence(self):
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js").read_text(
+                        encoding="utf-8")
+        start = exporter.index("async function getExportAssetPath(")
+        end = exporter.index("async function getExportAssetSignature(", start)
+        segment = exporter[start:end]
+        self.assertIn("if (typeof asset.absolutePath === 'string'", segment)
+        self.assertIn("return asset.absolutePath", segment)
+        self.assertIn("if (asset.path)", segment)
+        self.assertLess(segment.index("return asset.absolutePath"),
+                        segment.index("if (asset.path)"))
+
     def test_untrusted_project_metadata_cannot_select_extra_host_paths(self):
         self.project["assets"][0]["settings"]["sourcePath"] = (
             "/not-owner-provided/unrelated-private-file.mp4")
