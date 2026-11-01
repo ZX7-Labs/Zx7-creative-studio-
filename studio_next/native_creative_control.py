@@ -884,7 +884,7 @@ class NativeCreativeControl:
                     "Native asset inventory must have one bounded text receipt")
             inventory = _strict_receipt(texts, "unplaced imported asset inventory")
             if (type(inventory.get("count")) is not int or
-                    inventory["count"] <= 0 or
+                    not 1 <= inventory["count"] <= 1000 or
                     inventory.get("limitApplied") is not False or
                     not isinstance(inventory.get("assets"), list) or
                     len(inventory["assets"]) != inventory["count"] or
