@@ -34,6 +34,8 @@ from studio_next.media_vault import MediaVault, sha256_file
 from studio_next.body_mlt_editor import export_owned_mlt
 from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
+from studio_next.model_film_revision import (
+    apply_model_selected_revision, encoded_film_contact_sheet)
 
 from scripts.run_native_model_trial import download, read_live_linux_model_peak_rss
 
@@ -405,6 +407,188 @@ def _render_music(music, output):
         w.setnchannels(2);w.setsampwidth(2)
         w.setframerate(sample_rate);w.writeframes(frames.tobytes())
 
+
+def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
+                                    native, music_att, video_path,
+                                    observation, workspace, vault,
+                                    transcript, dest):
+    """Actual encoded visual evidence -> independent model-selected native edit.
+
+    Keep both native project versions and both decoded movies. No host-authored
+    creative revision, no automatic approval and no invented soundtrack hearing.
+    A model's decision to retain its first edit is recorded, not treated as
+    proof of an actual post-observation edit.
+    """
+    first_frames = [n for n, _ in ordered]
+    review_image = workspace/"effects"/"first-encoded-film-preview.png"
+    preview = encoded_film_contact_sheet(
+        video_path, first_frames, review_image, fps=FPS)
+    if preview["source_sha256"] != sha256_file(video_path):
+        raise RuntimeError("Observed visual preview is not bound to decoded export")
+    schema = {
+        "type": "object", "additionalProperties": False,
+        "required": ["action", "beat_index", "field", "value", "reason"],
+        "properties": {
+            "action": {"type":"string", "enum":["keep", "revise"]},
+            "beat_index": {"type":"integer", "minimum":0,
+                           "maximum":len(plan["beats"])-1},
+            "field": {"type":"string",
+                      "enum":["caption", "camera", "artwork", "weight"]},
+            "value": {"type":"string", "minLength":1, "maxLength":100},
+            "reason": {"type":"string", "minLength":12, "maxLength":600},
+        },
+    }
+    brain.settings.sampling["response_format"] = {
+        "type":"json_schema",
+        "json_schema":{"name":"zx7_native_film_observation_revision",
+                       "strict":True, "schema":schema}
+    }
+    film_identity = sha256_file(video_path)
+    request = {
+        "phase": "actual_encoded_output_review",
+        "task": (
+            "You are reviewing the real decoded output of the film that YOU "
+            "independently directed. The attached indexed storyboard samples "
+            "actual decoded frames at the center of every authored beat; it "
+            "is not original still artwork. Inspect composition, legibility, "
+            "visual continuity and editorial pacing. Sound measurements "
+            "describe physical levels only: you have NOT listened to the "
+            "music and must not claim you have. Independently decide whether "
+            "a concrete visual or pacing repair is warranted. If so, pick "
+            "exactly one beat and one editable field to revise. Reply as "
+            "{action:revise,beat_index:integer,field:caption|camera|artwork|weight,"
+            "value:string,reason:string}. The value is the proposed new "
+            "caption, registered camera name, decimal relative beat weight, "
+            "or source inventory index as a string. If actual evidence does "
+            "not justify an edit, choose action:keep; the other fields must "
+            "still be present but no change will occur. You must not fabricate "
+            "frames, audio impressions, licenses, results or professional approval."
+        ),
+        "actual_movie_sha256": film_identity,
+        "physical_delivery": {
+            "duration_seconds": observation["duration_seconds"],
+            "full_picture_and_sound_decoder_completed":
+                observation["full_picture_and_sound_decoder_completed"],
+            "audio_measurements": observation["audio_measurements"],
+            "audio_understanding_or_artistic_quality_approved": False,
+        },
+        "picture_evidence": [{
+            "job_id": film_identity,
+            "path": str(review_image),
+            "sha256": preview["preview_sha256"],
+        }],
+        "preview_limitations": {
+            "temporal_sampling_only": True,
+            "continuous_motion_analysis_not_proven": True,
+            "audio_has_not_been_listened_to": True,
+        },
+        "current_edit_plan": plan,
+        "source_inventory": [
+            {"index":i,"sha256":item["sha256"],"title":item["title"]}
+            for i,item in enumerate(assets)
+        ],
+    }
+    decision = _call(brain, request, transcript, with_image=review_image)
+    revised, model_edit = apply_model_selected_revision(
+        plan, decision, asset_count=len(assets))
+    (dest/"model-original-export-review.json").write_text(
+        json.dumps({"visual_preview":preview, "model_decision":decision,
+                    "validated_edit":model_edit,
+                    "initial_movie":receipt(video_path),
+                    "quality_certified":False}, indent=2, ensure_ascii=False))
+    if not model_edit["revision_applied"]:
+        return {"status":"model_kept_original_after_visual_review",
+                "visual_preview":preview, "model_selected_edit":model_edit,
+                "post_observation_native_write":False,
+                "semantic_audio_review_verified":False}
+
+    _validate_decision(revised, assets)
+    frame_lengths = _weights_to_frames(revised["beats"])
+    selected_index = model_edit["beat_index"]
+    revision_dir = workspace/"revision-01"
+    revision_dir.mkdir(exist_ok=False)
+    shot_dir = revision_dir/"source"
+    shot_dir.mkdir()
+    effect_dir = revision_dir/"effects"
+    effect_dir.mkdir()
+    actual_revisions = []
+    new_ordered = []
+    for index,(beat, frames) in enumerate(zip(revised["beats"],frame_lengths)):
+        if beat == plan["beats"][index] and frames == first_frames[index]:
+            new_ordered.append(ordered[index])
+            continue
+        asset = assets[beat["artwork"]]
+        overlay = effect_dir / f"titles-{index:02d}.png"
+        _title_overlay(revised["title"], beat["caption"], index,
+                       len(frame_lengths), overlay)
+        shot = shot_dir / f"model-revised-shot-{index:02d}.mp4"
+        _render_segment(asset["local"], overlay, beat["camera"], frames, shot)
+        att = vault.ingest(
+            shot, mime="video/mp4", rights="generated_original",
+            source_type="trusted_renderer",
+            source_id="zx7-local-model-source-custodied-revision",
+            evidence=(f"Real post-observation selected native revision beat={selected_index} "
+                      f"changed_rendered_beat={index}; Commons source id={asset['id']} "
+                      f"art_sha256={asset['sha256']}; CC0 metadata is not legal clearance"),
+            owner_or_generator="ZX7 BODY local-model selected original visual revision")
+        new_ordered.append((frames, att))
+        actual_revisions.append({
+            "beat":index, "source_art_sha256":asset["sha256"],
+            "previous_asset_id":ordered[index][1]["asset_id"],
+            "revised_asset_id":att["asset_id"], "source_shot":receipt(shot),
+            "reused_original_source":False,
+        })
+    if not actual_revisions:
+        raise RuntimeError("Model-selected revision generated no new native shot")
+    cursor = 0
+    clips = []
+    for nframes, att in new_ordered:
+        clips.append({"source":"zx7:sha256:"+att["asset_id"],
+                      "asset_id":att["asset_id"],
+                      "attestation_id":att["attestation_id"],
+                      "position_frame":cursor, "first_frame":0,
+                      "end_frame":nframes, "audio":"intentional_silence"})
+        cursor += nframes
+    if cursor != FRAMES:
+        raise RuntimeError("Revision breaks the exact rational native picture clock")
+    second_native = {
+        "frame_rate":native["frame_rate"],"frame_size":native["frame_size"],
+        "tracks":[{"clips":clips}],
+        "audio_tracks":native["audio_tracks"],
+    }
+    plan_file = workspace/"model-to-native-mlt-revised.json"
+    plan_file.write_text(json.dumps(second_native, indent=2))
+    second_project = workspace/"zx7-model-native-edit-revised.mlt"
+    native_receipt = export_owned_mlt(
+        plan_file, workspace, workspace/"vault", second_project)
+    second_movie = workspace/"ZX7-LOCAL-AI-ONE-MINUTE-REVISED.mp4"
+    render_receipt = render_owned_mlt(second_project,workspace,second_movie)
+    decoded = full_decode_inspection(second_movie, expected={
+        "width":SIZE[0],"height":SIZE[1],"duration_seconds":SECONDS,
+        "require_audio":True,
+    })
+    if not decoded["technical_delivery_verified"]:
+        raise RuntimeError("Model-selected revision did not pass full A/V decode")
+    if sha256_file(second_movie) == film_identity:
+        raise RuntimeError("Model selected edit but actual decoded export has unchanged bytes")
+    revised_plan_path = dest/"model-authored-revised-film-plan.json"
+    revised_plan_path.write_text(json.dumps(revised, indent=2, ensure_ascii=False))
+    return {
+        "status":"model_revised_real_native_edit_after_visual_review",
+        "visual_preview":preview, "model_selected_edit":model_edit,
+        "revised_plan":receipt(revised_plan_path),
+        "native_project":native_receipt,
+        "native_render":render_receipt,
+        "full_decode":decoded,
+        "movie":receipt(second_movie),
+        "project":receipt(second_project),
+        "source_revisions":actual_revisions,
+        "source_movie_preserved":receipt(video_path),
+        "independent_artistic_quality_certified":False,
+        "semantic_audio_review_verified":False,
+        "post_observation_native_write":True,
+    }
+
 def _await_model(lock, runtime, logfile):
     from scripts.run_native_model_trial import sha
     archive=download(lock["runtime"]["archive"],runtime)
@@ -625,7 +809,17 @@ def produce(args):
                 raise RuntimeError("One-minute original film did not pass complete audiovisual decode and clock")
             evidence["film_seconds"]=SECONDS
             evidence["native_mlt_rendered"]=True
-            evidence["status"]="rendered_not_art_director_approved"
+            # This stage is driven by an actual separate local neural turn
+            # supplied with the exact rendered movie's decoded preview.
+            evidence["post_export_creative_review"] = _review_encoded_film_and_revise(
+                brain=brain, plan=plan, assets=assets, ordered=ordered,
+                native=native, music_att=music_att, video_path=video_path,
+                observation=observation, workspace=workspace, vault=vault,
+                transcript=transcript, dest=dest)
+            evidence["status"] = (
+                "rendered_revised_not_art_director_approved"
+                if evidence["post_export_creative_review"]["post_observation_native_write"]
+                else "rendered_not_art_director_approved")
             # Independent source comparison: every movie frame can be decoded.
             # Do NOT claim source rights or creative quality independently proven.
             (dest/"FINAL-MOVIE-RECEIPT.json").write_text(
@@ -647,7 +841,9 @@ def produce(args):
             except subprocess.TimeoutExpired:
                 model_process.kill();model_process.wait()
         (dest/"evidence.json").write_text(json.dumps(evidence,indent=2,ensure_ascii=False))
-    if evidence["status"]!="rendered_not_art_director_approved":
+    if evidence["status"] not in (
+            "rendered_not_art_director_approved",
+            "rendered_revised_not_art_director_approved"):
         raise RuntimeError("No actual full one-minute neural-directed ZX7 native film was produced")
 
 
