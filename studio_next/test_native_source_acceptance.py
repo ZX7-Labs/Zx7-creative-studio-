@@ -79,6 +79,176 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
                     "start_seconds": 0, "end_seconds": 60
                 }])["actual_original_video_used_on_native_timeline"], visible)
 
+    def test_pinned_video_track_visibility_contract_in_exporter(self):
+        # This exception must fail on a future Velorn change instead of
+        # persisting an invented understanding of native solo/mute behavior.
+        source = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        visibility = (source / "utils/videoTrackVisibility.js").read_text(
+            encoding="utf-8")
+        eligible = (source / "utils/exportVideoClipEligibility.js").read_text(
+            encoding="utf-8")
+        exporter = (source / "services/exporter.js").read_text(
+            encoding="utf-8")
+        self.assertIn("track.solo === true", visibility)
+        self.assertIn("if (track.visible === false) return false", visibility)
+        self.assertIn("if (track.muted === true) return false", visibility)
+        self.assertIn("if (anySolo && track.solo !== true) return false", visibility)
+        self.assertIn("hasVideoSolo(tracks)", eligible)
+        self.assertIn("isVideoTrackVisible(track, anyVideoSolo)", eligible)
+        self.assertIn("getRenderableVideoClipIds({", exporter)
+
+    def test_original_video_track_mute_and_solo_require_actual_visibility(self):
+        # Both lanes are legal original native video tracks. Solo monitoring
+        # overrides the normal visible/eye flag without changing the saved
+        # original source clip, so the verifier must honor the renderer's
+        # chosen active visual lane.
+        timeline = self.project["timelines"][0]
+        source_track = timeline["tracks"][0]
+        another_track = {"id": "video-2", "type": "video", "visible": True}
+        timeline["tracks"].append(another_track)
+        def check(expected):
+            self.save()
+            proof = self.verify([{"start_seconds": 0, "end_seconds": 4}])
+            self.assertEqual(
+                proof["actual_original_video_used_on_native_timeline"], expected)
+            self.assertEqual(
+                proof["physically_verified_native_source_clip_count"],
+                int(expected))
+        check(True)
+        source_track["muted"] = True
+        check(False)
+        source_track["muted"] = False
+        check(True)
+        source_track["muted"] = "false"
+        check(False)
+        source_track["muted"] = False
+        another_track["solo"] = True
+        check(False)
+        source_track["solo"] = True
+        check(True)
+        source_track["solo"] = False
+        check(False)
+        another_track["solo"] = False
+        check(True)
+        source_track["solo"] = 1
+        check(False)
+        source_track["solo"] = False
+        check(True)
+
+    def test_source_visibility_follows_pinned_native_playback_window(self):
+        source = Path(__file__).resolve().parents[1] / "third_party/velorn"
+        eligibility = (source / "src/utils/exportVideoClipEligibility.js").read_text(
+            encoding="utf-8")
+        visibility = (source / "electron/audioMixEligibility.mjs").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            "import { getClipPlaybackWindow } from './compoundPlayback.mjs'",
+            eligibility)
+        self.assertIn("const { start: clipStart, end: clipEnd } =",
+                      eligibility)
+        self.assertIn("getClipPlaybackWindow(clip)", eligibility)
+        self.assertIn("export const getClipPlaybackWindow = (clip) => {",
+                      visibility)
+        self.assertIn("start: Math.max(origin,", visibility)
+        self.assertIn("end: Math.min(origin + duration,", visibility)
+
+        clip = self.project["timelines"][0]["clips"][0]
+        def matches(begin, end):
+            self.save()
+            return self.verify([{
+                "start_seconds": begin, "end_seconds": end,
+            }])["actual_original_video_used_on_native_timeline"]
+        self.assertTrue(matches(0, 4))
+        clip["playbackWindowStart"] = 4
+        self.assertFalse(matches(0, 4))
+        clip["playbackWindowStart"] = 3.5
+        self.assertTrue(matches(0, 4))
+        self.assertFalse(matches(0, 3))
+        clip["playbackWindowEnd"] = 2
+        self.assertFalse(matches(0, 4))
+        clip["playbackWindowStart"] = 0
+        self.assertTrue(matches(0, 4))
+        self.assertTrue(matches(1, 3))
+        self.assertFalse(matches(2, 4))
+        for field in ("playbackWindowStart", "playbackWindowEnd"):
+            original = clip[field]
+            for invalid in (None, True, "0", float("nan"), float("inf")):
+                with self.subTest(field=field, invalid=repr(invalid)):
+                    clip[field] = invalid
+                    self.assertFalse(matches(0, 4))
+            clip[field] = original
+        clip.pop("playbackWindowStart")
+        clip.pop("playbackWindowEnd")
+        self.assertTrue(matches(0, 4))
+
+    def test_unverified_native_cache_must_not_impersonate_original_video_frames(self):
+        # The editor's default useCachedRenders=true may replace the native
+        # original source with an unrelated baked or legacy cache URL. Native
+        # asset SHA and original clip ID are not proof of cache derivation.
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/src/services/exporter.js").read_text(
+                      encoding="utf-8")
+        self.assertIn("useCachedRenders = true", source)
+        self.assertIn("if (clip.cacheStatus !== 'cached') continue", source)
+        self.assertIn("cachedVideoSources.set(clip.id, clip.cacheUrl)", source)
+        self.assertIn("cachedVideoSources.set(clip.id, fileUrl)", source)
+        self.assertIn("const cachedSourceUrl = cachedVideoSources.get(clip.id)", source)
+        self.assertIn("const usingCachedRender = !!cachedSourceUrl", source)
+        clip = self.project["timelines"][0]["clips"][0]
+        def covered():
+            self.save()
+            return self.verify([{
+                "start_seconds": 0, "end_seconds": 4
+            }])["actual_original_video_used_on_native_timeline"]
+        self.assertTrue(covered())
+        for key in ("cacheUrl", "cachePath"):
+            clip["cacheStatus"] = "cached"
+            clip["cacheKind"] = "full"
+            clip[key] = ("file:///unverified/foreign-baked-media.mp4"
+                         if key == "cacheUrl" else "unverified-foreign-bake.mp4")
+            self.save()
+            with self.subTest(active_cache=key):
+                self.assertTrue(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+                self.assertFalse(covered())
+            clip.pop(key)
+        clip["cacheStatus"] = "stale"
+        clip["cacheUrl"] = "file:///unverified/foreign-baked-media.mp4"
+        self.assertTrue(covered())
+        clip["cacheStatus"] = "cached"
+        clip["cacheUrl"] = ""
+        self.assertTrue(covered())
+        clip["cacheUrl"] = "file:///unverified/foreign-baked-media.mp4"
+        clip["cacheKind"] = "mask"
+        self.assertFalse(covered())
+
+    def test_wholly_cropped_native_video_cannot_prove_original_picture(self):
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js").read_text(
+                        encoding="utf-8")
+        self.assertIn("export const applyClipCrop = (ctx, rect, transform) => {",
+                      exporter)
+        self.assertIn("Math.max(0, rect.width - left - right)", exporter)
+        self.assertIn("Math.max(0, rect.height - top - bottom)", exporter)
+        self.assertIn("const getVisibleLocalRect =", exporter)
+        clip = self.project["timelines"][0]["clips"][0]
+        def visible(left=0, right=0, top=0, bottom=0):
+            clip["transform"] = {"cropLeft": left, "cropRight": right,
+                                 "cropTop": top, "cropBottom": bottom}
+            self.save()
+            return self.verify([{"start_seconds": 0, "end_seconds": 4}])[
+                "actual_original_video_used_on_native_timeline"]
+        self.assertTrue(visible())
+        self.assertTrue(visible(left=45, right=45))
+        self.assertFalse(visible(left=50, right=50))
+        self.assertFalse(visible(left=100))
+        self.assertFalse(visible(top=100))
+        self.assertFalse(visible(top=60, bottom=40))
+        self.assertTrue(visible(top=49, bottom=50))
+        for invalid in (None, "0", True, float("inf"), float("nan")):
+            with self.subTest(invalid=repr(invalid)):
+                self.assertFalse(visible(left=invalid))
+
     def test_completely_transparent_native_source_does_not_count_as_visible(self):
         # Pinned exporter treats transform.opacity as percent, so zero
         # hides the imported footage even when its track is visible.

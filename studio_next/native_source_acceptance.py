@@ -60,6 +60,30 @@ def _finite_real(value) -> bool:
         return False
 
 
+def _native_clip_playback_window(clip: dict) -> tuple[float, float] | None:
+    """Mirror pinned Electron getClipPlaybackWindow and reject malformed clocks.
+
+    The native exporter restricts clip frame eligibility to the intersected
+    authored/playback window. Its Number coercions are not sufficient as
+    independent original-footage provenance, so accept finite numbers only.
+    """
+    origin, length = clip.get("startTime"), clip.get("duration")
+    if (not _finite_real(origin) or not _finite_real(length) or
+            not 0 < length <= 1_000_000):
+        return None
+    end = origin + length
+    if not math.isfinite(end):
+        return None
+    lower = clip.get("playbackWindowStart", origin)
+    upper = clip.get("playbackWindowEnd", end)
+    if not _finite_real(lower) or not _finite_real(upper):
+        return None
+    beginning, finish = max(origin, lower), min(end, upper)
+    if beginning >= finish:
+        return None
+    return beginning, finish
+
+
 def _static_native_video_visibility(clip: dict) -> bool:
     """Reject a source video invisible from its own saved transform.
 
@@ -72,7 +96,20 @@ def _static_native_video_visibility(clip: dict) -> bool:
     if not isinstance(transform, dict):
         return False
     opacity = transform.get("opacity", 100)
-    return _finite_real(opacity) and opacity > 0
+    if not _finite_real(opacity) or opacity <= 0:
+        return False
+    # Pinned exporter.js applyClipCrop clips against a nonnegative crop
+    # rectangle. Opposing trims that consume the entire height/width leave
+    # exactly ZERO original-video pixels, regardless of import provenance.
+    # getVisibleLocalRect also clamps crop percentages into [0,100].
+    for first, second in (("cropLeft", "cropRight"),
+                          ("cropTop", "cropBottom")):
+        a, b = transform.get(first, 0), transform.get(second, 0)
+        if not _finite_real(a) or not _finite_real(b):
+            return False
+        if max(0, min(100, a)) + max(0, min(100, b)) >= 100:
+            return False
+    return True
 
 
 def verify_original_footage_on_native_timeline(
@@ -217,24 +254,49 @@ def verify_original_footage_on_native_timeline(
                         full_export_end = max(full_export_end, end)
             effective_windows = (checked_windows if checked_windows is not None
                                  else [(0, full_export_end)])
+            # The actual pinned renderer filters tracks with
+            # src/utils/videoTrackVisibility.js:isVideoTrackVisible.
+            # A video track marked muted contributes NO pixels, and an
+            # independently soloed video track hides every other video
+            # track even when their eye/visible flag remains true.
+            # Do not claim caller-original footage when the native
+            # compositor cannot select that track.
+            any_video_solo = any(
+                isinstance(track, dict) and
+                track.get("type") == "video" and
+                track.get("solo", False) is True
+                for track in tracks)
             visible_video_tracks = {
                 track["id"] for track in tracks
                 if isinstance(track, dict) and
                 isinstance(track.get("id"), str) and
-                track.get("type") == "video" and track.get("visible", True) is True}
+                track.get("type") == "video" and
+                track.get("visible", True) is True and
+                track.get("muted", False) is False and
+                type(track.get("solo", False)) is bool and
+                (not any_video_solo or track.get("solo", False) is True)}
             for clip in timeline["clips"]:
+                playback_window = (_native_clip_playback_window(clip)
+                                   if isinstance(clip, dict) else None)
                 if (isinstance(clip, dict) and
                         clip.get("type") == "video" and
                         clip.get("enabled", True) is True and
                         _static_native_video_visibility(clip) and
+                        # With useCachedRenders enabled, pinned exporter.js
+                        # replaces even a VIDEO clip's actual source decoder
+                        # with clip.cacheUrl/cachePath when status='cached'.
+                        # An unverified baked/legacy cache can carry entirely
+                        # unrelated pixels. Its presence cannot certify that
+                        # owner-original BYTES entered the delivered movie.
+                        # Preserve project-only custody separately.
+                        not (checked_windows is not None and
+                             clip.get("cacheStatus") == "cached" and
+                             (clip.get("cacheUrl") or clip.get("cachePath"))) and
                         clip.get("trackId") in visible_video_tracks and
                         isinstance(clip.get("assetId"), str) and
-                        _finite_real(clip.get("startTime")) and
-                        _finite_real(clip.get("duration")) and
-                        0 < clip["duration"] <= 1_000_000 and
-                        math.isfinite(clip["startTime"] + clip["duration"]) and
-                        any(clip["startTime"] < finish and
-                            clip["startTime"] + clip["duration"] > begin
+                        playback_window is not None and
+                        any(playback_window[0] < finish and
+                            playback_window[1] > begin
                             for begin, finish in effective_windows)):
                     placed.setdefault(clip["assetId"], []).append(clip)
         if not found_active:
