@@ -232,6 +232,40 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertTrue(valid[
             "actual_original_video_sampled_at_verified_output_frame"])
 
+    def test_pinned_nullish_trim_end_falls_back_to_source_duration(self):
+        # clipPlaybackTiming.js: trimEnd ?? sourceDuration ?? computedEnd.
+        # An explicit JSON null is NOT an instruction to skip sourceDuration.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip.update(trimStart=3.99, trimEnd=None, sourceDuration=4)
+        window = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        self.save()
+        self.assertTrue(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        # Without the native sourceDuration clamp, the first 24-fps center
+        # would seek beyond original EOF and must be denied.
+        clip.pop("sourceDuration")
+        self.save()
+        self.assertFalse(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_pinned_source_scale_fallback_requires_both_frame_rates(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        window = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        clip.update(trimStart=3.99, trimEnd=8, speed=0.05,
+                    sourceTimeScale=0, timelineFps=24)
+        self.save()
+        # With only timelineFps, native JS uses 1, not an arbitrary ratio.
+        self.assertTrue(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["sourceFps"] = 1
+        self.save()
+        # With BOTH FPS values native scaling is 24x; first source seek
+        # crosses original EOF despite all timeline/clip IDs being valid.
+        self.assertFalse(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
     def test_source_time_mapping_observes_reverse_and_native_source_scale(self):
         clip = self.project["timelines"][0]["clips"][0]
         output = {"start_seconds": 0, "end_seconds": 4,
