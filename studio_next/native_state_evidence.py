@@ -12,7 +12,9 @@ These are *safety contract bindings*, not creative templates or tool grants.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+from pathlib import Path
 
 _SOURCE_REVIEWED_NONMUTATING_PREVIEWS = frozenset({
     "add_asset_to_timeline", "add_assets_to_timeline", "add_solid_color",
@@ -79,6 +81,42 @@ def pinned_forced_image_sequence_absent_error(name, native_reply):
 _PINNED_UNKNOWN_BETWEEN_TRANSITION_CLIPS = (
     "Both clipAId and clipBId must refer to clips on the active timeline."
 )
+
+
+
+def pinned_native_export_identity(name, receipt):
+    """Attest native editor's own project/timeline/output at render launch.
+
+    Velorn b3c02ad electron/mcpServer.js:exportTimeline echoes
+    projectPath, outputPath and timeline.id in its application-ACK response
+    before starting the export worker. Never accept model-supplied identities
+    or leak absolute project/output paths into the shared native journal.
+    This is an exact saved-project binding, not proof of completed pixels.
+    """
+    if name != "export_timeline" or not isinstance(receipt, dict):
+        return None
+    if (receipt.get("success") is not True or
+            receipt.get("action") != "export_timeline"):
+        return None
+    project_path = receipt.get("projectPath")
+    output_path = receipt.get("outputPath")
+    timeline = receipt.get("timeline")
+    timeline_id = timeline.get("id") if isinstance(timeline, dict) else None
+    if (not isinstance(project_path, str) or
+            not Path(project_path).is_absolute() or
+            not isinstance(output_path, str) or
+            not Path(output_path).is_absolute() or
+            not isinstance(timeline_id, str) or
+            not 1 <= len(timeline_id) <= 512):
+        return None
+    return {
+        "native_export_project_path_sha256":
+            hashlib.sha256(project_path.encode("utf-8")).hexdigest(),
+        "native_export_output_path_sha256":
+            hashlib.sha256(output_path.encode("utf-8")).hexdigest(),
+        "native_export_timeline_id": timeline_id,
+    }
+
 
 
 def pinned_unknown_between_transition_clips(name, inputs, native_reply):
