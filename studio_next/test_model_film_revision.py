@@ -133,7 +133,7 @@ class LocalFilmRevisionTests(unittest.TestCase):
 
     def test_invalid_title_or_unbreakable_caption_rejected_before_render(self):
         plan=dict(self.plan)
-        plan["beats"]=[dict(x) for x in self.plan["beats"]]
+        plan["beats"]=[dict(self.plan["beats"][index%2]) for index in range(6)]
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             plan["beats"][1]["caption"]="Z"*100
             _validate_decision(plan,[{},{}])
