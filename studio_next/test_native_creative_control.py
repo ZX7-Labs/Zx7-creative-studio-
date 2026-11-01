@@ -1831,7 +1831,17 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         async def native(name, args):
             session.calls.append((name, args))
             preview = args.get("previewOnly", True)
-            payload = {"success": not preview, "result": {"previewOnly": preview}}
+            # Match the pinned Velorn createProject → handleCreateProject
+            # envelope. A truncated mock is not evidence of a safe preview.
+            payload = ({"success": False, "action": name,
+                        "result": {"previewOnly": True, "action": name,
+                                   "plan": {"previewOnly": True, "action": name,
+                                            "name": args["name"]}},
+                        "suggestedApplyCall": {"tool": name, "arguments": {
+                            **args, "previewOnly": False}}}
+                       if preview else
+                       {"success": True, "action": name,
+                        "result": {"created": True, "action": name}})
             return SimpleNamespace(is_error=False, content=[
                 SimpleNamespace(type="text", text=json.dumps(payload))])
         session.call_tool = native
@@ -2334,10 +2344,17 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     return await super().call_tool(name, arguments)
                 self.calls.append((name, dict(arguments)))
                 is_preview = arguments.get("previewOnly", True)
+                payload = ({"success": False, "action": name,
+                            "result": {"previewOnly": True, "action": name,
+                                       "plan": {"previewOnly": True, "action": name,
+                                                "name": arguments["name"]}},
+                            "suggestedApplyCall": {"tool": name, "arguments": {
+                                **arguments, "previewOnly": False}}}
+                           if is_preview else
+                           {"success": True, "action": name,
+                            "result": {"created": True, "action": name}})
                 return SimpleNamespace(is_error=False, content=[
-                    SimpleNamespace(type="text", text=json.dumps({
-                        "success": not is_preview,
-                        "result": {"previewOnly": is_preview, "name": arguments["name"]}}))])
+                    SimpleNamespace(type="text", text=json.dumps(payload))])
         session = ProjectPreview()
         grants = {tool.name: ("write" if tool.name in (
             "update_text_clip", "create_project") else "read")
