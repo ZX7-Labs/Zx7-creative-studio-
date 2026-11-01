@@ -100,8 +100,12 @@ def _museum_images(queries, folder):
         }
         if phrase is not None:
             params["q"]=phrase
-        result = _api_json("https://api.artic.edu/api/v1/artworks/search?" +
-                           urllib.parse.urlencode(params))
+        try:
+            result = _api_json("https://api.artic.edu/api/v1/artworks/search?" +
+                               urllib.parse.urlencode(params))
+        except (OSError,ValueError,urllib.error.URLError) as exc:
+            print("Museum query failed",repr(phrase),type(exc).__name__,flush=True)
+            continue
         records = result.get("data")
         if not isinstance(records,list):
             raise ValueError("Museum public-domain query returned invalid metadata")
@@ -407,7 +411,7 @@ def produce(args):
                 try:
                     queries=decision["search_queries"]
                     if not isinstance(queries,list) or not 2<=len(queries)<=5 or any(
-                            not isinstance(q,str) or not 2<=len(q)<=80 for q in queries):
+                            not isinstance(q,str) or not 2<=len(q)<=160 for q in queries):
                         raise ValueError("Invalid creative research queries")
                     topic=decision
                     break
