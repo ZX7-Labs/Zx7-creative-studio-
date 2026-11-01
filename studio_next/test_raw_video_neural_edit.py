@@ -101,7 +101,8 @@ class UnscriptedRawEditorTests(unittest.TestCase):
             evidence=shot_reel(video,info,sheet)
             self.assertEqual(len(evidence["sample_times_seconds"]),16)
             self.assertTrue(sheet.is_file())
-            self.assertEqual(Image.open(sheet).size,(1280,840))
+            with Image.open(sheet) as visual:
+                self.assertEqual(visual.size,(1280,840))
             self.assertTrue(evidence[
                 "samples_are_not_full_motion_semantic_understanding"])
 
