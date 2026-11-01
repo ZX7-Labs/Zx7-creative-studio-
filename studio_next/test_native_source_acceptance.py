@@ -31,6 +31,7 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.manifest = [{"path": str(self.src),
                           "sha256": hashlib.sha256(
                               self.src.read_bytes()).hexdigest(),
+                          "video_duration_seconds": 4.0,
                           "rights": "generated original owner media"}]
         self.project = {
             "assets": [{"id": "native-asset-12", "name": "Original",
@@ -93,6 +94,67 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.save()
         self.assertTrue(self.verify([{
             "start_seconds": 0, "end_seconds": 4
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_native_source_trim_must_reach_actual_original_video_frames(self):
+        # An owner-copy SHA and a timeline overlap alone cannot prove source
+        # pixels were available. A model can request trimStart=600 from a real
+        # four-second original: that is not a visible edited original video.
+        clip = self.project["timelines"][0]["clips"][0]
+        for trim, accepted in (
+            (0, True), (3.75, True), (4, False), (5, False),
+            (-0.01, False), (float("nan"), False), (float("inf"), False),
+            (True, False), ("0", False), (None, False),
+        ):
+            with self.subTest(trim=repr(trim)):
+                clip["trimStart"] = trim
+                self.save()
+                proof = self.verify([{
+                    "start_seconds": 0, "end_seconds": 4,
+                }])
+                self.assertEqual(proof[
+                    "actual_original_video_used_on_native_timeline"], accepted)
+                self.assertEqual(proof[
+                    "physically_verified_native_source_clip_count"],
+                    1 if accepted else 0)
+        clip.pop("trimStart")
+        self.save()
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_delivered_footage_proof_requires_measured_source_duration(self):
+        # A manifest hash authenticates the file bytes, not where its stream
+        # ends; project-only custody remains distinguishable from delivery.
+        self.manifest[0].pop("video_duration_seconds")
+        self.assertTrue(self.verify()[
+            "actual_original_video_used_on_native_timeline"])
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+        }])["actual_original_video_used_on_native_timeline"])
+        for invalid in (0, -1, float("nan"), float("inf"),
+                        "4", True, 1_000_001):
+            with self.subTest(value=repr(invalid)):
+                self.manifest[0]["video_duration_seconds"] = invalid
+                with self.assertRaisesRegex(ValueError, "duration"):
+                    self.verify([{"start_seconds": 0, "end_seconds": 4}])
+
+    def test_repeated_native_source_clips_must_each_pass_independent_trim(self):
+        timeline = self.project["timelines"][0]
+        second = copy.deepcopy(timeline["clips"][0])
+        second["id"] = "native-clip-trim-outside-source"
+        second["startTime"] = 5
+        second["trimStart"] = 60
+        timeline["clips"].append(second)
+        self.save()
+        receipt = self.verify([{"start_seconds": 0, "end_seconds": 10}])
+        self.assertEqual(receipt["physically_verified_native_source_clip_count"], 1)
+        self.assertEqual(receipt["verified_native_source_clip_proof"][0][
+            "native_clip_id"], "native-clip-88")
+        timeline["clips"][0]["trimStart"] = 12
+        self.save()
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 10
         }])["actual_original_video_used_on_native_timeline"])
 
     def test_multiple_placed_clips_using_same_original_count_separately(self):
