@@ -65,6 +65,45 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertEqual(receipt["verified_native_source_clip_proof"][0][
             "source_sha256"], self.manifest[0]["sha256"])
 
+    def test_native_optical_flow_cache_is_not_verified_original_video(self):
+        # The pinned renderer can sample a frame-interpolated cache instead
+        # of the original physical footage, EVEN when clip.cacheStatus is
+        # missing and the owner's imported asset SHA matches.
+        clip = self.project["timelines"][0]["clips"][0]
+        for sampling in ("optical-flow", "frame", "blend", None):
+            with self.subTest(native_sampling=sampling):
+                clip.pop("cacheStatus", None)
+                if sampling is None:
+                    clip.pop("frameSampling", None)
+                else:
+                    clip["frameSampling"] = sampling
+                self.save()
+                proof = self.verify([{
+                    "start_seconds": 0, "end_seconds": 4,
+                    "use_proxy_media": False
+                }])
+                self.assertEqual(
+                    proof["actual_original_video_used_on_native_timeline"],
+                    sampling != "optical-flow")
+                # The edit/project-only custody is still valid; optical-flow
+                # may be a legitimate creative effect, just unproven output
+                # source-byte provenance.
+                self.assertTrue(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+
+    def test_optical_flow_substitution_precedes_native_original_source(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        exporter = (root / "services/exporter.js").read_text(
+            encoding="utf-8")
+        sampling = (root / "utils/frameSampling.js").read_text(
+            encoding="utf-8")
+        self.assertIn("OPTICAL_FLOW: 'optical-flow'", sampling)
+        self.assertIn("opticalFlowSources.set(clip.id", exporter)
+        self.assertIn(
+            "cachedVideoSources.get(clip.id) || opticalFlowSources.get(clip.id)?.url",
+            exporter)
+        self.assertIn("const sourceUrl = overrideUrl || resolvedUrl", exporter)
+
     def test_proxy_export_never_proves_original_source_bytes(self):
         # An export with useProxyMedia:true may choose asset.proxyUrl or
         # proxyPath instead of the SHA-verified original. Even if the proxy
