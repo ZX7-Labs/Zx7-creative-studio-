@@ -34,6 +34,8 @@ def detect_authorized_shots(reference_root, reference, *,
         raise ReferenceObservationError("Reference media is unavailable") from exc
     if not movie.is_relative_to(root) or not movie.is_file():
         raise ReferenceObservationError("Reference escaped host's granted folder")
+    with movie.open("rb") as original:
+        before_digest = hashlib.file_digest(original, "sha256").hexdigest()
     duration, _, video = _probe(movie)
     if duration > max_seconds:
         raise ReferenceObservationError("Full-frame shot scan exceeds host duration budget")
@@ -75,6 +77,8 @@ def detect_authorized_shots(reference_root, reference, *,
             starts.append(round(s, 4))
     with movie.open("rb") as original:
         digest = hashlib.file_digest(original, "sha256").hexdigest()
+    if digest != before_digest:
+        raise ReferenceObservationError("Reference changed during full-frame shot detection")
     return {
         "schema": "ZX7_PYSCENEDETECT_SHOT_EVIDENCE_V1",
         "source_sha256": digest,
