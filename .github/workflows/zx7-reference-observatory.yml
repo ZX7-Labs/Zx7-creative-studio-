@@ -1,0 +1,38 @@
+name: ZX7 Real Reference Editing Observatory
+
+on:
+  push:
+    branches:
+      - "proof/local-brain-60s-native-film-20261101"
+    paths:
+      - "studio_next/reference_observatory.py"
+      - "studio_next/test_reference_observatory.py"
+      - ".github/workflows/zx7-reference-observatory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independently-decoded-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install actual open source decoder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version | head -n 1
+      - name: Compile reference observatory and regression tests
+        run: |
+          python -m py_compile studio_next/reference_observatory.py studio_next/test_reference_observatory.py
+          python -m unittest -v studio_next.test_reference_observatory
+      - name: Verify repository source syntax inventory
+        run: |
+          python -m compileall -q studio_next scripts
