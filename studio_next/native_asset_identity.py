@@ -70,6 +70,10 @@ def assess_native_asset_selection(tool_name: str, inputs: dict,
     else:
         collect_selector(inputs)
     if tool_name == "add_assets_to_timeline":
+        if any(field in inputs and not isinstance(inputs[field], list)
+               for field in ("assets", "assetIds", "assetNames")):
+            return {"validation_keyword": "native_asset_inventory_unverified",
+                    "no_native_dispatch": True}
         # Exact pinned Velorn resolveAssetsForTimelineBatchPlacement
         # collects ALL THREE native input forms: assets, assetIds, assetNames.
         # Ignoring assetIds let real Qwen3.5-4B run #41258639051 pass two
