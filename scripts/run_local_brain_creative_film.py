@@ -492,6 +492,46 @@ def produce(args):
                                 "weight":8}],
                       "music":{"bpm":88,"root_midi":57,"mode":"minor",
                                "progression":[0,3,4,2]}}}
+            # Grammar-guided transport, not a prewritten film. The real
+            # neural model still selects every artwork, caption, arc, beat,
+            # camera, duration weight and original musical direction.
+            # The pinned llama.cpp backend supports JSON-schema output and
+            # this prevents the CPU model from omitting the entire soundtrack.
+            brain.settings.sampling["response_format"]={
+                "type":"json_schema",
+                "json_schema":{"name":"zx7_original_one_minute_film",
+                               "strict":True,
+                               "schema":{
+                    "type":"object","additionalProperties":False,
+                    "required":["title","story","beats","music"],
+                    "properties":{
+                        "title":{"type":"string","minLength":3,"maxLength":70},
+                        "story":{"type":"string","minLength":20,"maxLength":800},
+                        "beats":{"type":"array","minItems":6,"maxItems":12,
+                                 "items":{"type":"object","additionalProperties":False,
+                                          "required":["artwork","caption","camera","weight"],
+                                          "properties":{
+                                              "artwork":{"type":"integer","minimum":0,
+                                                         "maximum":len(assets)-1},
+                                              "caption":{"type":"string","minLength":3,
+                                                         "maxLength":100},
+                                              "camera":{"type":"string","enum":[
+                                                  "push","pull","drift_left",
+                                                  "drift_right","still"]},
+                                              "weight":{"type":"number",
+                                                        "exclusiveMinimum":0,
+                                                        "maximum":1000000}}}},
+                        "music":{"type":"object","additionalProperties":False,
+                                 "required":["bpm","root_midi","mode","progression"],
+                                 "properties":{
+                                     "bpm":{"type":"integer","minimum":55,"maximum":155},
+                                     "root_midi":{"type":"integer","minimum":40,"maximum":72},
+                                     "mode":{"type":"string","enum":["major","minor"]},
+                                     "progression":{"type":"array","minItems":2,
+                                                    "maxItems":8,
+                                                    "items":{"type":"integer",
+                                                             "minimum":0,"maximum":6}}}}
+                    }}}}
             plan=None
             last_validation_failure=None
             for attempt in range(3):
