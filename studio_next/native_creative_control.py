@@ -550,16 +550,17 @@ class NativeCreativeControl:
         # never an instruction, a suggested aesthetic choice, or evidence of
         # an applied write. A wrong tool/evidence mapping is a configuration
         # error, never a license for a small model to hallucinate an API.
-        claimed = host_completion_affordances or {}
+        claimed = ({} if host_completion_affordances is None else
+                   host_completion_affordances)
         if (not isinstance(claimed, dict) or
                 (claimed and host_tool_access is None) or
                 any(key not in self.required_evidence or
                     not isinstance(names, (list, tuple)) or
                     not 1 <= len(names) <= 6 or
-                    len(names) != len(set(names)) or
                     any(not isinstance(name, str) or
                         name not in host_tool_access
-                        for name in names)
+                        for name in names) or
+                    len(names) != len(set(names))
                     for key, names in claimed.items())):
             raise NativeCreativeControlError(
                 "Completion affordances must reference required evidence and live host grants")
