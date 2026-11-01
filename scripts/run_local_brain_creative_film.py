@@ -334,7 +334,7 @@ def _fit_film_caption(draw, caption, *, max_width, max_height,
     Caption words are creative data; no fixed script or artistic sentences.
     """
     if (not isinstance(caption, str) or not caption.strip() or
-            "\\n" in caption or "\\r" in caption or
+            "\n" in caption or "\\r" in caption or
             not 50 <= max_width <= 10_000 or
             not 20 <= max_height <= 10_000):
         raise ValueError("Invalid physical caption or title-safe geometry")
@@ -357,7 +357,7 @@ def _fit_film_caption(draw, caption, *, max_width, max_height,
                 lines.append(current)
             if 1 <= len(lines) <= 2:
                 spacing = max(5, round(px*0.16))
-                block = "\\n".join(lines)
+                block = "\n".join(lines)
                 left, top, right, bottom = draw.multiline_textbbox(
                     (0, 0), block, font=font, spacing=spacing)
                 if (right-left <= max_width and
