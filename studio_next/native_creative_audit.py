@@ -370,6 +370,42 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         for tool in tools) or len(set(tools)) != len(tools)):
                 raise NativeJournalError("Untrusted or fabricated initial machine affordance")
             continue
+        if kind == "host_native_unplaced_asset_frontier":
+            # A genuine native project READ reported assetCount>0 and zero
+            # active clips. A fresh exact host-granted get_assets inventory
+            # followed it, without any intervening model/native write.
+            # Candidate names are only search hints; never executable grants.
+            names = event.get("tool_names_for_discovery")
+            inventory = events[i - 1] if i >= 1 else {}
+            state = events[i - 2] if i >= 2 else {}
+            if (pending is not None or
+                    host_tool_access.get("get_assets") != "read" or
+                    state.get("kind") not in (
+                        "host_project_bootstrap_observation",
+                        "host_native_state_progress_observation",
+                        "host_project_post_write_observation") or
+                    inventory.get("kind") != "host_native_asset_inventory_observed" or
+                    inventory.get("tool") != "get_assets" or
+                    inventory.get("host_attested_read_only") is not True or
+                    inventory.get("no_native_dispatch") is not True or
+                    not _sha(inventory.get("text_sha256")) or
+                    type(event.get("observed_asset_count")) is not int or
+                    not 1 <= event["observed_asset_count"] <= 1000 or
+                    event.get("observed_timeline_clip_count") != 0 or
+                    type(event.get("observed_timeline_clip_count")) is not int or
+                    not _sha(event.get("catalog_revision")) or
+                    type(event.get("turn")) is not int or
+                    event["turn"] < 0 or
+                    event.get("no_native_dispatch") is not True or
+                    not isinstance(names, list) or
+                    not 1 <= len(names) <= 4 or
+                    len(names) != len(set(names)) or
+                    any(not isinstance(name, str) or
+                        host_tool_access.get(name) != "write"
+                        for name in names)):
+                raise NativeJournalError(
+                    "Unplaced imported-asset hint lacks independent host proof")
+            continue
         if kind == "host_native_empty_asset_frontier":
             # A real native get_project snapshot was followed immediately by a
             # host-granted READ of get_assets. It reported an EMPTY complete
