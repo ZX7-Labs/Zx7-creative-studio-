@@ -11,6 +11,8 @@ inference. Bounded call counts are a safety ceiling, NOT a verified USD cap.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import base64
+import hashlib
 from threading import Lock
 from urllib.parse import urlsplit
 from urllib.request import Request, ProxyHandler, HTTPRedirectHandler, build_opener
@@ -39,6 +41,7 @@ class CreativeBrainEndpoint:
     mode: str = "local"
     credential_env: str | None = None
     paid_inference_approved: bool = False
+    remote_owner_media_approved: bool = False
     max_inference_calls: int = 48
     response_limit_bytes: int = 1_000_000
 
@@ -61,7 +64,8 @@ class CreativeBrainEndpoint:
             if (uri.scheme != "http" or
                     uri.hostname not in ("localhost","127.0.0.1","::1")
                     or self.credential_env is not None
-                    or self.paid_inference_approved is not False):
+                    or self.paid_inference_approved is not False or
+                    self.remote_owner_media_approved is not False):
                 raise CreativeBrainConnectionError("Local model must stay on loopback without paid authorization")
         else:
             if uri.scheme != "https" or uri.hostname.lower() in (
@@ -99,6 +103,13 @@ class CreativeBrainModel:
         return self.settings.max_inference_calls-self._attempts
 
     def decide(self, context):
+        return self._invoke(context)
+
+    def decide_with_images(self, context, images):
+        """Model sees only SHA-checked owner-approved actual visual evidence."""
+        return self._invoke(context, images=images)
+
+    def _invoke(self, context, *, images=()):
         """Exactly one bounded provider request; unknown outcomes never retried."""
         if not isinstance(context,dict):
             raise CreativeBrainConnectionError("Typed model context required")
@@ -112,11 +123,45 @@ class CreativeBrainModel:
             auth=os.getenv(self.settings.credential_env)
             if not auth or "\n" in auth or "\r" in auth:
                 raise CreativeBrainConnectionError("Approved provider credential is unavailable")
+        user_content=json.dumps(context,ensure_ascii=False,allow_nan=False)
+        if images:
+            if (self.settings.mode == "openai_compatible_remote" and
+                    not self.settings.remote_owner_media_approved):
+                raise CreativeBrainConnectionError(
+                    "Remote upload of owner visual evidence requires explicit owner consent")
+            if not isinstance(images,(tuple,list)) or len(images)>4:
+                raise CreativeBrainConnectionError("Bounded actual visual evidence required")
+            evidence=context.get("picture_evidence")
+            if not isinstance(evidence,list) or len(evidence)!=len(images):
+                raise CreativeBrainConnectionError(
+                    "Original image source evidence is not bound to media")
+            parts=[{"type":"text","text":user_content}]
+            for index, picture in enumerate(images):
+                if not isinstance(picture,tuple) or len(picture)!=2:
+                    raise CreativeBrainConnectionError("Actual image tuple required")
+                mime, raw = picture
+                if (mime not in ("image/png","image/jpeg") or
+                        not isinstance(raw,bytes) or
+                        not 16 <= len(raw) <= 3_000_000 or
+                        (mime=="image/png" and not raw.startswith(b"\x89PNG\r\n\x1a\n")) or
+                        (mime=="image/jpeg" and not raw.startswith(b"\xff\xd8\xff"))):
+                    raise CreativeBrainConnectionError("Untrusted visual media input")
+                provenance=evidence[index]
+                if (not isinstance(provenance,dict) or
+                        not isinstance(provenance.get("sha256"),str) or
+                        hashlib.sha256(raw).hexdigest()!=provenance["sha256"]):
+                    raise CreativeBrainConnectionError(
+                        "Owner media failed actual pixel byte identity proof")
+                parts.append({"type":"text","text":json.dumps(
+                    {"image_index":index,"sha256":provenance["sha256"]})})
+                parts.append({"type":"image_url","image_url":{"url":
+                    "data:"+mime+";base64,"+base64.b64encode(raw).decode("ascii")}})
+            user_content=parts
         payload={
             "model": self.settings.model_id, "stream": False,
             "messages": [
                 {"role":"system","content":self.system_prompt},
-                {"role":"user","content":json.dumps(context,ensure_ascii=False,allow_nan=False)}],
+                {"role":"user","content":user_content}],
             "response_format":{"type":"json_object"}}
         body=json.dumps(payload,allow_nan=False).encode("utf-8")
         if len(body)>512_000:
