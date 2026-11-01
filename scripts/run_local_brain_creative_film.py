@@ -93,7 +93,7 @@ def _museum_images(queries, folder):
     themes=[]
     for qi, phrase in enumerate(queries):
         tokens=re.findall(r"[A-Za-z]{3,}",phrase)
-        if len(tokens)<2:
+        if len(tokens)<1:
             raise ValueError("Creative source theme lacks meaningful search terms")
         for term in dict.fromkeys((phrase," ".join(tokens[:2]))):
             themes.append((qi,term))
@@ -411,7 +411,7 @@ def _render_music(music, output):
 def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
                                     native, music_att, video_path,
                                     observation, workspace, vault,
-                                    transcript, dest):
+                                    transcript, dest, alternate_cut_requested=False):
     """Actual encoded visual evidence -> independent model-selected native edit.
 
     Keep both native project versions and both decoded movies. No host-authored
@@ -488,6 +488,19 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
             for i,item in enumerate(assets)
         ],
     }
+    if alternate_cut_requested:
+        # An explicit alternate-cut workload is different from an autonomous
+        # decision to self-revise. No author-picked field/value/scene is passed
+        # to the model, and a model refusal remains a real failed trial.
+        request["alternate_cut_experiment_requested"] = True
+        request["task"] += (
+            " Additional separate trial instruction: deliver one genuinely "
+            "different editorial version after seeing the source-attested "
+            "first render. Independently choose whichever native beat and "
+            "field would best strengthen your current idea. Prefer action:revise "
+            "when a safe meaningful change is possible. Keep the original "
+            "unchanged as version one. This is a technical alternate-cut "
+            "request, not evidence that the original was artistically bad.")
     decision = _call(brain, request, transcript, with_image=review_image)
     revised, model_edit = apply_model_selected_revision(
         plan, decision, asset_count=len(assets))
@@ -497,7 +510,9 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
                     "initial_movie":receipt(video_path),
                     "quality_certified":False}, indent=2, ensure_ascii=False))
     if not model_edit["revision_applied"]:
-        return {"status":"model_kept_original_after_visual_review",
+        return {"status":("model_declined_requested_alternate_cut"
+                          if alternate_cut_requested else
+                          "model_kept_original_after_visual_review"),
                 "visual_preview":preview, "model_selected_edit":model_edit,
                 "post_observation_native_write":False,
                 "semantic_audio_review_verified":False}
@@ -587,6 +602,7 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
         "independent_artistic_quality_certified":False,
         "semantic_audio_review_verified":False,
         "post_observation_native_write":True,
+        "alternate_cut_experiment":alternate_cut_requested,
     }
 
 def _await_model(lock, runtime, logfile):
@@ -863,17 +879,35 @@ def produce(args):
                 brain=brain, plan=plan, assets=assets, ordered=ordered,
                 native=native, music_att=music_att, video_path=video_path,
                 observation=observation, workspace=workspace, vault=vault,
-                transcript=transcript, dest=dest)
+                transcript=transcript, dest=dest,
+                alternate_cut_requested=args.alternate_cut)
+            if args.alternate_cut and not evidence[
+                    "post_export_creative_review"]["post_observation_native_write"]:
+                raise RuntimeError(
+                    "Explicit alternate-cut trial requested, but the genuine "
+                    "model chose no native revision; refusing a false proof")
             evidence["status"] = (
                 "rendered_revised_not_art_director_approved"
                 if evidence["post_export_creative_review"]["post_observation_native_write"]
                 else "rendered_not_art_director_approved")
             # Independent source comparison: every movie frame can be decoded.
             # Do NOT claim source rights or creative quality independently proven.
+            final_receipts = {
+                "original_movie":receipt(video_path),
+                "original_native_project":receipt(project_path),
+                "original_model_plan":receipt(dest/"model-authored-film-plan.json"),
+                "original_music":receipt(music_path),
+                "creative_quality_independently_approved":False,
+            }
+            if evidence["post_export_creative_review"]["post_observation_native_write"]:
+                final_receipts["model_selected_revised_movie"] = (
+                    evidence["post_export_creative_review"]["movie"])
+                final_receipts["revised_native_project"] = (
+                    evidence["post_export_creative_review"]["project"])
+                final_receipts["revised_model_plan"] = (
+                    evidence["post_export_creative_review"]["revised_plan"])
             (dest/"FINAL-MOVIE-RECEIPT.json").write_text(
-                json.dumps({"movie":receipt(video_path),"native_project":receipt(project_path),
-                            "model_plan":receipt(dest/"model-authored-film-plan.json"),
-                            "music":receipt(music_path)},indent=2))
+                json.dumps(final_receipts,indent=2))
     except BaseException as exc:
         evidence["failure_type"]=type(exc).__name__
         evidence["failure_text"]=str(exc)[:1200]
@@ -900,6 +934,9 @@ def main(argv=None):
     p.add_argument("--model-lock",required=True)
     p.add_argument("--runtime",required=True)
     p.add_argument("--output",required=True)
+    p.add_argument("--alternate-cut",action="store_true",
+                   help="Explicit experimental request for a neural alternative "
+                        "after reviewing the genuinely encoded first film")
     args=p.parse_args(argv)
     produce(args)
 
