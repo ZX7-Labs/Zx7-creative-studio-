@@ -380,6 +380,40 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     event.get("missing_completion_evidence") != missing_evidence()):
                 raise NativeJournalError("Unproven or fabricated completion refusal")
             continue
+        if kind in ("host_native_asset_inventory", "native_asset_inventory_unknown"):
+            # The physical source-inventory read is a trusted READ, not a
+            # model-selected media write or an artistic completion event.
+            # A forged, unconstrained inventory event must never count as
+            # a real imported asset or edit.
+            if (pending is not None or
+                    event.get("tool") != "get_assets" or
+                    host_tool_access.get("get_assets") != "read" or
+                    type(event.get("turn")) is not int or event["turn"] < 0 or
+                    event.get("no_native_edit_dispatched") is not True):
+                raise NativeJournalError(
+                    "Native media identity event was not a granted read")
+            if kind == "host_native_asset_inventory":
+                total = event.get("actual_imported_asset_total")
+                returned = event.get("source_identities_count")
+                digests = event.get("text_sha256")
+                if (event.get("host_attested_read_only") is not True or
+                        type(total) is not int or total < 0 or
+                        type(returned) is not int or not 0 <= returned <= min(total, 1000) or
+                        event.get("complete_inventory") is not (returned == total) or
+                        not isinstance(digests, list) or len(digests) != 1 or
+                        not _sha(digests[0])):
+                    raise NativeJournalError(
+                        "Native source inventory is not hash-bound to real read")
+            else:
+                error = event.get("error_type")
+                # Exactly one bounded failure class; no invented media facts.
+                signals = [isinstance(error, str) and 0 < len(error) <= 80,
+                           event.get("native_read_failed") is True,
+                           event.get("invalid_native_inventory") is True]
+                if sum(signals) != 1:
+                    raise NativeJournalError(
+                        "Native source read failure has no specific physical witness")
+            continue
         if kind == "model_action_rejected":
             # Input-schema preflight rejected a model proposal BEFORE any RPC.
             # This is safe to correct, unlike an unknown native write result.
