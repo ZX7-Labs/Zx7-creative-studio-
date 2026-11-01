@@ -380,12 +380,18 @@ class SourcePreviewContracts(unittest.TestCase):
                         method.index("await this.performAction({"))
         self.assertLess(method.index("await this.performAction({"),
                         method.rindex("return textResult({"))
+        # The actual Velorn project path is its folder, not the JSON file.
+        store = (Path(__file__).resolve().parents[1] /
+                 "third_party/velorn/src/stores/projectStore.js").read_text(
+                     encoding="utf-8")
+        self.assertIn("const projectHandleOrPath = await createProjectFolder(", store)
+        self.assertIn("path: typeof projectHandleOrPath === 'string'", store)
 
     def test_pinned_export_receipt_binds_native_project_timeline_and_target(self):
         import hashlib
         receipt = {
             "success": True, "action": "export_timeline",
-            "projectPath": "/host/projects/Movie/project.comfystudio",
+            "projectPath": "/host/projects/Movie",
             "outputPath": "/host/outputs/film.mp4",
             "timeline": {"id": "editor-native-active-7"},
         }
