@@ -41,6 +41,7 @@ def apply_model_selected_revision(plan, decision, *, asset_count):
     if (decision["action"] not in ("keep", "revise")
             or type(decision["beat_index"]) is not int
             or not 0 <= decision["beat_index"] < len(plan["beats"])
+            or not isinstance(decision["field"], str)
             or decision["field"] not in _EDITABLE_FIELDS
             or not isinstance(decision["value"], str)
             or not isinstance(decision["reason"], str)
