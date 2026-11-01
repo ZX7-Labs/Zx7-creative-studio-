@@ -135,6 +135,52 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         source_track["solo"] = False
         check(True)
 
+    def test_source_visibility_follows_pinned_native_playback_window(self):
+        source = Path(__file__).resolve().parents[1] / "third_party/velorn"
+        eligibility = (source / "src/utils/exportVideoClipEligibility.js").read_text(
+            encoding="utf-8")
+        visibility = (source / "electron/audioMixEligibility.mjs").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            "import { getClipPlaybackWindow } from './compoundPlayback.mjs'",
+            eligibility)
+        self.assertIn("const { start: clipStart, end: clipEnd } =",
+                      eligibility)
+        self.assertIn("getClipPlaybackWindow(clip)", eligibility)
+        self.assertIn("export const getClipPlaybackWindow = (clip) => {",
+                      visibility)
+        self.assertIn("start: Math.max(origin,", visibility)
+        self.assertIn("end: Math.min(origin + duration,", visibility)
+
+        clip = self.project["timelines"][0]["clips"][0]
+        def matches(begin, end):
+            self.save()
+            return self.verify([{
+                "start_seconds": begin, "end_seconds": end,
+            }])["actual_original_video_used_on_native_timeline"]
+        self.assertTrue(matches(0, 4))
+        clip["playbackWindowStart"] = 4
+        self.assertFalse(matches(0, 4))
+        clip["playbackWindowStart"] = 3.5
+        self.assertTrue(matches(0, 4))
+        self.assertFalse(matches(0, 3))
+        clip["playbackWindowEnd"] = 2
+        self.assertFalse(matches(0, 4))
+        clip["playbackWindowStart"] = 0
+        self.assertTrue(matches(0, 4))
+        self.assertTrue(matches(1, 3))
+        self.assertFalse(matches(2, 4))
+        for field in ("playbackWindowStart", "playbackWindowEnd"):
+            original = clip[field]
+            for invalid in (None, True, "0", float("nan"), float("inf")):
+                with self.subTest(field=field, invalid=repr(invalid)):
+                    clip[field] = invalid
+                    self.assertFalse(matches(0, 4))
+            clip[field] = original
+        clip.pop("playbackWindowStart")
+        clip.pop("playbackWindowEnd")
+        self.assertTrue(matches(0, 4))
+
     def test_completely_transparent_native_source_does_not_count_as_visible(self):
         # Pinned exporter treats transform.opacity as percent, so zero
         # hides the imported footage even when its track is visible.
