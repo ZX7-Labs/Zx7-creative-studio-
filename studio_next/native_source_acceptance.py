@@ -111,7 +111,19 @@ def verify_original_footage_on_native_timeline(
             raise ValueError("Original video source missing")
         if _sha256(source) != expected:
             raise ValueError("Original source bytes changed after host hash")
-        sources[str(source)] = expected
+        # The host may bind a measured video-stream duration to the exact
+        # byte-verified original. A file extension or SHA alone cannot prove
+        # whether the editor is sampling beyond the available source frames.
+        # An absent duration is acceptable for project-only custody, never
+        # for delivered-footage proof that relies on sampled source time.
+        measured_duration = item.get("video_duration_seconds")
+        if measured_duration is not None and (
+                not _finite_real(measured_duration) or
+                not 0 < measured_duration <= 1_000_000):
+            raise ValueError("Invalid host-measured original video duration")
+        sources[str(source)] = {
+            "sha256": expected, "video_duration_seconds": measured_duration,
+        }
     # A delivered render cannot be attributed to one of several saved
     # projects merely because a matching clip exists SOMEWHERE in the trial.
     # The runner presently supplies independently verified MP4 time windows,
@@ -224,7 +236,7 @@ def verify_original_footage_on_native_timeline(
                         any(clip["startTime"] < finish and
                             clip["startTime"] + clip["duration"] > begin
                             for begin, finish in effective_windows)):
-                    placed.setdefault(clip["assetId"], []).append(clip["id"])
+                    placed.setdefault(clip["assetId"], []).append(clip)
         if not found_active:
             raise ValueError("Active native timeline was not saved")
         for asset in data["assets"]:
@@ -242,9 +254,11 @@ def verify_original_footage_on_native_timeline(
             # A saved editor project is not authority to make the trial
             # verifier open arbitrary host paths. Check the exact caller-
             # attested source identity BEFORE resolving or accessing it.
-            owner_hash = sources.get(previous)
-            if not owner_hash:
+            original_record = sources.get(previous)
+            if not original_record:
                 continue
+            owner_hash = original_record["sha256"]
+            original_duration = original_record["video_duration_seconds"]
             original = Path(previous)
             for path_field in ("absolutePath", "path"):
                 asset_location = asset.get(path_field)
@@ -268,14 +282,25 @@ def verify_original_footage_on_native_timeline(
                     continue
                 if _sha256(owned) != owner_hash:
                     continue
-                for native_clip_id in placed[asset_id]:
+                for native_clip in placed[asset_id]:
+                    # Velorn's exporter samples its media from trimStart
+                    # (default 0). Source ownership and time-window overlap
+                    # do not prove any source frame was available if the edit
+                    # points beyond the real video's decoded end.
+                    source_in = native_clip.get("trimStart", 0)
+                    if (not _finite_real(source_in) or source_in < 0 or
+                            (checked_windows is not None and
+                             (original_duration is None or
+                              source_in >= original_duration))):
+                        continue
                     accepted.append({
                         # Preserve only an owner-root-relative reference in
                         # published CI artifacts; never disclose local absolute
                         # media/project paths in technical provenance reports.
                         "relative_native_project_file": str(project.relative_to(root)),
                         "native_asset_id": asset_id,
-                        "native_clip_id": native_clip_id,
+                        "native_clip_id": native_clip["id"],
+                        "source_trim_start_seconds": source_in,
                         "source_sha256": owner_hash,
                         "project_owned_copy_sha256": owner_hash,
                     })
