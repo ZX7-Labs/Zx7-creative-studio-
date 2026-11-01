@@ -65,6 +65,71 @@ class AssetIdentityPureTests(unittest.TestCase):
         self.assertIsNone(assess_native_asset_selection(
             "replace_clip_with_asset", {"replacementAssetId": "a"}, stock))
 
+    def test_physical_4b_batch_asset_ids_must_reference_imported_project_objects(self):
+        # Actual CPU 4B run #41258639051 imported one video yet selected
+        # source filesystem paths for assetIds. Velorn's native batch ABI
+        # requires opaque IDs from its asset catalog, not external filenames.
+        original = "/owner/trial/staging/raw-gradient-0.mp4"
+        other = "/owner/trial/staging/raw-gradient-1.mp4"
+        stock = {"count": 1, "limitApplied": False, "assets": [
+            {"id": "native-imported-5", "name": "raw-gradient-0.mp4"}]}
+        invalid = assess_native_asset_selection("add_assets_to_timeline", {
+            "assetIds": [original, other], "previewOnly": False}, stock)
+        self.assertEqual(invalid["validation_keyword"],
+                         "native_asset_not_imported")
+        self.assertEqual(invalid["available_native_asset_ids_sample"],
+                         ["native-imported-5"])
+        self.assertEqual(invalid["requested_native_asset_id_count"], 2)
+        self.assertTrue(invalid["no_native_dispatch"])
+        self.assertIsNone(assess_native_asset_selection(
+            "add_assets_to_timeline",
+            {"assetIds": ["native-imported-5"]}, stock))
+        self.assertIsNone(assess_native_asset_selection(
+            "add_assets_to_timeline",
+            {"assetNames": ["gradient-0"]}, stock))
+        self.assertEqual(assess_native_asset_selection(
+            "add_assets_to_timeline",
+            {"assetNames": ["raw-gradient-1.mp4"]}, stock)[
+                "validation_keyword"], "native_asset_not_imported")
+        partial = {**stock, "count": 2, "limitApplied": True}
+        self.assertEqual(assess_native_asset_selection(
+            "add_assets_to_timeline",
+            {"assetIds": [other]}, partial)[
+                "validation_keyword"], "native_asset_inventory_incomplete")
+
+    def test_all_native_batch_selector_shapes_and_per_entry_priority(self):
+        stock = {"count": 2, "limitApplied": False,
+                 "assets": [{"id": "a", "name": "One.mp4"},
+                            {"id": "b", "name": "Two.mp4"}]}
+        good = (
+            {"assets": ["a", {"assetId": "b"}]},
+            {"assets": [{"assetName": "one"}, {"assetName": "two"}]},
+            {"assetIds": ["a"], "assetNames": ["two"]},
+            {"assets": [{"assetId": "a", "assetName": "does-not-exist"},
+                        {"assetId": "b"}]},
+        )
+        for selection in good:
+            with self.subTest(selection=selection):
+                self.assertIsNone(assess_native_asset_selection(
+                    "add_assets_to_timeline", selection, stock))
+        bad = (
+            {"assets": ["a", "unknown"]},
+            {"assetIds": ["a", "unknown"]},
+            {"assetNames": ["one", "unknown"]},
+            {"assetIds": ["a"], "assetNames": ["unknown"]},
+            {"assets": [{"assetId": "a"}, {"assetName": "unknown"}]},
+            {"assets": [{"assetId": "a"}, {"assetId": "unknown"}]},
+            {"assetIds": None},
+            {"assetNames": "a"},
+            {"assets": None},
+        )
+        for selection in bad:
+            with self.subTest(selection=selection):
+                proof = assess_native_asset_selection(
+                    "add_assets_to_timeline", selection, stock)
+                self.assertIsNotNone(proof)
+                self.assertTrue(proof["no_native_dispatch"])
+
     def test_untrusted_or_incomplete_inventory_never_proves_absence(self):
         for stock in (
             {"count": "one", "limitApplied": False, "assets": []},
@@ -171,6 +236,47 @@ class NativeAssetIdentityControlTests(unittest.IsolatedAsyncioTestCase):
                             e.get("tool") == "add_asset_to_timeline"
                             for e in result["events"]))
         self.assertFalse(result["native_editing_capability_complete"])
+
+    async def test_real_batch_path_ids_rejected_without_dispatch_then_real_ids_accepted(self):
+        session = LiveCatalogSession([
+            {"id": "project-imported-asset", "name": "raw-gradient-0.mp4"}])
+        session.tools.append(SimpleNamespace(
+            name="add_assets_to_timeline",
+            description="Use imported project assets in a real timeline",
+            input_schema={"type": "object", "properties": {
+                "assetIds": {"type": "array", "items": {"type": "string"}},
+                "previewOnly": {"type": "boolean"}}}))
+        model = ScriptedModel([
+            decision("invoke", tool="add_assets_to_timeline", inputs={
+                "assetIds": ["/owner/staging/raw-gradient-0.mp4"],
+                "previewOnly": False}),
+            decision("invoke", tool="add_assets_to_timeline", inputs={
+                "assetIds": ["project-imported-asset"], "previewOnly": False}),
+            decision("finish", summary="Only native asset identity admission; not a film"),
+        ])
+        grants = {tool.name: ("write" if tool.name in {
+            "add_assets_to_timeline", "add_asset_to_timeline",
+            "update_text_clip"} else "read") for tool in session.tools}
+        outcome = await NativeCreativeControl(
+            session, model, host_tool_access=grants, max_turns=3).run(
+            "Select source media by native project IDs, not filesystem path")
+        self.assertEqual(outcome["status"], "model_finished_unverified")
+        self.assertEqual(model.observed[1][
+            "last_rejected_native_action_feedback"]["validation_keyword"],
+            "native_asset_not_imported")
+        self.assertEqual(model.observed[1][
+            "last_rejected_native_action_feedback"][
+                "available_native_asset_ids_sample"], ["project-imported-asset"])
+        self.assertEqual([args for name, args in session.calls
+                          if name == "add_assets_to_timeline"],
+                         [{"assetIds": ["project-imported-asset"],
+                           "previewOnly": False}])
+        self.assertEqual(len([x for x in outcome["events"] if x.get("kind") ==
+                              "native_tool_result" and x.get("tool") ==
+                              "add_assets_to_timeline"]), 1)
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
 
     async def test_uncertain_read_only_inventory_does_not_dispatch_write(self):
         session, model, result = await self.trial([], "invented",
