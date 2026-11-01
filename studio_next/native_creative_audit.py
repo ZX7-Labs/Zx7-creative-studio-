@@ -552,7 +552,17 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 ]
                 if len(previous) != 1:
                     raise NativeJournalError("Model consent references a stale or absent preview")
-                preview_index = previous[0][0]
+                preview_index, source_preview = previous[0]
+                # The application, not an invented MODEL argument, owned the
+                # proposed commit inputs. The controller hashes those exact
+                # editor-suggested arguments before offering short consent.
+                # A substituted source/path/clip in the committed input is
+                # NOT equivalent approval.
+                if (not _sha(source_preview.get(
+                        "source_suggested_apply_inputs_sha256")) or
+                        source_preview["source_suggested_apply_inputs_sha256"] !=
+                        event["inputs_sha256"]):
+                    raise NativeJournalError("Model approval changed the editor plan")
                 if any(prior.get("kind") in (
                         "native_tool_submitted", "native_tool_result",
                         "native_tool_preview", "native_tool_reported_error",
@@ -577,6 +587,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 # Its exact bounded text remains hash-attested; physical
                 # mutation proof requires a distinct later native result.
                 hashes = event.get("text_sha256")
+                native_suggestion = event.get("source_suggested_apply_inputs_sha256")
+                if native_suggestion is not None and not _sha(native_suggestion):
+                    raise NativeJournalError("Native preview offered unhashable editor plan")
                 if (access != "write" or
                         event.get("host_reported_preview_only") is not True or
                         event.get("no_accepted_write_evidence") is not True or
