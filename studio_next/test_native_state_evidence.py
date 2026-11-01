@@ -423,7 +423,7 @@ class SourcePreviewContracts(unittest.TestCase):
                 self.assertIsNone(native_model_consent_apply_affordance(
                     "import_asset_from_path", model_choice, wrong))
         for bad in (
-            {"previewOnly": False, **good_receipt},
+            {**good_receipt, "previewOnly": False},
             {**good_receipt, "action": "delete_clips"},
             {**good_receipt, "previewOnly": "true"},
             {**good_receipt, "suggestedApplyCall": None},
