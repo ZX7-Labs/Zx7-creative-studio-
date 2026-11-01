@@ -13,7 +13,7 @@ import math
 from pathlib import Path
 import subprocess
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 
 class ModelFilmRevisionError(ValueError):
