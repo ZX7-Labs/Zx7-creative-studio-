@@ -534,6 +534,31 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             if (not isinstance(tool, str) or tool not in host_tool_access or
                     not _sha(event.get("inputs_sha256")) or not (legacy or hashed)):
                 raise NativeJournalError("Native operation lacks model intent or host grant")
+            consent = event.get("model_approved_preview_receipt_sha256")
+            if consent is not None:
+                # A model-consented apply must refer to a real immediately
+                # preceding, separately returned pinned editor preview for
+                # exactly this native tool. A stale hash, switched tool or
+                # second use cannot mint a fresh write or hide a replay.
+                if host_tool_access[tool] != "write" or not _sha(consent):
+                    raise NativeJournalError("Model approval lacks exact preview receipt")
+                previous = [
+                    (index, prior) for index, prior in enumerate(events[:i])
+                    if prior.get("kind") == "native_tool_preview" and
+                    prior.get("tool") == tool and
+                    type(prior.get("turn")) is int and
+                    prior["turn"] == event.get("turn") - 1 and
+                    prior.get("text_sha256") == [consent]
+                ]
+                if len(previous) != 1:
+                    raise NativeJournalError("Model consent references a stale or absent preview")
+                preview_index = previous[0][0]
+                if any(prior.get("kind") in (
+                        "native_tool_submitted", "native_tool_result",
+                        "native_tool_preview", "native_tool_reported_error",
+                        "native_tool_uncertain_outcome")
+                        for prior in events[preview_index + 1:i]):
+                    raise NativeJournalError("Model approval replayed after another native call")
             pending = (event.get("turn"), tool, host_tool_access[tool])
             continue
         if kind in ("native_tool_result", "native_tool_preview",
