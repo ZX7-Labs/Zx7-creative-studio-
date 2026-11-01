@@ -140,7 +140,7 @@ def _decode_audio(path, max_audio_seconds):
                 raise ReferenceObservationError("Audio decoder returned nonfinite samples")
             power = sum(x*x for x in samples)/len(samples)
             peak = max(abs(x) for x in samples)
-            rows.append({"second": len(rows),
+            rows.append({"second": len(rows), "sample_count": len(samples),
                          "rms_dbfs": round(20*math.log10(max(math.sqrt(power), 1e-6)), 2),
                          "peak_dbfs": round(20*math.log10(max(peak, 1e-6)), 2)})
         if proc.wait(timeout=30):
