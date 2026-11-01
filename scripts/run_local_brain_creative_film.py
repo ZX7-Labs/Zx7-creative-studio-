@@ -60,12 +60,11 @@ def receipt(path):
 
 def _api_json(url):
     uri = urllib.parse.urlsplit(url)
-    if (uri.scheme != "https" or uri.hostname != "api.artic.edu"
+    if (uri.scheme != "https" or uri.hostname != "openaccess-api.clevelandart.org"
             or uri.username or uri.password):
-        raise ValueError("Only the authorized museum CC0 metadata API may be queried")
+        raise ValueError("Only the authorized Cleveland Museum CC0 metadata API may be queried")
     req = urllib.request.Request(url, headers={
         "User-Agent": "ZX7-LocalCreativeFilm/0.1 (github.com/ZX7-Labs/Zx7-creative-studio-)",
-        "AIC-User-Agent": "ZX7-LocalCreativeFilm (github.com/ZX7-Labs/Zx7-creative-studio-)",
         "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as response:
         data = response.read(3_000_001)
@@ -74,95 +73,114 @@ def _api_json(url):
     return json.loads(data)
 
 def _museum_images(queries, folder):
-    if not isinstance(queries, list) or not 2 <= len(queries) <= 5:
-        raise ValueError("Creative model did not author 2–5 genuine search themes")
+    """Search model-picked themes, then physically obtain CC0 *image bytes*.
+
+    CMA exposes artwork-level CC0 flags and direct official image URLs. AIC's
+    public metadata API is not used to assert downloadable images; its IIIF
+    host has independently documented anti-bot HTTP 403 restrictions.
+    """
     import re
-    if any(not isinstance(q,str) or not 2<=len(q)<=160 for q in queries):
+    if (not isinstance(queries,list) or not 2<=len(queries)<=5 or
+            any(not isinstance(q,str) or not 2<=len(q)<=160 for q in queries)):
         raise ValueError("Model-authored visual research themes are invalid")
-    found = {}
-    # Art museum APIs rank *short searchable terms*, not cinematic prose.
-    # Normalize the model's freely chosen themes into targeted variants.
-    # This modifies search syntax, never story, visuals or creative intent.
-    subjects = []
+    subjects=[]
     for phrase in queries:
-        subjects.append(phrase[:160])
+        subjects.append(phrase)
         subjects.extend(re.findall(r"[A-Za-z]{4,}",phrase.lower())[:7])
-    subjects.append(None)  # Open public-domain catalog; model still selects.
+    subjects.append(None)
+    found={}
     tried=set()
     for phrase in subjects:
         if phrase in tried:
             continue
         tried.add(phrase)
-        params = {
-            "query[term][is_public_domain]": "true",
-            "fields": "id,title,image_id,is_public_domain,artist_title,date_display",
-            "limit": 40,
-        }
+        params={"cc0":"","has_image":1,"limit":40}
         if phrase is not None:
             params["q"]=phrase
+        url=("https://openaccess-api.clevelandart.org/api/artworks/?" +
+             urllib.parse.urlencode(params))
         try:
-            result = _api_json("https://api.artic.edu/api/v1/artworks/search?" +
-                               urllib.parse.urlencode(params))
+            response=_api_json(url)
         except (OSError,ValueError,urllib.error.URLError) as exc:
-            print("Museum query failed",repr(phrase),type(exc).__name__,flush=True)
+            print("CMA CC0 search unreachable",repr(phrase),type(exc).__name__,flush=True)
             continue
-        records = result.get("data")
+        records=response.get("data")
         if not isinstance(records,list):
-            raise ValueError("Museum public-domain query returned invalid metadata")
-        accepted=0
-        for x in records:
-            if (not isinstance(x,dict) or x.get("is_public_domain") is not True
-                    or type(x.get("id")) is not int or
-                    not isinstance(x.get("image_id"),str) or
-                    not re.fullmatch(r"[a-fA-F0-9-]{36}",x["image_id"])):
+            raise ValueError("Museum CC0 query returned invalid records")
+        n=0
+        for rec in records:
+            if not isinstance(rec,dict) or rec.get("share_license_status")!="CC0":
                 continue
-            found[x["id"]] = {
-                "id": x["id"], "title": str(x.get("title",""))[:150],
-                "artist": str(x.get("artist_title") or "")[:100],
-                "image_id": x["image_id"],
-                "public_domain_flag": True,
-                "page": "https://www.artic.edu/artworks/" + str(x["id"])}
-            accepted+=1
-        print("Live museum creative research",repr(phrase),"verified PD records",accepted,
-              "total",len(found),flush=True)
+            images=rec.get("images")
+            web=images.get("web") if isinstance(images,dict) else None
+            image_url=web.get("url") if isinstance(web,dict) else None
+            if not isinstance(image_url,str):
+                continue
+            link=urllib.parse.urlsplit(image_url)
+            if (link.scheme!="https" or not link.hostname or
+                    (link.hostname!="clevelandart.org" and
+                     not link.hostname.endswith(".clevelandart.org"))
+                    or link.username or link.password):
+                continue
+            aid=rec.get("id")
+            accession=rec.get("accession_number")
+            if (type(aid) is not int or aid <= 0 or not isinstance(accession,str)
+                    or not re.fullmatch(r"[A-Za-z0-9.]{1,40}",accession)):
+                continue
+            found[aid]={
+                "id":aid,
+                "title":str(rec.get("title") or "")[:150],
+                "artist":str((rec.get("creators") or [{}])[0].get("description") or "")[:100]
+                          if isinstance(rec.get("creators"),list) and rec["creators"]
+                          and isinstance(rec["creators"][0],dict) else "",
+                "image_url":image_url,
+                "public_domain_flag":True,
+                "provider":"cleveland_museum_open_access",
+                "page":"https://www.clevelandart.org/art/"+accession}
+            n+=1
+        print("Real CMA creative source research",repr(phrase),"CC0 images",n,
+              "total candidates",len(found),flush=True)
         if len(found)>=30:
             break
-    if len(found) < 8:
-        raise ValueError("Official museum has too few verifiable public-domain source records")
-    # Download genuine source bytes from all available candidates until
-    # sufficient distinct decoded art exists. Never substitute test graphics.
-    source = []
-    for index, x in enumerate(list(found.values())[:45]):
-        img_url = "https://www.artic.edu/iiif/2/" + x["image_id"] + "/full/843,/0/default.jpg"
-        req = urllib.request.Request(img_url, headers={
-            "User-Agent":"ZX7-LocalCreativeFilm/0.1 (public-domain artwork; museum IIIF)"})
+    if len(found)<8:
+        raise ValueError("CMA supplied fewer than eight verifiable CC0 source images")
+    source=[]
+    for record in list(found.values())[:45]:
+        img_url=record["image_url"]
+        req=urllib.request.Request(img_url,headers={
+            "User-Agent":"ZX7-LocalCreativeFilm/0.1 (CC0 CMA Open Access)"})
         try:
-            with urllib.request.urlopen(req, timeout=25) as response:
-                if urllib.parse.urlsplit(response.url).hostname != "www.artic.edu":
-                    raise ValueError("Museum JPEG redirected to unapproved host")
-                b = response.read(6_000_001)
-            if not 5_000 < len(b) <= 6_000_000:
-                raise ValueError("Artwork image bytes missing or over budget")
-            p = folder / ("artwork-%02d.jpg" % len(source))
-            p.write_bytes(b)
-            with Image.open(p) as im:
-                im.verify()
-            with Image.open(p) as im:
-                if im.width < 500 or im.height < 300:
+            with urllib.request.urlopen(req,timeout=25) as response:
+                endpoint=urllib.parse.urlsplit(response.url)
+                if (endpoint.scheme!="https" or not endpoint.hostname or
+                        (endpoint.hostname!="clevelandart.org" and
+                         not endpoint.hostname.endswith(".clevelandart.org"))):
+                    raise ValueError("CC0 artwork source redirected outside trusted museum")
+                data=response.read(6_000_001)
+            if not 5_000<len(data)<=6_000_000:
+                raise ValueError("CMA artwork bytes missing or over budget")
+            p=folder / ("artwork-%02d.jpg"%len(source))
+            p.write_bytes(data)
+            with Image.open(p) as img:
+                img.verify()
+            with Image.open(p) as img:
+                if img.width<500 or img.height<300:
                     p.unlink()
                     continue
-            entry = {**x,"local":str(p),"sha256":sha256_file(p),
-                     "bytes":p.stat().st_size,"declared_rights":"public_domain_from_museum_metadata",
-                     "iiif_url":img_url}
-            source.append(entry)
+            source.append({**record,"local":str(p),"sha256":sha256_file(p),
+                           "bytes":p.stat().st_size,
+                           "declared_rights":"CC0_from_CMA_official_work_and_image_metadata"})
+            print("Physically decoded CMA CC0 image",record["id"],
+                  source[-1]["sha256"][:12],flush=True)
         except (OSError,ValueError,urllib.error.URLError) as exc:
-            print("Unavailable museum IIIF artwork",x["id"],type(exc).__name__,flush=True)
+            print("CMA image unavailable",record["id"],type(exc).__name__,
+                  getattr(exc,"code",None),flush=True)
             continue
-        if len(source) >= 9:
+        if len(source)>=9:
             break
-        time.sleep(1) # Museum asks for serial, throttled IIIF image downloads.
-    if len(source) < 6:
-        raise ValueError("Not enough physically decoded public-domain artwork for a complete film")
+        time.sleep(1)  # Respect provider infrastructure; no scraping burst.
+    if len(source)<6:
+        raise ValueError("Insufficient original physically decoded museum CC0 images")
     return source
 
 def _font(size):
@@ -473,7 +491,7 @@ def produce(args):
                     source_type="trusted_renderer",
                     source_id="zx7-original-motion-from-public-domain-museum-art",
                     evidence=f"Model shot {idx} from artwork id={asset['id']} image sha256={asset['sha256']}; "
-                             f"rights provider metadata public-domain flag true; no false rights certification",
+                             f"rights provider metadata explicit CC0 and fetched source identity; no false rights certification",
                     owner_or_generator="ZX7 BODY native shot renderer from local neural director")
                 ordered.append((nframes,att))
             music_path=source_dir/"model-original-score.wav"
