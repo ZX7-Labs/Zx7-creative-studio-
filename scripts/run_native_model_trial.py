@@ -244,6 +244,13 @@ async def trial(args, lock, artifacts, command):
     # Actual asset presence remains gated by live get_assets reads.
     initial_project_effects["import_asset_from_path"] = [
         "project_asset_available"]
+    # An imported native asset and an empty saved timeline are a separate
+    # genuine machine state. Only the pinned Velorn asset-placement tools
+    # can potentially add an existing physical asset to an editable clip.
+    # These host-authored possibility labels do not select a scene, source,
+    # argument, edit or grant; real inventory and native ACKs remain required.
+    for placement_name in ("add_asset_to_timeline", "add_assets_to_timeline"):
+        initial_project_effects[placement_name] = ["native_source_clip_placed"]
     # Raw, neutral media available to the model; no timeline or artwork authored.
     source_assets = []
     for index, colors in enumerate((('0x102030', '0x607080'), ('0x302010', '0x807060'))):
