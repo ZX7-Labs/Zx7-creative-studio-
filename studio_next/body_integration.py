@@ -21,6 +21,7 @@ import zipfile
 from pathlib import Path
 
 from .contracts import ToolSpec
+from .creative_research import CreativeResearch
 from .registry import ToolCatalog
 from .edit_timeline import render_edit,_path_within
 from .editorial_interchange import export_editable_timeline
@@ -343,7 +344,7 @@ def _commit_actual_body_output(final_path,render):
         stage.unlink(missing_ok=True)
 
 
-def body_catalog(workspace,*,vault_root=None,editor_client=None):
+def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=None):
     """Attach native editor operations only through a host-configured client.
 
     The host owns its grants and argument/path policy. Project/model arguments
@@ -353,6 +354,41 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None):
     root=Path(workspace).resolve()
     vault=MediaVault(vault_root or (root/"vault"))
     catalog=ToolCatalog()
+    # Research cannot become a source-rights attestation or a media writer.
+    # Its explicit 'network' permission is not included in ordinary read grants.
+    # The caller can attach an independently configured trusted client.
+    researcher = research_client if research_client is not None else CreativeResearch()
+    for operation_id, description, required, properties, runner in (
+        ("body.research_assets",
+         "Search CC0 candidate image/audio/video metadata. No download, "
+         "no verified license, no automatic source import; original rights review required.",
+         ["query", "media"],
+         {"query": {"type": "string"}, "media": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1}},
+         lambda args: researcher.assets(query=args["query"],media=args["media"],
+                                       limit=args.get("limit", 8))),
+        ("body.research_studies",
+         "Search published scholarly metadata about storytelling, editing, "
+         "attention and visual/auditory perception; title is not an audience finding.",
+         ["query"],
+         {"query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1}},
+         lambda args: researcher.studies(query=args["query"], limit=args.get("limit", 8))),
+    ):
+        catalog.register(
+            ToolSpec(
+                operation_id, "creative research evidence",
+                description, "network", status="installed",
+                license="ZX7 source license; third-party metadata and works retain their own rights",
+                resource="free public metadata HTTPS API; no key, scraping or paid runtime",
+                operation_schema={"type": "object", "additionalProperties": False,
+                                  "required": required, "properties": properties},
+                limitations=(
+                    "Network grant required; source reachability is checked only on live request.",
+                    "Candidate rights are not verified, cleared or imported.",
+                    "Model-generated taste or audience claims need independent empirical validation.",
+                )),
+            runner, idempotent=False)
     video_io=bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
     motion_libraries=all(importlib.util.find_spec(name) is not None
                          for name in ("numpy","PIL","fontTools"))
