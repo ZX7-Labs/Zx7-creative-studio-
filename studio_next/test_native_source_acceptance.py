@@ -583,6 +583,70 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
             "start_seconds": 0, "end_seconds": 4
         }])["actual_original_video_used_on_native_timeline"])
 
+    def test_native_opacity_animation_can_hide_entire_original_source(self):
+        # Actual pinned keyframes getValueAtTime: a sole alpha keyframe
+        # overrides static 100% for the entire clip, including before/after
+        # its authored keyframe time. Multiple zeros are also identically
+        # zero, independent of interpolation easing.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {"opacity": 100}
+        output = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 96
+        }]
+        for frames in (
+            [{"time": 2.0, "value": 0}],
+            [{"time": 0, "value": 0, "easing": "linear"},
+             {"time": 4, "value": 0, "easing": "easeOut"}],
+            [{"time": 0, "value": 0, "easing": "cubic-bezier(0,1,1,0)"},
+             {"time": 4, "value": 0, "easing": "hold"}],
+        ):
+            with self.subTest(zero_animation=repr(frames)):
+                clip["keyframes"] = {"opacity": frames}
+                self.save()
+                self.assertFalse(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+                self.assertFalse(self.verify(output)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+        # Nonzero animated alpha is not rejected solely because a
+        # keyframe track exists; independent source and frame checks remain.
+        clip["keyframes"] = {"opacity": [
+            {"time": 0, "value": 100},
+            {"time": 4, "value": 25}
+        ]}
+        self.save()
+        self.assertTrue(self.verify(output)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        for bad in (
+            {"opacity": "transparent"},
+            {"opacity": [{"time": 1, "value": "0"}]},
+            {"opacity": [{"time": float("nan"), "value": 0}]},
+            ["invalid"],
+        ):
+            with self.subTest(malformed=repr(bad)):
+                clip["keyframes"] = bad
+                self.save()
+                self.assertFalse(self.verify(output)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_pinned_keyframed_opacity_overrides_native_base_alpha(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        keyframes = (root / "utils/keyframes.js").read_text(encoding="utf-8")
+        exporter = (root / "services/exporter.js").read_text(encoding="utf-8")
+        start = keyframes.index("export function getAnimatedTransform(")
+        end = keyframes.index("export function getAnimatedAdjustmentSettings(", start)
+        actual_native_animation = keyframes[start:end]
+        self.assertIn("const propKeyframes = keyframes[prop.id]", actual_native_animation)
+        self.assertIn("getValueAtTime(", actual_native_animation)
+        self.assertIn("animatedTransform[prop.id] = getValueAtTime(", actual_native_animation)
+        alpha = keyframes.index("export function getValueAtTime(")
+        next_function = keyframes.index("function parseHexColor(", alpha)
+        actual_native_alpha = keyframes[alpha:next_function]
+        self.assertIn("return keyframes[0].value", actual_native_alpha)
+        self.assertIn("prevKeyframe.value +", actual_native_alpha)
+        self.assertIn("getAnimatedTransform(", exporter)
+        self.assertIn("clipTransform.opacity / 100", exporter)
+
     def test_pinned_exporter_uses_source_trim_for_video_frame_sampling(self):
         # Source exception must not silently survive a Velorn upgrade that
         # changes the editor's treatment of original clip source in-points.
