@@ -96,6 +96,13 @@ creative intent, you may choose to invoke its exact tool and arguments
 unchanged after reviewing the plan. The suggestion is NOT consent: you
 may instead decline, inspect or revise. Never send native_plan_apply_option
 as a tool; choose an actual granted invoke.
+When an app-owned native preview offers `native_model_consent_receipt_sha256`,
+you may independently select apply_preview:{receipt_sha256} on your VERY NEXT
+decision to approve only its exact original previewed apply call. This is
+explicit model consent, not a host-chosen edit; it never runs automatically.
+You can instead search, inspect or decline; after any other decision the short
+consent token expires and you may request another preview. The native editor
+still independently validates the actual commit and may refuse it.
 When a compact search reports requires_refinement with zero executable matches,
 its bounded candidate_examples are REAL but INSPECTABLE-ONLY host-granted tools:
 choose one candidate's exact tool name with describe to inspect and select its
@@ -108,7 +115,8 @@ that a completed project creation is a completed creative edit.
 Respond with a JSON object: {action, arguments, reason}.
 Allowed actions: search:{query, limit?} for live granted operations,
 describe:{tool} for its exact schema, invoke:{tool, inputs} to actually use it,
-discover:{}, finish:{summary}. In compact mode tool names are absent until
+apply_preview:{receipt_sha256} to explicitly consent to the immediately
+preceding app-owned native plan, discover:{}, finish:{summary}. In compact mode tool names are absent until
 searched. Never guess a tool or parameter. All inputs use native schemas.
 In indexed compact mode, search is the ONLY useful catalog discovery; discover
 cannot list tools in that mode. In full mode, discover lists tool names and
@@ -132,7 +140,7 @@ NATIVE_CREATIVE_DECISION_SCHEMA = {
     "properties": {
         "action": {
             "type": "string",
-            "enum": ["search", "describe", "invoke", "discover", "finish"],
+            "enum": ["search", "describe", "invoke", "apply_preview", "discover", "finish"],
         },
         # Explicit true is required: some llama.cpp JSON-schema grammar
         # releases default to CLOSED objects when properties are absent,
@@ -696,6 +704,10 @@ class NativeCreativeControl:
         self._post_write_state_warning: dict | None = None
         self._last_preflight_feedback: dict | None = None
         self._last_native_preview_feedback: dict | None = None
+        # Single-turn, source-owned proposed commit. A preview NEVER applies
+        # itself; only a new neural action may explicitly approve these exact
+        # editor-suggested arguments. No external filesystem state is cached.
+        self._pending_native_preview_apply: dict | None = None
         self._last_model_output_feedback: dict | None = None
         # A native state observation after each acknowledged write distinguishes
         # an actual media/clip revision from markers or project metadata. It
@@ -855,7 +867,9 @@ class NativeCreativeControl:
 
     def _decision(self, raw):
         if (not isinstance(raw, dict) or set(raw) != {"action", "arguments", "reason"} or
-                raw.get("action") not in {"discover", "search", "describe", "invoke", "finish"} or
+                raw.get("action") not in {
+                    "discover", "search", "describe", "invoke",
+                    "apply_preview", "finish"} or
                 not isinstance(raw.get("arguments"), dict) or
                 not isinstance(raw.get("reason"), str) or
                 not raw["reason"].strip()):
@@ -887,6 +901,18 @@ class NativeCreativeControl:
                      args["tool"] not in self._selectable_tools and
                      args["tool"] not in self._inspectable_tied_candidates)):
                 raise NativeCreativeControlError("Model requested an ungranted or unsearched native tool")
+        elif action == "apply_preview":
+            approved = self._pending_native_preview_apply
+            if (set(args) != {"receipt_sha256"} or
+                    not _digest(args.get("receipt_sha256")) or
+                    not isinstance(approved, dict) or
+                    args["receipt_sha256"] != approved["receipt_sha256"] or
+                    approved["tool"] not in self.tools or
+                    self.host_tool_access is None or
+                    self.host_tool_access.get(approved["tool"]) != "write" or
+                    self._host_write_already_acknowledged(approved["tool"])):
+                raise NativeCreativeControlError(
+                    "No exact current native preview available for independent model approval")
         elif (set(args) != {"tool", "inputs"} or not isinstance(args["tool"], str)
                 or args["tool"] not in self.tools or not isinstance(args["inputs"], dict) or
                 (self.catalog_mode == "indexed" and
@@ -1382,6 +1408,27 @@ class NativeCreativeControl:
                 # project-state observation available to the small model.
                 # A new successful native call replaces this text below.
                 action, args = decision["action"], decision["arguments"]
+                approved_native_receipt = None
+                if action == "apply_preview":
+                    # Only the immediately preceding editor preview may be
+                    # committed, and only after a distinct model decision.
+                    # This is a signed-off intent token, not a host-selected
+                    # follow-up or an automatic replay. Shared schema,
+                    # authentic grants and editor result checks still apply.
+                    pending = self._pending_native_preview_apply
+                    approved_native_receipt = pending["receipt_sha256"]
+                    args = {"tool": pending["tool"],
+                            "inputs": copy.deepcopy(pending["arguments"])}
+                    self._pending_native_preview_apply = None
+                    action = "invoke"
+                else:
+                    # Once the model chooses anything else, this one-shot
+                    # shortcut dies. It can still manually invoke the
+                    # original app schema on a later turn.
+                    self._pending_native_preview_apply = None
+                    if isinstance(self._last_native_preview_feedback, dict):
+                        self._last_native_preview_feedback.pop(
+                            "native_model_consent_receipt_sha256", None)
                 if action != "search":
                     # Only consecutive duplicate metadata searches are
                     # redundant. Describing a schema, inspecting real state,
@@ -1848,7 +1895,10 @@ class NativeCreativeControl:
                               "model_reason_sha256": hashlib.sha256(
                                   decision["reason"].encode("utf-8")).hexdigest(),
                               "model_reason_utf8_bytes": len(decision["reason"].encode("utf-8")),
-                              "uncertain_write_do_not_replay": True})
+                              "uncertain_write_do_not_replay": True,
+                              **({"model_approved_preview_receipt_sha256":
+                                  approved_native_receipt}
+                                 if approved_native_receipt is not None else {})})
                 call_started = time.monotonic_ns()
                 try:
                     result = await self.session.call_tool(native_name, args["inputs"])
@@ -2138,6 +2188,22 @@ class NativeCreativeControl:
                                             "next_model_invoke_must_use_exact_suggested_arguments"] = True
                                         self._last_native_preview_feedback[
                                             "native_plan_apply_option"] = suggested_consent
+                                        # Avoid forcing a tiny local model to
+                                        # retype a long editor-produced JSON
+                                        # plan. The token is the SHA256 of the
+                                        # real preview receipt already recorded
+                                        # in native_tool_preview's immutable
+                                        # evidence. It cannot name an edit or
+                                        # revive a stale preview by itself.
+                                        digest = hashlib.sha256(
+                                            texts[0].encode("utf-8")).hexdigest()
+                                        self._pending_native_preview_apply = {
+                                            "receipt_sha256": digest,
+                                            "tool": native_name,
+                                            "arguments": copy.deepcopy(proposed),
+                                        }
+                                        self._last_native_preview_feedback[
+                                            "native_model_consent_receipt_sha256"] = digest
                                     else:
                                         self._last_native_preview_feedback[
                                             "native_plan_requires_new_model_review"] = True
