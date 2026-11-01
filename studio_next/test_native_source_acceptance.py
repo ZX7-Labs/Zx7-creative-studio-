@@ -629,6 +629,47 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
                 self.assertFalse(self.verify(output)[
                     "actual_original_video_sampled_at_verified_output_frame"])
 
+    def test_constant_animated_native_crop_can_remove_every_source_pixel(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {
+            "opacity": 100, "cropLeft": 0, "cropRight": 0,
+            "cropTop": 0, "cropBottom": 0
+        }
+        window = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 96
+        }]
+        for crop in (
+            {"cropLeft": [{"time": 0, "value": 100}]},
+            {"cropTop": [{"time": 0, "value": 100}]},
+            {"cropLeft": [{"time": 0, "value": 60},
+                          {"time": 4, "value": 60}],
+             "cropRight": [{"time": 0, "value": 40},
+                           {"time": 4, "value": 40}]},
+            {"cropBottom": [{"time": 0, "value": 100,
+                             "easing": "hold"}]},
+        ):
+            with self.subTest(fully_hidden_crop=repr(crop)):
+                clip["keyframes"] = crop
+                self.save()
+                self.assertFalse(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+                self.assertFalse(self.verify(window)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+        clip["keyframes"] = {"cropLeft": [
+            {"time": 0, "value": 10},
+            {"time": 4, "value": 10}
+        ]}
+        self.save()
+        self.assertTrue(self.verify(window)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["keyframes"] = {"cropLeft": [
+            {"time": 0, "value": "100"}
+        ]}
+        self.save()
+        self.assertFalse(self.verify(window)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
     def test_pinned_keyframed_opacity_overrides_native_base_alpha(self):
         root = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
         keyframes = (root / "utils/keyframes.js").read_text(encoding="utf-8")
@@ -646,6 +687,11 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         self.assertIn("prevKeyframe.value +", actual_native_alpha)
         self.assertIn("getAnimatedTransform(", exporter)
         self.assertIn("clipTransform.opacity / 100", exporter)
+        self.assertIn("{ id: 'cropLeft'", keyframes)
+        self.assertIn("{ id: 'cropRight'", keyframes)
+        self.assertIn("{ id: 'cropTop'", keyframes)
+        self.assertIn("{ id: 'cropBottom'", keyframes)
+        self.assertIn("applyClipCrop(", exporter)
 
     def test_pinned_exporter_uses_source_trim_for_video_frame_sampling(self):
         # Source exception must not silently survive a Velorn upgrade that
