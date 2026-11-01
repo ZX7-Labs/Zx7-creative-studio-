@@ -99,6 +99,14 @@ class ReferenceMCPTests(unittest.IsolatedAsyncioTestCase):
                             "compare_reference_cases",
                             {"first_id": identity, "second_id":"f"*64})
                         self.assertTrue(denied_compare.is_error)
+                        missing = await session.call_tool(
+                            "observe_authorized_reference",
+                            {"reference":"missing.mp4"})
+                        self.assertTrue(missing.is_error)
+                        missing_shots = await session.call_tool(
+                            "detect_authorized_reference_shots",
+                            {"reference":"missing.mp4"})
+                        self.assertTrue(missing_shots.is_error)
                         denied_study = await session.call_tool(
                             "study_authorized_reference", {"reference":"../private.mp4"})
                         self.assertTrue(denied_study.is_error)
