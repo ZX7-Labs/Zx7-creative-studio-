@@ -21,6 +21,8 @@ import time
 from typing import Any
 
 from .providers import LocalModelOutputError
+from .native_asset_identity import (
+    NativeAssetEvidenceError, inventory_from_native_text, check_native_asset_reference)
 
 
 _MAX_MODEL_OUTPUT_RECOVERIES = 2  # host protocol budget, never a creative action
@@ -545,6 +547,7 @@ class NativeCreativeControl:
         self._model_output_rejections = 0
         self._last_audio: list[tuple[str, bytes]] = []
         self._last_audio_evidence: dict | None = None
+        self._last_real_asset_inventory: dict | None = None
         self._verified_exports: set[str] = set()
         self._model_wall_ms_total = 0.0
         self._native_mcp_wall_ms_total = 0.0
@@ -898,6 +901,12 @@ class NativeCreativeControl:
                     # expose the exact bounded host schema for independent
                     # model correction. No model action is selected here.
                     "last_rejected_native_action_feedback": self._last_preflight_feedback,
+                    "last_physically_observed_native_asset_inventory": (
+                        {"imported_total": self._last_real_asset_inventory["total"],
+                         "returned_assets": self._last_real_asset_inventory["returned"],
+                         "source_ids": self._last_real_asset_inventory["ids"][:20],
+                         "snapshot_complete": self._last_real_asset_inventory["complete"]}
+                        if self._last_real_asset_inventory is not None else None),
                     "last_native_preview_feedback": self._last_native_preview_feedback,
                     "last_rejected_model_output_feedback": self._last_model_output_feedback,
                     # Evidence-based progress facts persist beyond the 8-event
@@ -1187,9 +1196,84 @@ class NativeCreativeControl:
                                       list(invalid.schema_path)[:16])[:512],
                                   "no_native_dispatch": True})
                     continue
+                # A staged source file is not an editor asset. For a host-
+                # specified media-placement prerequisite, refresh the REAL
+                # native inventory via granted read-only get_assets before
+                # sending any stateful edit. Never infer an asset id from
+                # the model, the tool name, or a source path.
+                asset_condition = (
+                    "assets_present" in self._host_preconditions.get(native_name, ()))
+                if asset_condition:
+                    if (self.host_tool_access is None or
+                            self.host_tool_access.get("get_assets") != "read" or
+                            "get_assets" not in validators or
+                            not validators["get_assets"].is_valid({})):
+                        raise NativeCreativeControlError(
+                            "Media placement requires a host-granted native inventory reader")
+                    try:
+                        response = await self.session.call_tool("get_assets", {})
+                    except BaseException as exc:
+                        self._append({"kind": "native_asset_inventory_unknown",
+                                      "turn": turn, "tool": "get_assets",
+                                      "error_type": type(exc).__name__,
+                                      "no_native_edit_dispatched": True})
+                        raise NativeCreativeControlError(
+                            "Unable to establish current native source inventory") from exc
+                    if _field(response, "is_error", _field(response, "isError", False)):
+                        self._append({"kind": "native_asset_inventory_unknown",
+                                      "turn": turn, "tool": "get_assets",
+                                      "native_read_failed": True,
+                                      "no_native_edit_dispatched": True})
+                        raise NativeCreativeControlError(
+                            "Native asset reader returned an error")
+                    try:
+                        inventory_texts, inventory_images, inventory_audio = (
+                            _native_content(response))
+                        if inventory_images or inventory_audio:
+                            raise NativeAssetEvidenceError(
+                                "Native asset inventory cannot impersonate a media observation")
+                        inventory = inventory_from_native_text(inventory_texts)
+                    except (NativeAssetEvidenceError, NativeCreativeControlError) as exc:
+                        self._append({"kind": "native_asset_inventory_unknown",
+                                      "turn": turn, "tool": "get_assets",
+                                      "invalid_native_inventory": True,
+                                      "no_native_edit_dispatched": True})
+                        raise NativeCreativeControlError(
+                            "Native source inventory cannot be independently trusted") from exc
+                    self._last_real_asset_inventory = inventory
+                    self._append({"kind": "host_native_asset_inventory",
+                                  "turn": turn, "tool": "get_assets",
+                                  "host_attested_read_only": True,
+                                  "source_identities_count": inventory["returned"],
+                                  "complete_inventory": inventory["complete"],
+                                  "actual_imported_asset_total": inventory["total"],
+                                  "text_sha256": [hashlib.sha256(
+                                      x.encode("utf-8")).hexdigest() for x in inventory_texts],
+                                  "no_native_edit_dispatched": True})
+                    reason = check_native_asset_reference(args["inputs"], inventory)
+                    if reason is not None:
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "native_media_identity",
+                            "reason": reason,
+                            "actual_imported_asset_count": inventory["total"],
+                            "source_id_must_come_from_real_get_assets": True,
+                            "staged_files_are_not_editor_assets": True,
+                            "no_native_dispatch": True}
+                        self._append({"kind": "model_action_rejected", "turn": turn,
+                                      **timing, "tool": native_name,
+                                      "inputs_sha256": hashlib.sha256(
+                                          _wire(args["inputs"]).encode()).hexdigest(),
+                                      "validation_keyword": "native_media_identity",
+                                      "reason": reason,
+                                      "no_native_dispatch": True})
+                        continue
                 if (self._capabilities is not None and
                         native_name in self._host_preconditions):
                     known_facts = {}
+                    if asset_condition and self._last_real_asset_inventory is not None:
+                        known_facts["assets_present"] = (
+                            self._last_real_asset_inventory["total"] > 0)
                     if self._project_presence in ("present", "absent"):
                         known_facts["project_open"] = self._project_presence == "present"
                     readiness = self._capabilities.check_prerequisites(
