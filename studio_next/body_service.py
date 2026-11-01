@@ -864,17 +864,34 @@ def main():
     p.add_argument("--port",type=int,default=8765)
     p.add_argument("--workers",type=int,default=1)
     p.add_argument("--creative-api",default="http://127.0.0.1:8085")
-    p.add_argument("--creative-model",help="Installed local model ID; enables ordinary brief sessions")
+    p.add_argument("--creative-model",help="One connected creative Brain model ID")
+    p.add_argument("--creative-model-mode",choices=("local","openai_compatible_remote"),
+                   default="local")
+    p.add_argument("--creative-key-env",default="ZX7_CREATIVE_MODEL_API_KEY")
+    p.add_argument("--approve-paid-model",action="store_true",
+                   help="Owner intentionally opts into provider-billed model inference")
+    p.add_argument("--approve-remote-media",action="store_true",
+                   help="Owner authorizes sending selected visual evidence to this paid API")
     a=p.parse_args()
     secret=os.getenv("ZX7_BODY_API_TOKEN")
     if not secret or len(secret)<32:
         raise SystemExit("Set a unique 32+ character ZX7_BODY_API_TOKEN in host environment")
     model=None
     if a.creative_model:
-        from .providers import LocalCreativeModel,LocalModelSettings
         from .body_creative_session import SESSION_SYSTEM
-        model=LocalCreativeModel(LocalModelSettings(base_url=a.creative_api,
-            model_id=a.creative_model,max_response_bytes=262144),system_prompt=SESSION_SYSTEM)
+        if a.creative_model_mode=="local":
+            from .providers import LocalCreativeModel,LocalModelSettings
+            model=LocalCreativeModel(LocalModelSettings(base_url=a.creative_api,
+                model_id=a.creative_model,max_response_bytes=262144),
+                system_prompt=SESSION_SYSTEM)
+        else:
+            from .brain_model_endpoint import CreativeBrainEndpoint,CreativeBrainModel
+            model=CreativeBrainModel(CreativeBrainEndpoint(
+                model_id=a.creative_model,base_url=a.creative_api,
+                mode=a.creative_model_mode,credential_env=a.creative_key_env,
+                paid_inference_approved=a.approve_paid_model,
+                remote_owner_media_approved=a.approve_remote_media),
+                system_prompt=SESSION_SYSTEM)
     start_local_body_service(a.workspace_root,secret=secret,
                              port=a.port,workers=a.workers,creative_model=model)
 
