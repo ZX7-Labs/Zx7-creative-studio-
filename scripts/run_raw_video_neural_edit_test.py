@@ -223,8 +223,20 @@ def overlay_graphics(movie,graphics,dest,temp):
                        f"enable='between(t,{item['start']:.6f},{item['end']:.6f})'"+
                        f":format=auto{nextref}")
         prev=nextref
+    # PNG overlays loop forever. Without a frame-exact output clock,
+    # FFmpeg overlay continues encoding the frozen last source frame forever.
+    # Derive the bound from independently decoded original source frames,
+    # never from the model's asserted duration or an arbitrary timeout.
+    measured=json.loads(run([
+        "ffprobe","-v","error","-count_frames","-select_streams","v:0",
+        "-show_entries","stream=nb_read_frames","-of","json",str(movie)],
+        timeout=60).stdout)
+    actual_frames=int(measured["streams"][0]["nb_read_frames"])
+    if not 1<=actual_frames<=MAX_MOVIE_SECONDS*RATE:
+        raise ValueError("Real movie has no bounded original video frame clock")
     argv+=["-filter_complex",";".join(filters),"-map",prev,"-an",
            "-c:v","libx264","-preset","veryfast","-crf","18",
+           "-frames:v",str(actual_frames),
            "-pix_fmt","yuv420p","-r",str(RATE),"-movflags","+faststart",str(dest)]
     run(argv,timeout=480)
     return {"authored_graphics":len(graphics),"applied":True}
