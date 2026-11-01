@@ -76,43 +76,59 @@ def _api_json(url):
 def _museum_images(queries, folder):
     if not isinstance(queries, list) or not 2 <= len(queries) <= 5:
         raise ValueError("Creative model did not author 2–5 genuine search themes")
+    import re
+    if any(not isinstance(q,str) or not 2<=len(q)<=160 for q in queries):
+        raise ValueError("Model-authored visual research themes are invalid")
     found = {}
+    # Art museum APIs rank *short searchable terms*, not cinematic prose.
+    # Normalize the model's freely chosen themes into targeted variants.
+    # This modifies search syntax, never story, visuals or creative intent.
+    subjects = []
     for phrase in queries:
-        if not isinstance(phrase, str) or not 2 <= len(phrase) <= 80:
-            raise ValueError("Creative model search theme invalid")
-        params = urllib.parse.urlencode({
-            "q": phrase,
+        subjects.append(phrase[:160])
+        subjects.extend(re.findall(r"[A-Za-z]{4,}",phrase.lower())[:7])
+    subjects.append(None)  # Open public-domain catalog; model still selects.
+    tried=set()
+    for phrase in subjects:
+        if phrase in tried:
+            continue
+        tried.add(phrase)
+        params = {
             "query[term][is_public_domain]": "true",
             "fields": "id,title,image_id,is_public_domain,artist_title,date_display",
-            "limit": 15,
-        })
-        result = _api_json("https://api.artic.edu/api/v1/artworks/search?" + params)
+            "limit": 40,
+        }
+        if phrase is not None:
+            params["q"]=phrase
+        result = _api_json("https://api.artic.edu/api/v1/artworks/search?" +
+                           urllib.parse.urlencode(params))
         records = result.get("data")
         if not isinstance(records,list):
             raise ValueError("Museum public-domain query returned invalid metadata")
+        accepted=0
         for x in records:
             if (not isinstance(x,dict) or x.get("is_public_domain") is not True
                     or type(x.get("id")) is not int or
-                    not isinstance(x.get("image_id"),str)):
-                continue
-            ident = x["image_id"]
-            import re
-            if not re.fullmatch(r"[a-fA-F0-9-]{36}",ident):
+                    not isinstance(x.get("image_id"),str) or
+                    not re.fullmatch(r"[a-fA-F0-9-]{36}",x["image_id"])):
                 continue
             found[x["id"]] = {
                 "id": x["id"], "title": str(x.get("title",""))[:150],
                 "artist": str(x.get("artist_title") or "")[:100],
-                "image_id": ident,
+                "image_id": x["image_id"],
                 "public_domain_flag": True,
                 "page": "https://www.artic.edu/artworks/" + str(x["id"])}
-        if len(found) >= 18:
+            accepted+=1
+        print("Live museum creative research",repr(phrase),"verified PD records",accepted,
+              "total",len(found),flush=True)
+        if len(found)>=30:
             break
     if len(found) < 8:
-        raise ValueError("Insufficient actual public-domain artwork for original cinematic film")
-    # Download only the first twelve source candidates; never silently
-    # substitute a synthetic test frame or unapproved stock download.
+        raise ValueError("Official museum has too few verifiable public-domain source records")
+    # Download genuine source bytes from all available candidates until
+    # sufficient distinct decoded art exists. Never substitute test graphics.
     source = []
-    for index, x in enumerate(list(found.values())[:12]):
+    for index, x in enumerate(list(found.values())[:45]):
         img_url = "https://www.artic.edu/iiif/2/" + x["image_id"] + "/full/843,/0/default.jpg"
         req = urllib.request.Request(img_url, headers={
             "User-Agent":"ZX7-LocalCreativeFilm/0.1 (public-domain artwork; museum IIIF)"})
@@ -135,8 +151,8 @@ def _museum_images(queries, folder):
                      "bytes":p.stat().st_size,"declared_rights":"public_domain_from_museum_metadata",
                      "iiif_url":img_url}
             source.append(entry)
-        except (OSError,ValueError,urllib.error.URLError):
-            # Missing art is reported by inventory, not silently replaced.
+        except (OSError,ValueError,urllib.error.URLError) as exc:
+            print("Unavailable museum IIIF artwork",x["id"],type(exc).__name__,flush=True)
             continue
         if len(source) >= 9:
             break
