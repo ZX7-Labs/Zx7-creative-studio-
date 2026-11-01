@@ -64,6 +64,15 @@ class ReferenceObservatoryTests(unittest.TestCase):
             result = observe_reference(movie)
             self.assertEqual(result["audio_observations"], [])
             self.assertFalse(result["has_audio"])
+            self.assertTrue(result["visual_observations"])
+            colored = result["visual_observations"][0]
+            self.assertGreater(colored["mean_rgb"][0], 0.5)
+            self.assertLess(colored["mean_rgb"][1], 0.05)
+            self.assertLess(colored["mean_rgb"][2], 0.05)
+            self.assertGreater(colored["mean_chroma"], 0.5)
+            graph = inspect_authorized_reference(temp, "silent.mp4", bins=8)
+            self.assertGreater(graph["graph"][0]["mean_chroma"], 0.5)
+            self.assertEqual(graph["graph"][0]["audio_rms_dbfs"], None)
 
     def test_invalid_reference_fails_closed(self):
         with self.assertRaises((ReferenceObservationError, FileNotFoundError)):
