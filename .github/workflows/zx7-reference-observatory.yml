@@ -15,6 +15,7 @@ on:
       - "studio_next/test_pro_scene_detector.py"
       - "pyproject.toml"
       - "scripts/repo_audit.py"
+      - "scripts/test_repo_audit.py"
       - "studio_next/test_reference_observatory.py"
       - ".github/workflows/zx7-reference-observatory.yml"
   workflow_dispatch:
