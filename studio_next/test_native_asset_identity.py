@@ -278,6 +278,98 @@ class NativeAssetIdentityControlTests(unittest.IsolatedAsyncioTestCase):
             outcome["events"], host_tool_access=grants)[
                 "journal_chain_structurally_valid"])
 
+    async def test_import_receipt_preserves_opaque_native_id_for_model_only(self):
+        # A real Qwen4B run received the correct imported asset ID at turn 2,
+        # but a later checkpoint overwrote its last native response, so the
+        # model eventually substituted filesystem paths for native assetIds.
+        # Keep the positive application ACK's ID discoverable, never mutate
+        # a request or accept it as final source verification.
+        native_id = "asset-opaque-host-issued-9"
+        class ActualImportSession(LiveCatalogSession):
+            def __init__(self, *, receipt_id=native_id):
+                super().__init__([
+                    {"id": native_id, "name": "owner-footage.mp4"}])
+                self.receipt_id = receipt_id
+                self.tools.extend([
+                    SimpleNamespace(
+                        name="import_asset_from_path",
+                        description="Host project media import",
+                        input_schema={"type": "object", "properties": {
+                            "path": {"type": "string"},
+                            "previewOnly": {"type": "boolean"}}}),
+                    SimpleNamespace(
+                        name="add_assets_to_timeline",
+                        description="Commit selected native catalog assets",
+                        input_schema={"type": "object", "properties": {
+                            "assetIds": {"type": "array", "items": {
+                                "type": "string"}},
+                            "previewOnly": {"type": "boolean"}}}),
+                ])
+            async def call_tool(self, name, arguments):
+                if name != "import_asset_from_path":
+                    return await super().call_tool(name, arguments)
+                self.calls.append((name, arguments))
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps({
+                        "success": True, "previewOnly": False,
+                        "action": "import_asset_from_path",
+                        "result": {
+                            "success": True, "action": "import_asset_from_path",
+                            "asset": {"id": self.receipt_id,
+                                      "name": "owner-footage.mp4"}},
+                    }))])
+        session = ActualImportSession()
+        model = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path", inputs={
+                "path": "/owner/staging/owner-footage.mp4",
+                "previewOnly": False}),
+            decision("invoke", tool="get_timeline", inputs={}),
+            decision("invoke", tool="add_assets_to_timeline", inputs={
+                "assetIds": [native_id], "previewOnly": False}),
+            decision("finish", summary="Protocol passes, not a verified film"),
+        ])
+        grants = {t.name: ("write" if t.name in {
+            "import_asset_from_path", "add_assets_to_timeline",
+            "add_asset_to_timeline", "update_text_clip"} else "read")
+                  for t in session.tools}
+        result = await NativeCreativeControl(
+            session, model, max_turns=4, host_tool_access=grants).run(
+            "Model selects original footage and real native project object")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        for index in (1, 2):
+            hint = model.observed[index][
+                "last_imported_native_asset_receipt_for_lookup_only"]
+            self.assertEqual(hint["assetId"], native_id)
+            self.assertEqual(hint["assetName"], "owner-footage.mp4")
+            self.assertTrue(
+                hint["provisional_until_get_assets_confirms_identity"])
+        self.assertEqual([name for name, args in session.calls
+                          if name == "add_assets_to_timeline"],
+                         ["add_assets_to_timeline"])
+        self.assertEqual(len([e for e in result["events"]
+                              if e.get("kind") == "native_tool_result" and
+                              e.get("tool") == "add_assets_to_timeline"]), 1)
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+        # A malformed native ACK cannot invent a usable project object ID.
+        malformed = ActualImportSession(receipt_id="")
+        fake = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path", inputs={
+                "path": "/owner/staging/owner-footage.mp4",
+                "previewOnly": False}),
+            decision("finish", summary="No native asset ID attested"),
+        ])
+        outcome = await NativeCreativeControl(
+            malformed, fake, max_turns=2,
+            host_tool_access={t.name: ("write" if t.name in {
+                "import_asset_from_path", "add_assets_to_timeline",
+                "add_asset_to_timeline", "update_text_clip"} else "read")
+                for t in malformed.tools}).run("Do not invent native assets")
+        self.assertEqual(outcome["status"], "model_finished_unverified")
+        self.assertIsNone(fake.observed[1][
+            "last_imported_native_asset_receipt_for_lookup_only"])
+
     async def test_uncertain_read_only_inventory_does_not_dispatch_write(self):
         session, model, result = await self.trial([], "invented",
                                                   malformed=True)
