@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import unittest
 
+from PIL import Image
+
 from .model_film_revision import (
     ModelFilmRevisionError, apply_model_selected_revision,
     encoded_film_contact_sheet,
@@ -62,7 +64,8 @@ class LocalFilmRevisionTests(unittest.TestCase):
     def test_forged_native_decisions_rejected_without_changing_original(self):
         bad = [
             self.decision(beat_index=True), self.decision(beat_index=200),
-            self.decision(field="shell"), self.decision(field="camera", value="zoom='system()'"),
+            self.decision(field="shell"),
+            self.decision(field=[]), self.decision(field="camera", value="zoom='system()'"),
             self.decision(field="camera", value="push"),
             self.decision(field="artwork", value="../../tmp"),
             self.decision(field="artwork", value="2"),
@@ -104,6 +107,13 @@ class LocalFilmRevisionTests(unittest.TestCase):
             self.assertEqual(receipt["decoded_frame_count"], 2)
             self.assertEqual(receipt["source_frame_count"], 48)
             self.assertTrue(sheet.stat().st_size > 1000)
+            with Image.open(sheet) as visual:
+                red = visual.getpixel((160, 90))
+                blue = visual.getpixel((480, 90))
+                # Independent physical oracle: two film times must actually
+                # depict different decoded sources, not repeated thumbnails.
+                self.assertGreater(red[0], red[2] + 60)
+                self.assertGreater(blue[2], blue[0] + 60)
             with self.assertRaises(ModelFilmRevisionError):
                 encoded_film_contact_sheet(movie, [24, 24], sheet, fps=24)
             with self.assertRaises(ModelFilmRevisionError):
