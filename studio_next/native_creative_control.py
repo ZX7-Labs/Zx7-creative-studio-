@@ -703,6 +703,7 @@ class NativeCreativeControl:
         self._native_state_refresh_due = False
         self._latest_native_state_facts: dict | None = None
         self._host_source_frontier: dict | None = None
+        self._host_unplaced_source_frontier: dict | None = None
         # A successful native import ACK may identify a new project asset.
         # Preserve its native ID across later metadata/tool calls so a small
         # model need not guess an external source path as an opaque asset ID.
@@ -797,6 +798,113 @@ class NativeCreativeControl:
                       "trusted_machine_fact": "project_asset_available",
                       "host_observed_value": False,
                       "native_project_asset_count": 0,
+                      "no_native_dispatch": True})
+
+    async def _offer_attested_unplaced_asset_frontier(self, validators, *, turn):
+        """Surface real placement tool *possibilities* after native asset import.
+
+        The empty-project import frontier stops helping once the owner footage
+        is imported. Actual Qwen3.5-2B run #41293599325 had an imported
+        native asset but zero clips and burned its remaining 48 turns on
+        searches and metadata. This bridge publishes only HOST-GRANTED
+        possible asset-to-timeline operations. The model must still search,
+        describe and independently invoke any selected action.
+        """
+        self._host_unplaced_source_frontier = None
+        facts = self._latest_native_state_facts
+        if (self._project_presence != "present" or
+                not isinstance(facts, dict) or
+                type(facts.get("native_project_asset_count")) is not int or
+                facts["native_project_asset_count"] <= 0 or
+                type(facts.get("current_timeline_clip_count")) is not int or
+                facts["current_timeline_clip_count"] != 0 or
+                self._capabilities is None or
+                self.host_tool_access is None or
+                self.host_tool_access.get("get_assets") != "read" or
+                "get_assets" not in validators or
+                not validators["get_assets"].is_valid({"limit": 1000}) or
+                not self.events or self.events[-1].get("kind") not in (
+                    "host_project_bootstrap_observation",
+                    "host_native_state_progress_observation",
+                    "host_project_post_write_observation")):
+            return
+        possible = self._capabilities.affordance_frontier(
+            trusted_facts={
+                "project_open": True, "project_asset_available": True,
+                "native_source_clip_placed": False},
+            namespace="native", limit=4)
+        eligible = []
+        for entry in possible["matches"]:
+            record = self._capabilities.resolve(
+                entry["id"], revision=self._capabilities.revision)
+            name = record["native_name"]
+            if (record["access"] == "write" and
+                    self.host_tool_access.get(name) == "write" and
+                    name in validators and
+                    name not in self._host_once_after_ack):
+                eligible.append({
+                    "tool": name,
+                    "description": entry["description"],
+                    "may_enable": entry["may_enable"]})
+        if not eligible:
+            return
+        try:
+            reply = await self.session.call_tool("get_assets", {"limit": 1000})
+            # A missing or nonboolean status can never assert asset custody.
+            error_flag = _field(reply, "is_error", None)
+            wire_flag = _field(reply, "isError", None)
+            if ((error_flag is None and wire_flag is None) or
+                    (error_flag is not None and type(error_flag) is not bool) or
+                    (wire_flag is not None and type(wire_flag) is not bool) or
+                    (error_flag is not None and wire_flag is not None and
+                     error_flag != wire_flag) or
+                    error_flag is True or wire_flag is True):
+                raise NativeCreativeControlError(
+                    "Unverified native asset inventory status")
+            texts, images, audio = _native_content(reply)
+            if len(texts) != 1 or images or audio:
+                raise NativeCreativeControlError(
+                    "Native asset inventory must have one bounded text receipt")
+            inventory = _strict_receipt(texts, "unplaced imported asset inventory")
+            if (type(inventory.get("count")) is not int or
+                    inventory["count"] <= 0 or
+                    inventory.get("limitApplied") is not False or
+                    not isinstance(inventory.get("assets"), list) or
+                    len(inventory["assets"]) != inventory["count"] or
+                    any(not isinstance(x, dict) or
+                        not isinstance(x.get("id"), str) or
+                        not x["id"] for x in inventory["assets"]) or
+                    len({x["id"] for x in inventory["assets"]}) !=
+                        inventory["count"]):
+                raise NativeCreativeControlError(
+                    "No complete nonempty native imported asset inventory")
+        except Exception as exc:
+            self._append({"kind": "host_native_asset_inventory_read_error",
+                          "turn": turn, "tool": "get_assets",
+                          "error_type": type(exc).__name__,
+                          "host_attested_read_only": True,
+                          "no_native_dispatch": True})
+            return
+        self._append({"kind": "host_native_asset_inventory_observed",
+                      "turn": turn, "tool": "get_assets",
+                      "text_sha256": hashlib.sha256(texts[0].encode()).hexdigest(),
+                      "host_attested_read_only": True,
+                      "no_native_dispatch": True})
+        self._host_unplaced_source_frontier = {
+            "source": "host_authorized_native_get_project_and_get_assets",
+            "catalog_revision": self._capabilities.revision,
+            "observed_project_asset_count": inventory["count"],
+            "observed_current_timeline_clip_count": 0,
+            "possible_native_tools_for_model_discovery_only": eligible,
+            "host_did_not_choose_or_execute_an_edit": True,
+            "snapshot_may_lag": True,
+        }
+        self._append({"kind": "host_native_unplaced_asset_frontier",
+                      "turn": turn,
+                      "catalog_revision": self._capabilities.revision,
+                      "tool_names_for_discovery": [x["tool"] for x in eligible],
+                      "observed_asset_count": inventory["count"],
+                      "observed_timeline_clip_count": 0,
                       "no_native_dispatch": True})
 
     def _missing_completion_evidence(self):
@@ -1126,6 +1234,7 @@ class NativeCreativeControl:
                 if self._native_state_refresh_due:
                     self._native_state_refresh_due = False
                     self._host_source_frontier = None
+                    self._host_unplaced_source_frontier = None
                     # A new native state invalidates an earlier empty-asset
                     # search result; never replay stale availability as fact.
                     if (isinstance(self._last_search_result, dict) and
@@ -1194,6 +1303,8 @@ class NativeCreativeControl:
                             if self._project_presence == "present":
                                 await self._offer_source_attested_empty_asset_frontier(
                                     validators, turn=turn)
+                                await self._offer_attested_unplaced_asset_frontier(
+                                    validators, turn=turn)
                 indexed_actions = ["search"]
                 if self._selectable_tools or self._inspectable_tied_candidates:
                     indexed_actions.append("describe")
@@ -1233,6 +1344,8 @@ class NativeCreativeControl:
                         if self._capabilities is not None else None),
                     "last_capability_search_result": self._last_search_result,
                     "host_attested_source_asset_producers": self._host_source_frontier,
+                    "host_attested_unplaced_source_tool_options":
+                        self._host_unplaced_source_frontier,
                     # Host-verified project content makes a real export or
                     # observation physically possible, but the editor may
                     # still reject the chosen action. Expose the NAMES of
