@@ -1,0 +1,80 @@
+name: ZX7 Genuine Unedited Camera Takes Acquisition Proof
+on:
+  push:
+    branches: ["experiment/unedited-live-action-neural-edit-20261102"]
+    paths: [".github/workflows/zx7-raw-video-edit-experiment.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-raw-camera-takes-acquisition
+  cancel-in-progress: true
+jobs:
+  original-filmmaker-takes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install open-source real video decoders and source downloader
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --disable-pip-version-check 'yt-dlp>=2025.1' 
+      - name: Acquire actual unedited filmmaker takes — not finished stock montage
+        run: |
+          mkdir -p output/cinestudy-source
+          python - <<'PY'
+          import subprocess,os,json,hashlib,pathlib
+          source=[
+            ("camera_take_01","204719783"),
+            ("camera_take_02","204719558"),
+            ("camera_take_03","205262037")
+          ]
+          root=pathlib.Path("output/cinestudy-source")
+          evidence=[]
+          for label,video_id in source:
+              url=f"https://vimeo.com/{video_id}"
+              cmd=["yt-dlp","--no-playlist","--no-progress","--socket-timeout","25",
+                   "--retries","3","-f","bv*[height<=720]+ba/b[height<=720]/best",
+                   "--merge-output-format","mp4","-o",str(root/(label+".%(ext)s")),
+                   url]
+              run=subprocess.run(cmd,capture_output=True,text=True,timeout=180)
+              evidence.append({"label":label,"source_url":url,"returncode":run.returncode,
+                               "stdout":run.stdout[-1200:],"stderr":run.stderr[-1600:]})
+              if run.returncode:continue
+              files=list(root.glob(label+".*"))
+              if len(files)!=1:continue
+              path=files[0]
+              probe=subprocess.run(["ffprobe","-v","error","-show_streams","-show_format",
+                          "-of","json",str(path)],capture_output=True,text=True,timeout=30)
+              if probe.returncode:continue
+              decoded=json.loads(probe.stdout)
+              duration=float(decoded.get("format",{}).get("duration",0))
+              picture=[x for x in decoded.get("streams",[]) if x.get("codec_type")=="video"]
+              if duration<3 or duration>1200 or len(picture)!=1:continue
+              evidence[-1].update({"path":str(path),"bytes":path.stat().st_size,
+                                    "sha256":hashlib.sha256(path.read_bytes()).hexdigest(),
+                                    "duration_seconds":duration,"width":picture[0].get("width"),
+                                    "height":picture[0].get("height"),"probe_verified":True})
+          (root/"acquisition.json").write_text(json.dumps({
+              "source":"Cinestudy / Sonnyboo: EDIT CHALLENGE – Editing a Sequence",
+              "source_page":"https://cinestudy.org/2019/02/15/interactive-project-editing-a-sequence/",
+              "rights":"Owner allows downloading, editing and uploading with full original credits and #Cinestudy or #Sonnyboo. This is not public-domain footage or a sensor RAW file.",
+              "takes":evidence
+          },indent=2))
+          print(json.dumps(evidence,indent=2))
+          assert sum(1 for item in evidence if item.get("probe_verified"))>=2,(
+              "Fewer than two genuinely fetched separately shot unedited film camera takes")
+          PY
+      - name: Preserve actual source media access proof (even on failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-real-filmmaker-camera-takes
+          path: |
+            output/cinestudy-source/acquisition.json
+            output/cinestudy-source/camera_take_*.mp4
+          if-no-files-found: warn
+          retention-days: 5
