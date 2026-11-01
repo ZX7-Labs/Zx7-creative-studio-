@@ -50,7 +50,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg
           ffmpeg -version | head -n 1
       - name: Install and independently test official MCP research transport
-        run: python -m pip install --disable-pip-version-check -e '.[research,research_video]'
+        run: python -m pip install --disable-pip-version-check -e '.[production,research,research_video]'
       - name: Compile reference observatory and regression tests
         run: |
           python -m py_compile studio_next/reference_observatory.py studio_next/reference_evidence_tools.py studio_next/creative_research_mcp.py studio_next/test_reference_observatory.py
