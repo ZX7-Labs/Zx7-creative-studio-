@@ -68,6 +68,23 @@ def _strict_receipt(texts, label):
     return receipt
 
 
+def _native_mcp_error_status(result):
+    """Require an unambiguous actual MCP boolean status, never default success.
+
+    Both Python-style is_error and wire-style isError are permitted, but
+    contradictory or mistyped copies cannot establish a successful operation.
+    """
+    missing = object()
+    statuses = [_field(result, key, missing)
+                for key in ("is_error", "isError")]
+    present = [status for status in statuses if status is not missing]
+    if (not present or any(type(status) is not bool for status in present)
+            or len(set(present)) != 1):
+        raise NativeCreativeControlError(
+            "Native MCP response has missing or contradictory boolean status")
+    return present[0]
+
+
 def _digest(value):
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
@@ -1241,7 +1258,22 @@ class NativeCreativeControl:
                     raise
                 native_ms = round((time.monotonic_ns() - call_started) / 1_000_000, 3)
                 self._native_mcp_wall_ms_total += native_ms
-                if _field(result, "is_error", _field(result, "isError", False)):
+                try:
+                    native_error = _native_mcp_error_status(result)
+                except NativeCreativeControlError:
+                    # A malformed transport receipt is NOT an application ACK.
+                    # The native write may have happened; stop before any
+                    # subsequent model decision or guessed write retry.
+                    self._append({
+                        "kind": "native_tool_uncertain_outcome", "turn": turn,
+                        "tool": native_name,
+                        "measured_native_mcp_wall_ms": native_ms,
+                        "uncertainty_reason": "untrusted_mcp_status_envelope",
+                        "must_reconcile_native_state": True,
+                        "no_automatic_retry": True})
+                    outcome = "native_error_requires_state_reconciliation"
+                    break
+                if native_error:
                     digest, out_of_budget = _bounded_error_digest(result)
                     if (self.host_tool_access is not None and
                             self.host_tool_access[native_name] == "read"):
@@ -1521,8 +1553,24 @@ class NativeCreativeControl:
                                           "no_model_selected_mutation": True,
                                           "error_type": type(exc).__name__})
                             break
-                        if _field(refreshed, "is_error",
-                                  _field(refreshed, "isError", False)):
+                        try:
+                            refreshed_error = _native_mcp_error_status(refreshed)
+                        except NativeCreativeControlError:
+                            self._project_presence = "unknown"
+                            self._post_write_state_warning = {
+                                "read_only_reconciliation_incomplete": True,
+                                "project_state_unknown": True,
+                                "must_inspect_native_project": True}
+                            self._append({
+                                "kind": "host_project_post_write_error",
+                                "tool": "get_project",
+                                "triggered_by_native_tool": native_name,
+                                "read_attempt": read_attempt,
+                                "host_attested_read_only": True,
+                                "no_model_selected_mutation": True,
+                                "error_type": "UntrustedMCPStatusEnvelope"})
+                            break
+                        if refreshed_error:
                             digest, oversized = _bounded_error_digest(refreshed)
                             self._project_presence = "unknown"
                             self._post_write_state_warning = {
