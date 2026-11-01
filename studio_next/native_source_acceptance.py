@@ -341,6 +341,10 @@ def verify_original_footage_on_native_timeline(
             for clip in timeline["clips"]:
                 playback_window = (_native_clip_playback_window(clip)
                                    if isinstance(clip, dict) else None)
+                matching_export_windows = (
+                    [window for window in effective_windows
+                     if playback_window is not None and
+                     _export_samples_original_clip(playback_window, window)])
                 if (isinstance(clip, dict) and
                         clip.get("type") == "video" and
                         clip.get("enabled", True) is True and
@@ -368,10 +372,10 @@ def verify_original_footage_on_native_timeline(
                         clip.get("trackId") in visible_video_tracks and
                         isinstance(clip.get("assetId"), str) and
                         playback_window is not None and
-                        any(_export_samples_original_clip(
-                                playback_window, interval)
-                            for interval in effective_windows)):
-                    placed.setdefault(clip["assetId"], []).append(clip)
+                        bool(matching_export_windows)):
+                    placed.setdefault(clip["assetId"], []).append((
+                        clip, any(window[2] is not None
+                                  for window in matching_export_windows)))
         if not found_active:
             raise ValueError("Active native timeline was not saved")
         for asset in data["assets"]:
@@ -423,7 +427,7 @@ def verify_original_footage_on_native_timeline(
                 continue
             if _sha256(owned) != owner_hash:
                 continue
-            for native_clip in placed[asset_id]:
+            for native_clip, output_frame_sampled in placed[asset_id]:
                 # Original source frames must remain in-range after trim.
                 source_in = native_clip.get("trimStart", 0)
                 if (not _finite_real(source_in) or source_in < 0 or
@@ -436,11 +440,17 @@ def verify_original_footage_on_native_timeline(
                     "native_asset_id": asset_id,
                     "native_clip_id": native_clip["id"],
                     "source_trim_start_seconds": source_in,
+                    "sampled_at_physically_verified_output_frame":
+                        output_frame_sampled,
                     "source_sha256": owner_hash,
                     "project_owned_copy_sha256": owner_hash,
                 })
+    sampled = sum(1 for clip in accepted if
+                  clip["sampled_at_physically_verified_output_frame"])
     return {
         "actual_original_video_used_on_native_timeline": bool(accepted),
+        "actual_original_video_sampled_at_verified_output_frame": sampled > 0,
+        "verified_output_sampled_original_clip_count": sampled,
         "physically_verified_native_source_clip_count": len(accepted),
         "verified_native_source_clip_proof": accepted,
         "professional_artistic_quality_approved": False,
