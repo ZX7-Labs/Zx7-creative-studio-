@@ -476,8 +476,15 @@ async def trial(args, lock, artifacts, command):
                 continue
             if not math.isfinite(start + duration):
                 continue
+            # Pinned electron/mcpServer.js:resolveExportDeliveryPlan
+            # sets useProxyMedia ONLY for the literal boolean true. Pinned
+            # exporter.js then prefers a usable asset proxyUrl/proxyPath;
+            # substitute bytes cannot attest source-original footage.
+            # This is the exact application-ACKed export's model-selected
+            # configuration, not a guessed render setting.
             host_verified_export_windows.append({
-                'start_seconds': start, 'end_seconds': start + duration})
+                'start_seconds': start, 'end_seconds': start + duration,
+                'use_proxy_media': inputs.get('useProxyMedia') is True})
             native_export_project_bindings.add((
                 identity["native_project_path_sha256"],
                 identity["native_timeline_id"]))
