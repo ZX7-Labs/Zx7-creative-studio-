@@ -110,7 +110,9 @@ class PinnedSubmoduleSourceAudit(unittest.TestCase):
         self.assert_blocked()
 
     def test_arbitrary_directory_cannot_inherit_parent_repository(self):
-        shutil.rmtree(self.child/".git")
+        # Moving metadata out proves the exact missing repository boundary
+        # without recursively racing transient Git object maintenance files.
+        shutil.move(self.child/".git", Path(self.temp.name)/"orphaned-git-metadata")
         self.assert_blocked()
 
     def test_wrong_checked_out_commit_is_blocked(self):
