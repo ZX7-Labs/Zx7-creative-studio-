@@ -249,8 +249,30 @@ def verify_original_footage_on_native_timeline(
                         _finite_real(clip.get("duration")) and
                         0 < clip["duration"] <= 1_000_000 and
                         math.isfinite(clip["startTime"] + clip["duration"]) and
-                        any(clip["startTime"] < finish and
-                            clip["startTime"] + clip["duration"] > begin
+                        # Native src/utils/compoundPlayback.mjs imports
+                        # getClipPlaybackWindow from the shared Electron
+                        # audioMixEligibility.mjs. Frame compositing uses
+                        # the intersection of authored start/duration with
+                        # explicit playbackWindowStart/playbackWindowEnd.
+                        # A child source visually cropped OUT of the
+                        # actual output must not certify delivered footage.
+                        (("playbackWindowStart" not in clip) or
+                         _finite_real(clip["playbackWindowStart"])) and
+                        (("playbackWindowEnd" not in clip) or
+                         _finite_real(clip["playbackWindowEnd"])) and
+                        any(
+                            max(clip["startTime"],
+                                clip.get("playbackWindowStart", clip["startTime"]))
+                            < finish and
+                            min(clip["startTime"] + clip["duration"],
+                                clip.get("playbackWindowEnd",
+                                         clip["startTime"] + clip["duration"]))
+                            > begin and
+                            max(clip["startTime"],
+                                clip.get("playbackWindowStart", clip["startTime"]))
+                            < min(clip["startTime"] + clip["duration"],
+                                  clip.get("playbackWindowEnd",
+                                           clip["startTime"] + clip["duration"]))
                             for begin, finish in effective_windows)):
                     placed.setdefault(clip["assetId"], []).append(clip)
         if not found_active:
