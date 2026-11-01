@@ -325,23 +325,87 @@ def _weights_to_frames(beats):
         raise ValueError("Model selected an invisible beat with no physical video frames")
     return ints
 
+def _fit_film_caption(draw, caption, *, max_width, max_height,
+                      largest_px=42, smallest_px=17):
+    """Fit the *whole* neural caption inside an available typographic box.
+
+    Never truncate text, shrink outside explicit legibility bounds, or
+    silently paint text beyond the frame. Return exact measured geometry.
+    Caption words are creative data; no fixed script or artistic sentences.
+    """
+    if (not isinstance(caption, str) or not caption.strip() or
+            "\\n" in caption or "\\r" in caption or
+            not 50 <= max_width <= 10_000 or
+            not 20 <= max_height <= 10_000):
+        raise ValueError("Invalid physical caption or title-safe geometry")
+    text = caption.strip()
+    for px in range(largest_px, smallest_px-1, -1):
+        font = _font(px)
+        lines = []
+        current = ""
+        for word in text.split():
+            proposed = f"{current} {word}" if current else word
+            if draw.textbbox((0, 0), proposed, font=font)[2] <= max_width:
+                current = proposed
+            else:
+                if not current:
+                    break  # A single unbreakable word exceeds the safe area.
+                lines.append(current)
+                current = word
+        else:
+            if current:
+                lines.append(current)
+            if 1 <= len(lines) <= 2:
+                spacing = max(5, round(px*0.16))
+                block = "\\n".join(lines)
+                left, top, right, bottom = draw.multiline_textbbox(
+                    (0, 0), block, font=font, spacing=spacing)
+                if (right-left <= max_width and
+                        bottom-top <= max_height and
+                        all(draw.textbbox((0,0), line, font=font)[2]
+                            <= max_width for line in lines)):
+                    return {
+                        "text":block,"font":font, "font_px":px,
+                        "spacing":spacing,"bbox":(left, top, right, bottom),
+                        "lines":lines,
+                    }
+    raise ValueError(
+        "Model-authored caption cannot fit without clipping or unreadable type")
+
+
 def _title_overlay(title, caption, number, count, dest):
-    W,H=SIZE
-    im=Image.new("RGBA",(W,H))
-    px=im.load()
-    # Bottom gradient for readable real credits over varied artwork.
+    W,H = SIZE
+    im = Image.new("RGBA", (W,H))
+    draw = ImageDraw.Draw(im)
+    # Bottom gradient for reliable foreground contrast on source images.
+    # This is a renderer safety layer, not the model's visual-art direction.
     for y in range(370,H):
-        a=int(205*((y-370)/(H-370))**1.4)
-        ImageDraw.Draw(im).line((0,y,W,y),fill=(8,11,19,a),width=1)
-    draw=ImageDraw.Draw(im)
-    draw.text((76,478),title.upper(),font=_font(19),fill=(215,206,187,225))
-    cap=caption[:100]
-    draw.text((76,526),cap,font=_font(35 if len(cap)>42 else 42),fill=(255,252,247,245))
-    draw.rectangle((76,644,76+int(1128*(number+1)/count),647),
+        alpha=int(205*((y-370)/(H-370))**1.4)
+        draw.line((0,y,W,y),fill=(8,11,19,alpha),width=1)
+    gutter=max(48,round(W*.06))
+    right=W-gutter
+    if type(number) is not int or type(count) is not int or not 0<=number<count:
+        raise ValueError("Invalid actual native editorial beat index")
+    if not isinstance(title,str) or not title.strip():
+        raise ValueError("Missing original model-authored film title")
+    headline_font = _font(19)
+    headline = title.upper()
+    box = draw.textbbox((0,0),headline,font=headline_font)
+    if box[2]-box[0] > right-gutter:
+        raise ValueError("Film title exceeds measured safe area")
+    draw.text((gutter,478),headline,font=headline_font,fill=(215,206,187,225))
+    layout = _fit_film_caption(
+        draw,caption,max_width=right-gutter,max_height=112)
+    draw.multiline_text(
+        (gutter,514-layout["bbox"][1]),layout["text"],
+        font=layout["font"],spacing=layout["spacing"],
+        fill=(255,252,247,245))
+    draw.rectangle((gutter,644,gutter+int((right-gutter)*(number+1)/count),647),
                    fill=(214,167,106,225))
-    draw.text((76,667),f"{number+1:02d} / {count:02d}",
+    draw.text((gutter,667),f"{number+1:02d} / {count:02d}",
               font=_font(15),fill=(223,224,225,218))
-    im.save(dest)
+    im.save(dest,format="PNG")
+
 
 def _render_segment(image, overlay, camera, nframes, dest):
     import shlex
