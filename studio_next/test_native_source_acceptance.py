@@ -181,6 +181,45 @@ class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
         clip.pop("playbackWindowEnd")
         self.assertTrue(matches(0, 4))
 
+    def test_unverified_native_cache_must_not_impersonate_original_video_frames(self):
+        # The editor's default useCachedRenders=true may replace the native
+        # original source with an unrelated baked or legacy cache URL. Native
+        # asset SHA and original clip ID are not proof of cache derivation.
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/src/services/exporter.js").read_text(
+                      encoding="utf-8")
+        self.assertIn("useCachedRenders = true", source)
+        self.assertIn("if (clip.cacheStatus !== 'cached') continue", source)
+        self.assertIn("cachedVideoSources.set(clip.id, clip.cacheUrl)", source)
+        self.assertIn("cachedVideoSources.set(clip.id, fileUrl)", source)
+        self.assertIn("const cachedSourceUrl = cachedVideoSources.get(clip.id)", source)
+        self.assertIn("const usingCachedRender = !!cachedSourceUrl", source)
+        clip = self.project["timelines"][0]["clips"][0]
+        def covered():
+            self.save()
+            return self.verify([{
+                "start_seconds": 0, "end_seconds": 4
+            }])["actual_original_video_used_on_native_timeline"]
+        self.assertTrue(covered())
+        for key in ("cacheUrl", "cachePath"):
+            clip["cacheStatus"] = "cached"
+            clip["cacheKind"] = "full"
+            clip[key] = "file:///unverified/foreign-baked-media.mp4"
+            with self.subTest(active_cache=key):
+                self.assertTrue(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+                self.assertFalse(covered())
+            clip.pop(key)
+        clip["cacheStatus"] = "stale"
+        clip["cacheUrl"] = "file:///unverified/foreign-baked-media.mp4"
+        self.assertTrue(covered())
+        clip["cacheStatus"] = "cached"
+        clip["cacheUrl"] = ""
+        self.assertTrue(covered())
+        clip["cacheUrl"] = "file:///unverified/foreign-baked-media.mp4"
+        clip["cacheKind"] = "mask"
+        self.assertFalse(covered())
+
     def test_completely_transparent_native_source_does_not_count_as_visible(self):
         # Pinned exporter treats transform.opacity as percent, so zero
         # hides the imported footage even when its track is visible.
