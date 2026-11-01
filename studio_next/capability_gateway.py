@@ -29,6 +29,21 @@ def _wire(value):
                       ensure_ascii=False, allow_nan=False)
 
 
+def _native_mcp_status(result):
+    """No native write evidence without a consistent strict boolean status."""
+    missing = object()
+    if isinstance(result, dict):
+        values = [result.get(key, missing) for key in ("is_error", "isError")]
+    else:
+        values = [getattr(result, key, missing) for key in ("is_error", "isError")]
+    present = [value for value in values if value is not missing]
+    if (not present or any(type(value) is not bool for value in present)
+            or len(set(present)) != 1):
+        raise CapabilityExecutionError(
+            "Native host returned no unambiguous boolean status envelope")
+    return present[0]
+
+
 class CapabilityGateway:
     """Trusted host-owned source connections, not a model/plugin write proxy.
 
@@ -202,15 +217,14 @@ class CapabilityGateway:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
                 raise
-            failure = (result.get("is_error", result.get("isError"))
-                       if isinstance(result, dict) else getattr(
-                           result, "is_error", getattr(result, "isError", None)))
-            if type(failure) is not bool:
+            try:
+                failure = _native_mcp_status(result)
+            except CapabilityExecutionError:
                 # The remote operation MAY already have mutated the document.
-                # An invalid/untrustworthy receipt is not proof of success.
+                # Contradictory and nonboolean statuses never become success.
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
-                raise CapabilityExecutionError("Native host returned no verified status envelope")
+                raise
             if failure:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
