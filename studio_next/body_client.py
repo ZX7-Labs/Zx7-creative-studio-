@@ -71,6 +71,15 @@ class ZX7BodyClient:
             return json.loads(raw.decode("utf-8"))
         finally:connection.close()
 
+    def research(self, query, *, domain="all", media="all", limit=12):
+        """All creative domains; host-authenticated free public metadata only.
+
+        Does not import third-party media or certify the candidate's rights.
+        """
+        return self.request_json("POST", "/v1/research",
+                                 {"query": query, "domain": domain,
+                                  "media": media, "limit": limit})
+
     def tools(self):
         return self.request_json("GET","/v1/tools")
 
