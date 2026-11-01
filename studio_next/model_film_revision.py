@@ -10,6 +10,7 @@ from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 import hashlib
 import math
+import os
 from pathlib import Path
 import subprocess
 
@@ -36,7 +37,8 @@ def apply_model_selected_revision(plan, decision, *, asset_count):
             or not plan["beats"] or not isinstance(decision, dict)
             or type(asset_count) is not int or asset_count <= 0):
         raise ModelFilmRevisionError("Valid original plan, decision and asset inventory required")
-    if set(decision) != {"action", "beat_index", "field", "value", "reason"}:
+    if set(decision) != {"action", "beat_index", "field", "value", "reason",
+                         "expected_before"}:
         raise ModelFilmRevisionError("Model revision must match exact admitted fields")
     if (decision["action"] not in ("keep", "revise")
             or type(decision["beat_index"]) is not int
@@ -44,6 +46,7 @@ def apply_model_selected_revision(plan, decision, *, asset_count):
             or not isinstance(decision["field"], str)
             or decision["field"] not in _EDITABLE_FIELDS
             or not isinstance(decision["value"], str)
+            or not isinstance(decision["expected_before"], str)
             or not isinstance(decision["reason"], str)
             or not 12 <= len(decision["reason"].strip()) <= 600):
         raise ModelFilmRevisionError("Model must give a bounded, grounded editorial decision")
@@ -61,6 +64,13 @@ def apply_model_selected_revision(plan, decision, *, asset_count):
     if not isinstance(beat, dict) or field not in beat:
         raise ModelFilmRevisionError("Target beat is not a native editable field")
     previous = beat[field]
+    # Compare-and-swap over actual native source state, not a model's imagined
+    # prior caption/parameter. In an actual neural run the model confused an
+    # adjacent silhouette beat with a textile beat. An unverified critique
+    # cannot be authority for rewriting a different object's native state.
+    if decision["expected_before"] != str(previous):
+        raise ModelFilmRevisionError(
+            "Model's previous field value does not match target native beat")
     if field == "caption":
         if not 3 <= len(value) <= 100 or not value.strip():
             raise ModelFilmRevisionError("Caption revision must be visible and bounded")
@@ -93,6 +103,8 @@ def apply_model_selected_revision(plan, decision, *, asset_count):
         "action": "revise", "revision_applied": True,
         "reason": decision["reason"], "beat_index": beat_index,
         "field": field, "before": previous, "after": replacement,
+        "previous_field_model_attested_to_host_state":True,
+        "model_reason_is_not_independently_verified_artistic_quality":True,
         "changed_fields": [f"beats[{beat_index}].{field}"]
     }
 
@@ -163,9 +175,22 @@ def encoded_film_contact_sheet(movie, beat_frames, destination, *, fps,
     if original_sha != final_sha:
         raise ModelFilmRevisionError("Source movie changed during decoded review")
     destination = Path(destination)
-    if destination.exists():
-        raise ModelFilmRevisionError("Never overwrite a previous visual review")
-    sheet.save(destination, format="PNG")
+    # O_EXCL|O_NOFOLLOW closes the dangling-symlink and check/create races:
+    # a preview is a new immutable evidence file, never an overwrite.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(destination, flags, 0o600)
+    except OSError as exc:
+        raise ModelFilmRevisionError(
+            "Review destination already exists or cannot be created safely") from exc
+    try:
+        with os.fdopen(descriptor, "wb") as sink:
+            sheet.save(sink, format="PNG")
+            sink.flush()
+            os.fsync(sink.fileno())
+    except BaseException:
+        destination.unlink(missing_ok=True)
+        raise
     with destination.open("rb") as stream:
         sheet_sha = hashlib.file_digest(stream, "sha256").hexdigest()
     return {"source_sha256": original_sha,
