@@ -7,6 +7,9 @@ on:
       - "studio_next/test_creative_research.py"
       - ".github/workflows/zx7-creative-research-live.yml"
   workflow_dispatch:
+  push:
+    branches: ['feature/**']
+    paths: ['studio_next/creative_research*.py', '.github/workflows/zx7-creative-research-live.yml']
 permissions:
   contents: read
 
