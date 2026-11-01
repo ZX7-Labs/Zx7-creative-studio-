@@ -206,8 +206,25 @@ async def trial(args, lock, artifacts, command):
         subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
             f'gradients=s=640x360:r=24:d=4:c0={colors[0]}:c1={colors[1]}:seed={index + 10}',
             '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)], check=True, timeout=60)
-        source_assets.append({'path': str(path), 'sha256': sha(path),
-                              'rights': 'original generated neutral trial input'})
+        # ffprobe measures the actual video stream of these freshly encoded
+        # host-owned original bytes. The model cannot assert or influence this
+        # duration. Save it with the same SHA-bound source manifest so native
+        # clip trimStart can be checked against available source frames.
+        stream_seconds = subprocess.check_output([
+            'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            str(path)], timeout=30).decode('utf-8').strip()
+        try:
+            video_duration = float(stream_seconds)
+        except ValueError as exc:
+            raise ValueError('Host original video stream duration unmeasurable') from exc
+        if not math.isfinite(video_duration) or video_duration <= 0:
+            raise ValueError('Host original video has no usable video duration')
+        source_assets.append({
+            'path': str(path), 'sha256': sha(path),
+            'video_duration_seconds': video_duration,
+            'rights': 'original generated neutral trial input'})
     (artifacts / 'source-assets.json').write_text(json.dumps(source_assets, indent=2))
     config = json.loads((ROOT / 'engines/velorn/editor.example.json').read_text())
     for helper in ('get_ai_review_passes', 'get_mcp_recipes'):
