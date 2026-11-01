@@ -528,6 +528,7 @@ def _native_source_is_guaranteed_culled_by_upper_layer(
     for upper in clips:
         if (not isinstance(upper, dict) or
                 upper.get("id") == source_clip.get("id") or
+                upper.get("type") == "adjustment" or
                 upper.get("compositeLowerLayers") != "off" or
                 upper.get("enabled", True) is not True):
             continue
