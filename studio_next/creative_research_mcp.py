@@ -1,7 +1,7 @@
 """Opt-in standard MCP research server; public metadata only, no asset import.
 
-The host must pass --allow-public-research to grant fixed public HTTPS
-endpoints. A connected model can choose queries but cannot grant itself
+Starting this local MCP process authorizes its fixed free public HTTPS
+endpoints by default; the host can disable all network calls. The model cannot grant itself
 network access, arbitrary URLs, downloads or paid generation.
 """
 from __future__ import annotations
@@ -11,9 +11,21 @@ import asyncio
 import json
 
 from .creative_research import CreativeResearch, CreativeResearchError
+from .creative_research_hub import CreativeResearchHub
 
 
 _TOOL_DEFINITIONS = (
+    ("research_creative",
+     "Independent creative-domain research across every installed free public "
+     "source. Discover visuals, sound, video references, animation, storytelling, "
+     "design technique, audience papers and other creative knowledge. Returned "
+     "leads cannot themselves authorize copyright reuse, even when CC0 declared.",
+     {"type": "object", "properties": {
+         "query": {"type": "string", "minLength": 1, "maxLength": 240},
+         "domain": {"type": "string", "enum": ["all", "assets", "knowledge", "scholarship"]},
+         "media": {"type": "string", "enum": ["all", "image", "audio", "video", "3d"]},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 12}},
+      "required": ["query"], "additionalProperties": False}),
     ("research_assets",
      "Research CC0/public-domain footage, visual and audio *candidate* metadata. "
      "Rights are NOT independently verified, assets are NOT downloaded.",
@@ -32,7 +44,8 @@ _TOOL_DEFINITIONS = (
 )
 
 
-def create_research_server(*, allow_public_research=False, research_client=None):
+def create_research_server(*, allow_public_research=True, research_client=None,
+                           research_hub=None):
     """Use official MCP SDK; requires an explicit host-side network grant."""
     if allow_public_research is not True:
         raise PermissionError("Host must explicitly permit free public metadata research")
@@ -42,14 +55,11 @@ def create_research_server(*, allow_public_research=False, research_client=None)
     from mcp import types
 
     client = research_client if research_client is not None else CreativeResearch()
+    hub = research_hub if research_hub is not None else CreativeResearchHub.installed()
     operations = {
-        name: (schema, handler)
-        for name, _, schema, handler in (
-            (_TOOL_DEFINITIONS[0][0], _TOOL_DEFINITIONS[0][1],
-             _TOOL_DEFINITIONS[0][2], client.assets),
-            (_TOOL_DEFINITIONS[1][0], _TOOL_DEFINITIONS[1][1],
-             _TOOL_DEFINITIONS[1][2], client.studies),
-        )
+        "research_creative": (_TOOL_DEFINITIONS[0][2], hub.research),
+        "research_assets": (_TOOL_DEFINITIONS[1][2], client.assets),
+        "research_studies": (_TOOL_DEFINITIONS[2][2], client.studies),
     }
     tools = [types.Tool(name=name, description=description, inputSchema=schema)
              for name, description, schema in _TOOL_DEFINITIONS]
@@ -88,12 +98,12 @@ def create_research_server(*, allow_public_research=False, research_client=None)
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--allow-public-research", action="store_true",
-                        help="Host-side permission for fixed public metadata endpoints")
+    parser.add_argument("--disable-public-research", action="store_true",
+                        help="Host-owned kill switch for fixed public research endpoints")
     args = parser.parse_args(argv)
     try:
         server = create_research_server(
-            allow_public_research=args.allow_public_research)
+            allow_public_research=not args.disable_public_research)
     except PermissionError as exc:
         parser.error(str(exc))
     from mcp.server.stdio import stdio_server
