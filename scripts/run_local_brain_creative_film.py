@@ -36,7 +36,8 @@ from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
 from studio_next.model_film_revision import (
     ModelFilmRevisionError, apply_model_selected_revision,
-    audit_editorial_reprises, encoded_film_contact_sheet)
+    audit_editorial_reprises, encoded_beat_motion_pair,
+    encoded_film_contact_sheet)
 
 from scripts.run_native_model_trial import download, read_live_linux_model_peak_rss
 
@@ -621,6 +622,7 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
     target_field=selection["field"]
     actual_before=plan["beats"][target_index][target_field]
     choice=None
+    focus=None
     if selection["action"]=="keep":
         decision={**selection,"value":str(actual_before),
                   "expected_before":str(actual_before)}
@@ -628,6 +630,11 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
             plan,decision,asset_count=len(assets),
             source_titles=[asset["title"] for asset in assets])
     else:
+        focus_path=workspace/"effects"/f"focused-original-beat-{target_index:02d}.png"
+        focus=encoded_beat_motion_pair(
+            video_path,first_frames,target_index,focus_path,fps=FPS)
+        if focus["source_sha256"]!=film_identity:
+            raise RuntimeError("Focused physical beat does not match exact rendered movie")
         if target_field=="camera":
             allowed=[value for value in (
                 "push","pull","drift_left","drift_right","still")
@@ -677,11 +684,17 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
             "source_inventory":request["source_inventory"],
             "supported_camera_controls":["push","pull","drift_left",
                                          "drift_right","still"],
-            "picture_evidence":request["picture_evidence"],
+            "picture_evidence":[{
+                "job_id":film_identity,
+                "path":str(focus_path),
+                "sha256":focus["preview_sha256"],
+            }],
+            "selected_beat_actual_early_late_evidence":focus,
+            "source_frame_selection_cannot_be_inferred_from_contact_sheet":True,
             "metadata_is_not_independent_rights_clearance":True,
         }
         for attempt in range(3):
-            choice=_call(brain,value_request,transcript,with_image=review_image)
+            choice=_call(brain,value_request,transcript,with_image=focus_path)
             try:
                 if (not isinstance(choice,dict)
                         or set(choice)!={"new_value","reason"}
@@ -713,6 +726,7 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
         json.dumps({"visual_preview":preview, "model_decision":decision,
                     "neural_target_selection":selection,
                     "neural_replacement_value":choice,
+                    "selected_beat_focused_temporal_preview":focus,
                     "native_before_value_origin":"host_exact_state",
                     "validated_edit":model_edit,
                     "initial_movie":receipt(video_path),
