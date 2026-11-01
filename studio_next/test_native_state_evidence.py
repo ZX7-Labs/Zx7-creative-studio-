@@ -15,6 +15,7 @@ from studio_next.native_state_evidence import (
     pinned_direct_native_plan_preview, contradictory_nested_write_receipt,
     _PINNED_NO_IMAGE_SEQUENCE_ERROR,
     pinned_forced_image_sequence_absent_error,
+    pinned_native_export_identity,
     _PINNED_UNKNOWN_BETWEEN_TRANSITION_CLIPS,
     pinned_unknown_between_transition_clips)
 from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
@@ -358,6 +359,40 @@ class SourcePreviewContracts(unittest.TestCase):
             with self.subTest(tool=name):
                 self.assertFalse(pinned_forced_image_sequence_absent_error(
                     name, candidate))
+
+    def test_pinned_export_receipt_binds_native_project_timeline_and_target(self):
+        import hashlib
+        receipt = {
+            "success": True, "action": "export_timeline",
+            "projectPath": "/host/projects/Movie/project.comfystudio",
+            "outputPath": "/host/outputs/film.mp4",
+            "timeline": {"id": "editor-native-active-7"},
+        }
+        data = pinned_native_export_identity("export_timeline", receipt)
+        self.assertIsNotNone(data)
+        self.assertEqual(data["native_export_project_path_sha256"],
+                         hashlib.sha256(receipt["projectPath"].encode()).hexdigest())
+        self.assertEqual(data["native_export_output_path_sha256"],
+                         hashlib.sha256(receipt["outputPath"].encode()).hexdigest())
+        self.assertEqual(data["native_export_timeline_id"],
+                         "editor-native-active-7")
+        self.assertNotIn(receipt["projectPath"], str(data))
+        self.assertNotIn(receipt["outputPath"], str(data))
+        for tool, patch_fields in (
+            ("delete_clips", {}),
+            ("export_timeline", {"success": "true"}),
+            ("export_timeline", {"success": False}),
+            ("export_timeline", {"action": "create_project"}),
+            ("export_timeline", {"projectPath": "../other/project.comfystudio"}),
+            ("export_timeline", {"outputPath": "film.mp4"}),
+            ("export_timeline", {"timeline": {"id": None}}),
+            ("export_timeline", {"timeline": {"id": ""}}),
+            ("export_timeline", {"timeline": {"id": "x" * 513}}),
+            ("export_timeline", {"timeline": None}),
+        ):
+            with self.subTest(tool=tool, changed=patch_fields):
+                self.assertIsNone(pinned_native_export_identity(
+                    tool, {**receipt, **patch_fields}))
 
     def test_exact_transition_target_failure_is_nonmutating_and_source_pinned(self):
         source = Path(__file__).resolve().parents[1] / (
