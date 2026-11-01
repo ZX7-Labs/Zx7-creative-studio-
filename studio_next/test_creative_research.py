@@ -1,5 +1,6 @@
 """Offline adversarial contract tests; no paid API and no network traffic."""
 import json
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
@@ -220,6 +221,59 @@ class CreativeResearchTests(unittest.TestCase):
                                allowed_access=frozenset({"network"}))
             self.assertEqual(len(provider.calls),1)
 
+
+@unittest.skipUnless(importlib.util.find_spec("mcp") is not None,
+                     "Optional research MCP SDK is not installed")
+
+class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
+    def test_host_network_permission_is_mandatory(self):
+        from studio_next.creative_research_mcp import create_research_server
+        with self.assertRaises(PermissionError):
+            create_research_server()
+
+    async def test_real_mcp_protocol_exposes_only_bounded_readonly_research(self):
+        import anyio
+        from mcp import ClientSession
+        from mcp.shared.memory import create_client_server_memory_streams
+        from studio_next.creative_research_mcp import create_research_server
+
+        class PreparedResearch:
+            def __init__(self):
+                self.calls = []
+
+            def assets(self, **kwargs):
+                self.calls.append(("assets", kwargs))
+                return {"kind": "research_asset_candidates", "results": [],
+                        "import_authorized": False}
+
+            def studies(self, **kwargs):
+                self.calls.append(("studies", kwargs))
+                return {"kind": "creative_audience_research", "results": []}
+
+        research = PreparedResearch()
+        server = create_research_server(
+            allow_public_research=True, research_client=research)
+        async with create_client_server_memory_streams() as (client_streams, server_streams):
+            async with anyio.create_task_group() as group:
+                group.start_soon(server.run, *server_streams,
+                                 server.create_initialization_options())
+                async with ClientSession(*client_streams) as session:
+                    await session.initialize()
+                    tools = (await session.list_tools()).tools
+                    self.assertEqual({tool.name for tool in tools},
+                                     {"research_assets", "research_studies"})
+                    response = await session.call_tool(
+                        "research_assets", {"query": "light", "media": "video"})
+                    self.assertFalse(response.is_error)
+                    self.assertFalse(json.loads(response.content[0].text)
+                                     ["import_authorized"])
+                    invalid = await session.call_tool(
+                        "research_assets", {"query": "light", "media": "video",
+                                            "limit": 0})
+                    self.assertTrue(invalid.is_error)
+                    self.assertEqual(research.calls,
+                                     [("assets", {"query": "light", "media": "video"})])
+                group.cancel_scope.cancel()
 
 if __name__ == "__main__":
     unittest.main()
