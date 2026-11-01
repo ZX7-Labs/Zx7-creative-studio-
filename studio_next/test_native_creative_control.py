@@ -786,6 +786,46 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(outcome["artistic_quality_independently_approved"])
 
 
+    async def test_foreign_preview_like_false_ack_is_not_a_safe_replay(self):
+        # Source-restricted preview classification: an unrelated native writer
+        # cannot turn an ambiguous failed write into a no-mutation guarantee.
+        from studio_next.native_creative_audit import audit_native_journal
+        class ForeignNativeWriter(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools.append(SimpleNamespace(
+                    name="foreign_writer", description="Unreviewed editor writer",
+                    input_schema={"type": "object", "properties": {
+                        "previewOnly": {"type": "boolean"}}}))
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, dict(arguments)))
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps({
+                        "success": False, "action": name,
+                        "result": {"previewOnly": True, "action": name,
+                                   "plan": {"previewOnly": True, "action": name}},
+                        "suggestedApplyCall": {"tool": name, "arguments": {
+                            **arguments, "previewOnly": False}},
+                    }))])
+        session = ForeignNativeWriter()
+        grants = {t.name: ("write" if t.name == "foreign_writer" else "read")
+                  for t in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="foreign_writer", inputs={"previewOnly": True}),
+            decision("invoke", tool="foreign_writer", inputs={"previewOnly": True}),
+        ])
+        outcome = await NativeCreativeControl(
+            session, model, max_turns=2, host_tool_access=grants).run(
+                "Do not retry an unverified native mutation")
+        self.assertEqual(outcome["status"], "native_error_requires_state_reconciliation")
+        self.assertEqual([name for name, _ in session.calls if name == "foreign_writer"],
+                         ["foreign_writer"])
+        self.assertFalse(any(e["kind"] == "native_tool_preview"
+                             for e in outcome["events"]))
+        self.assertEqual(outcome["events"][-1]["kind"], "native_tool_reported_error")
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
     async def test_commit_intent_cannot_be_reclassified_as_legacy_preview(self):
         from studio_next.native_creative_audit import audit_native_journal
         class ContradictoryReceiptSession(FakeSession):

@@ -254,6 +254,40 @@ class SourcePreviewContracts(unittest.TestCase):
                 # The applied arguments may be built ahead of the guard.
                 self.assertIn("previewOnly: false", source_method[:dispatch])
 
+    def test_pinned_legacy_project_previews_return_before_native_project_mutation(self):
+        # Validate the exact vendored source, not a test double or an API
+        # field name. Any upstream refactor requires re-reviewing the trust
+        # boundary rather than silently allowing arbitrary write recovery.
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn"
+        native = (root / "electron/mcpServer.js").read_text(encoding="utf-8")
+        renderer = (root / "src/services/mcpActions.js").read_text(encoding="utf-8")
+        cases = (
+            ("create_project", "createProject", "handleCreateProject",
+             "projectState.createProject?.("),
+            ("duplicate_project", "duplicateProject", "handleDuplicateProject",
+             "projectState.duplicateProject?.("),
+        )
+        for name, wrapper_name, handler_name, mutation in cases:
+            with self.subTest(tool=name):
+                native_start = native.index("  async " + wrapper_name + "(snapshot, args")
+                native_end = native.index("\n  async ", native_start + 8)
+                wrapper = native[native_start:native_end]
+                self.assertIn("success: !previewOnly", wrapper)
+                self.assertIn("action: '" + name + "'", wrapper)
+                self.assertIn("suggestedApplyCall: previewOnly ?", wrapper)
+                self.assertLess(wrapper.index("const previewOnly = args.previewOnly !== false"),
+                                wrapper.index("const result = await this.performAction({"))
+                renderer_start = renderer.index("async function " + handler_name + "(")
+                renderer_end = renderer.index("\n}", renderer_start) + 2
+                handler = renderer[renderer_start:renderer_end]
+                guard = handler.index("if (payload.previewOnly !== false) {")
+                project_write = handler.index(mutation)
+                self.assertLess(guard, project_write)
+                self.assertIn("return {", handler[guard:project_write])
+                self.assertIn("previewOnly: true", handler[guard:project_write])
+                self.assertIn("action: '" + name + "'", handler[guard:project_write])
+                self.assertIn("plan,", handler[guard:project_write])
+
     def test_pinned_native_editor_source_guarantees_preview_never_performs_action(self):
         # This safety exception may NOT silently survive a third-party editor
         # update that changes preview behavior. Inspect the actual vendored
