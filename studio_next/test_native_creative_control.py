@@ -414,6 +414,42 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(NativeCreativeControlError, "No earlier independently verified export"):
             await NativeCreativeControl(session2, model2).run("Review unverified output")
 
+    async def test_missing_mistyped_and_conflicting_mcp_status_cannot_certify_write(self):
+        # Successful-looking native content cannot substitute for a verified
+        # MCP transport status. Nor can contradictory status aliases.
+        content = [SimpleNamespace(type="text", text='{"success":true,"editable":true}')]
+        responses = [
+            SimpleNamespace(content=content),
+            SimpleNamespace(is_error=0, content=content),
+            SimpleNamespace(is_error="false", content=content),
+            SimpleNamespace(is_error=False, isError=True, content=content),
+            {"is_error": True, "isError": False, "content": content},
+        ]
+        for response in responses:
+            with self.subTest(response=repr(response)[:100]):
+                session = FakeSession()
+                session.custom_response = response
+                grants = {item.name: ("write" if item.name == "update_text_clip" else "read")
+                          for item in session.tools}
+                model = ScriptedModel([
+                    decision("invoke", tool="update_text_clip",
+                             inputs={"clipId": "original", "text": "Edited"}),
+                    decision("finish", summary="Must not be accepted"),
+                ])
+                outcome = await NativeCreativeControl(
+                    session, model, host_tool_access=grants,
+                    required_evidence=("native_write_acknowledged",),
+                    max_turns=2).run("Edit the actual source")
+                self.assertEqual(outcome["status"], "native_error_requires_state_reconciliation")
+                self.assertEqual(len(session.calls), 1)
+                self.assertEqual(outcome["events"][-1]["kind"], "native_tool_uncertain_outcome")
+                self.assertEqual(outcome["events"][-1]["uncertainty_reason"],
+                                 "untrusted_mcp_status_envelope")
+                self.assertTrue(outcome["events"][-1]["must_reconcile_native_state"])
+                self.assertFalse(any(event["kind"] in ("native_tool_result", "model_finished")
+                                     for event in outcome["events"]))
+                self.assertEqual(len(model.observed), 1)
+
     async def test_error_results_do_not_become_trusted_success(self):
         session = FakeSession()
         session.custom_response = SimpleNamespace(is_error=True, content=[
