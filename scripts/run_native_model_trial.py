@@ -350,7 +350,23 @@ async def trial(args, lock, artifacts, command):
                     # Failed model claims cannot end the trial before actual
                     # native activity, source-verified export and visual sensing.
                     required_evidence=completion_evidence,
-                    host_content_revision_tools=host_content_revision_tools).run(brief),
+                    host_content_revision_tools=host_content_revision_tools,
+                    # The trusted runner can reveal possible mechanical
+                    # tool names once the physical native project has BOTH
+                    # an imported asset and an actual timeline clip. The
+                    # 48-decision Qwen run #41278678340 eventually reached
+                    # this state but spent its remaining decisions searching
+                    # timeline/marker tools, only DESCRIBING export_timeline
+                    # on the final turn. These are host-authored affordance
+                    # labels, NOT editor operations, creative choices or
+                    # assumed completed evidence.
+                    host_completion_affordances={
+                        "physical_export_verified": (
+                            "export_timeline", "zx7_verify_native_export"),
+                        "verified_export_frame_observed": (
+                            "zx7_observe_verified_export_frame",
+                            "zx7_observe_verified_export_samples"),
+                    }).run(brief),
                     timeout=2400)
                 except Exception as trial_error:
                     # A disk-full/write failure while preserving a diagnostic
