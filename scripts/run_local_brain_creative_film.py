@@ -275,8 +275,10 @@ def _validate_decision(plan,assets):
             raise ValueError("Each original visual beat needs an authored short thought")
         if beat.get("camera") not in ("push","pull","drift_left","drift_right","still"):
             raise ValueError("Model requested a camera control unavailable in the physical editor")
-        if type(beat.get("weight")) not in (int,float) or not 1<=beat["weight"]<=20:
-            raise ValueError("Model must choose finite positive relative pacing weight")
+        if (type(beat.get("weight")) not in (int,float) or
+                not math.isfinite(beat["weight"]) or
+                not 0 < beat["weight"] <= 1_000_000):
+            raise ValueError("Model relative pacing weight must be positive and finite")
     music=plan.get("music")
     if not isinstance(music,dict):
         raise ValueError("Model must author music decisions, not a silent film")
@@ -298,8 +300,8 @@ def _weights_to_frames(beats):
     # Preserve model-chosen proportions, and exact 60 seconds of native CFR.
     for i in sorted(range(len(ints)),key=lambda k:raw[k]-ints[k],reverse=True)[:FRAMES-sum(ints)]:
         ints[i]+=1
-    if sum(ints)!=FRAMES or min(ints)<FPS*2:
-        raise ValueError("Model's chosen pacing cannot physically fit the 60s film")
+    if sum(ints)!=FRAMES or min(ints)<1:
+        raise ValueError("Model selected an invisible beat with no physical video frames")
     return ints
 
 def _title_overlay(title, caption, number, count, dest):
@@ -491,9 +493,15 @@ def produce(args):
                       "music":{"bpm":88,"root_midi":57,"mode":"minor",
                                "progression":[0,3,4,2]}}}
             plan=None
+            last_validation_failure=None
             for attempt in range(3):
                 incoming=dict(brief)
-                if attempt:incoming["retry_feedback"]="Your prior response failed strict model-owned creative plan validation. Supply your own revised, complete valid JSON film; no guessed asset IDs."
+                if attempt:
+                    incoming["retry_feedback"]=(
+                      "Previous film plan failed: "+str(last_validation_failure)+
+                      ". Please supply a complete revised JSON with all required "
+                      "film fields, original music and 6–12 actual editorial beats. "
+                      "Relative weights can be positive decimals. No invented asset IDs.")
                 decision=_call(brain,incoming,transcript,with_image=sheet)
                 try:
                     plan=_validate_decision(decision,assets)
@@ -501,6 +509,7 @@ def produce(args):
                     break
                 except (ValueError,KeyError,TypeError) as exc:
                     transcript[-1]["validation_failure"]=str(exc)
+                    last_validation_failure=str(exc)
                     plan=None
             if plan is None:
                 raise RuntimeError("Real local Brain did not author an executable film and soundtrack")
