@@ -466,6 +466,12 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
             "expected_before MUST exactly reproduce the current field value "
             "at the chosen beat_index from current_edit_plan; this is a "
             "source-state precondition, not an artistic opinion. "
+            "When revising a caption, the artwork title/source inventory is "
+            "the only attached image's explicit factual metadata. Never "
+            "borrow the date, museum, origin or identity of another artwork, "
+            "or fabricate new dates, credits or numeric catalog identifiers. "
+            "Creative imagery and metaphors are allowed, but unverified "
+            "factual attribution will be rejected by the native host. "
             "The value is the proposed new "
             "caption, registered camera name, decimal relative beat weight, "
             "or source inventory index as a string. If actual evidence does "
@@ -518,7 +524,8 @@ def _review_encoded_film_and_revise(*, brain, plan, assets, ordered,
         decision = _call(brain, request, transcript, with_image=review_image)
         try:
             revised, model_edit = apply_model_selected_revision(
-                plan, decision, asset_count=len(assets))
+                plan, decision, asset_count=len(assets),
+                source_titles=[asset["title"] for asset in assets])
         except ModelFilmRevisionError as exc:
             transcript[-1]["source_precondition_or_edit_validation_failed"] = str(exc)
             if review_attempt == 2:
