@@ -22,7 +22,9 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
+from studio_next.native_creative_control import (
+    NativeCreativeControl, NATIVE_CREATIVE_SYSTEM,
+    NATIVE_CREATIVE_DECISION_SCHEMA)
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.native_action_schema import native_action_schema
@@ -293,8 +295,16 @@ async def trial(args, lock, artifacts, command):
     params = [str(ROOT / 'engines/velorn/mcp.mjs'), '--source', str(args.source),
               '--config', str(config_path), '--state', str(args.runtime / 'editor-state'),
               '--python', sys.executable, '--xvfb-binary', args.xvfb_binary, '--display', args.display]
+    # A pinned local llama.cpp server may enforce this JSON envelope grammar.
+    # It constrains only the model's {action,arguments,reason} syntax, never
+    # selects an action or fills actual editor tool inputs. The full native
+    # schema/grant/host ACK checks remain authoritative for real editing.
+    decision_grammar = {"type": "json_schema",
+                        "schema": NATIVE_CREATIVE_DECISION_SCHEMA}
     model = RecordedModel(LocalCreativeModel(LocalModelSettings(
-        model_id=lock['server']['alias'], base_url='http://127.0.0.1:8080', timeout_seconds=300),
+        model_id=lock['server']['alias'], base_url='http://127.0.0.1:8080',
+        timeout_seconds=300,
+        sampling={"response_format": decision_grammar}),
         system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts)
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
