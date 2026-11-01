@@ -95,7 +95,7 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(schema["required"], ["action", "arguments", "reason"])
         self.assertFalse(schema["additionalProperties"])
         self.assertEqual(set(schema["properties"]["action"]["enum"]), {
-            "search", "describe", "invoke", "discover", "finish"})
+            "search", "describe", "invoke", "apply_preview", "discover", "finish"})
         # This schema never specifies what file, clip, scene or tool the brain
         # may create. Actual host tools must still be discovered and granted.
         self.assertEqual(schema["properties"]["arguments"], {
