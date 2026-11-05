@@ -1,5 +1,4 @@
 """Hostile source-coverage tests: metrics must never certify creative quality."""
-import math
 import unittest
 
 from studio_next.raw_edit_coverage import EditCoverageError, assess_raw_edit_coverage
