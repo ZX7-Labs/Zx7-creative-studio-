@@ -21,20 +21,11 @@ sys.path.insert(0, str(ROOT))
 from studio_next.body_capabilities import installed_body_capability_fabric
 from studio_next.model_tool_audition import (
     run_model_tool_audition, summarize_model_tool_auditions,
+    constrained_local_audition_adapter,
 )
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from scripts.run_local_brain_creative_film import _await_model
 
-
-_AUDITION_SYSTEM = """You are being tested for exact tool-use compatibility, not
-film direction. You are given an ordinary task and real, host-granted tool
-schemas. Choose the one tool whose documented function satisfies the task
-and provide a JSON object with exactly two keys: operation_id and inputs.
-operation_id MUST match exactly one offered operation_id. inputs MUST be a
-valid JSON object satisfying that operation's actual machine input schema.
-No tools will be executed by this test. Never invent an operation or field.
-Output JSON only. Do not explain. Do not imply that you performed the action.
-"""
 
 
 def sha(path):
@@ -64,7 +55,7 @@ def execute(args):
     runtime.mkdir(parents=True, exist_ok=False)
     workspace=output/"workspace"
     workspace.mkdir()
-    case_path=ROOT/"research/model-tool-audition-cases.json"
+    case_path=ROOT/"studio_next/fixtures/model_tool_baseline_v1.json"
     manifest=json.loads(case_path.read_text(encoding="utf-8"))
     if (manifest.get("schema")!=1 or
             manifest.get("kind")!="operator-owned-model-to-body-audition-cases"
@@ -108,21 +99,12 @@ def execute(args):
         result["pinned_model_files"]={
             name:{"sha256":data.get("sha256"),"bytes":data.get("bytes")}
             for name,data in weights.items()}
-        model=LocalCreativeModel(LocalModelSettings(
-            model_id=lock["server"]["alias"],
-            base_url="http://127.0.0.1:8080",
-            timeout_seconds=300,
-            sampling={"temperature":0.1,"max_tokens":550,
-                      "response_format":{"type":"json_schema","json_schema":{
-                          "name":"zx7_model_tool_contract_audition",
-                          "strict":True,
-                          "schema":{"type":"object",
-                              "additionalProperties":False,
-                              "required":["operation_id","inputs"],
-                              "properties":{
-                                  "operation_id":{"type":"string"},
-                                  "inputs":{"type":"object"}}}}}}
-        ),_AUDITION_SYSTEM)
+        model=constrained_local_audition_adapter(
+            LocalCreativeModel(LocalModelSettings(
+                model_id=lock["server"]["alias"],
+                base_url="http://127.0.0.1:8080",
+                timeout_seconds=300,
+            )))
         for case in manifest["cases"]:
             receipt=run_model_tool_audition(model,fabric,case)
             result["real_model_results"].append(receipt)
