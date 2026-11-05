@@ -1,0 +1,82 @@
+name: ZX7 Whole-Repository Boundary and Source Audit
+on:
+  push:
+    branches:
+      - engineering/unified-brain-body-architecture-audit-20261106
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-complete-architecture-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  all-tracked-source-with-pinned-native-editor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install only the OSS source-format parser
+        run: python -m pip install --disable-pip-version-check "PyYAML>=6,<7"
+      - name: Test fail-closed source and gitlink inventory
+        run: python -m unittest discover -s scripts -p test_repo_audit.py -v
+      - name: Verify every checked-out tracked source byte, format and native source pin
+        run: |
+          python scripts/repo_audit.py --out output/source-audit/all-tracked-files.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path("output/source-audit/all-tracked-files.json").read_text())
+          assert report["total_file_count"] == len(report["files"])
+          assert not report["blocking_source_format_errors"]
+          assert any(x["path"]=="third_party/velorn" for x in report["pinned_sources"])
+          assert report["security_manual_review_complete"] is False
+          assert report["film_release_production_approved"] is False
+          print("ALL_TRACKED_SOURCE_AUDIT",
+              report["total_file_count"],"regular files (including pinned editor source)",
+              len(report["static_source_change_sites"]),"review candidates")
+          PY
+      - name: Preserve complete file coverage, sha256 and unreviewed risk call sites
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-boundary-full-tree-${{ github.sha }}
+          path: output/source-audit/
+          if-no-files-found: warn
+          retention-days: 14
+  model-body-execution-contract-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install actual open source runtime and media tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg inkscape fonts-dejavu-core
+          python -m pip install --disable-pip-version-check '.[production,editor]'
+          python -m compileall -q studio_next
+      - name: Test creative-brain authority distinct from BODY actuation and graph admissibility
+        run: |
+          python -m unittest -v \
+            studio_next.test_execution_lane_admission \
+            studio_next.test_universal_graph_reachability \
+            studio_next.test_body_affordances \
+            studio_next.test_body_signal \
+            studio_next.test_body_editor_catalog \
+            studio_next.test_body_editor_policy \
+            studio_next.test_capability_fabric \
+            studio_next.test_capability_gateway \
+            studio_next.test_universal_diagnostics \
+            studio_next.test_universal_diagnostics_service \
+            studio_next.test_body_service \
+            studio_next.test_body_mobile
