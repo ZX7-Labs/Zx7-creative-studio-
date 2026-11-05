@@ -123,7 +123,7 @@ def _safe_host_memory(host_capacity):
 
 def universal_diagnostics(*, operation_records, job_records, session_records,
                           host_capacity, model_configured, model_id=None,
-                          paired_trials=(), trace_evidence=None):
+                          paired_trials=(), trace_evidence=None, model_audition=None):
     """Bounded authenticated dashboard snapshot from actual host runtime state.
 
     Registry claims prove *discovery/installation*, not tool execution;
@@ -158,6 +158,26 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
                     "paused", "cancelled", "unmeasured", "unknown")
                 or not isinstance(event.get("code"), str)):
             raise DiagnosticEvidenceError("Host trace contains ungrounded stage facts")
+    if model_audition is None:
+        model_audition={"status":"unmeasured","cases_recorded":0,
+                        "summary":None,"model_weights_physically_attested":False,
+                        "body_execution_not_tested":True,
+                        "creativity_not_assessed":True}
+    if (not isinstance(model_audition,dict)
+            or model_audition.get("status") not in (
+                "unmeasured","queued","running","interrupted",
+                "completed_measured_not_creative_certification","failed_to_measure")
+            or model_audition.get("creativity_not_assessed") is not True
+            or model_audition.get("body_execution_not_tested") is not True
+            or model_audition.get("model_weights_physically_attested") is not False):
+        raise DiagnosticEvidenceError("Local model measurement provenance unsupported")
+    measured_cases=model_audition.get("cases_recorded",0)
+    if type(measured_cases) is not int or not 0 <= measured_cases <= 8:
+        raise DiagnosticEvidenceError("Local model case receipts are unbounded")
+    summary=model_audition.get("summary")
+    if summary is not None:
+        if not isinstance(summary,dict) or summary.get("evaluated_case_count") != measured_cases:
+            raise DiagnosticEvidenceError("Model case summary contradicts observed count")
     if not isinstance(host_capacity, dict):
         raise DiagnosticEvidenceError("Live host capacity observation required")
     if type(model_configured) is not bool:
@@ -320,8 +340,19 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
         "model": {
             "configured": model_configured,
             "identity": model_id if model_configured else None,
-            "capability_assessment": ("host_paired_evidence_available" if pair_evidence
-                                      else "unmeasured"),
+            "capability_assessment": (
+                "host_paired_evidence_available" if pair_evidence
+                else "observed_narrow_tool_contract_audition"
+                if model_audition["status"]=="completed_measured_not_creative_certification"
+                else "unmeasured"),
+            "operator_initiated_tool_audition": {
+                "status":model_audition["status"],
+                "cases_recorded":measured_cases,
+                "summary":summary,
+                "model_weights_physically_attested":False,
+                "no_native_tool_execution_in_audition":True,
+                "no_artistic_or_general_model_score":True,
+            },
             "independent_creativity": "unmeasured",
             "observed_creative_sessions": sum(session_states.values()),
             "observed_model_decisions": decision_count,
