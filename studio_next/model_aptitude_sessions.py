@@ -69,7 +69,8 @@ class ModelAptitudeSessions:
                 "SELECT id,created,status,evidence FROM model_diagnostic_runs "
                 "ORDER BY created DESC,id DESC LIMIT 1").fetchone()
         if row is None:
-            return {"status":"unmeasured", "case_count":0,
+            return {"status":"unmeasured", "cases_recorded":0,
+                    "summary":None,"model_weights_physically_attested":False,
                     "creativity_not_assessed":True,
                     "body_execution_not_tested":True}
         return self._summary_row(row)
