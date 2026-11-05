@@ -98,8 +98,9 @@ class UnscriptedRawEditorTests(unittest.TestCase):
                 check=True,timeout=40)
             info=probe(video)
             sheet=root/"source-actually-decoded.png"
-            evidence=shot_reel(video,info,sheet)
-            self.assertEqual(len(evidence["sample_times_seconds"]),16)
+            times=[round((i+.5)*info["duration"]/16,3) for i in range(16)]
+            evidence=shot_reel(video,info,sheet,sample_times_seconds=times)
+            self.assertEqual(evidence["sample_times_seconds"],times)
             self.assertTrue(sheet.is_file())
             with Image.open(sheet) as visual:
                 self.assertEqual(visual.size,(1280,840))
