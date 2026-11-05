@@ -20,7 +20,7 @@ _SCHEMA = 1
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _STATES = frozenset({
     "queued", "running", "completed", "blocked", "failed", "paused", "cancelled",
-    "stopped", "budget_exhausted",
+    "stopped", "budget_exhausted", "model_finished", "needs_owner_input",
 })
 _PHASES = (
     "source", "perception", "planning", "discovery", "contract",
