@@ -6,6 +6,8 @@ on:
       - "studio_next/test_raw_video_neural_edit.py"
       - "studio_next/raw_edit_coverage.py"
       - "studio_next/test_raw_edit_coverage.py"
+      - "studio_next/raw_temporal_observer.py"
+      - "studio_next/test_raw_temporal_observer.py"
       - "scripts/run_raw_video_neural_edit_test.py"
       - ".github/workflows/zx7-raw-video-edit-regression.yml"
   workflow_dispatch:
