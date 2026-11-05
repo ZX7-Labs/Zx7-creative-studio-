@@ -141,7 +141,7 @@ class NativeCreativeAuditTests(unittest.TestCase):
         root=Path(__file__).resolve().parent
         emitted=(root/"native_creative_control.py").read_text(encoding="utf-8")
         verified=(root/"native_creative_audit.py").read_text(encoding="utf-8")
-        kinds=set(re.findall(r'"kind"\\s*:\\s*"([a-z][a-z0-9_]+)"',emitted))
+        kinds=set(re.findall(r'"kind"\s*:\s*"([a-z][a-z0-9_]+)"',emitted))
         self.assertTrue(kinds)
         self.assertEqual({kind for kind in kinds if
                           re.search(r'"'+re.escape('"'+kind+'"'),verified) is None},set(),
