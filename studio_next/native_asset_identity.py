@@ -35,13 +35,19 @@ def inventory_from_native_text(texts):
         raise NativeAssetEvidenceError("Invalid native media inventory") from exc
     if not isinstance(record, dict):
         raise NativeAssetEvidenceError("Native media inventory must be an object")
+    # Pinned Velorn b3c02ad get_assets returns the EXACT transport keys
+    # {count, limitApplied, assets}, not fabricated totalAssetCount /
+    # returnedAssetCount. The original CPU camera trial proved that
+    # expecting those imaginary keys hid actual imported sources.
     rows = record.get("assets")
-    total = record.get("totalAssetCount")
-    returned = record.get("returnedAssetCount")
+    total = record.get("count")
+    limited = record.get("limitApplied")
+    returned = len(rows) if isinstance(rows, list) else -1
     if (not isinstance(rows, list) or type(total) is not int or
-            type(returned) is not int or total < 0 or returned < 0 or
-            returned != len(rows) or returned > total or returned > 1000 or
-            (total > 0 and returned == 0)):
+            type(limited) is not bool or total < 0 or returned < 0 or
+            returned > total or returned > 1000 or
+            (limited and (total <= returned or returned == 0)) or
+            (not limited and returned != total)):
         raise NativeAssetEvidenceError("Inconsistent native asset count")
     identities, names = [], []
     seen = set()
@@ -58,7 +64,7 @@ def inventory_from_native_text(texts):
         identities.append(identifier)
         names.append(name)
     return {"ids": identities, "names": names, "total": total,
-            "complete": returned == total, "returned": returned}
+            "complete": not limited, "returned": returned}
 
 
 def check_native_asset_reference(inputs, inventory):
