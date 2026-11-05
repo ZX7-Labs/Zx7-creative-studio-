@@ -238,6 +238,7 @@ class IndependentStudioDesktop:
                 raise ValueError("Service returned an unknown diagnostic contract")
             body=report["body"];model=report["model"]
             jobs=report["jobs"];comparisons=report["controlled_comparisons"]
+            trace=report.get("execution_traces",{})
             counts=jobs.get("by_state",{})
             failed=counts.get("blocked",0)+counts.get("failed",0)
             self.diagnostic_summary.set(
@@ -246,7 +247,8 @@ class IndependentStudioDesktop:
                 f"Model: {'configured' if model['configured'] else 'not configured'} "
                 f"(creative ability {model['independent_creativity']}) · "
                 f"Blocked/failed jobs: {failed} · "
-                f"Verified control comparisons: {comparisons['observed_pairs']}")
+                f"Verified control comparisons: {comparisons['observed_pairs']} · "
+                f"Durable stage events: {trace.get('observed_event_count',0)}")
             for item in self.diagnostics_tree.get_children():
                 self.diagnostics_tree.delete(item)
             for family in body.get("capabilities",[]):
@@ -257,6 +259,9 @@ class IndependentStudioDesktop:
             for issue in report.get("diagnostics",[])[:30]:
                 lines.append(f"{issue['layer']}: {issue['code']} — "
                              f"{issue.get('next_check','Inspect recorded evidence')}")
+            for event in trace.get("recent_events",[])[:12]:
+                lines.append(f"STAGE {event['phase']}: {event['outcome']} "
+                             f"[{event['capability_id']}] — {event['code']}")
             for issue in report.get("unresolved",[]):
                 lines.append("UNMEASURED: "+str(issue))
             self.diagnostic_issues.configure(state="normal")
