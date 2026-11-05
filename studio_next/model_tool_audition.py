@@ -13,6 +13,57 @@ import math
 import time
 
 
+TOOL_AUDITION_SYSTEM = """You are being tested for exact tool-use compatibility, not
+film direction. You are given an ordinary task and real, host-granted tool
+schemas. Choose the one tool whose documented function satisfies the task
+and provide a JSON object with exactly two keys: operation_id and inputs.
+operation_id MUST match exactly one offered operation_id. inputs MUST be a
+valid JSON object satisfying that operation's actual machine input schema.
+No tools will be executed by this test. Never invent an operation or field.
+Output JSON only. Do not explain. Do not imply that you performed the action.
+"""
+
+TOOL_AUDITION_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "zx7_model_tool_contract_audition",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["operation_id", "inputs"],
+            "properties": {
+                "operation_id": {"type": "string"},
+                "inputs": {"type": "object"},
+            },
+        },
+    },
+}
+
+
+def constrained_local_audition_adapter(actual_model):
+    """Use the SAME trusted local model endpoint, with fair diagnostic prompt.
+
+    No external provider is silently added. Any unrelated adapter stays
+    unmeasured rather than being assigned an invalid quality or ability score.
+    """
+    from dataclasses import replace
+    from .providers import LocalCreativeModel
+    if not isinstance(actual_model, LocalCreativeModel):
+        raise ModelToolAuditionError(
+            "Only a configured host-local, prompt-isolatable model is supported")
+    # Dataclass replacement retains model_id, loopback base URL, byte and
+    # time budgets. It never changes or impersonates the production instance.
+    return LocalCreativeModel(replace(
+        actual_model.settings,
+        sampling={
+            "temperature": 0.1,
+            "max_tokens": 550,
+            "response_format": TOOL_AUDITION_RESPONSE_FORMAT,
+        }),
+        TOOL_AUDITION_SYSTEM)
+
+
 class ModelToolAuditionError(ValueError):
     """Probe was malformed before a model could safely be tested."""
 
