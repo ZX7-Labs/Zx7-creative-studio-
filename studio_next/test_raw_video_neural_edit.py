@@ -7,7 +7,7 @@ import unittest
 
 from PIL import Image
 from scripts.run_raw_video_neural_edit_test import (
-    plan_schema,validate_edit,overlay_graphics,create_graphic,
+    plan_schema,validate_edit,validate_neural_edit_candidate,overlay_graphics,create_graphic,
     SYSTEM,shot_reel,probe
 )
 
@@ -54,6 +54,29 @@ class UnscriptedRawEditorTests(unittest.TestCase):
         } for _ in range(3)]
         with self.assertRaises(ValueError):
             validate_edit(too_long,30)
+
+    def test_real_neural_trial_cannot_accept_mechanically_unedited_prefix(self):
+        from studio_next.raw_edit_gate import InsufficientEditorialEvidence
+        no_op = model_edit()
+        no_op["cuts"] = [
+            {"source_in":i,"source_out":i+1,"speed":1.0,
+             "contrast":1.0,"saturation":1.0} for i in range(12)]
+        # This is the exact physical structure emitted by the real 2B trial:
+        # editing a 240-second source to its unchanged first 12 seconds.
+        self.assertEqual(validate_edit(no_op,240.032),12)
+        with self.assertRaises(InsufficientEditorialEvidence) as rejected:
+            validate_neural_edit_candidate(no_op,240.032)
+        self.assertTrue(rejected.exception.diagnostics[
+            "unmodified_source_prefix_detected"])
+        self.assertFalse(rejected.exception.diagnostics[
+            "artistic_quality_certified"])
+        chosen=model_edit()
+        chosen["cuts"][0]["source_in"]=55
+        chosen["cuts"][0]["source_out"]=58
+        length,evidence=validate_neural_edit_candidate(chosen,240.032)
+        self.assertEqual(length,3)
+        self.assertTrue(evidence["passes_minimum_editorial_evidence"])
+        self.assertFalse(evidence["artistic_quality_certified"])
 
     def test_transparent_native_graphic_is_written_from_authored_pixels(self):
         graphic={"text":"REAL TEST","start":0.1,"end":1.6,
