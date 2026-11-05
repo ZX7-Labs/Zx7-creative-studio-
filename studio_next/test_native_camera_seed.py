@@ -77,6 +77,10 @@ class NativeCameraSeedTests(unittest.TestCase):
             target.write_bytes(b"not the same original")
             modified = verify_native_original_timeline(document, sha)
             self.assertFalse(modified["original_camera_bytes_preserved"])
+            structure["assets"].append({"id": "real-camera", "path": "camera.webm"})
+            document.write_text(json.dumps(structure))
+            with self.assertRaises(NativeCameraSeedError):
+                verify_native_original_timeline(document, sha)
 
     def test_reject_rights_or_hash_without_importing(self):
         with tempfile.TemporaryDirectory() as temp:
