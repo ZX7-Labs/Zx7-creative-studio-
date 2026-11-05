@@ -178,6 +178,40 @@ class RecordedModel:
         return self.infer(context, images)
 
 
+async def preflight_real_editor_inventory_contract(session, host_grants):
+    """Read native tool result BEFORE costly model inference, never mutate art.
+
+    An installed schema for get_assets does not establish that BODY understands
+    the actual RESULT shape. The first real Qwen camera pilot wasted several
+    minutes because an invented response envelope only failed after project
+    creation. This bounded read-only probe fails early on the pinned engine's
+    real source contract and reveals no names, source paths or original bytes.
+    """
+    from studio_next.native_creative_control import _native_content, _field
+    from studio_next.native_asset_identity import inventory_from_native_text
+    if not isinstance(host_grants,dict) or host_grants.get("get_assets")!="read":
+        raise ValueError("Native asset preflight requires trusted read-only grant")
+    result=await session.call_tool("get_assets",{})
+    if _field(result,"is_error",_field(result,"isError",False)):
+        raise ValueError("Native asset read-only contract probe reported error")
+    texts,images,audio=_native_content(result)
+    if images or audio:
+        raise ValueError("Native asset metadata probe cannot return visual/audio content")
+    snapshot=inventory_from_native_text(texts)
+    return {
+        "schema":1,
+        "source":"pinned_native_get_assets_live_read",
+        "read_only":True,
+        "no_native_write_attempted":True,
+        "original_source_rights_not_established":True,
+        "source_response_sha256":hashlib.sha256(
+            json.dumps(texts,sort_keys=True,ensure_ascii=True).encode()).hexdigest(),
+        "observed_asset_count":snapshot["total"],
+        "bounded_inventory_complete":snapshot["complete"],
+        "any_media_physically_imported_by_this_probe":False,
+    }
+
+
 def fresh_trial_project_open_effects(projects_root):
     """Host-attested possibilities for a NEW empty native-editor trial.
 
@@ -314,6 +348,12 @@ async def trial(args, lock, artifacts, command):
         async with stdio_client(StdioServerParameters(command='node', args=params, cwd=ROOT), errlog=log) as (read, write):
             async with ClientSession(read, write, read_timeout_seconds=180) as session:
                 await session.initialize()
+                # The engine's exact read-result protocol must be checked
+                # before consuming CPU model turns or mutating any project.
+                preflight=await preflight_real_editor_inventory_contract(session,host)
+                print("Native read-only inventory contract verified:",
+                      preflight["observed_asset_count"],
+                      "assets; real source response, zero tool writes",flush=True)
                 outcome = await asyncio.wait_for(NativeCreativeControl(session, model, max_turns=48,
                     receipt_path=artifacts / 'native-journal.jsonl',
                     host_tool_access=host, catalog_mode="indexed",
