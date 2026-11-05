@@ -1683,11 +1683,15 @@ class NativeCreativeControl:
                             outcome = "native_error_requires_state_reconciliation"
                             break
                         if (success is not True or
+                                (isinstance(host_response,dict) and
+                                 host_response.get("previewOnly") is True) or
                                 (isinstance(host_result, dict) and
                                  "previewOnly" in host_result and preview is not False)):
                             # No application-level acknowledgment, or the host
                             # contradicted itself by claiming both a successful
-                            # write and a preview. Neither is acceptable proof.
+                            # write and a preview, EITHER at the native
+                            # wrapper or nested result level. Neither can
+                            # establish a mutation proof.
                             # The write may still have taken effect: stop rather
                             # than guessing or sending a second mutation.
                             self._append({
