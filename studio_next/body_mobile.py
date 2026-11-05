@@ -9,6 +9,12 @@ PAGE = """<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ZX7 Studio | Production</title><link rel="stylesheet" href="/studio.css"></head>
 <body><main><header><h1>ZX7 <span>STUDIO</span></h1><p>Original media · real tools · recoverable projects</p></header>
+<section id="diagnostics-panel" aria-label="System evidence">
+<h2>System diagnostics</h2><p>Evidence, not a fabricated AI power score. Requires a private host connection.</p>
+<div class="diagnostic-grid" id="diagnostic-grid" aria-live="polite"><div>Connect to inspect real capabilities and blockers.</div></div>
+<button id="diagnostics-button" disabled>Refresh diagnostic evidence</button>
+<details><summary>Observed limitations and next checks</summary><div id="diagnostic-issues">Not measured</div></details>
+</section>
 <section><h2>Connect</h2><p>Host token is kept only in this browser tab, never saved.</p>
 <label for="token">Studio host token</label><input id="token" type="password" autocomplete="off" placeholder="Host token (32+ characters)">
 <button id="connect">Connect</button><output id="status" aria-live="polite"></output></section>
@@ -48,7 +54,13 @@ h2{font-size:19px}label{display:block;font-size:13px;margin:14px 0 6px}input,tex
 button{margin:12px 7px 5px 0;border:0;border-radius:9px;padding:12px 14px;min-height:44px;font:700 14px system-ui;background:#eac572;color:#10141a}
 button:disabled{opacity:.4}button:focus,input:focus,textarea:focus{outline:2px solid #eac572}
 output{display:block;overflow-wrap:anywhere;white-space:pre-wrap}.entry{border-top:1px solid #394958;padding:12px 0;overflow-wrap:anywhere}
-pre{white-space:pre-wrap;font-size:12px}footer{text-align:center;padding:20px}"""
+pre{white-space:pre-wrap;font-size:12px}footer{text-align:center;padding:20px}
+.diagnostic-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;margin:12px 0}
+.diagnostic-card{background:#101d28;border:1px solid #415669;border-radius:10px;padding:12px;min-width:0}
+.diagnostic-card strong{display:block;font-size:19px;margin-top:4px;overflow-wrap:anywhere}
+.diagnostic-card span{font-size:12px;color:#b0bcc9}
+#diagnostic-issues .entry{font-size:13px}details{margin-top:8px}summary{cursor:pointer}
+"""
 
 SCRIPT = r"""(()=>{
 'use strict';
@@ -64,7 +76,37 @@ async function api(path,options={}){
  if(!r.ok){let s='HTTP '+r.status;try{s=(await r.json()).error||s}catch(_){}throw Error(s)}
  return r.json();
 }
-function enabled(v){if(!v&&creativeTimer){clearTimeout(creativeTimer);creativeTimer=null}for(const id of ['tools-button','resources-button','impact-button','jobs-button','upload','submit','creative-refresh','creative-stop'])e(id).disabled=!v}
+function enabled(v){if(!v&&creativeTimer){clearTimeout(creativeTimer);creativeTimer=null}for(const id of ['diagnostics-button','tools-button','resources-button','impact-button','jobs-button','upload','submit','creative-refresh','creative-stop'])e(id).disabled=!v}
+function diagnosticCard(label,value){
+ const n=document.createElement('div');n.className='diagnostic-card';
+ const heading=node('span',label),data=node('strong',value);
+ n.append(heading,data);return n;
+}
+async function diagnostics(){
+ const view=await api('/v1/diagnostics'),body=view.body||{},brain=view.model||{},
+       jobs=view.jobs||{},host=view.host||{},pairs=view.controlled_comparisons||{};
+ const root=e('diagnostic-grid');root.replaceChildren();
+ root.append(diagnosticCard('Installed operations',body.installed_operations??'Unknown'),
+   diagnosticCard('Capability families',body.capability_families??'Unknown'),
+   diagnosticCard('Local model',brain.configured?
+       'Configured · '+(brain.capability_assessment||'unmeasured'):'Not configured'),
+   diagnosticCard('Durable failures',Number(jobs.by_state?.blocked||0)+Number(jobs.by_state?.failed||0)),
+   diagnosticCard('Controlled model/BODY comparisons',pairs.observed_pairs??0),
+   diagnosticCard('Creative quality',brain.independent_creativity||'unmeasured'));
+ const issues=e('diagnostic-issues');issues.replaceChildren();
+ for(const issue of (view.diagnostics||[]).slice(0,12)){
+   const block=node('div',(issue.layer||'Unknown')+' / '+(issue.code||'unmeasured')
+     +' — '+(issue.next_check||'Review actual source evidence'));
+   block.className='entry';issues.append(block);
+ }
+ if(!(view.diagnostics||[]).length)issues.append(node('div','No recorded blockers; unmeasured areas are not certified.'));
+ const families=(body.capabilities||[]).filter(x=>x.needs_setup_operations);
+ for(const family of families.slice(0,8)){
+    const item=node('div',family.name+': '+family.needs_setup_operations
+       +' operations need setup — '+(family.operations_needing_setup||[]).join(', '));
+    item.className='entry';issues.append(item);
+ }
+}
 async function tools(){
  const root=e('tools');root.replaceChildren();
  for(const t of (await api('/v1/tools')).tools||[]){const n=node('div',t.tool_id+' — '+t.capability+' ('+t.access+')');n.className='entry';root.append(n)}
@@ -116,7 +158,7 @@ async function jobs(){
 e('connect').onclick=async()=>{
  const key=e('token').value;if(key.length<32){print('status','Token must contain at least 32 characters');return}
  secret=key;e('token').value='';
- try{const health=await api('/v1/health');creativeReady=health.creative_model_configured===true;enabled(true);e('creative-submit').disabled=!creativeReady;print('creative-runtime',creativeReady?'A local creative model is configured. Describe your idea to begin.':'Local creative model is not configured on this host.');print('status','Connected, token stays in tab memory');await Promise.all([tools(),jobs(),resources()])}
+ try{const health=await api('/v1/health');creativeReady=health.creative_model_configured===true;enabled(true);e('creative-submit').disabled=!creativeReady;print('creative-runtime',creativeReady?'A local creative model is configured. Describe your idea to begin.':'Local creative model is not configured on this host.');print('status','Connected, token stays in tab memory');await Promise.all([tools(),jobs(),resources(),diagnostics()])}
  catch(err){secret=null;enabled(false);e('creative-submit').disabled=true;print('status',err.message)}
 };
 async function creativeProgress(){
@@ -136,6 +178,7 @@ e('creative-submit').onclick=async()=>{try{
 }catch(err){print('creative-status',err.message)}};
 e('creative-stop').onclick=async()=>{try{if(!creativeSession)throw Error('No active creative session');await api('/v1/creative-sessions/'+encodeURIComponent(creativeSession)+'/stop',{method:'POST'});print('creative-status','Stop requested. Use job controls to stop an existing render.')}catch(err){print('creative-status',err.message)}};
 e('creative-refresh').onclick=()=>creativeProgress().catch(err=>print('creative-status',err.message));
+e('diagnostics-button').onclick=()=>diagnostics().catch(err=>print('status',err.message));
 e('tools-button').onclick=()=>tools().catch(err=>print('status',err.message));
 e('resources-button').onclick=()=>resources().catch(err=>print('status',err.message));
 e('jobs-button').onclick=()=>jobs().catch(err=>print('status',err.message));
