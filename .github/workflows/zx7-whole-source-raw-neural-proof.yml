@@ -1,0 +1,59 @@
+name: ZX7 Whole-Source Temporal Neural Camera Trial
+on:
+  push:
+    branches: ["engineering/native-camera-brain-20261106"]
+    paths:
+      - ".github/workflows/zx7-whole-source-raw-neural-proof.yml"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: zx7-whole-camera-temporal-actual-model
+  cancel-in-progress: false
+jobs:
+  original-footage-motion-informed-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the original GPL video editor and decoder stack
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg melt frei0r-plugins fonts-dejavu-core
+          python -m pip install --disable-pip-version-check '.[production]'
+          python -m compileall -q scripts/run_raw_video_neural_edit_test.py studio_next
+      - name: Restore same verified real camera input from prior successful evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: zx7-real-filmmaker-camera-takes
+          run-id: 41348347870
+          github-token: ${{ github.token }}
+          repository: ZX7-Labs/Zx7-creative-studio-
+          path: output/cinestudy-source
+      - name: Run genuine local Qwen against full-source temporal evidence
+        run: |
+          python -u scripts/run_raw_video_neural_edit_test.py \
+            --source output/cinestudy-source/camera_take_01.webm \
+            --rights output/cinestudy-source/acquisition.json \
+            --model-lock engines/velorn/local-model-trial.lock.json \
+            --model-runtime "$RUNNER_TEMP/zx7-temporal-neural-model" \
+            --output "$GITHUB_WORKSPACE/output/whole-source-edit"
+      - name: Retain non-media receipts; do not publish source or provisional film
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-whole-source-edit-evidence-${{ github.sha }}
+          path: |
+            output/whole-source-edit/edit-evidence.json
+            output/whole-source-edit/local-model-transcript.json
+            output/whole-source-edit/model-authored-raw-video-edit.json
+            output/whole-source-edit/source-selection-diagnostics.json
+            output/whole-source-edit/raw-temporal-source-evidence.json
+          if-no-files-found: warn
+          retention-days: 5
