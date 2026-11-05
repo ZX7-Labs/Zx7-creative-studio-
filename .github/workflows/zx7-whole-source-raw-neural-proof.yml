@@ -4,6 +4,9 @@ on:
     branches: ["engineering/native-camera-brain-20261106"]
     paths:
       - ".github/workflows/zx7-whole-source-raw-neural-proof.yml"
+      - "scripts/run_raw_video_neural_edit_test.py"
+      - "studio_next/raw_edit_gate.py"
+      - "studio_next/raw_temporal_observer.py"
 permissions:
   contents: read
   actions: read
