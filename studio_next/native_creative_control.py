@@ -580,6 +580,10 @@ class NativeCreativeControl:
         # Only a trusted, acknowledged native import can request a second
         # read-only visibility check. Never replay or synthesize a media write.
         self._pending_asset_visibility_check = False
+        # Key: native operation plus privacy-preserving, normalized source hash.
+        # Value: asset ID returned by the native application's success receipt,
+        # or None when the adapter did not supply an identity. Never invent ID.
+        self._imports_awaiting_native_visibility: dict[tuple[str, str], str | None] = {}
         self._last_native_timeline_picture_state = "unknown"
         self._host_timeline_observation_attempted = False
         self._verified_exports: set[str] = set()
@@ -635,6 +639,33 @@ class NativeCreativeControl:
             self._receipt.flush()
             os.fsync(self._receipt.fileno())
         self.events.append(event)
+
+    def _native_import_source_key(self, name: str, inputs: dict):
+        """Identify a source write without persisting the owner's file path.
+
+        Native retries may vary category/preview arguments. Deduplicating the
+        whole command JSON would miss a duplicate of the SAME original file.
+        This is a session-local guard, not a global content-addressed cache.
+        """
+        if "assets_present" not in self._host_possible_effects.get(name, ()):
+            return None
+        source = next((inputs[key].strip()
+                       for key in ("path", "filePath", "sourcePath")
+                       if isinstance(inputs.get(key), str) and inputs[key].strip()), None)
+        if source is not None and os.path.isabs(source):
+            identity = "local-path:" + os.path.normcase(os.path.normpath(source))
+        else:
+            # Future asset-generating operations without path fields remain
+            # bounded to their exact command, never to a guessed source.
+            identity = "command:" + _wire(inputs)
+        return name, hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+    def _reconcile_native_import_ids(self, inventory: dict):
+        """Clear a prior import ACK only upon actual native ID observation."""
+        present = set(inventory["ids"])
+        for key, expected_id in tuple(self._imports_awaiting_native_visibility.items()):
+            if expected_id is not None and expected_id in present:
+                del self._imports_awaiting_native_visibility[key]
 
     def _host_write_already_acknowledged(self, tool: str) -> bool:
         """Trusted session policy only; previews and model claims are excluded."""
@@ -924,6 +955,7 @@ class NativeCreativeControl:
                                               "no_native_edit_dispatched": True})
                                 break
                             self._last_real_asset_inventory = inventory
+                            self._reconcile_native_import_ids(inventory)
                             self._append({"kind": "host_native_asset_inventory",
                                           "turn": turn, "tool": "get_assets",
                                           "host_attested_read_only": True,
@@ -935,8 +967,14 @@ class NativeCreativeControl:
                                               text.encode("utf-8")).hexdigest()
                                               for text in asset_texts],
                                           "no_native_edit_dispatched": True})
-                            if inventory["total"] > 0 or not reconcile_import:
+                            if not reconcile_import or not self._imports_awaiting_native_visibility:
                                 break
+                            if read_attempt == 2 and inventory["total"] == 0:
+                                # ACK + two contradictory empty READs is
+                                # unresolved, not evidence that no import
+                                # occurred. Preserve previous physical assets
+                                # when other sources remain visible.
+                                self._last_real_asset_inventory = None
                     wants_picture = any(
                         "timeline_picture_present" in effects
                         for effects in self._host_possible_effects.values())
@@ -1082,6 +1120,12 @@ class NativeCreativeControl:
                     # A successful write and a lagging native READ are a
                     # contradiction, never permission to create again.
                     "last_host_project_write_reconciliation": self._post_write_state_warning,
+                    "last_native_source_import_reconciliation": (
+                        {"native_import_acknowledged": True,
+                         "specific_imported_asset_not_yet_observed": True,
+                         "same_source_reimport_requires_reconciliation": True,
+                         "read_only_get_assets_can_reconcile": True}
+                        if self._imports_awaiting_native_visibility else None),
                     # A schema error is known BEFORE any native RPC. Instead
                     # of burning another costly inference on metadata discovery,
                     # expose the exact bounded host schema for independent
@@ -1334,6 +1378,27 @@ class NativeCreativeControl:
                 # It may describe the tool and independently revise its
                 # arguments on its next turn. Never retry an actual write.
                 native_name = args["tool"]
+                import_key = self._native_import_source_key(native_name, args["inputs"])
+                if (import_key is not None and
+                        import_key in self._imports_awaiting_native_visibility):
+                    # Native application ACK, but its exact returned asset ID
+                    # is not yet visible. A second import (even with changed
+                    # optional arguments) could duplicate/corrupt the project.
+                    # A read-only native inventory can reconcile it instead.
+                    self._last_preflight_feedback = {
+                        "tool": native_name,
+                        "validation_keyword": "unreconciled_native_import",
+                        "same_source_write_previously_acknowledged": True,
+                        "read_only_get_assets_can_reconcile": True,
+                        "no_native_dispatch": True}
+                    self._append({"kind": "model_action_rejected", "turn": turn,
+                                  **timing, "tool": native_name,
+                                  "inputs_sha256": hashlib.sha256(
+                                      _wire(args["inputs"]).encode()).hexdigest(),
+                                  "validation_keyword": "unreconciled_native_import",
+                                  "schema_location": "",
+                                  "no_native_dispatch": True})
+                    continue
                 # A model may repeat create_project after a successful native
                 # write and even a contradictory project-state observation.
                 # The host may expressly mark selected writes as single-use
@@ -1737,6 +1802,17 @@ class NativeCreativeControl:
                         self._host_asset_observation_attempted = False
                         self._pending_asset_visibility_check = (
                             "assets_present" in self._host_possible_effects.get(native_name, ()))
+                        if self._pending_asset_visibility_check:
+                            source_key = self._native_import_source_key(
+                                native_name, args["inputs"])
+                            native_asset = host_response.get("asset") if (
+                                isinstance(host_response, dict)) else None
+                            asset_id = native_asset.get("id") if (
+                                isinstance(native_asset, dict)) else None
+                            if source_key is not None:
+                                self._imports_awaiting_native_visibility[source_key] = (
+                                    asset_id if isinstance(asset_id, str) and
+                                    1 <= len(asset_id) <= 240 else None)
                         self._last_native_timeline_picture_state = "unknown"
                         self._host_timeline_observation_attempted = False
                     hashes = _source_bound_images(texts, images)
@@ -1795,6 +1871,18 @@ class NativeCreativeControl:
                     # warning and raw evidence in immutable journal events.
                     self._post_write_state_warning = None
                 self._last_native_texts = texts
+                if (native_name == "get_assets" and self.host_tool_access is not None
+                        and self.host_tool_access.get("get_assets") == "read"):
+                    # A model-requested native READ is an equally valid
+                    # reconciliation witness; no retry of an earlier WRITE.
+                    try:
+                        refreshed_inventory = inventory_from_native_text(texts)
+                    except NativeAssetEvidenceError:
+                        self._last_real_asset_inventory = None
+                    else:
+                        self._last_real_asset_inventory = refreshed_inventory
+                        self._host_asset_observation_attempted = True
+                        self._reconcile_native_import_ids(refreshed_inventory)
                 self._last_images, self._last_hashes = images, hashes
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
                 self._append({"kind": "native_tool_result", "turn": turn,
