@@ -73,6 +73,24 @@ def trace():
 
 
 class NativeCreativeAuditTests(unittest.TestCase):
+    def test_forged_first_event_cannot_hide_missing_session_identity(self):
+        # A positional journal parser must never skip an unrecognized first
+        # event, even if all later steps satisfy their own local contracts.
+        for forged in (
+            {"kind": "model_action_rejected", "tool": "update_text_clip",
+             "inputs_sha256": A, "validation_keyword": "type",
+             "no_native_dispatch": True},
+            {"kind": "discovered", "tools": ["update_text_clip"]},
+            {"kind": "native_tool_result", "tool": "update_text_clip",
+             "host_application_write_acknowledged": True},
+            {"kind": "unrecognized_first_event"},
+        ):
+            with self.subTest(forged=forged):
+                events = trace()
+                events[0] = {"sequence": 0, **forged}
+                with self.assertRaisesRegex(NativeJournalError, "session_started"):
+                    audit_native_journal(events,host_tool_access=HOST)
+
     def test_host_timeline_picture_guard_is_read_evidence_not_a_native_edit(self):
         before = audit_native_journal(trace(), host_tool_access=HOST)
         variants = [
