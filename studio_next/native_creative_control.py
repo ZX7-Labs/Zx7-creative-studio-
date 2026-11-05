@@ -770,29 +770,11 @@ class NativeCreativeControl:
         # Same local-only schema family as the MCP host: preflight avoids
         # sending a known-invalid creative decision to a stateful native
         # editor. The real host validates again; preflight grants nothing.
-        import jsonschema
-        from .body_editor_mcp import _local_schema_references
+        from .body_editor_mcp import native_admission_validator
         validators = {}
         for native_name, native_tool in self.tools.items():
             schema = _field(native_tool, "input_schema", _field(native_tool, "inputSchema"))
-            _local_schema_references(schema)
-            # Several native schemas advertise valid field names but omit
-            # additionalProperties. Their handlers silently ignore made-up
-            # fields or fail *after* dispatch. Model-only preflight should not
-            # send unknown top-level keys to a stateful app: interpret the
-            # declared top-level interface strictly when it lists properties.
-            # Nested artistic objects preserve their own unrestricted schema.
-            # Official host grants and the original native schema are untouched.
-            import copy
-            admission = copy.deepcopy(schema)
-            if (isinstance(admission, dict) and
-                    isinstance(admission.get("properties"), dict) and
-                    "additionalProperties" not in admission and
-                    "patternProperties" not in admission):
-                admission["additionalProperties"] = False
-            cls = jsonschema.validators.validator_for(admission)
-            cls.check_schema(admission)
-            validators[native_name] = cls(admission)
+            validators[native_name] = native_admission_validator(schema)
         if self.receipt_path is not None:
             if not self.receipt_path.parent.is_dir():
                 raise NativeCreativeControlError("Receipt directory must already exist")
