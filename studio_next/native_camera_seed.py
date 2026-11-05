@@ -76,7 +76,7 @@ def stage_attested_camera(camera, rights_manifest, staging, evidence_root):
         raise NativeCameraSeedError("Staged camera bytes differ from attested original")
     try:
         probe = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries",
+            ["ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-show_entries",
              "format=duration:stream=codec_type,width,height",
              "-of", "json", str(target)],
             capture_output=True, text=True, check=True, timeout=60)
