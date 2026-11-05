@@ -101,6 +101,32 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(proof["recorded_native_write_result_count"],0)
         self.assertFalse(proof["human_or_artistic_quality_approved"])
 
+    async def test_brain_can_choose_import_and_then_picture_tool_without_one_metadata_search(self):
+        session=SyntheticNativeStateSession()
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/camera_source.webm"}),
+            decision("finish",summary="Still no model-directed edit or export"),
+        ])
+        outcome=await controls(session,model,2).run("Model chooses creative film, no BODY storyboard")
+        self.assertIn("invoke",model.observed[0]["available_actions"])
+        self.assertIn("import_asset_from_path",
+                      model.observed[0]["selectable_native_tools"])
+        self.assertIn("add_asset_to_timeline",
+                      model.observed[1]["selectable_native_tools"])
+        self.assertNotIn("import_asset_from_path",
+                         model.observed[1]["selectable_native_tools"])
+        self.assertTrue(model.observed[1]["host_observed_machine_facts"][
+            "assets_present"])
+        self.assertEqual([name for name,_ in session.calls].count(
+            "import_asset_from_path"),1)
+        self.assertEqual([name for name,_ in session.calls].count(
+            "add_asset_to_timeline"),0)
+        self.assertTrue(any(x["kind"]=="host_machine_frontier"
+                            for x in outcome["events"]))
+        audit=audit_native_journal(outcome["events"],host_tool_access=host_grants())
+        self.assertEqual(audit["recorded_native_write_result_count"],1)
+
     async def test_after_model_selected_import_host_shows_real_missing_picture_not_aesthetic_recipe(self):
         session=SyntheticNativeStateSession()
         model=ScriptedModel([
