@@ -570,6 +570,9 @@ class NativeCreativeControl:
         self._last_audio: list[tuple[str, bytes]] = []
         self._last_audio_evidence: dict | None = None
         self._last_real_asset_inventory: dict | None = None
+        self._host_asset_observation_attempted = False
+        self._last_native_timeline_picture_state = "unknown"
+        self._host_timeline_observation_attempted = False
         self._verified_exports: set[str] = set()
         self._model_wall_ms_total = 0.0
         self._native_mcp_wall_ms_total = 0.0
@@ -872,6 +875,116 @@ class NativeCreativeControl:
                                   "host_observed_value": False,
                                   "no_native_dispatch": True})
             for turn in range(self.max_turns):
+                # Read-only navigator for genuinely incomplete machine state.
+                # No editor write or artistic action is chosen here. All facts
+                # originate in live host-granted native READs, never model
+                # declarations. A failed read leaves a fact UNKNOWN.
+                if (self.catalog_mode == "indexed" and
+                        self._capabilities is not None and
+                        self._project_presence == "present"):
+                    wants_assets = any(
+                        "assets_present" in effects
+                        for effects in self._host_possible_effects.values())
+                    if (wants_assets and not self._host_asset_observation_attempted
+                            and self.host_tool_access.get("get_assets") == "read"
+                            and "get_assets" in validators
+                            and validators["get_assets"].is_valid({})):
+                        self._host_asset_observation_attempted = True
+                        try:
+                            response = await self.session.call_tool("get_assets", {})
+                        except Exception as exc:
+                            self._append({"kind": "native_asset_inventory_unknown",
+                                          "turn": turn, "tool": "get_assets",
+                                          "error_type": type(exc).__name__,
+                                          "no_native_edit_dispatched": True})
+                        else:
+                            if _field(response, "is_error",
+                                      _field(response, "isError", False)):
+                                self._append({"kind": "native_asset_inventory_unknown",
+                                              "turn": turn, "tool": "get_assets",
+                                              "native_read_failed": True,
+                                              "no_native_edit_dispatched": True})
+                            else:
+                                try:
+                                    asset_texts, asset_images, asset_audio = _native_content(response)
+                                    if asset_images or asset_audio:
+                                        raise NativeAssetEvidenceError(
+                                            "Native inventory cannot contain visual/audio claims")
+                                    inventory = inventory_from_native_text(asset_texts)
+                                except (NativeAssetEvidenceError, NativeCreativeControlError):
+                                    self._append({"kind": "native_asset_inventory_unknown",
+                                                  "turn": turn, "tool": "get_assets",
+                                                  "invalid_native_inventory": True,
+                                                  "no_native_edit_dispatched": True})
+                                else:
+                                    self._last_real_asset_inventory = inventory
+                                    self._append({"kind": "host_native_asset_inventory",
+                                                  "turn": turn, "tool": "get_assets",
+                                                  "host_attested_read_only": True,
+                                                  "source_identities_count": inventory["returned"],
+                                                  "complete_inventory": inventory["complete"],
+                                                  "actual_imported_asset_total": inventory["total"],
+                                                  "text_sha256": [hashlib.sha256(
+                                                      text.encode("utf-8")).hexdigest()
+                                                      for text in asset_texts],
+                                                  "no_native_edit_dispatched": True})
+                    wants_picture = any(
+                        "timeline_picture_present" in effects
+                        for effects in self._host_possible_effects.values())
+                    timeline_args = {"includeClips": True, "limit": 1000}
+                    if (wants_picture and not self._host_timeline_observation_attempted
+                            and self._last_real_asset_inventory is not None
+                            and self._last_real_asset_inventory["total"] > 0
+                            and self.host_tool_access.get("get_timeline") == "read"
+                            and "get_timeline" in validators
+                            and validators["get_timeline"].is_valid(timeline_args)):
+                        self._host_timeline_observation_attempted = True
+                        picture_state = "unknown"
+                        digest = None
+                        try:
+                            response = await self.session.call_tool("get_timeline", timeline_args)
+                        except Exception as exc:
+                            self._append({"kind": "host_native_timeline_read_unknown",
+                                          "turn": turn, "error_type": type(exc).__name__,
+                                          "no_native_edit_dispatched": True})
+                        else:
+                            if not _field(response, "is_error",
+                                          _field(response, "isError", False)):
+                                try:
+                                    timeline_texts, timeline_images, timeline_audio = (
+                                        _native_content(response))
+                                    if timeline_images or timeline_audio:
+                                        raise NativeCreativeControlError(
+                                            "Timeline project sensing cannot contain unbound media")
+                                    picture_state = _native_timeline_picture_presence_from_text(
+                                        timeline_texts)
+                                    digest = hashlib.sha256(
+                                        _wire(timeline_texts).encode("utf-8")).hexdigest()
+                                except NativeCreativeControlError:
+                                    picture_state = "unknown"
+                            receipt = {"kind": "host_native_timeline_picture_observation",
+                                       "turn": turn, "picture_state": picture_state,
+                                       "host_attested_read_only": True,
+                                       "no_native_edit_dispatched": True}
+                            if digest is not None:
+                                receipt["observed_text_sha256"] = digest
+                            self._append(receipt)
+                        self._last_native_timeline_picture_state = picture_state
+                host_machine_facts = {}
+                if self._project_presence in ("present", "absent"):
+                    host_machine_facts["project_open"] = self._project_presence == "present"
+                if self._last_real_asset_inventory is not None:
+                    host_machine_facts["assets_present"] = (
+                        self._last_real_asset_inventory["total"] > 0)
+                if self._last_native_timeline_picture_state in ("present", "absent"):
+                    host_machine_facts["timeline_picture_present"] = (
+                        self._last_native_timeline_picture_state == "present")
+                host_machine_frontier = (
+                    self._capabilities.affordance_frontier(
+                        trusted_facts=host_machine_facts, namespace="native", limit=5)
+                    if self._capabilities is not None and
+                        any(value is False for value in host_machine_facts.values())
+                    else None)
                 indexed_actions = ["search"]
                 if self._selectable_tools or self._inspectable_tied_candidates:
                     indexed_actions.append("describe")
@@ -905,6 +1018,10 @@ class NativeCreativeControl:
                             for name in self._host_once_after_ack))
                         if self._capabilities is not None else None),
                     "last_capability_search_result": self._last_search_result,
+                    "host_observed_machine_facts": (
+                        host_machine_facts if self.catalog_mode == "indexed" else {}),
+                    "host_machine_affordances": (
+                        host_machine_frontier if self.catalog_mode == "indexed" else None),
                     "completion_does_not_certify_artistic_quality": True,
                     "required_completion_evidence": sorted(self.required_evidence),
                     "missing_completion_evidence": self._missing_completion_evidence(),
@@ -1539,9 +1656,15 @@ class NativeCreativeControl:
                             break
                     if (self.host_tool_access is not None and
                             self.host_tool_access.get(native_name) == "write"):
-                        # Only the native application's explicit success ACK
-                        # clears the pending preview. No host-selected edit.
+                        # A real native write invalidates all older sensed
+                        # media/timeline facts, regardless of whether the
+                        # edit was creative. A new host READ must reestablish
+                        # project truth before future model decisions.
                         self._last_native_preview_feedback = None
+                        self._last_real_asset_inventory = None
+                        self._host_asset_observation_attempted = False
+                        self._last_native_timeline_picture_state = "unknown"
+                        self._host_timeline_observation_attempted = False
                     hashes = _source_bound_images(texts, images)
                     audio_evidence = _source_bound_audio(texts, audio)
                     new_export_sha = None
