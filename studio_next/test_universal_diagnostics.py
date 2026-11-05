@@ -107,6 +107,35 @@ class UniversalDiagnosticsTests(unittest.TestCase):
         self.assertEqual(compare_controlled_trials(c, m)["creative_quality"],
                          "not_assessed")
 
+    def test_source_neutral_durable_job_stages_never_expose_graph_ids(self):
+        graph_name = "secret_owner_film_scene_001"
+        import hashlib
+        job_name = "confidential_client_job"
+        report = universal_diagnostics(
+            operation_records=[],job_records=[{"status":"blocked"}],
+            session_records=[],host_capacity={},
+            model_configured=False,
+            job_stage_evidence=[{
+                "job_ref_sha256":hashlib.sha256(job_name.encode()).hexdigest(),
+                "job_status":"blocked",
+                "independently_observed_node_results":True,
+                "nodes":[{"node_ref_sha256":hashlib.sha256(graph_name.encode()).hexdigest(),
+                          "state":"failed","attempts":2,"observed_at":42.0}],
+            }])
+        observed=report["durable_job_stages"]
+        self.assertEqual(observed["observed_job_count"],1)
+        self.assertEqual(observed["jobs"][0]["recent_nodes"][0]["attempts"],2)
+        self.assertEqual(observed["jobs"][0]["recent_nodes"][0]["state"],"failed")
+        self.assertNotIn(graph_name,str(report))
+        self.assertNotIn(job_name,str(report))
+        self.assertTrue(observed["lineage_may_span_original_project_revisions"])
+        with self.assertRaises(DiagnosticEvidenceError):
+            universal_diagnostics(operation_records=[],job_records=[],
+                session_records=[],host_capacity={},model_configured=False,
+                job_stage_evidence=[{"job_ref_sha256":"wrong","job_status":"blocked",
+                                     "independently_observed_node_results":True,
+                                     "nodes":[]}])
+
     def test_adversarial_registry_and_status_fields_fail_closed(self):
         with self.assertRaises(DiagnosticEvidenceError):
             universal_diagnostics(operation_records=[{
