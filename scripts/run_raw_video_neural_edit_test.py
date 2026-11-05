@@ -171,7 +171,7 @@ def validate_neural_edit_candidate(plan, source_seconds):
     """
     length = validate_edit(plan, source_seconds)
     evidence = assess_minimum_editorial_evidence(
-        plan, source_seconds=source_seconds)
+        plan, source_seconds=source_seconds, output_fps=RATE)
     return length, evidence
 
 def create_graphic(item,path):
