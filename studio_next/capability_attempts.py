@@ -12,6 +12,7 @@ covers generic live editor/3D/audio/graphics tool side effects instead.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
 import re
 import sqlite3
@@ -78,12 +79,16 @@ class CapabilityAttemptStore:
                 settled_ns INTEGER
             )""")
 
+    @contextmanager
     def _connect(self):
         db = sqlite3.connect(self.path, timeout=10, isolation_level=None)
-        db.execute("PRAGMA busy_timeout = 10000")
-        db.execute("PRAGMA journal_mode = WAL")
-        db.execute("PRAGMA synchronous = FULL")
-        return db
+        try:
+            db.execute("PRAGMA busy_timeout = 10000")
+            db.execute("PRAGMA journal_mode = WAL")
+            db.execute("PRAGMA synchronous = FULL")
+            yield db
+        finally:
+            db.close()
 
     @staticmethod
     def _validate(request_id, operation_id, catalog_revision, input_sha256):
