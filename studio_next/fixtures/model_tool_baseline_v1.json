@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "kind": "operator-owned-model-to-body-audition-cases",
+  "note": "Fixed benchmark objectives, not generic model prompting or authored creative direction. No tool execution; human artwork assessment excluded.",
+  "cases": [
+    {
+      "case_id": "timecode_forward_24fps",
+      "task": "Convert physical video frame index 240 at 24/1 frames per second into an exact non-drop SMPTE timecode label. Choose the BODY operation that formats a frame index; supply all its required fields.",
+      "offered_operation_ids": [
+        "zx7/body.timecode_format",
+        "zx7/body.timecode_parse",
+        "zx7/body.voice_inventory"
+      ],
+      "expected_operation_id": "zx7/body.timecode_format"
+    },
+    {
+      "case_id": "timecode_reverse_24fps",
+      "task": "Read an already written SMPTE timecode 00:00:10:00 at 24/1 frames per second and obtain the original frame index. Choose the BODY parser, not a formatter; supply required fields.",
+      "offered_operation_ids": [
+        "zx7/body.timecode_parse",
+        "zx7/body.voice_inventory",
+        "zx7/body.timecode_format"
+      ],
+      "expected_operation_id": "zx7/body.timecode_parse"
+    },
+    {
+      "case_id": "local_voice_asset_inventory",
+      "task": "Inspect the currently configured local voice identities and installed voice assets. Do not synthesize sound, do not calculate timecode, do not create a new movie. Choose the introspection operation and give valid inputs.",
+      "offered_operation_ids": [
+        "zx7/body.voice_inventory",
+        "zx7/body.timecode_format",
+        "zx7/body.timecode_parse"
+      ],
+      "expected_operation_id": "zx7/body.voice_inventory"
+    }
+  ]
+}
