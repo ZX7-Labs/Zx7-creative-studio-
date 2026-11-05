@@ -80,6 +80,10 @@ class ZX7BodyClient:
                                  {"query": query, "domain": domain,
                                   "media": media, "limit": limit})
 
+    def diagnostics(self):
+        """Read host-observed facts; never claim an untested model is weak."""
+        return self.request_json("GET", "/v1/diagnostics")
+
     def tools(self):
         return self.request_json("GET","/v1/tools")
 
