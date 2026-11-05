@@ -43,6 +43,7 @@ from .body_download_tickets import DownloadTickets
 from .body_verified_delivery import verified_artifact_snapshot
 from .body_host_resources import inspect_host_resources
 from .universal_diagnostics import universal_diagnostics
+from .model_aptitude_sessions import ModelAptitudeSessions
 from .diagnostic_trace import initialize_trace_store, append_host_event, read_recent_host_events
 from .body_revision_impact import plan_film_revision_impact
 from .durable_graph import durable_project_key
@@ -118,9 +119,12 @@ class LocalBodyCoordinator:
         # Non-idempotent operations still require manual reconciliation.
         self._reconcile_orphaned_work_on_exclusive_startup()
         self.creative_sessions=None
+        self.model_aptitude_sessions=None
         if creative_model is not None:
             from .body_creative_session import CreativeSessions
             self.creative_sessions=CreativeSessions(self,creative_model)
+            self.model_aptitude_sessions=ModelAptitudeSessions(
+                self,creative_model)
 
     def _connect(self):
         if self.database.is_symlink():
@@ -489,6 +493,8 @@ class LocalBodyCoordinator:
             model_configured=model is not None,
             model_id=identity,
             trace_evidence=trace_evidence,
+            model_audition=(self.model_aptitude_sessions.latest()
+                            if self.model_aptitude_sessions is not None else None),
         )
 
     def list_jobs(self,*,limit=100):
@@ -611,6 +617,8 @@ class LocalBodyCoordinator:
         return len(ids)
 
     def close(self):
+        if self.model_aptitude_sessions is not None:
+            self.model_aptitude_sessions.close()
         if self.creative_sessions is not None:
             self.creative_sessions.close()
         self.executor.shutdown(wait=True)
