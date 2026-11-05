@@ -77,6 +77,8 @@ jobs:
             studio_next.test_body_editor_mcp \
             studio_next.test_native_creative_audit \
             studio_next.test_native_creative_control \
+            studio_next.test_native_asset_identity \
+            studio_next.test_native_top_level_preview \
             studio_next.test_native_machine_navigator \
             studio_next.test_native_picture_export_guard \
             studio_next.test_capability_fabric \
