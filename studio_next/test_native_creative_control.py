@@ -558,8 +558,20 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     await controller.run("Inspect native media without unbounded context")
                 events = [json.loads(line) for line in journal.read_text().splitlines()]
                 self.assertEqual(events[-1]["kind"], "native_observation_rejected")
+                self.assertEqual(events[-1]["error_type"],"NativeCreativeControlError")
+                self.assertEqual(len(events[-1]["error_sha256"]),64)
+                self.assertNotIn("error", {k for k in events[-1] if k=="error"})
                 self.assertEqual(len(session.calls), 1)
                 self.assertNotIn("a" * 1000, journal.read_text())
+                from studio_next.native_creative_audit import audit_native_journal
+                audit=audit_native_journal(events,host_tool_access={"get_timeline":"read"})
+                self.assertEqual(audit["model_reported_end_state"],
+                                 "native_observation_rejected")
+                leaked=[dict(record) for record in events]
+                leaked[-1]["error"]="owner-private-source.mov"
+                from studio_next.native_creative_audit import NativeJournalError
+                with self.assertRaises(NativeJournalError):
+                    audit_native_journal(leaked,host_tool_access={"get_timeline":"read"})
 
     async def test_bounded_native_text_parts_still_reach_the_model(self):
         session = FakeSession()
