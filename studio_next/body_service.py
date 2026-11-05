@@ -42,6 +42,7 @@ from .body_mobile import ASSETS as MOBILE_ASSETS, CSP as MOBILE_CSP
 from .body_download_tickets import DownloadTickets
 from .body_verified_delivery import verified_artifact_snapshot
 from .body_host_resources import inspect_host_resources
+from .universal_diagnostics import universal_diagnostics
 from .body_revision_impact import plan_film_revision_impact
 from .durable_graph import durable_project_key
 
@@ -423,6 +424,46 @@ class LocalBodyCoordinator:
         """Only live technical capacity, never unverified AI model execution."""
         return inspect_host_resources(self.root)
 
+    def diagnostic_snapshot(self):
+        """Real-time authenticated capability and model/BODY evidence overview.
+
+        No inference is launched by this GET; the reader never fabricates
+        creative-model scores. It does not return source prompts, paths, owner
+        facts, errors or private media bytes.
+        """
+        with self._connect() as db:
+            job_rows = db.execute(
+                "SELECT status, COUNT(*) FROM jobs GROUP BY status").fetchall()
+            has_sessions = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='creative_sessions'"
+            ).fetchone() is not None
+            session_rows = (
+                db.execute("SELECT state FROM creative_sessions "
+                           "ORDER BY rowid DESC LIMIT 64").fetchall()
+                if has_sessions else [])
+        sessions = []
+        for (raw,) in session_rows:
+            record = json.loads(raw)
+            if not isinstance(record, dict):
+                raise ValueError("Real creative session record is malformed")
+            sessions.append({
+                "status": record.get("status"),
+                "events": [{"result": event.get("result")} for event in
+                           record.get("events", []) if isinstance(event, dict)],
+            })
+        model = self.creative_sessions
+        identity = (model._model_identity().get("model_id")
+                    if model is not None else None)
+        return universal_diagnostics(
+            operation_records=body_catalog(self.projects).discover(),
+            job_records=[{"status": status, "count": count}
+                         for status, count in job_rows],
+            session_records=sessions,
+            host_capacity=self.host_resource_status(),
+            model_configured=model is not None,
+            model_id=identity,
+        )
+
     def list_jobs(self,*,limit=100):
         """Bounded honest job statuses for a standalone creative desktop client."""
         if type(limit) is not int or not (1<=limit<=100):
@@ -649,6 +690,8 @@ def make_body_http_handler(coordinator,token):
                     return self._reply(200,coordinator.list_jobs())
                 if path=="/v1/resources":
                     return self._reply(200,coordinator.host_resource_status())
+                if path=="/v1/diagnostics":
+                    return self._reply(200,coordinator.diagnostic_snapshot())
                 if path=="/v1/affordances":
                     opts=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
                     if any(k not in ("capability","limit","cursor","include_unavailable") or
