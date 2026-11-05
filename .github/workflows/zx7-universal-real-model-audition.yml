@@ -1,0 +1,48 @@
+name: ZX7 Real Local Brain Universal BODY Tool Aptitude
+on:
+  push:
+    branches: ["engineering/universal-capability-observability-20261106"]
+    paths:
+      - ".github/workflows/zx7-universal-real-model-audition.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-real-local-brain-universal-aptitude-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source-pinned-real-local-brain-abi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install declared OSS runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          python -m pip install --disable-pip-version-check '.[editor,production]'
+          python -m compileall -q scripts/run_universal_model_audition.py \
+            studio_next/model_tool_audition.py studio_next/capability_fabric.py
+          python -m unittest -v studio_next.test_model_tool_audition
+      - name: Run identified source-pinned local Qwen using actual host tool schema
+        run: |
+          python -u scripts/run_universal_model_audition.py \
+            --runtime "$RUNNER_TEMP/zx7-universal-brain" \
+            --output "$GITHUB_WORKSPACE/output/universal-model-audition"
+      - name: Save limited private-neutral decision receipts, never raw prompts/weights/media
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-real-local-abi-audition-${{ github.sha }}
+          path: |
+            output/universal-model-audition/trial-summary.json
+            output/universal-model-audition/timecode_forward_24fps.json
+            output/universal-model-audition/timecode_reverse_24fps.json
+            output/universal-model-audition/local_voice_asset_inventory.json
+          if-no-files-found: warn
+          retention-days: 14
