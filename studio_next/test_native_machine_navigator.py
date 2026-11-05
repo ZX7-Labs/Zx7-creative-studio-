@@ -6,6 +6,7 @@ evidence of neural artistic ability or actual imported/edited real media.
 import json
 from types import SimpleNamespace
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from studio_next.native_creative_control import NativeCreativeControl
 from studio_next.native_creative_audit import audit_native_journal
@@ -59,6 +60,27 @@ class SyntheticNativeStateSession:
     def _receipt(body):
         return SimpleNamespace(is_error=False,content=[
             SimpleNamespace(type="text",text=json.dumps(body))])
+
+
+class DelayedNativeAssetSession(SyntheticNativeStateSession):
+    """A native ACK can be observed before the read-only source index settles."""
+
+    def __init__(self, *, stale_post_import_reads=1, error_on_second_read=False):
+        super().__init__()
+        self.stale_post_import_reads=stale_post_import_reads
+        self.error_on_second_read=error_on_second_read
+        self.post_import_reads=0
+
+    async def call_tool(self, name, args):
+        if name=="get_assets" and self.imported:
+            self.post_import_reads += 1
+            if self.error_on_second_read and self.post_import_reads==2:
+                self.calls.append((name,args))
+                raise ConnectionError("Test-only native inventory read outage")
+            if self.post_import_reads <= self.stale_post_import_reads:
+                self.calls.append((name,args))
+                return self._receipt({"count":0,"limitApplied":False,"assets":[]})
+        return await super().call_tool(name,args)
 
 
 def host_grants():
@@ -190,6 +212,74 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
                          [name for name,_ in session.calls])
         self.assertTrue(any(event["kind"]=="native_asset_inventory_unknown"
                             for event in outcome["events"]))
+        audit_native_journal(outcome["events"],host_tool_access=host_grants())
+
+
+    async def test_native_import_ack_requires_fresh_asset_identity_after_visibility_lag(self):
+        session=DelayedNativeAssetSession(stale_post_import_reads=1)
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/real-camera.webm"}),
+            decision("finish",summary="Test-only no export or artistic evaluation"),
+        ])
+        # Stub only the physical waiting interval, not the native read results.
+        with patch("studio_next.native_creative_control.asyncio.sleep",
+                   new_callable=AsyncMock) as sleep:
+            outcome=await controls(session,model,2).run("Use operator source")
+        sleep.assert_awaited_once_with(1.5)
+        self.assertTrue(model.observed[1]["host_observed_machine_facts"]["assets_present"])
+        self.assertIn("source-from-native",model.observed[1][
+            "last_physically_observed_native_asset_inventory"]["source_ids"])
+        self.assertEqual([name for name,_ in session.calls].count("get_assets"),3)
+        self.assertEqual([name for name,_ in session.calls].count(
+            "import_asset_from_path"),1)
+        reads=[event for event in outcome["events"]
+               if event["kind"]=="host_native_asset_inventory" and event["turn"]==1]
+        self.assertEqual([(r["read_attempt"],r["actual_imported_asset_total"])
+                          for r in reads],[(1,0),(2,1)])
+        self.assertEqual(audit_native_journal(outcome["events"],
+            host_tool_access=host_grants())["recorded_native_write_result_count"],1)
+
+    async def test_import_ack_does_not_invent_assets_when_bounded_reads_stay_empty(self):
+        session=DelayedNativeAssetSession(stale_post_import_reads=2)
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/not-yet-visible.webm"}),
+            decision("finish",summary="Source still not observed"),
+        ])
+        with patch("studio_next.native_creative_control.asyncio.sleep",
+                   new_callable=AsyncMock) as sleep:
+            outcome=await controls(session,model,2).run("Observe physical source identity")
+        sleep.assert_awaited_once_with(1.5)
+        self.assertFalse(model.observed[1]["host_observed_machine_facts"]["assets_present"])
+        self.assertEqual([name for name,_ in session.calls].count(
+            "import_asset_from_path"),1)
+        self.assertEqual([event["actual_imported_asset_total"]
+            for event in outcome["events"]
+            if event["kind"]=="host_native_asset_inventory" and event["turn"]==1],[0,0])
+        audit_native_journal(outcome["events"],host_tool_access=host_grants())
+
+    async def test_failed_second_asset_read_leaves_identity_unknown_not_assumed(self):
+        session=DelayedNativeAssetSession(stale_post_import_reads=1,
+                                          error_on_second_read=True)
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/source.webm"}),
+            decision("finish",summary="Native identity unknown"),
+        ])
+        with patch("studio_next.native_creative_control.asyncio.sleep",
+                   new_callable=AsyncMock) as sleep:
+            outcome=await controls(session,model,2).run("Never infer imported files")
+        sleep.assert_awaited_once_with(1.5)
+        self.assertNotIn("assets_present",model.observed[1]["host_observed_machine_facts"])
+        self.assertIsNone(model.observed[1][
+            "last_physically_observed_native_asset_inventory"])
+        self.assertEqual([name for name,_ in session.calls].count(
+            "import_asset_from_path"),1)
+        unknown=[event for event in outcome["events"]
+                 if event["kind"]=="native_asset_inventory_unknown"]
+        self.assertEqual(len(unknown),1)
+        self.assertEqual(unknown[0]["read_attempt"],2)
         audit_native_journal(outcome["events"],host_tool_access=host_grants())
 
 
