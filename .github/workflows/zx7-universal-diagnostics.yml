@@ -8,6 +8,10 @@ on:
       - "studio_next/diagnostic_trace.py"
       - "studio_next/test_diagnostic_trace.py"
       - "studio_next/model_tool_audition.py"
+      - "studio_next/model_aptitude_sessions.py"
+      - "studio_next/test_model_aptitude_sessions.py"
+      - "studio_next/fixtures/model_tool_baseline_v1.json"
+      - "scripts/run_universal_model_audition.py"
       - "studio_next/test_model_tool_audition.py"
       - "studio_next/test_universal_diagnostics.py"
       - "studio_next/test_universal_diagnostics_service.py"
@@ -46,6 +50,8 @@ jobs:
             studio_next/universal_diagnostics.py \
             studio_next/diagnostic_trace.py \
             studio_next/model_tool_audition.py \
+            studio_next/model_aptitude_sessions.py \
+            scripts/run_universal_model_audition.py \
             studio_next/body_service.py \
             studio_next/body_client.py \
             studio_next/body_mobile.py \
@@ -56,6 +62,7 @@ jobs:
             studio_next.test_universal_diagnostics \
             studio_next.test_diagnostic_trace \
             studio_next.test_model_tool_audition \
+            studio_next.test_model_aptitude_sessions \
             studio_next.test_universal_diagnostics_service \
             studio_next.test_body_mobile
       - name: Guard existing durable production, recovery, pause and upload invariants
