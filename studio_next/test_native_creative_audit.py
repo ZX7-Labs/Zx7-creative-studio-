@@ -88,7 +88,7 @@ class NativeCreativeAuditTests(unittest.TestCase):
             with self.subTest(forged=forged):
                 events = trace()
                 events[0] = {"sequence": 0, **forged}
-                with self.assertRaisesRegex(NativeJournalError, "session_started"):
+                with self.assertRaisesRegex(NativeJournalError, "session identity"):
                     audit_native_journal(events,host_tool_access=HOST)
 
     def test_host_timeline_picture_guard_is_read_evidence_not_a_native_edit(self):
