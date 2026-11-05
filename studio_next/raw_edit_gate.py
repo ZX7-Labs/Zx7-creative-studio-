@@ -21,7 +21,7 @@ class InsufficientEditorialEvidence(ValueError):
         )
 
 
-def assess_minimum_editorial_evidence(edit, *, source_seconds):
+def assess_minimum_editorial_evidence(edit, *, source_seconds, output_fps):
     """Detect zero-intervention playback, not assign a subjective quality score.
 
     A selective trim from elsewhere in a source can pass this minimum signal;
@@ -31,7 +31,9 @@ def assess_minimum_editorial_evidence(edit, *, source_seconds):
     """
     if (not isinstance(edit, dict) or
             type(source_seconds) not in (int, float) or
-            not math.isfinite(source_seconds) or source_seconds <= 0):
+            not math.isfinite(source_seconds) or source_seconds <= 0 or
+            type(output_fps) not in (int, float) or
+            not math.isfinite(output_fps) or not 1 <= output_fps <= 240):
         raise ValueError("Valid model edit and physical source duration required")
     cuts = edit.get("cuts")
     if not isinstance(cuts, list) or not cuts:
@@ -42,27 +44,39 @@ def assess_minimum_editorial_evidence(edit, *, source_seconds):
                     not math.isfinite(clip[key]) for key in (
                         "source_in", "source_out", "speed", "contrast", "saturation"))):
             raise ValueError("Cannot audit unvalidated native source span")
+        if (not 0 <= clip["source_in"] < clip["source_out"] <= source_seconds
+                or clip["speed"] <= 0):
+            raise ValueError("Native source span and speed must be physically possible")
     beginning = cuts[0]["source_in"]
     ending = cuts[-1]["source_out"]
     contiguous = all(
         abs(prev["source_out"] - later["source_in"]) < 1e-5
         for prev, later in zip(cuts, cuts[1:]))
+    # A speed change is measurable only if the native render's rounded
+    # output-frame count changes; the real renderer uses round(span/speed*RATE).
+    # Sub-8-bit color tweaks are not reliable evidence of any pixel change.
+    # These are conservative physical significance checks, not art scoring.
     controls_neutral = all(
-        abs(clip["speed"] - 1.0) < 1e-6 and
-        abs(clip["contrast"] - 1.0) < 1e-6 and
-        abs(clip["saturation"] - 1.0) < 1e-6
+        round((clip["source_out"] - clip["source_in"]) /
+              clip["speed"] * output_fps) ==
+        round((clip["source_out"] - clip["source_in"]) * output_fps)
+        and abs(clip["contrast"] - 1.0) < 1.0 / 255
+        and abs(clip["saturation"] - 1.0) < 1.0 / 255
         for clip in cuts)
     no_graphics = edit.get("graphics") == []
     music = edit.get("music")
     no_music = isinstance(music, dict) and music.get("enabled") is False
-    unmodified_prefix = (
+    unmodified_at_start = (
         abs(beginning) < 1e-5 and contiguous and controls_neutral
-        and no_graphics and no_music and ending < source_seconds - 1e-5
+        and no_graphics and no_music
     )
+    unmodified_prefix = unmodified_at_start and ending < source_seconds - 1e-5
+    full_source_unmodified = unmodified_at_start and not unmodified_prefix
     results = {
         "kind": "independent_mechanical_edit_evidence_only",
         "source_duration_seconds": source_seconds,
         "source_clip_count": len(cuts),
+        "physically_checked_output_fps": output_fps,
         "first_selected_source_second": beginning,
         "last_selected_source_second": ending,
         "source_selection_is_contiguous": contiguous,
@@ -70,9 +84,10 @@ def assess_minimum_editorial_evidence(edit, *, source_seconds):
         "graphics_disabled": no_graphics,
         "music_disabled": no_music,
         "unmodified_source_prefix_detected": unmodified_prefix,
-        "passes_minimum_editorial_evidence": not unmodified_prefix,
+        "unmodified_full_source_playback_detected": full_source_unmodified,
+        "passes_minimum_editorial_evidence": not unmodified_at_start,
         "artistic_quality_certified": False,
     }
-    if unmodified_prefix:
+    if unmodified_at_start:
         raise InsufficientEditorialEvidence(results)
     return results
