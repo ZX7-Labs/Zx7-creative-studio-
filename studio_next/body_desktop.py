@@ -293,6 +293,12 @@ class IndependentStudioDesktop:
             for event in trace.get("recent_events",[])[:12]:
                 lines.append(f"STAGE {event['phase']}: {event['outcome']} "
                              f"[{event['capability_id']}] — {event['code']}")
+            for job in report.get("durable_job_stages",{}).get("jobs",[])[:8]:
+                lines.append(f"JOB {job['job_ref_sha256'][:12]}: {job['job_status']}; "
+                             f"lineage {'observed' if job['physically_observed_lineage'] else 'unmeasured'}")
+                for node in job.get("recent_nodes",[])[:12]:
+                    lines.append(f"  NODE {node['node_ref_sha256'][:12]}: "
+                                 f"{node['state']} ({node['attempts']} attempts)")
             for issue in report.get("unresolved",[]):
                 lines.append("UNMEASURED: "+str(issue))
             self.diagnostic_issues.configure(state="normal")
