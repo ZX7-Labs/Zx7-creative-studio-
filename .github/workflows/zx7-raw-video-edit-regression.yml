@@ -1,7 +1,7 @@
 name: ZX7 Genuine Raw Camera Edit Physical Regression
 on:
   push:
-    branches: ["experiment/unedited-live-action-neural-edit-20261102", "engineering/raw-edit-source-coverage-20261106"]
+    branches: ["experiment/unedited-live-action-neural-edit-20261102", "engineering/raw-edit-source-coverage-20261106", "engineering/native-camera-brain-20261106"]
     paths:
       - "studio_next/test_raw_video_neural_edit.py"
       - "studio_next/raw_edit_coverage.py"
