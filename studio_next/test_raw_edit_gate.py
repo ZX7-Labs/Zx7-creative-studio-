@@ -20,7 +20,7 @@ class NeuralRawEditMinimumEvidenceTests(unittest.TestCase):
     def test_real_240_second_noop_prefix_rejected_without_style_hardcoding(self):
         observed = candidate([(i, i + 1, 1, 1, 1) for i in range(12)])
         with self.assertRaises(InsufficientEditorialEvidence) as refusal:
-            assess_minimum_editorial_evidence(observed, source_seconds=240.032)
+            assess_minimum_editorial_evidence(observed, source_seconds=240.032, output_fps=24)
         fields = refusal.exception.diagnostics
         self.assertTrue(fields["unmodified_source_prefix_detected"])
         self.assertFalse(fields["passes_minimum_editorial_evidence"])
@@ -38,7 +38,7 @@ class NeuralRawEditMinimumEvidenceTests(unittest.TestCase):
         ]
         for example in examples:
             with self.subTest(example=example):
-                x = assess_minimum_editorial_evidence(example, source_seconds=240)
+                x = assess_minimum_editorial_evidence(example, source_seconds=240, output_fps=24)
                 self.assertTrue(x["passes_minimum_editorial_evidence"])
                 self.assertFalse(x["artistic_quality_certified"])
 
@@ -47,7 +47,7 @@ class NeuralRawEditMinimumEvidenceTests(unittest.TestCase):
             bad = candidate([(0, 12, 1, 1, 1)])
             bad["cuts"][0]["speed"] = value
             with self.subTest(value=value), self.assertRaises(ValueError):
-                assess_minimum_editorial_evidence(bad, source_seconds=240)
+                assess_minimum_editorial_evidence(bad, source_seconds=240, output_fps=24)
 
 
 if __name__ == "__main__":
