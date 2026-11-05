@@ -4,6 +4,10 @@ on:
     branches: ["engineering/native-camera-brain-20261106"]
     paths:
       - ".github/workflows/zx7-native-original-camera-brain.yml"
+      - "scripts/run_native_model_trial.py"
+      - "studio_next/native_creative_control.py"
+      - "studio_next/native_camera_seed.py"
+      - "studio_next/test_native_picture_export_guard.py"
   workflow_dispatch:
 permissions:
   contents: read
