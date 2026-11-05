@@ -146,7 +146,9 @@ def render_camera_contact_sheet(source, duration_seconds, sample_times_seconds, 
     for i, second in enumerate(sample_times_seconds):
         command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
                    "-ss", str(second), "-i", str(source), "-map", "0:v:0",
-                   "-frames:v", "1", "-vf", "scale=320:180:flags=fast_bilinear",
+                   "-frames:v", "1", "-vf",
+                   "scale=320:180:force_original_aspect_ratio=decrease:flags=fast_bilinear,"
+                   "pad=320:180:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
                    "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"]
         try:
             frame = subprocess.run(command, capture_output=True, check=True, timeout=45)
