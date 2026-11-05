@@ -1627,15 +1627,23 @@ class NativeCreativeControl:
                     self._selectable_tools = []
                     self._inspectable_tied_candidates = []
                     self._last_search_result = None
-                # A successful project-opening write may precede the editor's
-                # asynchronous project snapshot. Source-evidence from the real
-                # CPU trial showed one actual create ACK followed immediately
-                # by get_project reporting 'absent'. Recheck at most ONCE,
-                # using only the host-authorized native READ. Neither read may
-                # create a project, mutate a timeline or invent success.
+                # A native write can change an editor's currently open
+                # project. A new model turn must not lose an observed project
+                # merely because the last action was a harmless marker, nor
+                # may the BODY blindly assume the old project remained open.
+                # If this host requires machine-state prerequisites, refresh
+                # with one authorized native READ after acknowledged writes.
+                # On an asynchronously created project, permit one delayed
+                # second read; NEVER retry an uncertain model-selected WRITE.
                 effects = self._host_possible_effects.get(native_name, ())
-                if (isinstance(effects, (list, tuple)) and
-                        "project_open" in effects and
+                project_opening=(isinstance(effects, (list, tuple)) and
+                                 "project_open" in effects)
+                needs_live_project_read=(project_opening or (
+                    self.catalog_mode == "indexed" and
+                    bool(self._host_preconditions) and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(native_name) == "write"))
+                if (needs_live_project_read and
                         self.host_tool_access is not None and
                         self.host_tool_access.get("get_project") == "read" and
                         "get_project" in validators and
