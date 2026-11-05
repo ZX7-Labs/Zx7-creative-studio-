@@ -45,9 +45,9 @@ def run_model_tool_audition(model, fabric, case):
     offers = case["offered_operation_ids"]
     expected = case["expected_operation_id"]
     if (not isinstance(offers,list) or not 2<=len(offers)<=8
-            or len(set(offers))!=len(offers)
             or any(not isinstance(x,str) or not x or len(x)>256 for x in offers)
-            or expected not in offers):
+            or len(set(offers))!=len(offers)
+            or not isinstance(expected,str) or expected not in offers):
         raise ModelToolAuditionError("Need two to eight different genuinely granted tools")
     revision = getattr(fabric, "revision", None)
     if not isinstance(revision,str) or not revision:
@@ -63,6 +63,10 @@ def run_model_tool_audition(model, fabric, case):
         schema=spec.get("input_schema")
         if not isinstance(schema,dict):
             raise ModelToolAuditionError("Granted capability has no machine schema")
+        from .body_editor_mcp import _local_schema_references
+        import jsonschema
+        _local_schema_references(schema)
+        jsonschema.validators.validator_for(schema).check_schema(schema)
         description=spec.get("description","")
         if not isinstance(description,str):
             raise ModelToolAuditionError("Missing real installed capability description")
@@ -77,7 +81,6 @@ def run_model_tool_audition(model, fabric, case):
     context = {
         "task": task, "current_host_catalog_revision": revision,
         "actual_granted_tool_contracts": tool_descriptors,
-        "task": task,
         "expected_response_shape": {"operation_id": "one actual offered tool id",
                                     "inputs": "JSON object matching that tool schema"},
         "body_execution_permitted": False,
@@ -96,6 +99,13 @@ def run_model_tool_audition(model, fabric, case):
     selected = None
     valid_schema = False
     target = False
+    if reason is None:
+        try:
+            reply_bytes=_json(response).encode("utf-8")
+            if len(reply_bytes)>65536:
+                raise ValueError("Model reply exceeds bounded contract")
+        except (ValueError,TypeError,RecursionError,OverflowError):
+            reason="model_reply_not_finite_bounded_json"
     if reason is None:
         if not isinstance(response,dict) or set(response)!={"operation_id","inputs"}:
             reason="model_reply_shape_rejected"
