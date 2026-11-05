@@ -1605,12 +1605,33 @@ class NativeCreativeControl:
                             host_response.get("action") == native_name and
                             isinstance(host_result, dict) and
                             host_result.get("action") == native_name)
+                        # Pinned Velorn's create_timeline and other native
+                        # planning tools expose a THIRD source-backed preview:
+                        # top-level previewOnly/action/plan/suggestedApplyCall,
+                        # with NO nested result and NO success ACK. A matching
+                        # model-selectable apply call is proof of the native
+                        # preview contract, not proof of artistic quality or
+                        # a project write. Never treat a bare preview flag as
+                        # proof that no mutation happened.
+                        apply=host_response.get("suggestedApplyCall") if (
+                            isinstance(host_response,dict)) else None
+                        direct_plan_preview=(
+                            isinstance(host_response,dict) and
+                            success is None and host_result is None and
+                            host_response.get("previewOnly") is True and
+                            host_response.get("action")==native_name and
+                            isinstance(host_response.get("plan"),dict) and
+                            isinstance(apply,dict) and
+                            apply.get("tool")==native_name and
+                            isinstance(apply.get("arguments"),dict) and
+                            apply["arguments"].get("previewOnly") is False)
                         acknowledged_preview = (
-                            preview is True and (
+                            (preview is True and (
                                 (success is False and (
                                     not isinstance(host_response, dict) or
                                     host_response.get("previewOnly", True) is True
                                 )) or (success is None and wrapper_preview)))
+                            or direct_plan_preview)
                         if success is False or acknowledged_preview:
                             if acknowledged_preview:
                                 # Actual pinned editor defaults to a preview
