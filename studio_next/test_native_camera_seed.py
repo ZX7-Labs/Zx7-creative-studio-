@@ -66,6 +66,15 @@ class NativeCameraSeedTests(unittest.TestCase):
                 with self.assertRaises(NativeCameraSeedError):
                     stage_attested_camera(camera, rights, staging, evidence)
                 self.assertFalse(list(staging.iterdir()))
+            rights.write_text(json.dumps({
+                "sha256": hashlib.sha256(camera.read_bytes()).hexdigest(),
+                "bytes": camera.stat().st_size + 1,
+                "license_declared_by_source": "CC0",
+                "full_picture_decode_completed": True,
+            }))
+            with self.assertRaises(NativeCameraSeedError):
+                stage_attested_camera(camera, rights, staging, evidence)
+            self.assertFalse(list(staging.iterdir()))
             linked = root / "alias.mp4"
             linked.symlink_to(camera)
             with self.assertRaises(NativeCameraSeedError):
