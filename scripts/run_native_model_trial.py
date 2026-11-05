@@ -323,7 +323,7 @@ async def trial(args, lock, artifacts, command):
                         "replace_clip_with_asset": ["project_open", "assets_present"],
                         "add_text_clip": ["project_open"],
                         "save_project": ["project_open"],
-                        "export_timeline": ["project_open"],
+                        "export_timeline": ["project_open", "timeline_picture_present"],
                     },
                     host_possible_effects=initial_project_effects,
                     # The bounded trial authors one project. A second neural
