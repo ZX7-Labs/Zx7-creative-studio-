@@ -143,8 +143,8 @@ class NativeCreativeAuditTests(unittest.TestCase):
         verified=(root/"native_creative_audit.py").read_text(encoding="utf-8")
         kinds=set(re.findall(r'"kind"\s*:\s*"([a-z][a-z0-9_]+)"',emitted))
         self.assertTrue(kinds)
-        self.assertEqual({kind for kind in kinds if
-                          re.search(r'"'+re.escape('"'+kind+'"'),verified) is None},set(),
+        auditor_literals=set(re.findall(r'"([a-z][a-z0-9_]+)"',verified))
+        self.assertEqual(kinds-auditor_literals,set(),
                          "New controller event needs explicit independent auditor validation")
 
     def test_real_read_only_native_asset_receipts_cannot_forge_media_proof(self):
