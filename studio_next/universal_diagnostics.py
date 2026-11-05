@@ -120,7 +120,7 @@ def _safe_host_memory(host_capacity):
 
 def universal_diagnostics(*, operation_records, job_records, session_records,
                           host_capacity, model_configured, model_id=None,
-                          paired_trials=()):
+                          paired_trials=(), trace_evidence=None):
     """Bounded authenticated dashboard snapshot from actual host runtime state.
 
     Registry claims prove *discovery/installation*, not tool execution;
@@ -131,6 +131,30 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
     jobs = _rows(job_records, "durable job history")
     sessions = _rows(session_records, "creative sessions")
     pairs = _rows(paired_trials, "paired trial receipts")
+    if trace_evidence is None:
+        trace_evidence = {
+            "recent_events": [], "observed_event_count": 0,
+            "recent_window_hashes_valid": True,
+            "externally_signed_or_globally_certified": False,
+        }
+    if not isinstance(trace_evidence, dict):
+        raise DiagnosticEvidenceError("Host trace evidence is missing or untrusted")
+    recent_events = _rows(trace_evidence.get("recent_events"), "actual stage receipts")
+    _whole(trace_evidence.get("observed_event_count"), "durable trace")
+    if (trace_evidence.get("recent_window_hashes_valid") is not True
+            or trace_evidence.get("externally_signed_or_globally_certified") is not False):
+        raise DiagnosticEvidenceError("Diagnostic trace custody cannot be verified")
+    for event in recent_events:
+        if (event.get("schema") != 1
+                or event.get("model_causality_not_assigned") is not True
+                or not isinstance(event.get("trace_id"), str)
+                or not isinstance(event.get("capability_id"), str)
+                or event.get("phase") not in _PHASES
+                or event.get("outcome") not in (
+                    "started", "observed", "verified", "failed",
+                    "paused", "cancelled", "unmeasured", "unknown")
+                or not isinstance(event.get("code"), str)):
+            raise DiagnosticEvidenceError("Host trace contains ungrounded stage facts")
     if not isinstance(host_capacity, dict):
         raise DiagnosticEvidenceError("Live host capacity observation required")
     if type(model_configured) is not bool:
@@ -242,6 +266,16 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
             "observed_count": error_result_count,
             "next_check": "Run independent control with identical source and contract before attributing fault",
         })
+    for event in recent_events[:8]:
+        if event["outcome"] == "failed":
+            diagnostics.append({
+                "layer": event["phase"],
+                "code": event["code"],
+                "state": "observed_blockage",
+                "evidence": "host_durable_stage_receipt",
+                "trace_id": event["trace_id"],
+                "next_check": "Review the source-bound job stage and independent verifier",
+            })
     for verdict in pair_evidence[:24]:
         if verdict["attribution"] not in ("technical_path_verified_for_pair", "inconclusive"):
             diagnostics.append({
@@ -312,12 +346,19 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
             "each_pair_is_not_a_general_model_ranking": True,
         },
         "diagnostics": diagnostics[:40],
+        "execution_traces": {
+            "observed_event_count": trace_evidence["observed_event_count"],
+            "recent_events": list(recent_events),
+            "recent_window_hashes_valid": True,
+            "independently_signed_or_globally_certified": False,
+            "stage_evidence_never_assigns_model_causality": True,
+        },
         "measurement_lanes": [
             {"name": "BODY discovery", "state": "observed",
              "proof": "live_registered_operations"},
             {"name": "BODY execution", "state": (
                 "observed" if job_states else "unmeasured"),
-             "proof": "actual_durable_jobs_only"},
+             "proof": "actual_durable_jobs_and_categorical_stage_receipts"},
             {"name": "Model interface", "state": (
                 "partially_observed" if decision_count else "unmeasured"),
              "proof": "host_stored_action_attempts_not_skill_certification"},
