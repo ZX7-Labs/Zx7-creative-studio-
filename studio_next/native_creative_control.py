@@ -1805,8 +1805,15 @@ class NativeCreativeControl:
                         if self._pending_asset_visibility_check:
                             source_key = self._native_import_source_key(
                                 native_name, args["inputs"])
-                            native_asset = host_response.get("asset") if (
-                                isinstance(host_response, dict)) else None
+                            # Pinned native Velorn MCP e2e proves the
+                            # application payload is nested under result:
+                            # title["result"]["clip"]["id"]. Media imports
+                            # return result.asset.id. A top-level-only lookup
+                            # left every genuine ACK permanently unresolved.
+                            application_result = host_result if isinstance(
+                                host_result, dict) else host_response
+                            native_asset = application_result.get("asset") if (
+                                isinstance(application_result, dict)) else None
                             asset_id = native_asset.get("id") if (
                                 isinstance(native_asset, dict)) else None
                             if source_key is not None:
