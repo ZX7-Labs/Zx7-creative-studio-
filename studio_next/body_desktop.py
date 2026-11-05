@@ -117,6 +117,11 @@ class IndependentStudioDesktop:
                   wraplength=800).pack(anchor="w",pady=8)
         ttk.Button(self.diagnostics_page,text="Refresh Actual Measurements",
                    command=self.refresh_diagnostics).pack(anchor="w",pady=(0,8))
+        self.model_audition_button=ttk.Button(
+            self.diagnostics_page,text="Test Local Model Tool-Use (3 cases)",
+            command=self.start_model_audition)
+        self.model_audition_button.pack(anchor="w",pady=(0,8))
+        self.model_audition_button.state(["disabled"])
         columns=("family","installed","needs_setup")
         self.diagnostics_tree=ttk.Treeview(self.diagnostics_page,columns=columns,
                                             show="headings",height=10)
@@ -231,14 +236,32 @@ class IndependentStudioDesktop:
         widget.delete("1.0","end")
         widget.insert("1.0",json.dumps(data,ensure_ascii=False,indent=2))
 
+    def start_model_audition(self):
+        from tkinter import messagebox
+        if not messagebox.askyesno("Run real local model checks",
+              "Run three bounded local model inference tests? "
+              "This uses host CPU but NEVER executes a creative BODY tool "
+              "or claims artistic competence."):
+            return
+        def done(record):
+            self.diagnostic_summary.set(
+                "Local tool-use audition queued: "+record["run_id"]+
+                ". Refresh actual measurements to inspect receipts.")
+            self.refresh_diagnostics()
+        self._run("Starting explicit, no-tool-mutation model diagnostic…",
+                  self.client.start_model_audition,done)
+
     def refresh_diagnostics(self):
         """Show only factual host receipts, not estimated creative ability."""
         def done(report):
             if not isinstance(report,dict) or report.get("schema")!=1:
                 raise ValueError("Service returned an unknown diagnostic contract")
             body=report["body"];model=report["model"]
+            self.model_audition_button.state(
+                ["!disabled"] if model["configured"] else ["disabled"])
             jobs=report["jobs"];comparisons=report["controlled_comparisons"]
             trace=report.get("execution_traces",{})
+            aptitude=model.get("operator_initiated_tool_audition",{})
             counts=jobs.get("by_state",{})
             failed=counts.get("blocked",0)+counts.get("failed",0)
             self.diagnostic_summary.set(
@@ -248,7 +271,8 @@ class IndependentStudioDesktop:
                 f"(creative ability {model['independent_creativity']}) · "
                 f"Blocked/failed jobs: {failed} · "
                 f"Verified control comparisons: {comparisons['observed_pairs']} · "
-                f"Durable stage events: {trace.get('observed_event_count',0)}")
+                f"Durable stage events: {trace.get('observed_event_count',0)} · "
+                f"Model tool audition: {aptitude.get('status','unmeasured')}")
             for item in self.diagnostics_tree.get_children():
                 self.diagnostics_tree.delete(item)
             for family in body.get("capabilities",[]):
@@ -256,6 +280,13 @@ class IndependentStudioDesktop:
                     family["name"], family["installed_operations"],
                     family["needs_setup_operations"]))
             lines=[]
+            if aptitude.get("summary"):
+                stats=aptitude["summary"]
+                lines.append(
+                    f"LOCAL MODEL TOOL CONTRACTS: "
+                    f"{stats['matching_tool_and_schema_count']}/"
+                    f"{stats['evaluated_case_count']} tested cases matched; "
+                    "creative quality NOT measured.")
             for issue in report.get("diagnostics",[])[:30]:
                 lines.append(f"{issue['layer']}: {issue['code']} — "
                              f"{issue.get('next_check','Inspect recorded evidence')}")
