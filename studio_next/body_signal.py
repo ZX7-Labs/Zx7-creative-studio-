@@ -301,11 +301,16 @@ class LiveBodySignal:
             if not isinstance(ir,dict):
                 raise BodyCommandRejected("Original creative Film IR object required")
             catalog=self._factory(self._workspace(workspace_id))
+            # Model-facing submission is restricted to tool contracts the
+            # same trusted BODY can actually admit to its durable graph.
+            # A native editor's session-only tool must not appear runnable
+            # merely because a separate client can discover its schema.
+            runnable_graph={identity for identity,receipt in
+                            catalog.execution_admission(
+                                self._authority.tool_access).items()
+                            if receipt["can_attempt_durable_graph"]}
             validation=validate_film_ir(ir,
-                installed_tool_ids=(
-                    catalog.executable_ids(
-                        allowed_access=self._authority.tool_access)
-                    -_LEGACY_UNATTESTED),
+                installed_tool_ids=runnable_graph-_LEGACY_UNATTESTED,
                 fact_ids=set(self._authority.fact_ids))
             if not validation.render_ready:
                 raise BodyCommandRejected("Proposed film is not physically runnable: "+
