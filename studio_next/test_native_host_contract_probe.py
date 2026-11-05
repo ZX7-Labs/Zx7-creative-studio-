@@ -27,7 +27,58 @@ class NativeAssetReadSession:
         return SimpleNamespace(is_error=self.is_error,content=items)
 
 
+class FreshNativeProjectSession(NativeAssetReadSession):
+    def __init__(self, status=None, *, is_error=False, image=False):
+        super().__init__(status if status is not None else {
+            "mcp":{"hasProject":False}, "project":None},
+            is_error=is_error, image=image)
+
+    async def call_tool(self,tool,args):
+        if tool=="get_assets":
+            raise AssertionError("Empty project must not be probed as an asset inventory")
+        return await super().call_tool(tool,args)
+
+
 class HostNativeSourceContractProbeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_new_empty_native_editor_defers_asset_probe_until_open(self):
+        session=FreshNativeProjectSession()
+        receipt=await preflight_real_editor_inventory_contract(session,{
+            "get_project":"read", "get_assets":"read", "create_project":"write"},
+            require_absent_project=True)
+        self.assertEqual(session.calls,[("get_project",{})])
+        self.assertTrue(receipt["native_project_observed_absent"])
+        self.assertTrue(receipt["inventory_probe_deferred_until_native_project_exists"])
+        self.assertFalse(receipt["native_asset_contract_proved"])
+        self.assertIsNone(receipt["observed_asset_count"])
+        self.assertTrue(receipt["no_native_write_attempted"])
+
+    async def test_lifecycle_preflight_refuses_unknown_or_present_project(self):
+        for project in (
+            {"mcp":{"hasProject":True},"project":{"id":"already-open"}},
+            {"mcp":{"hasProject":True},"project":None},
+            {"mcp":{"hasProject":False},"project":{"id":"contradiction"}},
+            {}):
+            session=FreshNativeProjectSession(project)
+            with self.subTest(project=project),self.assertRaises(ValueError):
+                await preflight_real_editor_inventory_contract(session,{
+                    "get_project":"read","get_assets":"read"},require_absent_project=True)
+            self.assertEqual(session.calls,[("get_project",{})])
+
+    async def test_lifecycle_preflight_requires_project_read_permission(self):
+        session=FreshNativeProjectSession()
+        with self.assertRaises(ValueError):
+            await preflight_real_editor_inventory_contract(session,{
+                "get_assets":"read"},require_absent_project=True)
+        self.assertEqual(session.calls,[])
+
+    async def test_lifecycle_probe_rejects_native_failure_or_image(self):
+        for options in ({"is_error":True},{"image":True}):
+            session=FreshNativeProjectSession(**options)
+            with self.subTest(options=options),self.assertRaises(ValueError):
+                await preflight_real_editor_inventory_contract(session,{
+                    "get_project":"read","get_assets":"read"},require_absent_project=True)
+            self.assertEqual(session.calls,[("get_project",{})])
+
     async def test_current_pinned_real_source_envelope_is_read_only_and_private(self):
         actual={"count":1,"limitApplied":False,"assets":[{
             "id":"native-asset-abc","name":"private owner's shot.webm",
