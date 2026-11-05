@@ -545,6 +545,7 @@ class NativeCreativeControl:
         self._previous_search_signature = None
         self._identical_search_repetitions = 0
         self._selectable_tools: list[str] = []
+        self._host_frontier_tools: list[str] = []
         # On a tied lexical search, show a bounded *inspectable-only*
         # set of actual host grants. A model must explicitly describe
         # one candidate before it can submit a write. No automatic pick.
@@ -868,6 +869,7 @@ class NativeCreativeControl:
                             for item in opportunities["matches"]]}
                     self._selectable_tools = [
                         item["tool"] for item in self._last_search_result["matches"]]
+                    self._host_frontier_tools = list(self._selectable_tools)
                     self._append({"kind": "host_capability_frontier",
                                   "catalog_revision": self._capabilities.revision,
                                   "result_tool_names": self._selectable_tools,
@@ -985,6 +987,44 @@ class NativeCreativeControl:
                     if self._capabilities is not None and
                         any(value is False for value in host_machine_facts.values())
                     else None)
+                # The host may reveal a *choice of candidate operations* that
+                # satisfy missing physical prerequisites. Do not force the
+                # model to waste multiple searches for tools the host has
+                # already discovered, and NEVER select or invoke a write.
+                # Keep independent model-search selections intact while
+                # invalidating only our own earlier machine-state frontier.
+                if (self.catalog_mode == "indexed" and
+                        self._capabilities is not None):
+                    new_frontier=[]
+                    if host_machine_frontier is not None:
+                        for match in host_machine_frontier["matches"]:
+                            native=self._capabilities.resolve(
+                                match["id"],revision=self._capabilities.revision)["native_name"]
+                            if native not in new_frontier:
+                                new_frontier.append(native)
+                    if new_frontier!=self._host_frontier_tools:
+                        prior_host=set(self._host_frontier_tools)
+                        independent=[name for name in self._selectable_tools
+                                     if name not in prior_host]
+                        # Never mint an executable grant: these are exact
+                        # native names verified by CapabilityFabric already.
+                        self._selectable_tools=(independent+[
+                            name for name in new_frontier if name not in independent])[:8]
+                        self._host_frontier_tools=new_frontier[:8]
+                        if new_frontier:
+                            self._append({
+                                "kind":"host_machine_frontier",
+                                "turn":turn,
+                                "catalog_revision":self._capabilities.revision,
+                                "host_known_facts_sha256":hashlib.sha256(
+                                    _wire(host_machine_facts).encode("utf-8")).hexdigest(),
+                                "false_host_facts":sorted(
+                                    key for key,val in host_machine_facts.items()
+                                    if val is False),
+                                "result_tool_names":new_frontier[:8],
+                                "host_sensing_only_no_artistic_choice":True,
+                                "no_native_dispatch":True,
+                            })
                 indexed_actions = ["search"]
                 if self._selectable_tools or self._inspectable_tied_candidates:
                     indexed_actions.append("describe")
