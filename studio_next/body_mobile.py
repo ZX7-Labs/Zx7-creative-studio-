@@ -13,6 +13,8 @@ PAGE = """<!doctype html><html lang="en"><head>
 <h2>System diagnostics</h2><p>Evidence, not a fabricated AI power score. Requires a private host connection.</p>
 <div class="diagnostic-grid" id="diagnostic-grid" aria-live="polite"><div>Connect to inspect real capabilities and blockers.</div></div>
 <button id="diagnostics-button" disabled>Refresh diagnostic evidence</button>
+<button id="model-audition-button" disabled>Test local model tool-use (3 cases)</button>
+<output id="model-audition-result" aria-live="polite">No local model audit run yet.</output>
 <details><summary>Observed limitations and next checks</summary><div id="diagnostic-issues">Not measured</div></details>
 </section>
 <section><h2>Connect</h2><p>Host token is kept only in this browser tab, never saved.</p>
@@ -64,7 +66,7 @@ pre{white-space:pre-wrap;font-size:12px}footer{text-align:center;padding:20px}
 
 SCRIPT = r"""(()=>{
 'use strict';
-let secret=null,creativeSession=null,creativeReady=false,creativeTimer=null;
+let secret=null,creativeSession=null,creativeReady=false,creativeTimer=null,auditionPoll=null;
 const e=id=>document.getElementById(id);
 const print=(id,msg)=>{e(id).textContent=String(msg)};
 const node=(tag,msg)=>{const n=document.createElement(tag);n.textContent=String(msg);return n};
@@ -76,7 +78,7 @@ async function api(path,options={}){
  if(!r.ok){let s='HTTP '+r.status;try{s=(await r.json()).error||s}catch(_){}throw Error(s)}
  return r.json();
 }
-function enabled(v){if(!v&&creativeTimer){clearTimeout(creativeTimer);creativeTimer=null}for(const id of ['diagnostics-button','tools-button','resources-button','impact-button','jobs-button','upload','submit','creative-refresh','creative-stop'])e(id).disabled=!v}
+function enabled(v){if(!v&&creativeTimer){clearTimeout(creativeTimer);creativeTimer=null}for(const id of ['diagnostics-button','model-audition-button','tools-button','resources-button','impact-button','jobs-button','upload','submit','creative-refresh','creative-stop'])e(id).disabled=!v}
 function diagnosticCard(label,value){
  const n=document.createElement('div');n.className='diagnostic-card';
  const heading=node('span',label),data=node('strong',value);
@@ -86,6 +88,14 @@ async function diagnostics(){
  const view=await api('/v1/diagnostics'),body=view.body||{},brain=view.model||{},
        jobs=view.jobs||{},host=view.host||{},pairs=view.controlled_comparisons||{};
  const root=e('diagnostic-grid');root.replaceChildren();
+ const tested=brain.operator_initiated_tool_audition||{};
+ const probeSummary=tested.summary;
+ print('model-audition-result',tested.status==='completed_measured_not_creative_certification'
+    ? 'Observed actual local tool contracts: '
+      +probeSummary?.matching_tool_and_schema_count+'/'+probeSummary?.evaluated_case_count
+      +' cases accepted. Creative judgment was NOT measured.'
+    : 'Local tool-use audition: '+(tested.status||'unmeasured')
+      +'. Tool choice is not an artistic score.');
  root.append(diagnosticCard('Installed operations',body.installed_operations??'Unknown'),
    diagnosticCard('Capability families',body.capability_families??'Unknown'),
    diagnosticCard('Local model',brain.configured?
@@ -168,7 +178,7 @@ async function jobs(){
 e('connect').onclick=async()=>{
  const key=e('token').value;if(key.length<32){print('status','Token must contain at least 32 characters');return}
  secret=key;e('token').value='';
- try{const health=await api('/v1/health');creativeReady=health.creative_model_configured===true;enabled(true);e('creative-submit').disabled=!creativeReady;print('creative-runtime',creativeReady?'A local creative model is configured. Describe your idea to begin.':'Local creative model is not configured on this host.');print('status','Connected, token stays in tab memory');await Promise.all([tools(),jobs(),resources(),diagnostics()])}
+ try{const health=await api('/v1/health');creativeReady=health.creative_model_configured===true;enabled(true);e('creative-submit').disabled=!creativeReady;e('model-audition-button').disabled=!creativeReady;print('creative-runtime',creativeReady?'A local creative model is configured. Describe your idea to begin.':'Local creative model is not configured on this host.');print('status','Connected, token stays in tab memory');await Promise.all([tools(),jobs(),resources(),diagnostics()])}
  catch(err){secret=null;enabled(false);e('creative-submit').disabled=true;print('status',err.message)}
 };
 async function creativeProgress(){
@@ -189,6 +199,31 @@ e('creative-submit').onclick=async()=>{try{
 e('creative-stop').onclick=async()=>{try{if(!creativeSession)throw Error('No active creative session');await api('/v1/creative-sessions/'+encodeURIComponent(creativeSession)+'/stop',{method:'POST'});print('creative-status','Stop requested. Use job controls to stop an existing render.')}catch(err){print('creative-status',err.message)}};
 e('creative-refresh').onclick=()=>creativeProgress().catch(err=>print('creative-status',err.message));
 e('diagnostics-button').onclick=()=>diagnostics().catch(err=>print('status',err.message));
+async function pollAudition(runId,remaining){
+ const result=await api('/v1/diagnostics/audition/'+encodeURIComponent(runId));
+ print('model-audition-result','Local model aptitude: '+result.status+
+   ' · '+(result.cases_recorded||0)+' cases observed'+
+   (result.summary?' · '+result.summary.matching_tool_and_schema_count+
+     '/'+result.summary.evaluated_case_count+' matched':'')+
+   '\nNo BODY tool executed; creativity not assessed.');
+ if(result.status==='queued'||result.status==='running'){
+   if(remaining>0)auditionPoll=setTimeout(()=>
+      pollAudition(runId,remaining-1).catch(err=>
+        print('model-audition-result',err.message)),2500);
+ }else await diagnostics();
+}
+e('model-audition-button').onclick=async()=>{
+ if(!creativeReady)return;
+ if(!confirm('Run up to 3 real local-model inference checks? This uses CPU and never edits projects.'))return;
+ e('model-audition-button').disabled=true;
+ try{
+   const receipt=await api('/v1/diagnostics/audition',{
+      method:'POST',body:new Uint8Array(0)});
+   if(auditionPoll){clearTimeout(auditionPoll);auditionPoll=null}
+   await pollAudition(receipt.run_id,24);
+ }catch(err){print('model-audition-result',err.message)}
+ finally{e('model-audition-button').disabled=false}
+};
 e('tools-button').onclick=()=>tools().catch(err=>print('status',err.message));
 e('resources-button').onclick=()=>resources().catch(err=>print('status',err.message));
 e('jobs-button').onclick=()=>jobs().catch(err=>print('status',err.message));
