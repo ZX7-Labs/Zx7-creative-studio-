@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/zx7-universal-diagnostics.yml"
       - "studio_next/universal_diagnostics.py"
+      - "studio_next/diagnostic_trace.py"
+      - "studio_next/test_diagnostic_trace.py"
       - "studio_next/test_universal_diagnostics.py"
       - "studio_next/test_universal_diagnostics_service.py"
       - "studio_next/test_universal_diagnostics_desktop.py"
@@ -40,6 +42,7 @@ jobs:
           python -m pip install --disable-pip-version-check '.[production,editor]'
           python -m compileall -q \
             studio_next/universal_diagnostics.py \
+            studio_next/diagnostic_trace.py \
             studio_next/body_service.py \
             studio_next/body_client.py \
             studio_next/body_mobile.py \
@@ -48,6 +51,7 @@ jobs:
         run: |
           python -m unittest -v \
             studio_next.test_universal_diagnostics \
+            studio_next.test_diagnostic_trace \
             studio_next.test_universal_diagnostics_service \
             studio_next.test_body_mobile
       - name: Confirm native desktop UI with real local service under display
