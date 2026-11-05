@@ -38,7 +38,8 @@ jobs:
           python -m unittest -q \
             studio_next.test_native_machine_navigator \
             studio_next.test_native_asset_identity \
-            studio_next.test_native_creative_control
+            studio_next.test_native_creative_control \
+            studio_next.test_native_creative_audit
       - name: Re-check fixed GPL native editor source and sandbox identity
         run: |
           test "$(id -u)" -ne 0
