@@ -25,6 +25,7 @@ from PIL import Image, ImageDraw, ImageFont
 from studio_next.providers import LocalCreativeModel,LocalModelSettings
 from studio_next.media_vault import MediaVault,sha256_file
 from studio_next.raw_edit_coverage import assess_raw_edit_coverage
+from studio_next.raw_edit_gate import assess_minimum_editorial_evidence, InsufficientEditorialEvidence
 from studio_next.raw_temporal_observer import inspect_raw_temporal_source, render_camera_contact_sheet
 from studio_next.body_mlt_editor import export_owned_mlt
 from studio_next.body_mlt_render import render_owned_mlt
@@ -295,10 +296,20 @@ def produce(args):
                 transcript.append(event)
                 try:
                     length=validate_edit(reply,spec["duration"])
+                    # This is *not* a preference for a style or shot list. Reject
+                    # the physically observed neutral contiguous source prefix
+                    # that previously passed all technical decoder checks.
+                    editorial=assess_minimum_editorial_evidence(reply,
+                        source_seconds=spec["duration"])
+                    event["minimum_editorial_evidence"]=editorial
+                    evidence["minimum_editorial_evidence"]=editorial
                     decision=reply
                     break
                 except (ValueError,TypeError,KeyError) as exc:
                     event["host_rejection"]=str(exc)
+                    if isinstance(exc, InsufficientEditorialEvidence):
+                        event["minimum_editorial_evidence"]=exc.diagnostics
+                        evidence["last_rejected_editorial_evidence"]=exc.diagnostics
                     request["previous_response_failure"]=str(exc)
             if decision is None:
                 raise RuntimeError("Real model never authored a valid video edit")
