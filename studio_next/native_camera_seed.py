@@ -120,3 +120,43 @@ def stage_attested_camera(camera, rights_manifest, staging, evidence_root):
     (evidence_root / "native-camera-evidence.json").write_text(
         json.dumps(record, indent=2), encoding="utf-8")
     return record
+
+
+def verify_native_original_timeline(native_document, original_sha256):
+    """Check saved native edit references byte-identical original video."""
+    if not isinstance(original_sha256, str) or not re.fullmatch("[0-9a-f]{64}", original_sha256):
+        raise NativeCameraSeedError("Original SHA-256 required")
+    doc = Path(native_document)
+    try:
+        project = json.loads(doc.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise NativeCameraSeedError("Saved native project cannot be inspected") from exc
+    if not isinstance(project, dict) or not isinstance(project.get("assets"), list):
+        raise NativeCameraSeedError("Saved project assets not present")
+    if not isinstance(project.get("timelines"), list):
+        raise NativeCameraSeedError("Saved project timelines not present")
+    root = doc.parent.resolve()
+    ids = set()
+    for asset in project["assets"]:
+        if not isinstance(asset, dict):
+            raise NativeCameraSeedError("Native media record malformed")
+        rel = asset.get("path")
+        if not isinstance(rel, str) or not rel or Path(rel).is_absolute():
+            continue
+        media = (root / rel).resolve()
+        if media.is_relative_to(root) and media.is_file() and _sha(media) == original_sha256:
+            if isinstance(asset.get("id"), str):
+                ids.add(asset["id"])
+    count = 0
+    for timeline in project["timelines"]:
+        if not isinstance(timeline, dict) or not isinstance(timeline.get("clips"), list):
+            raise NativeCameraSeedError("Native clip list invalid")
+        for clip in timeline["clips"]:
+            if not isinstance(clip, dict):
+                raise NativeCameraSeedError("Native clip invalid")
+            if clip.get("assetId") in ids:
+                count += 1
+    return {"original_camera_bytes_preserved": bool(ids),
+            "native_timeline_original_camera_clip_count": count,
+            "original_on_saved_native_timeline": count > 0,
+            "rendered_output_source_provenance_not_proved": True}
