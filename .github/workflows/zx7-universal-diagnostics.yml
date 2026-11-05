@@ -1,0 +1,55 @@
+name: ZX7 Universal Model and BODY Evidence Diagnostics
+on:
+  push:
+    branches: ["engineering/universal-capability-observability-20261106"]
+    paths:
+      - ".github/workflows/zx7-universal-diagnostics.yml"
+      - "studio_next/universal_diagnostics.py"
+      - "studio_next/test_universal_diagnostics.py"
+      - "studio_next/test_universal_diagnostics_service.py"
+      - "studio_next/body_service.py"
+      - "studio_next/body_client.py"
+      - "studio_next/body_mobile.py"
+      - "studio_next/body_desktop.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-evidence-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-host-and-public-dashboard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install actual optional BODY runtime and UI prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg inkscape python3-tk xvfb xauth fonts-dejavu-core
+          python -m pip install --disable-pip-version-check '.[production,editor]'
+          python -m compileall -q \
+            studio_next/universal_diagnostics.py \
+            studio_next/body_service.py \
+            studio_next/body_client.py \
+            studio_next/body_mobile.py \
+            studio_next/body_desktop.py
+      - name: Verify hostile model BODY isolation and real authorized local diagnostics API
+        run: |
+          python -m unittest -v \
+            studio_next.test_universal_diagnostics \
+            studio_next.test_universal_diagnostics_service \
+            studio_next.test_body_mobile
+      - name: Confirm native desktop UI with real local service under display
+        run: |
+          xvfb-run -a python -m unittest -v \
+            studio_next.test_universal_diagnostics_desktop
