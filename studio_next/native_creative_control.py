@@ -1719,8 +1719,15 @@ class NativeCreativeControl:
                             observed_export_sha not in self._verified_exports):
                         raise NativeCreativeControlError("No earlier independently verified export matches this media observation")
                 except NativeCreativeControlError as exc:
+                    # Media/protocol errors may mention operator files,
+                    # clip names or owner-only source identities. The native
+                    # receipt can be exported for public CI review: persist
+                    # only a bounded error class and a digest, never raw text.
                     self._append({"kind": "native_observation_rejected", "turn": turn,
-                                  "tool": native_name, "error": str(exc),
+                                  "tool": native_name,
+                                  "error_type": type(exc).__name__,
+                                  "error_sha256": hashlib.sha256(
+                                      str(exc).encode("utf-8")).hexdigest(),
                                   "measured_native_mcp_wall_ms": native_ms,
                                   "must_reconcile_native_state": True})
                     raise
