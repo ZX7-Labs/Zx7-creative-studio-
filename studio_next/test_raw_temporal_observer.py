@@ -7,7 +7,7 @@ import unittest
 
 from studio_next.raw_temporal_observer import (
     RawTemporalObservationError, inspect_raw_temporal_source,
-    select_temporal_samples,
+    select_temporal_samples, render_camera_contact_sheet,
 )
 
 
@@ -42,6 +42,25 @@ class RawTemporalObserverTests(unittest.TestCase):
             self.assertTrue(any(14 <= p["source_second"] <= 18
                                 for p in observed["highest_change_seconds"]))
             self.assertIs(observed["not_motion_semantics_or_artistic_quality"], True)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "Real FFmpeg required")
+    def test_portrait_source_preview_uses_letterboxing_not_image_distortion(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "portrait.mp4"
+            sheet = Path(temp) / "contact.png"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+                "-f", "lavfi", "-i", "color=white:size=64x128:rate=2:duration=4",
+                "-c:v", "mpeg4", "-q:v", "2", str(source)
+            ], capture_output=True, check=True, timeout=40)
+            times = [round(.1 + .2 * i, 3) for i in range(16)]
+            observed = render_camera_contact_sheet(source, 4.0, times, sheet)
+            self.assertEqual(observed["sample_times_seconds"], times)
+            with Image.open(sheet) as picture:
+                self.assertEqual(picture.size, (1280, 840))
+                self.assertLess(picture.getpixel((25, 90))[0], 30)
+                self.assertGreater(picture.getpixel((160, 90))[0], 200)
 
     def test_fail_closed_on_invalid_evidence(self):
         for duration, changes in [

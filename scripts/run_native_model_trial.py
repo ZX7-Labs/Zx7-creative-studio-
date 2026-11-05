@@ -25,6 +25,7 @@ from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CR
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.native_action_schema import native_action_schema
+from studio_next.native_camera_seed import stage_attested_camera, verify_native_original_timeline
 
 
 def sha(path):
@@ -122,8 +123,9 @@ def download(entry, root):
 
 class RecordedModel:
     """Trial-only passive transcript; all returned decisions come from inference."""
-    def __init__(self, model, artifacts):
+    def __init__(self, model, artifacts, *, initial_source_picture=None):
         self.model, self.settings, self.artifacts = model, model.settings, artifacts
+        self.initial_source_picture = initial_source_picture
         self.turn = 0
 
     @property
@@ -131,6 +133,11 @@ class RecordedModel:
         return self.model.last_call_usage
 
     def infer(self, context, images=()):
+        # Before the first model choice, show independently decoded ORIGINAL
+        # camera pixels. These are not a verified post-edit export observation.
+        seed_added = self.turn == 0 and self.initial_source_picture is not None
+        if seed_added:
+            images = (("image/png", self.initial_source_picture.read_bytes()),) + tuple(images)
         started = time.monotonic()
         self.model.settings.sampling['response_format'] = {'type': 'json_schema', 'json_schema': {
             'name': 'native_editor_action', 'strict': True,
@@ -141,7 +148,9 @@ class RecordedModel:
                  allow_finish=not context.get('missing_completion_evidence', []))}}
         record = {'turn': self.turn, 'context': context, 'image_sha256': []}
         for index, (_, raw) in enumerate(images):
-            path = self.artifacts / 'observations' / f'{self.turn}-{index}.png'
+            # Original-camera seed is NOT an observed exported movie frame.
+            folder = 'source-observations' if seed_added and index == 0 else 'observations'
+            path = self.artifacts / folder / f'{self.turn}-{index}.png'
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(raw)
             record['image_sha256'].append(sha(path))
@@ -191,15 +200,34 @@ async def trial(args, lock, artifacts, command):
     for root in (projects, staging, outputs):
         root.mkdir()
     initial_project_effects = fresh_trial_project_open_effects(projects)
-    # Raw, neutral media available to the model; no timeline or artwork authored.
+    # Source bootstrap never authors timeline edits. The real local model still
+    # chooses every native mutation through granted tools.
     source_assets = []
-    for index, colors in enumerate((('0x102030', '0x607080'), ('0x302010', '0x807060'))):
-        path = staging / f'raw-gradient-{index}.mp4'
-        subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
-            f'gradients=s=640x360:r=24:d=4:c0={colors[0]}:c1={colors[1]}:seed={index + 10}',
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)], check=True, timeout=60)
-        source_assets.append({'path': str(path), 'sha256': sha(path),
-                              'rights': 'original generated neutral trial input'})
+    camera_seed = None
+    if args.camera_video is not None:
+        if args.camera_rights is None:
+            raise ValueError("An explicit attested camera-rights manifest is required")
+        camera_seed = stage_attested_camera(
+            args.camera_video, args.camera_rights, staging, artifacts)
+        source_assets.append({
+            "path": camera_seed["path"],
+            "sha256": camera_seed["sha256"],
+            "rights": camera_seed["rights"],
+            "duration_seconds": camera_seed["source_duration_seconds"],
+            "source_has_audio": camera_seed["source_has_audio"],
+            "camera_original": True,
+        })
+    else:
+        if args.camera_rights is not None:
+            raise ValueError("Rights manifest without source video is invalid")
+        # Original neutral technical fixture, unaffected by camera mode.
+        for index, colors in enumerate((('0x102030', '0x607080'), ('0x302010', '0x807060'))):
+            path = staging / f'raw-gradient-{index}.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                f'gradients=s=640x360:r=24:d=4:c0={colors[0]}:c1={colors[1]}:seed={index + 10}',
+                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)], check=True, timeout=60)
+            source_assets.append({'path': str(path), 'sha256': sha(path),
+                                  'rights': 'original generated neutral trial input'})
     (artifacts / 'source-assets.json').write_text(json.dumps(source_assets, indent=2))
     config = json.loads((ROOT / 'engines/velorn/editor.example.json').read_text())
     for helper in ('get_ai_review_passes', 'get_mcp_recipes'):
@@ -208,29 +236,49 @@ async def trial(args, lock, artifacts, command):
                   verify_native_exports=True)
     config_path = artifacts / 'host-grants.json'
     config_path.write_text(json.dumps(config, indent=2))
-    brief = (
-        'Create an original short editable motion piece about "Small steps, clear progress". '
-        'Choose the composition, typography, pacing, visual treatment and message yourself. '
-        'Use any of the provided original neutral footage as raw material; they are not a storyboard. '
-        'Deliver an actual native project and MP4 in the dedicated output folder. '
-        'Inspect a physically verified frame of your export, independently identify an improvement, '
-        'make that editable change and deliver a new verified export. Save your native work. '
-        'This is a CPU technical trial: keep the film at most eight seconds and 640x360, '
-        'with small bounded state queries. Those are trial resource bounds, not product/style limits. '
-        'Your model supports text and images, not native WAV listening; do not claim hearing. '
-        'Known exporter limitation: at least one imported image/video must appear on the visual timeline. '
-        f'Projects folder: {projects}. Output folder: {outputs}. '
-        'Staged source paths are NOT imported native assets; obtain actual '
-        'editor asset IDs by inspecting permitted native tools after the '
-        'import operation. An MCP tool ID is never a media asset ID. '
-        'Available source assets: ' + json.dumps(source_assets))
+    if camera_seed is not None:
+        brief = (
+            "Edit this video. Use your independent creative judgment and "
+            "the actual camera source, not a prescribed storyboard. The "
+            "attached source-grounded frames are only still-image observations, "
+            "not continuous motion or audio understanding. Create a native "
+            "editable project, export and verify a real video, inspect genuine "
+            "export pixels, make a model-chosen revision and save the new native "
+            "version. Preserve the original camera recording, which has "
+            "source-declared CC0 metadata but no independent legal clearance. "
+            "This CPU-only technical experiment limits output to eight seconds "
+            "and 640x360: physical budget, never a style or product ceiling. "
+            "The model cannot claim to hear raw video audio from image evidence. "
+            "After media import, inspect real native asset IDs: paths and MCP "
+            "tool IDs are NOT media asset IDs. "
+            f"Projects folder: {projects}. Output folder: {outputs}. "
+            "Available camera source: " + json.dumps(source_assets))
+    else:
+        brief = (
+            'Create an original short editable motion piece about "Small steps, clear progress". '
+            'Choose the composition, typography, pacing, visual treatment and message yourself. '
+            'Use any of the provided original neutral footage as raw material; they are not a storyboard. '
+            'Deliver an actual native project and MP4 in the dedicated output folder. '
+            'Inspect a physically verified frame of your export, independently identify an improvement, '
+            'make that editable change and deliver a new verified export. Save your native work. '
+            'This is a CPU technical trial: keep the film at most eight seconds and 640x360, '
+            'with small bounded state queries. Those are trial resource bounds, not product/style limits. '
+            'Your model supports text and images, not native WAV listening; do not claim hearing. '
+            'Known exporter limitation: at least one imported image/video must appear on the visual timeline. '
+            f'Projects folder: {projects}. Output folder: {outputs}. '
+            'Staged source paths are NOT imported native assets; obtain actual '
+            'editor asset IDs by inspecting permitted native tools after the '
+            'import operation. An MCP tool ID is never a media asset ID. '
+            'Available source assets: ' + json.dumps(source_assets))
     (artifacts / 'brief.txt').write_text(brief)
     params = [str(ROOT / 'engines/velorn/mcp.mjs'), '--source', str(args.source),
               '--config', str(config_path), '--state', str(args.runtime / 'editor-state'),
               '--python', sys.executable, '--xvfb-binary', args.xvfb_binary, '--display', args.display]
     model = RecordedModel(LocalCreativeModel(LocalModelSettings(
         model_id=lock['server']['alias'], base_url='http://127.0.0.1:8080', timeout_seconds=300),
-        system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts)
+        system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts,
+        initial_source_picture=(
+            Path(camera_seed["camera_preview_path"]) if camera_seed else None))
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
     host = dict(config['allowed_tools'])
@@ -275,7 +323,7 @@ async def trial(args, lock, artifacts, command):
                         "replace_clip_with_asset": ["project_open", "assets_present"],
                         "add_text_clip": ["project_open"],
                         "save_project": ["project_open"],
-                        "export_timeline": ["project_open"],
+                        "export_timeline": ["project_open", "timeline_picture_present"],
                     },
                     host_possible_effects=initial_project_effects,
                     # The bounded trial authors one project. A second neural
@@ -325,6 +373,17 @@ async def trial(args, lock, artifacts, command):
             observed_sources.add(event['observed_export_sha256'])
     native_projects = [path for path in projects.glob('*/project.comfystudio')
         if any(timeline.get('clips') for timeline in json.loads(path.read_text()).get('timelines', []))]
+    # A model's textual claim of importing the original is not evidence.
+    # Re-open saved native documents and check their actual referenced bytes.
+    camera_original_saved = False
+    camera_original_on_timeline = False
+    camera_native_evidence = []
+    if camera_seed is not None:
+        for native_path in native_projects:
+            checked = verify_native_original_timeline(native_path, camera_seed["sha256"])
+            camera_native_evidence.append(checked)
+            camera_original_saved |= checked["original_camera_bytes_preserved"]
+            camera_original_on_timeline |= checked["original_on_saved_native_timeline"]
     def decoded_frames(path):
         raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(path),
             '-map', '0:v:0', '-f', 'framemd5', '-'], timeout=60).decode()
@@ -333,8 +392,15 @@ async def trial(args, lock, artifacts, command):
         for before in observed_sources for after in revised_exports if before in movies and after in movies)
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
-              and bool(revised_exports) and changed_pixels)
+              and bool(revised_exports) and changed_pixels
+              and (camera_seed is None or (camera_original_saved and camera_original_on_timeline)))
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
+            'native_original_camera_file_preserved': (
+                camera_original_saved if camera_seed is not None else None),
+            'camera_mode_used': camera_seed is not None,
+            'original_camera_on_saved_native_timeline': (
+                camera_original_on_timeline if camera_seed is not None else None),
+            'native_camera_project_verification': camera_native_evidence,
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
             'decoded_frame_sequence_changed': changed_pixels,
             'verified_exports_after_final_revision': revised_exports,
@@ -348,10 +414,16 @@ def main():
         parser.add_argument('--' + name, required=True, type=Path)
     parser.add_argument('--xvfb-binary', default='/usr/bin/Xvfb')
     parser.add_argument('--display', default='127.0.0.1:95')
+    parser.add_argument('--camera-video', type=Path, default=None,
+        help='Optional exact CC0-attested unedited original camera source')
+    parser.add_argument('--camera-rights', type=Path, default=None,
+        help='Rights/source SHA evidence for --camera-video')
     parser.add_argument('--model-lock', type=Path,
         default=ROOT / 'engines/velorn/local-model-trial.lock.json',
         help='Local pinned model manifest; default remains the verified 2B baseline')
     args = parser.parse_args()
+    if (args.camera_video is None) != (args.camera_rights is None):
+        parser.error('--camera-video and --camera-rights must be provided together')
     args.source, args.runtime, args.artifacts = (getattr(args, name).resolve() for name in ('source', 'runtime', 'artifacts'))
     args.artifacts.mkdir(parents=True, exist_ok=False)
     args.runtime.mkdir(parents=True, exist_ok=True)

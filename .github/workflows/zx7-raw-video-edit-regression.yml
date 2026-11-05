@@ -1,13 +1,21 @@
 name: ZX7 Genuine Raw Camera Edit Physical Regression
 on:
   push:
-    branches: ["experiment/unedited-live-action-neural-edit-20261102", "engineering/raw-edit-source-coverage-20261106"]
+    branches: ["experiment/unedited-live-action-neural-edit-20261102", "engineering/raw-edit-source-coverage-20261106", "engineering/native-camera-brain-20261106"]
     paths:
       - "studio_next/test_raw_video_neural_edit.py"
+      - "studio_next/raw_edit_gate.py"
+      - "studio_next/test_raw_edit_gate.py"
       - "studio_next/raw_edit_coverage.py"
       - "studio_next/test_raw_edit_coverage.py"
       - "studio_next/raw_temporal_observer.py"
       - "studio_next/test_raw_temporal_observer.py"
+      - "studio_next/native_camera_seed.py"
+      - "studio_next/test_native_camera_seed.py"
+      - "studio_next/test_native_camera_model_seed.py"
+      - "studio_next/test_native_picture_export_guard.py"
+      - "studio_next/native_creative_control.py"
+      - "scripts/run_native_model_trial.py"
       - "scripts/run_raw_video_neural_edit_test.py"
       - ".github/workflows/zx7-raw-video-edit-regression.yml"
   workflow_dispatch:
@@ -31,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
-          python -m pip install --disable-pip-version-check '.[production]'
-          python -m compileall -q studio_next scripts/run_raw_video_neural_edit_test.py
+          python -m pip install --disable-pip-version-check '.[production,editor]'
+          python -m compileall -q studio_next scripts/run_raw_video_neural_edit_test.py scripts/run_native_model_trial.py
       - name: Test no prescribed style, original camera frame evidence and actual encoded graphic output
-        run: python -m unittest -v studio_next.test_raw_video_neural_edit studio_next.test_raw_edit_coverage studio_next.test_raw_temporal_observer
+        run: python -m unittest -v studio_next.test_raw_video_neural_edit studio_next.test_raw_edit_gate studio_next.test_raw_edit_coverage studio_next.test_raw_temporal_observer studio_next.test_native_camera_seed studio_next.test_native_camera_model_seed studio_next.test_native_picture_export_guard

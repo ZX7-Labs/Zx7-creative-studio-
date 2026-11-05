@@ -444,6 +444,28 @@ def _native_project_presence_from_text(texts):
     return "unknown"
 
 
+
+def _native_timeline_picture_presence_from_text(texts):
+    """Read-only Velorn get_timeline snapshot; unknown is never treated as empty."""
+    try:
+        record = _strict_receipt(texts, "native picture timeline")
+    except NativeCreativeControlError:
+        return "unknown"
+    if not isinstance(record, dict) or not isinstance(record.get("clips"), list):
+        return "unknown"
+    if type(record.get("clipLimitApplied")) is not bool:
+        return "unknown"
+    clips = record["clips"]
+    if any(not isinstance(item, dict) for item in clips):
+        return "unknown"
+    for clip in clips:
+        if (clip.get("type") in ("video", "image")
+                and isinstance(clip.get("assetId"), str)
+                and bool(clip["assetId"])):
+            return "present"
+    return "unknown" if record["clipLimitApplied"] else "absent"
+
+
 class NativeCreativeControl:
     """Single in-process driver of an already host-authorized official MCP session.
 
@@ -1268,9 +1290,44 @@ class NativeCreativeControl:
                                       "reason": reason,
                                       "no_native_dispatch": True})
                         continue
+                # Optional host-only guard for final exports: a successfully
+                # created project is not evidence of placed picture footage.
+                # Re-read actual native state; never infer clips from model text.
+                picture_state = "unknown"
+                if "timeline_picture_present" in self._host_preconditions.get(native_name, ()):
+                    timeline_args = {"includeClips": True, "limit": 1000}
+                    if (self.host_tool_access is None or
+                            self.host_tool_access.get("get_timeline") != "read" or
+                            "get_timeline" not in validators or
+                            not validators["get_timeline"].is_valid(timeline_args)):
+                        raise NativeCreativeControlError(
+                            "Native picture export guard needs an authorized timeline reader")
+                    try:
+                        timeline_reply = await self.session.call_tool("get_timeline", timeline_args)
+                    except Exception as exc:
+                        self._append({"kind": "host_native_timeline_read_unknown",
+                                      "turn": turn, "error_type": type(exc).__name__,
+                                      "no_native_edit_dispatched": True})
+                    else:
+                        if not _field(timeline_reply, "is_error",
+                                      _field(timeline_reply, "isError", False)):
+                            try:
+                                raw_texts, raw_images, raw_audio = _native_content(timeline_reply)
+                                if raw_images or raw_audio:
+                                    raise NativeCreativeControlError(
+                                        "Timeline source state contained unexpected media")
+                                picture_state = _native_timeline_picture_presence_from_text(raw_texts)
+                            except NativeCreativeControlError:
+                                picture_state = "unknown"
+                        self._append({"kind": "host_native_timeline_picture_observation",
+                                      "turn": turn, "picture_state": picture_state,
+                                      "host_attested_read_only": True,
+                                      "no_native_edit_dispatched": True})
                 if (self._capabilities is not None and
                         native_name in self._host_preconditions):
                     known_facts = {}
+                    if picture_state in ("present", "absent"):
+                        known_facts["timeline_picture_present"] = (picture_state == "present")
                     if asset_condition and self._last_real_asset_inventory is not None:
                         known_facts["assets_present"] = (
                             self._last_real_asset_inventory["total"] > 0)
