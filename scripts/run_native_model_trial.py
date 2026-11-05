@@ -237,6 +237,7 @@ async def preflight_real_editor_inventory_contract(
         "source_response_sha256":hashlib.sha256(
             json.dumps(texts,sort_keys=True,ensure_ascii=True).encode()).hexdigest(),
         "observed_asset_count":snapshot["total"],
+        "native_asset_contract_proved":True,
         "bounded_inventory_complete":snapshot["complete"],
         "any_media_physically_imported_by_this_probe":False,
     }
@@ -382,9 +383,14 @@ async def trial(args, lock, artifacts, command):
                 # before consuming CPU model turns or mutating any project.
                 preflight=await preflight_real_editor_inventory_contract(
                     session,host,require_absent_project=True)
-                print("Native read-only inventory contract verified:",
-                      preflight["observed_asset_count"],
-                      "assets; real source response, zero tool writes",flush=True)
+                if preflight.get("native_asset_contract_proved") is True:
+                    print("Native asset inventory contract physically verified:",
+                          preflight["observed_asset_count"],
+                          "assets; zero tool writes",flush=True)
+                else:
+                    print("Native empty-project lifecycle verified; get_assets",
+                          "deferred until the real project is opened;",
+                          "asset contract NOT YET PROVED; zero tool writes",flush=True)
                 outcome = await asyncio.wait_for(NativeCreativeControl(session, model, max_turns=48,
                     receipt_path=artifacts / 'native-journal.jsonl',
                     host_tool_access=host, catalog_mode="indexed",
