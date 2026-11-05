@@ -360,6 +360,52 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             # set; no executable authority can be added by journal text.
             names=event.get("result_tool_names")
             false_facts=event.get("false_host_facts")
+            valid_false_facts={"project_open", "assets_present",
+                               "timeline_picture_present"}
+            # No creative/aesthetic assertion may be smuggled into a machine
+            # fact. A future native sensor MUST add its own independently
+            # reviewed journal witness, never just a model-visible string.
+            if (not isinstance(false_facts,list) or
+                    any(fact not in valid_false_facts for fact in false_facts)):
+                raise NativeJournalError(
+                    "Unknown or creative claim masquerading as physical machine state")
+            # Only host-owned READS AFTER THE MOST RECENT ACKNOWLEDGED WRITE
+            # can justify current-state affordances. Old source inventories
+            # and timelines become stale as soon as the native project changes.
+            previous=events[:i]
+            last_write=max((index for index,source in enumerate(previous)
+                            if source.get("kind")=="native_tool_result" and
+                            host_tool_access.get(source.get("tool"))=="write"),
+                           default=-1)
+            fresh=previous[last_write+1:]
+            for fact in false_facts:
+                if fact=="assets_present":
+                    witnessed=any(
+                        prior.get("kind")=="host_native_asset_inventory" and
+                        prior.get("actual_imported_asset_total")==0 and
+                        prior.get("host_attested_read_only") is True
+                        for prior in fresh)
+                elif fact=="timeline_picture_present":
+                    witnessed=any(
+                        prior.get("kind")=="host_native_timeline_picture_observation" and
+                        prior.get("picture_state")=="absent" and
+                        _sha(prior.get("observed_text_sha256")) and
+                        prior.get("host_attested_read_only") is True
+                        for prior in fresh)
+                else:
+                    witnessed=any(
+                        (prior.get("kind") in (
+                            "host_project_bootstrap_observation",
+                            "host_project_post_write_observation") and
+                         prior.get("project_presence")=="absent" and
+                         prior.get("host_attested_read_only") is True) or
+                        (prior.get("kind")=="native_tool_result" and
+                         prior.get("tool")=="get_project" and
+                         host_tool_access.get("get_project")=="read")
+                        for prior in fresh)
+                if not witnessed:
+                    raise NativeJournalError(
+                        "Machine-state choice has no fresh native READ witness")
             if (pending is not None or type(event.get("turn")) is not int
                     or event["turn"]<0 or
                     not _sha(event.get("catalog_revision")) or
