@@ -266,6 +266,9 @@ class IndependentStudioDesktop:
             failed=counts.get("blocked",0)+counts.get("failed",0)
             self.diagnostic_summary.set(
                 f"BODY {body['installed_operations']} installed operations / "
+                f"{body.get('durable_graph_admission_candidates','unmeasured')} "
+                f"graph-admissible / {body.get('installed_requiring_another_execution_lane','unmeasured')} "
+                f"need another execution lane / "
                 f"{body['capability_families']} families · "
                 f"Model: {'configured' if model['configured'] else 'not configured'} "
                 f"(creative ability {model['independent_creativity']}) · "
@@ -280,6 +283,10 @@ class IndependentStudioDesktop:
                     family["name"], family["installed_operations"],
                     family["needs_setup_operations"]))
             lines=[]
+            for family in body.get("capabilities",[]):
+                pending=family.get("requires_another_execution_lane",[])
+                if pending:
+                    lines.append(f"NOT GRAPH-READY {family['name']}: "+", ".join(pending))
             if aptitude.get("summary"):
                 stats=aptitude["summary"]
                 lines.append(
