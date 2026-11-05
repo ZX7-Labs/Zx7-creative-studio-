@@ -120,6 +120,21 @@ async function diagnostics(){
      item.className='entry';issues.append(item);
    }
  }
+ const jobStages=view.durable_job_stages||{};
+ if((jobStages.jobs||[]).length){
+   issues.append(node('h3','Durable project stage results'));
+   for(const record of jobStages.jobs.slice(0,8)){
+     const job=node('div','Job '+String(record.job_ref_sha256||'').slice(0,12)
+       +' · '+record.job_status+' · '
+       +(record.physically_observed_lineage?'actual project lineage':'node receipts unmeasured'));
+     job.className='entry';issues.append(job);
+     for(const stage of (record.recent_nodes||[]).slice(0,12)){
+       const item=node('div','  Node '+String(stage.node_ref_sha256||'').slice(0,12)
+         +' · '+stage.state+' · attempts '+stage.attempts);
+       item.className='entry';issues.append(item);
+     }
+   }
+ }
  const families=(body.capabilities||[]).filter(x=>x.needs_setup_operations);
  for(const family of families.slice(0,8)){
     const item=node('div',family.name+': '+family.needs_setup_operations
