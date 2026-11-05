@@ -135,7 +135,8 @@ class RecordedModel:
     def infer(self, context, images=()):
         # Before the first model choice, show independently decoded ORIGINAL
         # camera pixels. These are not a verified post-edit export observation.
-        if self.turn == 0 and self.initial_source_picture is not None:
+        seed_added = self.turn == 0 and self.initial_source_picture is not None
+        if seed_added:
             images = (("image/png", self.initial_source_picture.read_bytes()),) + tuple(images)
         started = time.monotonic()
         self.model.settings.sampling['response_format'] = {'type': 'json_schema', 'json_schema': {
@@ -147,7 +148,9 @@ class RecordedModel:
                  allow_finish=not context.get('missing_completion_evidence', []))}}
         record = {'turn': self.turn, 'context': context, 'image_sha256': []}
         for index, (_, raw) in enumerate(images):
-            path = self.artifacts / 'observations' / f'{self.turn}-{index}.png'
+            # Original-camera seed is NOT an observed exported movie frame.
+            folder = 'source-observations' if seed_added and index == 0 else 'observations'
+            path = self.artifacts / folder / f'{self.turn}-{index}.png'
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(raw)
             record['image_sha256'].append(sha(path))
