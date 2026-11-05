@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from studio_next.providers import LocalCreativeModel,LocalModelSettings
 from studio_next.media_vault import MediaVault,sha256_file
+from studio_next.raw_edit_coverage import assess_raw_edit_coverage
 from studio_next.body_mlt_editor import export_owned_mlt
 from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
@@ -360,6 +361,14 @@ def produce(args):
             native={"frame_rate":{"numerator":24,"denominator":1},
                     "frame_size":{"width":WIDTH,"height":HEIGHT},
                     "tracks":[{"clips":clips}],"audio_tracks":[]}
+            coverage=assess_raw_edit_coverage(
+                source_duration_seconds=spec["duration"],
+                source_sha256=evidence["source"]["sha256"],
+                source_has_audio=spec["has_audio"],
+                sample_times_seconds=original_visual["sample_times_seconds"],
+                edit=decision,native_plan=native)
+            evidence["source_selection_diagnostics"]=coverage
+            safe_json(out/"source-selection-diagnostics.json",coverage)
             native_source=root/"model-authored-native-edit.json"
             safe_json(native_source,native)
             native_project=root/"self-directed-camera-edit.mlt"
