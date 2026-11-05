@@ -68,7 +68,10 @@ def compare_controlled_trials(control, candidate):
     required = ("capability_id", "input_sha256", "contract_sha256", "body_revision")
     for field in required:
         a, b = control.get(field), candidate.get(field)
-        if not isinstance(a, str) or not a or a != b:
+        if (not isinstance(a, str) or not a or a != b
+                or (field in ("input_sha256", "contract_sha256")
+                    and re.fullmatch(r"[a-f0-9]{64}", a) is None)
+                or (field in ("capability_id", "body_revision") and len(a) > 128)):
             return {
                 "attribution": "inconclusive",
                 "evidence": "paired_input_or_contract_not_identical",
