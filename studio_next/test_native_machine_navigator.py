@@ -378,6 +378,8 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([n for n,_ in session.calls].count("import_asset_from_path"),1)
         self.assertEqual([n for n,_ in session.calls].count("get_assets"),4)
         self.assertIsNone(model.observed[3]["last_native_source_import_reconciliation"])
+        self.assertTrue(model.observed[3]["host_observed_machine_facts"]["project_open"])
+        self.assertTrue(model.observed[3]["host_observed_machine_facts"]["assets_present"])
         self.assertIn("source-from-native",model.observed[3][
             "last_physically_observed_native_asset_inventory"]["source_ids"])
         audit_native_journal(result["events"],host_tool_access=host_grants())
