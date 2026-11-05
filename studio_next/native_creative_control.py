@@ -1860,11 +1860,17 @@ class NativeCreativeControl:
                 # claimed an open project despite the REAL editor returning
                 # project=null, hasProject=false twice. Preserve only facts
                 # corroborated by both fields in the native read response.
-                # Any other successful native operation may change project
-                # state, so do not carry an old presence assertion forward.
-                self._project_presence = (
-                    _native_project_presence_from_text(texts)
-                    if native_name == "get_project" else "unknown")
+                # A host-granted READ cannot mutate the project. Preserve
+                # the last real get_project fact across get_assets, timeline,
+                # inspection and other explicitly trusted reads. The previous
+                # unconditional invalidation stranded models after EVERY
+                # useful read and made further preconditions unprovable.
+                # Unclassified calls and every WRITE still invalidate it.
+                if native_name == "get_project":
+                    self._project_presence = _native_project_presence_from_text(texts)
+                elif (self.host_tool_access is None or
+                      self.host_tool_access.get(native_name) != "read"):
+                    self._project_presence = "unknown"
                 if native_name == "get_project" and self._project_presence != "unknown":
                     # A newer independent native inspection supersedes the
                     # post-write inconsistency; preserve the historical
