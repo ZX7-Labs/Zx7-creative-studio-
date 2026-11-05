@@ -123,7 +123,8 @@ def _safe_host_memory(host_capacity):
 
 def universal_diagnostics(*, operation_records, job_records, session_records,
                           host_capacity, model_configured, model_id=None,
-                          paired_trials=(), trace_evidence=None, model_audition=None):
+                          paired_trials=(), trace_evidence=None, model_audition=None,
+                          job_stage_evidence=()):
     """Bounded authenticated dashboard snapshot from actual host runtime state.
 
     Registry claims prove *discovery/installation*, not tool execution;
@@ -133,6 +134,38 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
     tools = _rows(operation_records, "capability registry")
     jobs = _rows(job_records, "durable job history")
     sessions = _rows(session_records, "creative sessions")
+    observed_job_stages = _rows(job_stage_evidence, "durable job stages")
+    # Expose only hashed host identities and validated categorical state.
+    # No raw graph node names, source paths or operator prompt strings.
+    projected_jobs = []
+    for item in observed_job_stages:
+        ref = item.get("job_ref_sha256")
+        state = item.get("job_status")
+        found = item.get("independently_observed_node_results")
+        nodes = _rows(item.get("nodes"), "per-job durable nodes")
+        if (not isinstance(ref,str) or not re.fullmatch(r"[a-f0-9]{64}",ref)
+                or state not in _STATES or type(found) is not bool
+                or len(nodes)>40):
+            raise DiagnosticEvidenceError("Untrusted per-job lineage observation")
+        shown=[]
+        for node in nodes:
+            node_ref=node.get("node_ref_sha256")
+            attempts=node.get("attempts")
+            node_state=node.get("state")
+            if (not found or not isinstance(node_ref,str)
+                    or not re.fullmatch(r"[a-f0-9]{64}",node_ref)
+                    or not isinstance(node_state,str)
+                    or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}",node_state)
+                    or type(attempts) is not int or attempts<0):
+                raise DiagnosticEvidenceError("Unverified original tool stage receipt")
+            shown.append({"node_ref_sha256":node_ref,"state":node_state,
+                          "attempts":attempts})
+        projected_jobs.append({
+            "job_ref_sha256":ref,"job_status":state,
+            "physically_observed_lineage":found,"recent_nodes":shown,
+            "source":("same_project_lineage" if found else "not_proven"),
+            "creative_quality_not_assessed":True,
+        })
     pairs = _rows(paired_trials, "paired trial receipts")
     if trace_evidence is None:
         trace_evidence = {
@@ -380,6 +413,12 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
             "each_pair_is_not_a_general_model_ranking": True,
         },
         "diagnostics": diagnostics[:40],
+        "durable_job_stages": {
+            "observed_job_count":len(projected_jobs),
+            "jobs":projected_jobs,
+            "lineage_may_span_original_project_revisions":True,
+            "not_all_node_outcomes_are_actual_media_quality":True,
+        },
         "execution_traces": {
             "observed_event_count": trace_evidence["observed_event_count"],
             "recent_events": list(recent_events),
