@@ -92,6 +92,7 @@ async function diagnostics(){
        'Configured · '+(brain.capability_assessment||'unmeasured'):'Not configured'),
    diagnosticCard('Durable failures',Number(jobs.by_state?.blocked||0)+Number(jobs.by_state?.failed||0)),
    diagnosticCard('Controlled model/BODY comparisons',pairs.observed_pairs??0),
+   diagnosticCard('Durable stage receipts',view.execution_traces?.observed_event_count??0),
    diagnosticCard('Creative quality',brain.independent_creativity||'unmeasured'));
  const issues=e('diagnostic-issues');issues.replaceChildren();
  for(const issue of (view.diagnostics||[]).slice(0,12)){
@@ -100,6 +101,15 @@ async function diagnostics(){
    block.className='entry';issues.append(block);
  }
  if(!(view.diagnostics||[]).length)issues.append(node('div','No recorded blockers; unmeasured areas are not certified.'));
+ const history=view.execution_traces||{};
+ if((history.recent_events||[]).length){
+   issues.append(node('h3','Recent independently recorded BODY stages'));
+   for(const stage of history.recent_events.slice(0,12)){
+     const item=node('div',stage.phase+' · '+stage.outcome+' · '+stage.code
+         +' · '+stage.capability_id);
+     item.className='entry';issues.append(item);
+   }
+ }
  const families=(body.capabilities||[]).filter(x=>x.needs_setup_operations);
  for(const family of families.slice(0,8)){
     const item=node('div',family.name+': '+family.needs_setup_operations
