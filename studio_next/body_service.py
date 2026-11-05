@@ -43,6 +43,7 @@ from .body_download_tickets import DownloadTickets
 from .body_verified_delivery import verified_artifact_snapshot
 from .body_host_resources import inspect_host_resources
 from .universal_diagnostics import universal_diagnostics
+from .diagnostic_trace import initialize_trace_store, append_host_event, read_recent_host_events
 from .body_revision_impact import plan_film_revision_impact
 from .durable_graph import durable_project_key
 
@@ -109,6 +110,7 @@ class LocalBodyCoordinator:
             db.execute("""CREATE TABLE IF NOT EXISTS job_controls(
                 job_id TEXT PRIMARY KEY, requested_action TEXT NOT NULL,
                 requested_at REAL NOT NULL)""")
+            initialize_trace_store(db)
         # We already own the exclusive OS workspace lock, and no new worker
         # has been scheduled. A machine/process crash leaves a previously
         # running graph lease in the future; expire only those orphaned leases
@@ -297,13 +299,18 @@ class LocalBodyCoordinator:
                 return create_body_archive(self.root,archive_path)
 
     def _work(self,identity):
+        clock_started=time.monotonic()
         try:
             with self._connect() as db:
-                # Jobs already have a bounded single executor owner locally.
+                # One durable event and state transition, never a guessed start.
+                db.execute("BEGIN IMMEDIATE")
                 db.execute("""UPDATE jobs SET status='running',attempts=attempts+1,
                            modified=? WHERE id=?""",(time.time(),identity))
                 row=db.execute("SELECT workspace_id,original_ir FROM jobs WHERE id=?",
                                (identity,)).fetchone()
+                append_host_event(db,trace_id=identity,
+                    capability_id="zx7.production_graph", phase="execution",
+                    outcome="started",code="host_job_execution_started")
             if row is None:raise ValueError("Submitted original film vanished")
             location=self._workspace(row[0])
             original=json.loads(row[1])
@@ -336,9 +343,26 @@ class LocalBodyCoordinator:
                     "movie_delivered":False}
         finally:
             with self._connect() as db:
+                db.execute("BEGIN IMMEDIATE")
                 db.execute("""UPDATE jobs SET status=?,result=?,modified=? WHERE id=?""",
                     (status,json.dumps(report,allow_nan=False,ensure_ascii=False),
                      time.time(),identity))
+                if status=="completed" and self._uses_native_executor:
+                    outcome,code="verified","native_tool_graph_reported_verified"
+                elif status=="completed":
+                    outcome,code="observed","custom_executor_completion_unverified"
+                elif status=="paused":
+                    outcome,code="paused","operator_job_pause"
+                elif status=="cancelled":
+                    outcome,code="cancelled","operator_job_cancel"
+                elif status=="blocked":
+                    outcome,code="failed","tool_graph_reported_blockage"
+                else:
+                    outcome,code="failed","host_job_exception"
+                append_host_event(db,trace_id=identity,
+                    capability_id="zx7.production_graph",phase="execution",
+                    outcome=outcome,code=code,
+                    elapsed_ms=(time.monotonic()-clock_started)*1000)
                 if status not in ("paused","cancelled"):
                     db.execute("DELETE FROM job_controls WHERE job_id=?",(identity,))
             with self._lock:
@@ -454,6 +478,8 @@ class LocalBodyCoordinator:
         model = self.creative_sessions
         identity = (model._model_identity().get("model_id")
                     if model is not None else None)
+        with self._connect() as db:
+            trace_evidence=read_recent_host_events(db,limit=32)
         return universal_diagnostics(
             operation_records=body_catalog(self.projects).discover(),
             job_records=[{"status": status, "count": count}
@@ -462,6 +488,7 @@ class LocalBodyCoordinator:
             host_capacity=self.host_resource_status(),
             model_configured=model is not None,
             model_id=identity,
+            trace_evidence=trace_evidence,
         )
 
     def list_jobs(self,*,limit=100):
