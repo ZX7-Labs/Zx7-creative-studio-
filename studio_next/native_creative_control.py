@@ -444,6 +444,28 @@ def _native_project_presence_from_text(texts):
     return "unknown"
 
 
+
+def _native_timeline_picture_presence_from_text(texts):
+    """Read-only Velorn get_timeline snapshot; unknown is never treated as empty."""
+    try:
+        record = _strict_receipt(texts, "native picture timeline")
+    except NativeCreativeControlError:
+        return "unknown"
+    if not isinstance(record, dict) or not isinstance(record.get("clips"), list):
+        return "unknown"
+    if type(record.get("clipLimitApplied")) is not bool:
+        return "unknown"
+    clips = record["clips"]
+    if any(not isinstance(item, dict) for item in clips):
+        return "unknown"
+    for clip in clips:
+        if (clip.get("type") in ("video", "image")
+                and isinstance(clip.get("assetId"), str)
+                and bool(clip["assetId"])):
+            return "present"
+    return "unknown" if record["clipLimitApplied"] else "absent"
+
+
 class NativeCreativeControl:
     """Single in-process driver of an already host-authorized official MCP session.
 
