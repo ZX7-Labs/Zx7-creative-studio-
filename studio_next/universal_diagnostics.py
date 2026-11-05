@@ -105,6 +105,19 @@ def compare_controlled_trials(control, candidate):
             "creative_quality": "not_assessed"}
 
 
+
+def _safe_host_memory(host_capacity):
+    memory = host_capacity.get("memory")
+    if memory is None:
+        return None
+    if not isinstance(memory, dict):
+        raise DiagnosticEvidenceError("Invalid physical memory observation")
+    value = memory.get("available_bytes")
+    if value is not None and (type(value) is not int or value < 0):
+        raise DiagnosticEvidenceError("Invalid available host memory")
+    return value
+
+
 def universal_diagnostics(*, operation_records, job_records, session_records,
                           host_capacity, model_configured, model_id=None,
                           paired_trials=()):
@@ -135,24 +148,30 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
         if status not in ("installed", "needs_setup"):
             raise DiagnosticEvidenceError("Unexpected actual host tool status")
         key = tool.get("id")
-        if not isinstance(key, str) or not key or len(key) > 128:
-            raise DiagnosticEvidenceError("Missing live capability tool identity")
+        _name(key, "live operation")
         entry = per_capability.setdefault(capability, {
             "name": capability, "installed_operations": 0,
             "needs_setup_operations": 0,
             "physical_execution_verified": False,
             "creative_quality_verified": False,
+            "operations_needing_setup": [],
         })
         entry["installed_operations" if status == "installed"
               else "needs_setup_operations"] += 1
+        if status == "needs_setup":
+            entry["operations_needing_setup"].append(key)
     catalog = sorted(per_capability.values(), key=lambda x: x["name"].casefold())
+    for family in catalog:
+        family["operations_needing_setup"].sort()
 
     job_states = Counter()
     for row in jobs:
         status = row.get("status")
         if status not in _STATES:
             raise DiagnosticEvidenceError("Unknown durable job state")
-        job_states[status] += 1
+        count = row.get("count", 1)
+        _whole(count, "durable job")
+        job_states[status] += count
     session_states = Counter()
     decision_count = 0
     error_result_count = 0
@@ -183,7 +202,7 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
     all_installed = sum(x["installed_operations"] for x in catalog)
     setup_count = sum(x["needs_setup_operations"] for x in catalog)
     blocked = sum(job_states[x] for x in ("blocked", "failed"))
-    model_rejections = decision_count - error_result_count
+    unflagged_actions = decision_count - error_result_count
     diagnostics = []
     if not model_configured:
         diagnostics.append({
@@ -270,7 +289,8 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
             "observed_creative_sessions": sum(session_states.values()),
             "observed_model_decisions": decision_count,
             "session_dispatch_error_results": error_result_count,
-            "decisions_without_reported_error": model_rejections,
+            "decisions_without_reported_error": unflagged_actions,
+            "observed_session_window_limit": 64,
             "warning": "A successful decision is not proof of model intelligence or artistic merit",
         },
         "jobs": {
@@ -281,6 +301,7 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
         "host": {
             "cpu_logical_processors": processor,
             "free_workspace_disk_bytes": free,
+            "memory_available_bytes": _safe_host_memory(host_capacity),
             "capacity_is_not_model_capability": True,
             "source": "live_host_resource_sensor",
         },
@@ -291,6 +312,21 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
             "each_pair_is_not_a_general_model_ranking": True,
         },
         "diagnostics": diagnostics[:40],
+        "measurement_lanes": [
+            {"name": "BODY discovery", "state": "observed",
+             "proof": "live_registered_operations"},
+            {"name": "BODY execution", "state": (
+                "observed" if job_states else "unmeasured"),
+             "proof": "actual_durable_jobs_only"},
+            {"name": "Model interface", "state": (
+                "partially_observed" if decision_count else "unmeasured"),
+             "proof": "host_stored_action_attempts_not_skill_certification"},
+            {"name": "Paired causal isolation", "state": (
+                "observed" if pairs else "unmeasured"),
+             "proof": "same_contract_independent_host_controls_only"},
+            {"name": "Independent creative quality", "state": "unmeasured",
+             "proof": "professional_review_and_domain_acceptance_absent"},
+        ],
         "unresolved": [
             "Per-operation execution health requires observed tool receipts",
             "Model vs BODY requires independent same-input controls",
