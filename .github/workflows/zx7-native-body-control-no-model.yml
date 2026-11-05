@@ -4,6 +4,8 @@ on:
     branches: ["engineering/unified-brain-body-architecture-audit-20261106"]
     paths:
       - ".github/workflows/zx7-native-body-control-no-model.yml"
+      - "engines/velorn/mcp-e2e.py"
+      - "studio_next/native_asset_identity.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,6 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -56,7 +59,7 @@ jobs:
           sudo chmod 4755 "$helper"
           test "$(stat -c '%u:%a' "$helper")" = "0:4755"
           echo "ELECTRON SANDBOX: ROOT-OWNED 4755 HELPER VERIFIED (no --no-sandbox)"
-      - name: Run original SDK client through owned native Electron app and whole A/V export
+      - name: Verify native import receipt IDs against real asset inventory, edit/reopen and decode A/V
         run: |
           python -u engines/velorn/mcp-e2e.py \
             --source "$GITHUB_WORKSPACE/third_party/velorn" \
