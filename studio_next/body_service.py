@@ -452,6 +452,54 @@ class LocalBodyCoordinator:
         """Only live technical capacity, never unverified AI model execution."""
         return inspect_host_resources(self.root)
 
+    def recent_job_stage_evidence(self, *, limit=8):
+        """Expose exact host-owned production DB stage states, never private IDs.
+
+        A node belongs to a verified durable project lineage, not necessarily
+        the latest job attempt. Unmatched/absent records remain unmeasured.
+        """
+        import hashlib
+        if type(limit) is not int or not 1 <= limit <= 16:
+            raise ValueError("Bounded host-owned diagnostic stage window needed")
+        with self._connect() as db:
+            jobs=db.execute("SELECT id,status FROM jobs "
+                            "ORDER BY modified DESC,id DESC LIMIT ?",(limit,)).fetchall()
+        reports=[]
+        for job_id,status in jobs:
+            record=self.inspect(job_id)
+            progress=record.get("actual_tool_progress",{})
+            observed=progress.get("observed_tool_states",[])
+            nodes=[]
+            if progress.get("tool_progress_is_actual_sqlite") is True:
+                for node in observed[:40]:
+                    identity=node.get("node_id")
+                    state=node.get("state")
+                    attempts=node.get("attempts")
+                    updated=node.get("updated_at")
+                    if (not isinstance(identity,str) or not identity
+                            or not isinstance(state,str)
+                            or not re.fullmatch("[a-z][a-z0-9_]{0,63}",state)
+                            or type(attempts) is not int or attempts<0
+                            or type(updated) not in (int,float)
+                            or not 0 <= updated < 1e12):
+                        continue
+                    nodes.append({
+                        "node_ref_sha256":hashlib.sha256(identity.encode()).hexdigest(),
+                        "state":state,
+                        "attempts":attempts,
+                        "observed_at":updated,
+                    })
+            reports.append({
+                "job_ref_sha256":hashlib.sha256(job_id.encode()).hexdigest(),
+                "job_status":status,
+                "source":progress.get("stage_scope","unknown"),
+                "independently_observed_node_results": (
+                    progress.get("tool_progress_is_actual_sqlite") is True),
+                "nodes":nodes,
+                "not_a_creative_quality_measure":True,
+            })
+        return reports
+
     def diagnostic_snapshot(self):
         """Real-time authenticated capability and model/BODY evidence overview.
 
@@ -495,6 +543,7 @@ class LocalBodyCoordinator:
             trace_evidence=trace_evidence,
             model_audition=(self.model_aptitude_sessions.latest()
                             if self.model_aptitude_sessions is not None else None),
+            job_stage_evidence=self.recent_job_stage_evidence(),
         )
 
     def list_jobs(self,*,limit=100):
