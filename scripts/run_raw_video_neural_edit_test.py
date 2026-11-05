@@ -25,7 +25,7 @@ from PIL import Image, ImageDraw, ImageFont
 from studio_next.providers import LocalCreativeModel,LocalModelSettings
 from studio_next.media_vault import MediaVault,sha256_file
 from studio_next.raw_edit_coverage import assess_raw_edit_coverage
-from studio_next.raw_temporal_observer import inspect_raw_temporal_source
+from studio_next.raw_temporal_observer import inspect_raw_temporal_source, render_camera_contact_sheet
 from studio_next.body_mlt_editor import export_owned_mlt
 from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
@@ -61,36 +61,9 @@ def receipt(path):
     return {"path":str(p),"sha256":sha256_file(p),"bytes":p.stat().st_size}
 
 def shot_reel(raw,info,out,*,sample_times_seconds):
-    """Retain 16 real sampled frames with source bound before model inference."""
-    duration=info["duration"]
-    cols=4;rows=4;width=320;height=180;label=30
-    canvas=Image.new("RGB",(cols*width,rows*(height+label)),(12,18,25))
-    draw=ImageDraw.Draw(canvas)
-    if (not isinstance(sample_times_seconds,list) or len(sample_times_seconds)!=16 or
-            any(type(t) not in (float,int) or not math.isfinite(t) or
-                t<0 or t>=duration for t in sample_times_seconds)):
-        raise ValueError("Camera contact sheet requires 16 actual-source times")
-    samples=[]
-    for i,sec in enumerate(sample_times_seconds):
-        cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin",
-             "-ss",str(sec),"-i",str(raw),
-             "-map","0:v:0","-frames:v","1","-vf",
-             "scale=320:180:flags=fast_bilinear","-f","image2pipe",
-             "-vcodec","mjpeg","pipe:1"]
-        shot=subprocess.run(cmd,capture_output=True,timeout=35,check=True)
-        with Image.open(BytesIO(shot.stdout)) as frame:
-            frame.load()
-            if frame.size!=(width,height):
-                raise ValueError("Actual camera preview cannot be decoded")
-            x=(i%cols)*width;y=(i//cols)*(height+label)
-            canvas.paste(frame.convert("RGB"),(x,y))
-            draw.text((x+8,y+height+7),f"{sec:.1f}s",fill="white")
-            samples.append(sec)
-    canvas.save(out,format="PNG")
-    return {"thumbnail_sha256":sha256_file(out),
-            "actual_video_sha256":sha256_file(raw),
-            "sample_times_seconds":samples,
-            "samples_are_not_full_motion_semantic_understanding":True}
+    """Source-bound camera contact sheet; observations are not story understanding."""
+    return render_camera_contact_sheet(raw,info["duration"],sample_times_seconds,out)
+
 
 def plan_schema(length):
     max_second=min(1200,math.ceil(length))
