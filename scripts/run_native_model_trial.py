@@ -393,7 +393,7 @@ async def trial(args, lock, artifacts, command):
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
               and bool(revised_exports) and changed_pixels
-              and (camera_seed is None or camera_original_saved))
+              and (camera_seed is None or (camera_original_saved and camera_original_on_timeline)))
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
             'native_original_camera_file_preserved': (
                 camera_original_saved if camera_seed is not None else None),
