@@ -25,7 +25,7 @@ from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CR
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.native_action_schema import native_action_schema
-from studio_next.native_camera_seed import stage_attested_camera
+from studio_next.native_camera_seed import stage_attested_camera, verify_native_original_timeline
 
 
 def sha(path):
