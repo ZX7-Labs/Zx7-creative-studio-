@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
 from .body_editor_mcp import _local_schema_references
+from .capability_attempts import CapabilityAttemptStore
 
 
 class CapabilityExecutionError(ValueError):
@@ -53,7 +54,10 @@ class CapabilityGateway:
     host-attested boolean facts. Missing facts deny prerequisite admission.
     """
 
-    def __init__(self, bindings: Mapping):
+    def __init__(self, bindings: Mapping, *, attempt_store=None):
+        if attempt_store is not None and not isinstance(attempt_store, CapabilityAttemptStore):
+            raise CapabilityExecutionError("Only the trusted durable capability ledger is permitted")
+        self._attempt_store = attempt_store
         if not isinstance(bindings, Mapping) or not 1 <= len(bindings) <= 256:
             raise CapabilityExecutionError("Connected host-bound source inventory is required")
         self._bindings = {}
@@ -139,13 +143,16 @@ class CapabilityGateway:
         """Only bounded identity/digest and outcome, never raw private media."""
         return copy.deepcopy(self._events)
 
-    async def invoke(self, operation_id, *, revision, inputs):
+    async def invoke(self, operation_id, *, revision, inputs, request_id=None):
         """One model-selected operation; never auto-retry uncertain writes.
 
         Always re-discover live tool ABI and grants under a per-source lock
         before the call. State gates are advisory in the catalog but enforced
         here when a trusted source explicitly declares prerequisites.
         Individual native engines still enforce their own path/rights policies.
+        When configured with a durable attempt ledger, the host must provide
+        a stable request_id for every WRITE. No client/model request text may
+        create a second execution of the same admitted request.
         """
         prior = self._current()
         record = prior.resolve(operation_id, revision=revision)
@@ -206,9 +213,21 @@ class CapabilityGateway:
                     raise CapabilityExecutionError(
                         "Machine prerequisite absent or unknown; inspect host state")
             digest = hashlib.sha256(encoded_inputs).hexdigest()
+            durable_write = (self._attempt_store is not None and
+                             record["access"] == "write")
+            if durable_write:
+                # Commit to SQLite BEFORE the first non-idempotent RPC. A
+                # process death after admission is conservatively unresolved,
+                # even if the native worker never received the request.
+                self._attempt_store.admit(
+                    request_id=request_id, operation_id=operation_id,
+                    catalog_revision=revision, input_sha256=digest)
             trace = {"operation_id": operation_id, "catalog_revision": revision,
                      "input_sha256": digest, "access": record["access"],
                      "state": "submitted_unconfirmed"}
+            if durable_write:
+                trace["durable_request_id_sha256"] = hashlib.sha256(
+                    request_id.encode("utf-8")).hexdigest()
             self._events.append(trace)
             try:
                 # One submission only; uncertain writes require reconciliation.
@@ -216,6 +235,9 @@ class CapabilityGateway:
             except BaseException:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
+                if durable_write:
+                    self._attempt_store.settle(
+                        request_id=request_id, state=trace["state"])
                 raise
             try:
                 failure = _native_mcp_status(result)
@@ -224,12 +246,20 @@ class CapabilityGateway:
                 # Contradictory and nonboolean statuses never become success.
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
+                if durable_write:
+                    self._attempt_store.settle(
+                        request_id=request_id, state=trace["state"])
                 raise
             if failure:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
-                return {"state": trace["state"], "operation_id": operation_id,
-                        "native_result": result}
-            trace["state"] = "host_reported_success_unverified"
+            else:
+                # A successful MCP transport is NOT proof a native edit
+                # committed. Preview-only, internal application failures and
+                # delayed state visibility remain explicit downstream work.
+                trace["state"] = "host_reported_success_unverified"
+            if durable_write:
+                self._attempt_store.settle(
+                    request_id=request_id, state=trace["state"])
             return {"state": trace["state"], "operation_id": operation_id,
                     "native_result": result}
