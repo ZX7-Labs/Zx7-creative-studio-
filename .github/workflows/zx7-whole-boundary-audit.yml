@@ -74,6 +74,7 @@ jobs:
             studio_next.test_body_signal \
             studio_next.test_body_editor_catalog \
             studio_next.test_body_editor_policy \
+            studio_next.test_body_editor_mcp \
             studio_next.test_native_creative_audit \
             studio_next.test_native_creative_control \
             studio_next.test_native_machine_navigator \
