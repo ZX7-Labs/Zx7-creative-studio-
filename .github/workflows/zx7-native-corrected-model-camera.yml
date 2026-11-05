@@ -1,4 +1,4 @@
-name: ZX7 Corrected Brain BODY Actual Camera Trial
+name: ZX7 Source-Compatible Qwen Camera Native Trial
 on:
   push:
     branches: ["engineering/unified-brain-body-architecture-audit-20261106"]
