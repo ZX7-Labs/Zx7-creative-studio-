@@ -1294,6 +1294,7 @@ class NativeCreativeControl:
                 # created project is not evidence of placed picture footage.
                 # Re-read actual native state; never infer clips from model text.
                 picture_state = "unknown"
+                observed_timeline_text_sha256 = None
                 if "timeline_picture_present" in self._host_preconditions.get(native_name, ()):
                     timeline_args = {"includeClips": True, "limit": 1000}
                     if (self.host_tool_access is None or
@@ -1317,12 +1318,17 @@ class NativeCreativeControl:
                                     raise NativeCreativeControlError(
                                         "Timeline source state contained unexpected media")
                                 picture_state = _native_timeline_picture_presence_from_text(raw_texts)
+                                observed_timeline_text_sha256 = hashlib.sha256(
+                                    _wire(raw_texts).encode("utf-8")).hexdigest()
                             except NativeCreativeControlError:
                                 picture_state = "unknown"
-                        self._append({"kind": "host_native_timeline_picture_observation",
-                                      "turn": turn, "picture_state": picture_state,
-                                      "host_attested_read_only": True,
-                                      "no_native_edit_dispatched": True})
+                        evidence = {"kind": "host_native_timeline_picture_observation",
+                                    "turn": turn, "picture_state": picture_state,
+                                    "host_attested_read_only": True,
+                                    "no_native_edit_dispatched": True}
+                        if observed_timeline_text_sha256 is not None:
+                            evidence["observed_text_sha256"] = observed_timeline_text_sha256
+                        self._append(evidence)
                 if (self._capabilities is not None and
                         native_name in self._host_preconditions):
                     known_facts = {}
