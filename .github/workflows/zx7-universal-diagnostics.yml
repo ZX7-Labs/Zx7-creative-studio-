@@ -54,6 +54,11 @@ jobs:
             studio_next.test_diagnostic_trace \
             studio_next.test_universal_diagnostics_service \
             studio_next.test_body_mobile
+      - name: Guard existing durable production, recovery, pause and upload invariants
+        run: |
+          python -m unittest -v \
+            studio_next.test_body_service \
+            studio_next.test_body_controls
       - name: Confirm native desktop UI with real local service under display
         run: |
           xvfb-run -a python -m unittest -v \
