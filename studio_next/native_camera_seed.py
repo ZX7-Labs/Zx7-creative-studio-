@@ -56,6 +56,15 @@ def stage_attested_camera(camera, rights_manifest, staging, evidence_root):
             not isinstance(manifest.get("sha256"), str) or
             re.fullmatch("[0-9a-f]{64}", manifest["sha256"]) is None):
         raise NativeCameraSeedError("No exact source attestation or declared rights")
+    # Host-local, short-model trial resource budget, not a product format limit.
+    # Check before copying so a forged manifest cannot exhaust the staging disk.
+    camera_bytes = camera.stat().st_size
+    if camera_bytes <= 0 or camera_bytes > 2_000_000_000:
+        raise NativeCameraSeedError("Original camera exceeds trial staging byte budget")
+    declared_bytes = manifest.get("bytes")
+    if declared_bytes is not None and (
+            type(declared_bytes) is not int or declared_bytes != camera_bytes):
+        raise NativeCameraSeedError("Original camera length differs from rights manifest")
     target = staging / ("native-original-camera" + camera.suffix.lower())
     # Exclusive destination never replaces or follows an existing user file.
     with camera.open("rb") as original, target.open("xb") as staged:
