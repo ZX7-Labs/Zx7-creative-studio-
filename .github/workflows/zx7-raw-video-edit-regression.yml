@@ -32,4 +32,4 @@ jobs:
           python -m pip install --disable-pip-version-check '.[production]'
           python -m compileall -q studio_next scripts/run_raw_video_neural_edit_test.py
       - name: Test no prescribed style, original camera frame evidence and actual encoded graphic output
-        run: python -m unittest -v studio_next.test_raw_video_neural_edit studio_next.test_raw_edit_coverage
+        run: python -m unittest -v studio_next.test_raw_video_neural_edit studio_next.test_raw_edit_coverage studio_next.test_raw_temporal_observer
