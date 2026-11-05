@@ -32,8 +32,8 @@ def assess_raw_edit_coverage(
     a reopened .mlt or physical output. No favorable field certifies quality.
     """
     duration = _finite_number(source_duration_seconds, "source duration")
-    if not 0 < duration <= 24 * 3600:
-        raise EditCoverageError("source duration outside bounded evidence scope")
+    if duration <= 0:
+        raise EditCoverageError("source duration must be positive")
     if (not isinstance(source_sha256, str) or
             re.fullmatch(r"[0-9a-f]{64}", source_sha256) is None):
         raise EditCoverageError("source SHA-256 must be canonical")
