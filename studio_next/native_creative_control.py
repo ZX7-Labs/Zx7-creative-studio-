@@ -577,6 +577,9 @@ class NativeCreativeControl:
         self._last_audio_evidence: dict | None = None
         self._last_real_asset_inventory: dict | None = None
         self._host_asset_observation_attempted = False
+        # Only a trusted, acknowledged native import can request a second
+        # read-only visibility check. Never replay or synthesize a media write.
+        self._pending_asset_visibility_check = False
         self._last_native_timeline_picture_state = "unknown"
         self._host_timeline_observation_attempted = False
         self._verified_exports: set[str] = set()
@@ -879,44 +882,61 @@ class NativeCreativeControl:
                             and "get_assets" in validators
                             and validators["get_assets"].is_valid({})):
                         self._host_asset_observation_attempted = True
-                        try:
-                            response = await self.session.call_tool("get_assets", {})
-                        except Exception as exc:
-                            self._append({"kind": "native_asset_inventory_unknown",
-                                          "turn": turn, "tool": "get_assets",
-                                          "error_type": type(exc).__name__,
-                                          "no_native_edit_dispatched": True})
-                        else:
+                        reconcile_import = self._pending_asset_visibility_check
+                        self._pending_asset_visibility_check = False
+                        for read_attempt in ((1, 2) if reconcile_import else (1,)):
+                            if read_attempt == 2:
+                                # An editor import ACK may precede asset-list
+                                # visibility. This finite host-read grace is not
+                                # a claim about upstream's maximum latency.
+                                await asyncio.sleep(1.5)
+                            try:
+                                response = await self.session.call_tool("get_assets", {})
+                            except Exception as exc:
+                                self._last_real_asset_inventory = None
+                                self._append({"kind": "native_asset_inventory_unknown",
+                                              "turn": turn, "tool": "get_assets",
+                                              "error_type": type(exc).__name__,
+                                              "read_attempt": read_attempt,
+                                              "no_native_edit_dispatched": True})
+                                break
                             if _field(response, "is_error",
                                       _field(response, "isError", False)):
+                                self._last_real_asset_inventory = None
                                 self._append({"kind": "native_asset_inventory_unknown",
                                               "turn": turn, "tool": "get_assets",
                                               "native_read_failed": True,
+                                              "read_attempt": read_attempt,
                                               "no_native_edit_dispatched": True})
-                            else:
-                                try:
-                                    asset_texts, asset_images, asset_audio = _native_content(response)
-                                    if asset_images or asset_audio:
-                                        raise NativeAssetEvidenceError(
-                                            "Native inventory cannot contain visual/audio claims")
-                                    inventory = inventory_from_native_text(asset_texts)
-                                except (NativeAssetEvidenceError, NativeCreativeControlError):
-                                    self._append({"kind": "native_asset_inventory_unknown",
-                                                  "turn": turn, "tool": "get_assets",
-                                                  "invalid_native_inventory": True,
-                                                  "no_native_edit_dispatched": True})
-                                else:
-                                    self._last_real_asset_inventory = inventory
-                                    self._append({"kind": "host_native_asset_inventory",
-                                                  "turn": turn, "tool": "get_assets",
-                                                  "host_attested_read_only": True,
-                                                  "source_identities_count": inventory["returned"],
-                                                  "complete_inventory": inventory["complete"],
-                                                  "actual_imported_asset_total": inventory["total"],
-                                                  "text_sha256": [hashlib.sha256(
-                                                      text.encode("utf-8")).hexdigest()
-                                                      for text in asset_texts],
-                                                  "no_native_edit_dispatched": True})
+                                break
+                            try:
+                                asset_texts, asset_images, asset_audio = _native_content(response)
+                                if asset_images or asset_audio:
+                                    raise NativeAssetEvidenceError(
+                                        "Native inventory cannot contain visual/audio claims")
+                                inventory = inventory_from_native_text(asset_texts)
+                            except (NativeAssetEvidenceError, NativeCreativeControlError):
+                                self._last_real_asset_inventory = None
+                                self._append({"kind": "native_asset_inventory_unknown",
+                                              "turn": turn, "tool": "get_assets",
+                                              "invalid_native_inventory": True,
+                                              "read_attempt": read_attempt,
+                                              "no_native_edit_dispatched": True})
+                                break
+                            self._last_real_asset_inventory = inventory
+                            self._append({"kind": "host_native_asset_inventory",
+                                          "turn": turn, "tool": "get_assets",
+                                          "host_attested_read_only": True,
+                                          "source_identities_count": inventory["returned"],
+                                          "complete_inventory": inventory["complete"],
+                                          "actual_imported_asset_total": inventory["total"],
+                                          "read_attempt": read_attempt,
+                                          "text_sha256": [hashlib.sha256(
+                                              text.encode("utf-8")).hexdigest()
+                                              for text in asset_texts],
+                                          "no_native_edit_dispatched": True})
+                            if inventory["total"] > 0 or not reconcile_import:
+                                break
                     wants_picture = any(
                         "timeline_picture_present" in effects
                         for effects in self._host_possible_effects.values())
@@ -1715,6 +1735,8 @@ class NativeCreativeControl:
                         self._last_native_preview_feedback = None
                         self._last_real_asset_inventory = None
                         self._host_asset_observation_attempted = False
+                        self._pending_asset_visibility_check = (
+                            "assets_present" in self._host_possible_effects.get(native_name, ()))
                         self._last_native_timeline_picture_state = "unknown"
                         self._host_timeline_observation_attempted = False
                     hashes = _source_bound_images(texts, images)
