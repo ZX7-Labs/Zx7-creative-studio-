@@ -1,10 +1,12 @@
 """Physical trusted BODY catalog through universal small/large brain interface."""
 import tempfile
+from pathlib import Path
 import unittest
 
 from studio_next.body_capability_adapter import (
     InstalledBodyAdapter, connect_installed_zx7_body)
 from studio_next.capability_gateway import CapabilityExecutionError
+from studio_next.capability_attempts import CapabilityAttemptError, CapabilityAttemptStore
 from studio_next.capability_fabric import CapabilityContractError
 
 
@@ -50,6 +52,39 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("body.invented_capability", grants)
             self.assertFalse(any("Markdown" in str(t) for t in real.tools))
             self.assertIsNone(real.nextCursor)
+
+
+    async def test_installed_body_opt_in_durable_writes_preserve_read_tools(self):
+        with tempfile.TemporaryDirectory() as root:
+            gateway = await connect_installed_zx7_body(
+                root, allowed_access=("read", "write"),
+                durable_write_requests=True)
+            path = Path(root)/".zx7-host-private"/"capability-attempts.sqlite3"
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.stat().st_mode & 0o077, 0)
+            self.assertEqual(path.parent.stat().st_mode & 0o077, 0)
+            revision=gateway._current().revision
+            observed=await gateway.invoke("zx7/body.timecode_format",
+                revision=revision,inputs={
+                    "frame_index":48,"numerator":24,"denominator":1,
+                    "drop_frame":False})
+            self.assertEqual(observed["state"],"host_reported_success_unverified")
+            # A generated-rights write would be rejected by its own BODY
+            # graph policy, but stable host identity must be demanded even
+            # earlier, before the legacy runner is ever called.
+            with self.assertRaises(CapabilityAttemptError):
+                await gateway.invoke("zx7/body.asset_vault",revision=revision,
+                    inputs={"source_witness":{}})
+            self.assertEqual(len(gateway.evidence()),1)
+            self.assertIsNone(CapabilityAttemptStore(path).inspect("unissued"))
+
+    async def test_installed_body_refuses_non_boolean_durable_policy(self):
+        with tempfile.TemporaryDirectory() as root:
+            for invalid in ("true",1,None):
+                with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+                    await connect_installed_zx7_body(
+                        root,durable_write_requests=invalid)
+            self.assertFalse((Path(root)/".zx7-host-private").exists())
 
 
 if __name__ == "__main__":
