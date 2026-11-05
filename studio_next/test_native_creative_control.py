@@ -2544,8 +2544,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     body = {"project": {"name": "Open edit"},
                             "mcp": {"hasProject": True}}
                 elif name == "get_assets":
-                    body = {"assets": [], "totalAssetCount": 0,
-                            "returnedAssetCount": 0}
+                    body = {"assets": [], "count": 0,
+                            "limitApplied": False}
                 else:
                     raise AssertionError("No editor mutation was authorized")
                 return SimpleNamespace(is_error=False, content=[
