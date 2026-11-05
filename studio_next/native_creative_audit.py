@@ -599,6 +599,19 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if tool == _AUDIO and audio_sha is None:
                     raise NativeJournalError("Native WAV is absent")
             else:
+                if kind == "native_observation_rejected":
+                    allowed = {"sequence", "kind", "turn", "tool",
+                               "error_type", "error_sha256",
+                               "measured_native_mcp_wall_ms",
+                               "must_reconcile_native_state"}
+                    elapsed = event.get("measured_native_mcp_wall_ms")
+                    if (set(event) != allowed or
+                            event.get("error_type") != "NativeCreativeControlError" or
+                            not _sha(event.get("error_sha256")) or
+                            type(elapsed) not in (int, float) or
+                            not math.isfinite(elapsed) or elapsed < 0):
+                        raise NativeJournalError(
+                            "Untrusted native observation error or leaked raw source")
                 if access == "write" and kind == "native_observation_rejected":
                     # A rejected result might follow a completed write; cannot
                     # assume it was rolled back. Always terminate.
