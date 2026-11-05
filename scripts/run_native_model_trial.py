@@ -370,6 +370,24 @@ async def trial(args, lock, artifacts, command):
             observed_sources.add(event['observed_export_sha256'])
     native_projects = [path for path in projects.glob('*/project.comfystudio')
         if any(timeline.get('clips') for timeline in json.loads(path.read_text()).get('timelines', []))]
+    # A model's textual claim of importing the original is not evidence.
+    # Re-open saved native documents and check their actual referenced bytes.
+    camera_original_saved = False
+    if camera_seed is not None:
+        for native_path in native_projects:
+            native_doc = json.loads(native_path.read_text(encoding="utf-8"))
+            project_root = native_path.parent.resolve()
+            for asset in native_doc.get("assets", []):
+                relative = asset.get("path") if isinstance(asset, dict) else None
+                if not isinstance(relative, str) or Path(relative).is_absolute():
+                    continue
+                candidate = (project_root / relative).resolve()
+                if (candidate.is_relative_to(project_root) and candidate.is_file()
+                        and sha(candidate) == camera_seed["sha256"]):
+                    camera_original_saved = True
+                    break
+            if camera_original_saved:
+                break
     def decoded_frames(path):
         raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(path),
             '-map', '0:v:0', '-f', 'framemd5', '-'], timeout=60).decode()
@@ -378,8 +396,12 @@ async def trial(args, lock, artifacts, command):
         for before in observed_sources for after in revised_exports if before in movies and after in movies)
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
-              and bool(revised_exports) and changed_pixels)
+              and bool(revised_exports) and changed_pixels
+              and (camera_seed is None or camera_original_saved))
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
+            'native_original_camera_file_preserved': (
+                camera_original_saved if camera_seed is not None else None),
+            'camera_mode_used': camera_seed is not None,
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
             'decoded_frame_sequence_changed': changed_pixels,
             'verified_exports_after_final_revision': revised_exports,
