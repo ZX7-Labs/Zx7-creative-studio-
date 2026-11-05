@@ -414,6 +414,41 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     raise NativeJournalError(
                         "Native source read failure has no specific physical witness")
             continue
+        if kind in ("host_native_timeline_read_unknown",
+                    "host_native_timeline_picture_observation"):
+            # An export guard observed the native timeline through the
+            # host-granted get_timeline READ. It did NOT dispatch the model's
+            # proposed export, create a clip, certify output or approve art.
+            # Never let this receipt increment native write or film proofs.
+            if (pending is not None or
+                    host_tool_access.get("get_timeline") != "read" or
+                    type(event.get("turn")) is not int or event["turn"] < 0 or
+                    event.get("no_native_edit_dispatched") is not True):
+                raise NativeJournalError(
+                    "Native picture prerequisite has no authorized host read")
+            if kind == "host_native_timeline_read_unknown":
+                if (set(event) != {"sequence", "kind", "turn", "error_type",
+                                   "no_native_edit_dispatched"} or
+                        not isinstance(event.get("error_type"), str) or
+                        re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}",
+                                     event["error_type"]) is None):
+                    raise NativeJournalError(
+                        "Native picture read failure cannot invent project state")
+            else:
+                state = event.get("picture_state")
+                digest = event.get("observed_text_sha256")
+                allowed = {"sequence", "kind", "turn", "picture_state",
+                           "host_attested_read_only", "no_native_edit_dispatched"}
+                if digest is not None:
+                    allowed.add("observed_text_sha256")
+                if (set(event) != allowed or
+                        state not in ("unknown", "absent", "present") or
+                        event.get("host_attested_read_only") is not True or
+                        (digest is not None and not _sha(digest)) or
+                        (state == "present" and digest is None)):
+                    raise NativeJournalError(
+                        "Native picture state claim lacks bounded read evidence")
+            continue
         if kind == "model_action_rejected":
             # Input-schema preflight rejected a model proposal BEFORE any RPC.
             # This is safe to correct, unlike an unknown native write result.
