@@ -33,6 +33,12 @@ jobs:
             libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
             libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
           python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Fail fast on authoritative asset import reconciliation and project-read contracts
+        run: |
+          python -m unittest -q \
+            studio_next.test_native_machine_navigator \
+            studio_next.test_native_asset_identity \
+            studio_next.test_native_creative_control
       - name: Re-check fixed GPL native editor source and sandbox identity
         run: |
           test "$(id -u)" -ne 0
