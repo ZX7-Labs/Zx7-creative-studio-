@@ -152,6 +152,31 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(audit["recorded_native_write_result_count"],1)
         self.assertFalse(audit["video_editing_capability_complete"])
 
+    async def test_machine_frontier_cannot_invent_grants_or_certify_art(self):
+        import copy
+        from studio_next.native_creative_audit import NativeJournalError
+        session=SyntheticNativeStateSession()
+        model=ScriptedModel([decision("finish",summary="No independent film")])
+        result=await controls(session,model,1).run("Original film intent")
+        events=result["events"]
+        index=next(i for i,v in enumerate(events)
+                   if v["kind"]=="host_machine_frontier")
+        self.assertTrue(audit_native_journal(events,host_tool_access=host_grants())[
+            "journal_chain_structurally_valid"])
+        for field,forgery in (
+            ("result_tool_names",["not_a_granted_tool"]),
+            ("false_host_facts",["artistic_perfection_reached"]),
+            ("false_host_facts",[]),
+            ("host_known_facts_sha256","faked-state"),
+            ("host_sensing_only_no_artistic_choice",False),
+            ("no_native_dispatch",False),
+        ):
+            changed=copy.deepcopy(events)
+            changed[index][field]=forgery
+            with self.subTest(field=field,forgery=forgery),self.assertRaises(
+                    NativeJournalError):
+                audit_native_journal(changed,host_tool_access=host_grants())
+
     async def test_unobservable_native_source_is_unknown_not_unimported_and_no_auto_action(self):
         session=SyntheticNativeStateSession(fail_assets=True)
         model=ScriptedModel([
