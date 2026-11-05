@@ -88,6 +88,7 @@ class HostNativeSourceContractProbeTests(unittest.IsolatedAsyncioTestCase):
             session,{"get_assets":"read","create_project":"write"})
         self.assertEqual(session.calls,[("get_assets",{})])
         self.assertEqual(proof["observed_asset_count"],1)
+        self.assertTrue(proof["native_asset_contract_proved"])
         self.assertTrue(proof["bounded_inventory_complete"])
         self.assertTrue(proof["read_only"])
         self.assertTrue(proof["no_native_write_attempted"])
