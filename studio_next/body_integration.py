@@ -1067,8 +1067,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         # own top-level fields. Enforce the *full* native schema at this
         # boundary: unknown nested keys cannot reach a live document.
         import copy
-        import jsonschema
-        from .body_editor_mcp import _local_schema_references
+        from .body_editor_mcp import native_admission_validator
 
         native={tool["name"]:tool for tool in editor_client.list_tools()}
         if set(editor_client.allowed_tools)-set(native):
@@ -1076,15 +1075,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         for name,access in editor_client.allowed_tools.items():
             tool=native[name]
             native_schema=copy.deepcopy(tool["inputSchema"])
-            _local_schema_references(native_schema)
-            validator_type=jsonschema.validators.validator_for(native_schema)
-            validator_type.check_schema(native_schema)
-            admission_schema=copy.deepcopy(native_schema)
-            if (isinstance(admission_schema.get("properties"),dict)
-                    and "additionalProperties" not in admission_schema
-                    and "patternProperties" not in admission_schema):
-                admission_schema["additionalProperties"]=False
-            validator=validator_type(admission_schema)
+            validator=native_admission_validator(native_schema)
             # Keep exported native schema intact. Admission is stricter only
             # about invented top-level keys that the engine did not declare.
             schema={"type":"object","additionalProperties":False,
