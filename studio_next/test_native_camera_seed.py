@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 from studio_next.native_camera_seed import (
-    NativeCameraSeedError, stage_attested_camera,
+    NativeCameraSeedError, stage_attested_camera, verify_native_original_timeline,
 )
 
 
@@ -47,6 +47,36 @@ class NativeCameraSeedTests(unittest.TestCase):
             self.assertFalse(report.get("rights_legally_cleared", False))
             with self.assertRaises(FileExistsError):
                 stage_attested_camera(source, rights, staging, evidence)
+
+    def test_saved_native_project_must_use_actual_original_in_timeline(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            original = root / "camera.webm"
+            original.write_bytes(b"exact original media identity test bytes")
+            sha = hashlib.sha256(original.read_bytes()).hexdigest()
+            project = root / "project"
+            project.mkdir()
+            target = project / "camera.webm"
+            target.write_bytes(original.read_bytes())
+            document = project / "project.comfystudio"
+            structure = {
+                "assets": [{"id": "real-camera", "path": "camera.webm"}],
+                "timelines": [{"clips": [{"id": "native-1",
+                                          "assetId": "real-camera"}]}],
+            }
+            document.write_text(json.dumps(structure))
+            actual = verify_native_original_timeline(document, sha)
+            self.assertTrue(actual["original_camera_bytes_preserved"])
+            self.assertTrue(actual["original_on_saved_native_timeline"])
+            self.assertEqual(actual["native_timeline_original_camera_clip_count"], 1)
+            structure["timelines"][0]["clips"][0]["assetId"] = "other-media"
+            document.write_text(json.dumps(structure))
+            ignored = verify_native_original_timeline(document, sha)
+            self.assertTrue(ignored["original_camera_bytes_preserved"])
+            self.assertFalse(ignored["original_on_saved_native_timeline"])
+            target.write_bytes(b"not the same original")
+            modified = verify_native_original_timeline(document, sha)
+            self.assertFalse(modified["original_camera_bytes_preserved"])
 
     def test_reject_rights_or_hash_without_importing(self):
         with tempfile.TemporaryDirectory() as temp:
