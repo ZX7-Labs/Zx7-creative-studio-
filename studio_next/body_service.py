@@ -727,6 +727,17 @@ def make_body_http_handler(coordinator,token):
                     return self._reply(200,coordinator.host_resource_status())
                 if path=="/v1/diagnostics":
                     return self._reply(200,coordinator.diagnostic_snapshot())
+                if path=="/v1/diagnostics/audition":
+                    manager=coordinator.model_aptitude_sessions
+                    if manager is None:
+                        return self._reply(503,{"error":"No host-local model configured"})
+                    return self._reply(200,manager.latest())
+                if path.startswith("/v1/diagnostics/audition/"):
+                    manager=coordinator.model_aptitude_sessions
+                    if manager is None:
+                        return self._reply(503,{"error":"No host-local model configured"})
+                    identity=path.removeprefix("/v1/diagnostics/audition/")
+                    return self._reply(200,manager.inspect(identity))
                 if path=="/v1/affordances":
                     opts=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
                     if any(k not in ("capability","limit","cursor","include_unavailable") or
@@ -773,6 +784,16 @@ def make_body_http_handler(coordinator,token):
         def do_POST(self):
             if not self._authorized():return
             path=urlsplit(self.path).path
+            if path=="/v1/diagnostics/audition":
+                manager=coordinator.model_aptitude_sessions
+                if manager is None:
+                    return self._reply(503,{"error":"No host-local model configured"})
+                try:
+                    if self.headers.get("Content-Length","0") not in ("0",""):
+                        raise ValueError("Model aptitude run accepts no caller-authored prompts")
+                    return self._reply(202,manager.request())
+                except (ValueError,RuntimeError) as exc:
+                    return self._reply(409,{"error":str(exc)})
             if path == "/v1/research":
                 # Built into the authenticated loopback BODY. No additional
                 # research daemon/API key/configuration required after the
