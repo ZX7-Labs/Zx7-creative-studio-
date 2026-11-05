@@ -282,6 +282,15 @@ async def trial(args, lock, artifacts, command):
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
     host = dict(config['allowed_tools'])
+    # These source-defined possible physical effects describe host MACHINE
+    # affordances, never editing style or a predetermined model action order.
+    # A read-only source inspection must still establish each achieved fact.
+    for tool_name,physical_fact in (
+        ("import_asset_from_path","assets_present"),
+        ("add_asset_to_timeline","timeline_picture_present"),
+        ("add_assets_to_timeline","timeline_picture_present")):
+        if host.get(tool_name)=="write":
+            initial_project_effects[tool_name]=[physical_fact]
     host.update({name: 'read' for name in ('zx7_verify_native_export',
         'zx7_observe_verified_export_frame', 'zx7_observe_verified_export_samples',
         'zx7_observe_verified_export_audio', 'zx7_observe_verified_export_audio_timeline')})
