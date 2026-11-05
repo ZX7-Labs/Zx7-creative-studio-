@@ -53,7 +53,9 @@ class SyntheticNativeStateSession:
             return self._receipt({"clips":[],"clipLimitApplied":False})
         if name=="import_asset_from_path":
             self.imported=True
-            return self._receipt({"success":True,"result":{"imported":True}})
+            # Match the pinned Velorn application's real import receipt.
+            return self._receipt({"success":True,"asset":{
+                "id":"source-from-native","name":"owner-video"}})
         raise AssertionError("No native creative placement was model-authorized")
 
     @staticmethod
@@ -65,10 +67,12 @@ class SyntheticNativeStateSession:
 class DelayedNativeAssetSession(SyntheticNativeStateSession):
     """A native ACK can be observed before the read-only source index settles."""
 
-    def __init__(self, *, stale_post_import_reads=1, error_on_second_read=False):
+    def __init__(self, *, stale_post_import_reads=1, error_on_second_read=False,
+                 stale_snapshot_contains_other_source=False):
         super().__init__()
         self.stale_post_import_reads=stale_post_import_reads
         self.error_on_second_read=error_on_second_read
+        self.stale_snapshot_contains_other_source=stale_snapshot_contains_other_source
         self.post_import_reads=0
 
     async def call_tool(self, name, args):
@@ -79,6 +83,9 @@ class DelayedNativeAssetSession(SyntheticNativeStateSession):
                 raise ConnectionError("Test-only native inventory read outage")
             if self.post_import_reads <= self.stale_post_import_reads:
                 self.calls.append((name,args))
+                if self.stale_snapshot_contains_other_source:
+                    return self._receipt({"count":1,"limitApplied":False,
+                        "assets":[{"id":"older-asset","name":"unrelated older asset"}]})
                 return self._receipt({"count":0,"limitApplied":False,"assets":[]})
         return await super().call_tool(name,args)
 
@@ -251,7 +258,13 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
                    new_callable=AsyncMock) as sleep:
             outcome=await controls(session,model,2).run("Observe physical source identity")
         sleep.assert_awaited_once_with(1.5)
-        self.assertFalse(model.observed[1]["host_observed_machine_facts"]["assets_present"])
+        self.assertNotIn("assets_present", model.observed[1][
+            "host_observed_machine_facts"])
+        self.assertEqual(model.observed[1]["last_native_source_import_reconciliation"], {
+            "native_import_acknowledged":True,
+            "specific_imported_asset_not_yet_observed":True,
+            "same_source_reimport_requires_reconciliation":True,
+            "read_only_get_assets_can_reconcile":True})
         self.assertEqual([name for name,_ in session.calls].count(
             "import_asset_from_path"),1)
         self.assertEqual([event["actual_imported_asset_total"]
@@ -282,6 +295,92 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unknown[0]["read_attempt"],2)
         audit_native_journal(outcome["events"],host_tool_access=host_grants())
 
+
+    async def test_other_existing_asset_does_not_confirm_new_import_identity(self):
+        session=DelayedNativeAssetSession(stale_post_import_reads=1,
+            stale_snapshot_contains_other_source=True)
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/fresh.webm"}),
+            decision("finish",summary="Not a completed editorial operation"),
+        ])
+        with patch("studio_next.native_creative_control.asyncio.sleep",
+                   new_callable=AsyncMock) as sleep:
+            outcome=await controls(session,model,2).run("Preserve independent source IDs")
+        sleep.assert_awaited_once_with(1.5)
+        self.assertTrue(model.observed[1]["host_observed_machine_facts"]["assets_present"])
+        self.assertIsNone(model.observed[1]["last_native_source_import_reconciliation"])
+        reads=[e for e in outcome["events"] if e["kind"]=="host_native_asset_inventory"
+               and e["turn"]==1]
+        self.assertEqual([(e["read_attempt"],e["actual_imported_asset_total"])
+                          for e in reads],[(1,1),(2,1)])
+        # The count remained one on both reads, but ONLY the returned asset
+        # identity in the second response reconciled the native import.
+        self.assertIn("source-from-native",model.observed[1][
+            "last_physically_observed_native_asset_inventory"]["source_ids"])
+        audit_native_journal(outcome["events"],host_tool_access=host_grants())
+
+    async def test_same_source_import_variants_blocked_until_real_asset_visible(self):
+        session=DelayedNativeAssetSession(stale_post_import_reads=99)
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/source.webm",
+                             "previewOnly":False}),
+            decision("search",query="import asset"),
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/./source.webm",
+                             "category":"video","previewOnly":False}),
+            decision("finish",summary="Media identity still unresolved"),
+        ])
+        with patch("studio_next.native_creative_control.asyncio.sleep",
+                   new_callable=AsyncMock):
+            result=await controls(session,model,4).run("One source, never replay a write")
+        self.assertEqual([n for n,_ in session.calls].count("import_asset_from_path"),1)
+        refused=[e for e in result["events"]
+                 if e["kind"]=="model_action_rejected"]
+        self.assertEqual([e["validation_keyword"] for e in refused],
+                         ["unreconciled_native_import"])
+        self.assertEqual(refused[0]["no_native_dispatch"],True)
+        audit_native_journal(result["events"],host_tool_access=host_grants())
+
+    async def test_distinct_native_source_import_remains_possible(self):
+        session=DelayedNativeAssetSession(stale_post_import_reads=99)
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/first.webm"}),
+            decision("search",query="import asset"),
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/second.webm"}),
+            decision("finish",summary="No creative timeline completed"),
+        ])
+        with patch("studio_next.native_creative_control.asyncio.sleep",
+                   new_callable=AsyncMock):
+            result=await controls(session,model,4).run("Different original sources permitted")
+        self.assertEqual([a["path"] for n,a in session.calls
+                          if n=="import_asset_from_path"],
+                         ["/operator-owned/first.webm","/operator-owned/second.webm"])
+        self.assertFalse(any(e["kind"]=="model_action_rejected"
+                             for e in result["events"]))
+        audit_native_journal(result["events"],host_tool_access=host_grants())
+
+    async def test_model_selected_read_reconciles_visibility_without_reimport(self):
+        session=DelayedNativeAssetSession(stale_post_import_reads=2)
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/camera.webm"}),
+            decision("search",query="get assets"),
+            decision("invoke",tool="get_assets",inputs={}),
+            decision("finish",summary="Test-only source identity now observed"),
+        ])
+        with patch("studio_next.native_creative_control.asyncio.sleep",
+                   new_callable=AsyncMock):
+            result=await controls(session,model,4).run("Model invokes a fresh source read")
+        self.assertEqual([n for n,_ in session.calls].count("import_asset_from_path"),1)
+        self.assertEqual([n for n,_ in session.calls].count("get_assets"),4)
+        self.assertIsNone(model.observed[3]["last_native_source_import_reconciliation"])
+        self.assertIn("source-from-native",model.observed[3][
+            "last_physically_observed_native_asset_inventory"]["source_ids"])
+        audit_native_journal(result["events"],host_tool_access=host_grants())
 
 if __name__=="__main__":
     unittest.main()
