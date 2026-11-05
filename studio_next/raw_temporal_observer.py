@@ -75,7 +75,7 @@ def inspect_raw_temporal_source(source, duration_seconds, *, ffmpeg="ffmpeg"):
     if not source.is_file():
         raise RawTemporalObservationError("Original camera source not found")
     argv = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-            "-i", str(source), "-map", "0:v:0", "-an",
+            "-protocol_whitelist", "file,pipe", "-i", str(source), "-map", "0:v:0", "-an",
             "-vf", f"fps=1,scale={_WIDTH}:{_HEIGHT}:flags=fast_bilinear,format=gray",
             "-frames:v", str(_MAX_SECONDS),
             "-pix_fmt", "gray", "-f", "rawvideo", "pipe:1"]
@@ -145,7 +145,7 @@ def render_camera_contact_sheet(source, duration_seconds, sample_times_seconds, 
     draw = ImageDraw.Draw(sheet)
     for i, second in enumerate(sample_times_seconds):
         command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-                   "-ss", str(second), "-i", str(source), "-map", "0:v:0",
+                   "-protocol_whitelist", "file,pipe", "-ss", str(second), "-i", str(source), "-map", "0:v:0",
                    "-frames:v", "1", "-vf",
                    "scale=320:180:force_original_aspect_ratio=decrease:flags=fast_bilinear,"
                    "pad=320:180:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
