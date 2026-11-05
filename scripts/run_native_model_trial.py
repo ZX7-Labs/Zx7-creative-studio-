@@ -233,29 +233,49 @@ async def trial(args, lock, artifacts, command):
                   verify_native_exports=True)
     config_path = artifacts / 'host-grants.json'
     config_path.write_text(json.dumps(config, indent=2))
-    brief = (
-        'Create an original short editable motion piece about "Small steps, clear progress". '
-        'Choose the composition, typography, pacing, visual treatment and message yourself. '
-        'Use any of the provided original neutral footage as raw material; they are not a storyboard. '
-        'Deliver an actual native project and MP4 in the dedicated output folder. '
-        'Inspect a physically verified frame of your export, independently identify an improvement, '
-        'make that editable change and deliver a new verified export. Save your native work. '
-        'This is a CPU technical trial: keep the film at most eight seconds and 640x360, '
-        'with small bounded state queries. Those are trial resource bounds, not product/style limits. '
-        'Your model supports text and images, not native WAV listening; do not claim hearing. '
-        'Known exporter limitation: at least one imported image/video must appear on the visual timeline. '
-        f'Projects folder: {projects}. Output folder: {outputs}. '
-        'Staged source paths are NOT imported native assets; obtain actual '
-        'editor asset IDs by inspecting permitted native tools after the '
-        'import operation. An MCP tool ID is never a media asset ID. '
-        'Available source assets: ' + json.dumps(source_assets))
+    if camera_seed is not None:
+        brief = (
+            "Edit this video. Use your independent creative judgment and "
+            "the actual camera source, not a prescribed storyboard. The "
+            "attached source-grounded frames are only still-image observations, "
+            "not continuous motion or audio understanding. Create a native "
+            "editable project, export and verify a real video, inspect genuine "
+            "export pixels, make a model-chosen revision and save the new native "
+            "version. Preserve the original camera recording, which has "
+            "source-declared CC0 metadata but no independent legal clearance. "
+            "This CPU-only technical experiment limits output to eight seconds "
+            "and 640x360: physical budget, never a style or product ceiling. "
+            "The model cannot claim to hear raw video audio from image evidence. "
+            "After media import, inspect real native asset IDs: paths and MCP "
+            "tool IDs are NOT media asset IDs. "
+            f"Projects folder: {projects}. Output folder: {outputs}. "
+            "Available camera source: " + json.dumps(source_assets))
+    else:
+        brief = (
+            'Create an original short editable motion piece about "Small steps, clear progress". '
+            'Choose the composition, typography, pacing, visual treatment and message yourself. '
+            'Use any of the provided original neutral footage as raw material; they are not a storyboard. '
+            'Deliver an actual native project and MP4 in the dedicated output folder. '
+            'Inspect a physically verified frame of your export, independently identify an improvement, '
+            'make that editable change and deliver a new verified export. Save your native work. '
+            'This is a CPU technical trial: keep the film at most eight seconds and 640x360, '
+            'with small bounded state queries. Those are trial resource bounds, not product/style limits. '
+            'Your model supports text and images, not native WAV listening; do not claim hearing. '
+            'Known exporter limitation: at least one imported image/video must appear on the visual timeline. '
+            f'Projects folder: {projects}. Output folder: {outputs}. '
+            'Staged source paths are NOT imported native assets; obtain actual '
+            'editor asset IDs by inspecting permitted native tools after the '
+            'import operation. An MCP tool ID is never a media asset ID. '
+            'Available source assets: ' + json.dumps(source_assets))
     (artifacts / 'brief.txt').write_text(brief)
     params = [str(ROOT / 'engines/velorn/mcp.mjs'), '--source', str(args.source),
               '--config', str(config_path), '--state', str(args.runtime / 'editor-state'),
               '--python', sys.executable, '--xvfb-binary', args.xvfb_binary, '--display', args.display]
     model = RecordedModel(LocalCreativeModel(LocalModelSettings(
         model_id=lock['server']['alias'], base_url='http://127.0.0.1:8080', timeout_seconds=300),
-        system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts)
+        system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts,
+        initial_source_picture=(
+            Path(camera_seed["camera_preview_path"]) if camera_seed else None))
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
     host = dict(config['allowed_tools'])
