@@ -56,8 +56,8 @@ class SyntheticNativeStateSession:
         if name=="import_asset_from_path":
             self.imported=True
             # Match the pinned Velorn application's real import receipt.
-            return self._receipt({"success":True,"asset":{
-                "id":"source-from-native","name":"owner-video"}})
+            return self._receipt({"success":True,"result":{"success":True,
+                "asset":{"id":"source-from-native","name":"owner-video"}}})
         raise AssertionError("No native creative placement was model-authorized")
 
     @staticmethod
