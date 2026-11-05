@@ -35,6 +35,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
           python -m pip install --disable-pip-version-check '.[production]'
-          python -m compileall -q studio_next scripts/run_raw_video_neural_edit_test.py
+          python -m compileall -q studio_next scripts/run_raw_video_neural_edit_test.py scripts/run_native_model_trial.py
       - name: Test no prescribed style, original camera frame evidence and actual encoded graphic output
-        run: python -m unittest -v studio_next.test_raw_video_neural_edit studio_next.test_raw_edit_coverage studio_next.test_raw_temporal_observer
+        run: python -m unittest -v studio_next.test_raw_video_neural_edit studio_next.test_raw_edit_coverage studio_next.test_raw_temporal_observer studio_next.test_native_camera_seed
