@@ -128,8 +128,49 @@ async def exercise(options):
         project = Path(state["project"]["path"])
         assert (await session.call_tool("import_asset_from_path", {"path": "/etc/passwd", "previewOnly": False})).is_error
         for name, count in (("source.mp4", 1), ("tone.wav", 2)):
-            await call(session, "import_asset_from_path", {"path": str(staging / name), "previewOnly": False})
+            imported = await call(
+                session, "import_asset_from_path",
+                {"path": str(staging / name), "previewOnly": False})
+            application_result = imported.get("result")
+            asset = application_result.get("asset") if isinstance(
+                application_result, dict) else None
+            native_id = asset.get("id") if isinstance(asset, dict) else None
+            assert isinstance(native_id, str) and native_id, (
+                "Native import ACK lacks the actual nested result.asset.id", name)
             await wait(session, lambda state: state.get("assetCount") == count)
+            from studio_next.native_asset_identity import inventory_from_native_text
+            deadline = time.monotonic() + 20
+            native_source_reads = 0
+            started_inventory = time.monotonic()
+            while True:
+                # The pinned editor's REAL MCP get_assets payload (not the
+                # project summary count) must independently identify the
+                # freshly imported source. A stale unrelated asset cannot
+                # establish that a particular original is visible.
+                raw = await session.call_tool("get_assets", {})
+                assert not raw.is_error, "Native get_assets failed after project opened"
+                texts = [entry.text for entry in raw.content if entry.type == "text"]
+                imported_inventory = inventory_from_native_text(texts)
+                native_source_reads += 1
+                if native_id in imported_inventory["ids"]:
+                    assert imported_inventory["total"] >= count
+                    break
+                if time.monotonic() >= deadline:
+                    raise AssertionError(
+                        "Native asset identity never became visible after successful import")
+                await asyncio.sleep(.15)
+            print("ACTUAL_NATIVE_ASSET_ID_CONVERGENCE " + json.dumps({
+                "source": "pinned Velorn native MCP get_assets",
+                "application_import_acknowledged": True,
+                "returned_asset_id_matched_native_read": True,
+                "read_attempts": native_source_reads,
+                "elapsed_ms": round(
+                    (time.monotonic() - started_inventory) * 1000, 2),
+                "source_id_sha256": hashlib.sha256(
+                    native_id.encode("utf-8")).hexdigest(),
+                "count_after_import": imported_inventory["total"],
+                "independent_model_creative_quality_certified": False,
+            },sort_keys=True),flush=True)
         await call(session, "add_asset_to_timeline", {"assetName": "source.mp4", "startSeconds": 0, "includeAudio": False, "previewOnly": False})
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 1)
         await call(session, "add_asset_to_timeline", {"assetName": "tone.wav", "startSeconds": 0, "previewOnly": False})
