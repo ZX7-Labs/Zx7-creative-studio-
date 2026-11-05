@@ -42,6 +42,9 @@ from .body_mobile import ASSETS as MOBILE_ASSETS, CSP as MOBILE_CSP
 from .body_download_tickets import DownloadTickets
 from .body_verified_delivery import verified_artifact_snapshot
 from .body_host_resources import inspect_host_resources
+from .universal_diagnostics import universal_diagnostics
+from .model_aptitude_sessions import ModelAptitudeSessions
+from .diagnostic_trace import initialize_trace_store, append_host_event, read_recent_host_events
 from .body_revision_impact import plan_film_revision_impact
 from .durable_graph import durable_project_key
 
@@ -108,6 +111,7 @@ class LocalBodyCoordinator:
             db.execute("""CREATE TABLE IF NOT EXISTS job_controls(
                 job_id TEXT PRIMARY KEY, requested_action TEXT NOT NULL,
                 requested_at REAL NOT NULL)""")
+            initialize_trace_store(db)
         # We already own the exclusive OS workspace lock, and no new worker
         # has been scheduled. A machine/process crash leaves a previously
         # running graph lease in the future; expire only those orphaned leases
@@ -115,9 +119,12 @@ class LocalBodyCoordinator:
         # Non-idempotent operations still require manual reconciliation.
         self._reconcile_orphaned_work_on_exclusive_startup()
         self.creative_sessions=None
+        self.model_aptitude_sessions=None
         if creative_model is not None:
             from .body_creative_session import CreativeSessions
             self.creative_sessions=CreativeSessions(self,creative_model)
+            self.model_aptitude_sessions=ModelAptitudeSessions(
+                self,creative_model)
 
     def _connect(self):
         if self.database.is_symlink():
@@ -296,13 +303,18 @@ class LocalBodyCoordinator:
                 return create_body_archive(self.root,archive_path)
 
     def _work(self,identity):
+        clock_started=time.monotonic()
         try:
             with self._connect() as db:
-                # Jobs already have a bounded single executor owner locally.
+                # One durable event and state transition, never a guessed start.
+                db.execute("BEGIN IMMEDIATE")
                 db.execute("""UPDATE jobs SET status='running',attempts=attempts+1,
                            modified=? WHERE id=?""",(time.time(),identity))
                 row=db.execute("SELECT workspace_id,original_ir FROM jobs WHERE id=?",
                                (identity,)).fetchone()
+                append_host_event(db,trace_id=identity,
+                    capability_id="zx7.production_graph", phase="execution",
+                    outcome="started",code="host_job_execution_started")
             if row is None:raise ValueError("Submitted original film vanished")
             location=self._workspace(row[0])
             original=json.loads(row[1])
@@ -335,9 +347,26 @@ class LocalBodyCoordinator:
                     "movie_delivered":False}
         finally:
             with self._connect() as db:
+                db.execute("BEGIN IMMEDIATE")
                 db.execute("""UPDATE jobs SET status=?,result=?,modified=? WHERE id=?""",
                     (status,json.dumps(report,allow_nan=False,ensure_ascii=False),
                      time.time(),identity))
+                if status=="completed" and self._uses_native_executor:
+                    outcome,code="verified","native_tool_graph_reported_verified"
+                elif status=="completed":
+                    outcome,code="observed","custom_executor_completion_unverified"
+                elif status=="paused":
+                    outcome,code="paused","operator_job_pause"
+                elif status=="cancelled":
+                    outcome,code="cancelled","operator_job_cancel"
+                elif status=="blocked":
+                    outcome,code="failed","tool_graph_reported_blockage"
+                else:
+                    outcome,code="failed","host_job_exception"
+                append_host_event(db,trace_id=identity,
+                    capability_id="zx7.production_graph",phase="execution",
+                    outcome=outcome,code=code,
+                    elapsed_ms=(time.monotonic()-clock_started)*1000)
                 if status not in ("paused","cancelled"):
                     db.execute("DELETE FROM job_controls WHERE job_id=?",(identity,))
             with self._lock:
@@ -422,6 +451,100 @@ class LocalBodyCoordinator:
     def host_resource_status(self):
         """Only live technical capacity, never unverified AI model execution."""
         return inspect_host_resources(self.root)
+
+    def recent_job_stage_evidence(self, *, limit=8):
+        """Expose exact host-owned production DB stage states, never private IDs.
+
+        A node belongs to a verified durable project lineage, not necessarily
+        the latest job attempt. Unmatched/absent records remain unmeasured.
+        """
+        import hashlib
+        if type(limit) is not int or not 1 <= limit <= 16:
+            raise ValueError("Bounded host-owned diagnostic stage window needed")
+        with self._connect() as db:
+            jobs=db.execute("SELECT id,status FROM jobs "
+                            "ORDER BY modified DESC,id DESC LIMIT ?",(limit,)).fetchall()
+        reports=[]
+        for job_id,status in jobs:
+            record=self.inspect(job_id)
+            progress=record.get("actual_tool_progress",{})
+            observed=progress.get("observed_tool_states",[])
+            nodes=[]
+            if progress.get("tool_progress_is_actual_sqlite") is True:
+                for node in observed[:40]:
+                    identity=node.get("node_id")
+                    state=node.get("state")
+                    attempts=node.get("attempts")
+                    updated=node.get("updated_at")
+                    if (not isinstance(identity,str) or not identity
+                            or not isinstance(state,str)
+                            or not re.fullmatch("[a-z][a-z0-9_]{0,63}",state)
+                            or type(attempts) is not int or attempts<0
+                            or type(updated) not in (int,float)
+                            or not 0 <= updated < 1e12):
+                        continue
+                    nodes.append({
+                        "node_ref_sha256":hashlib.sha256(identity.encode()).hexdigest(),
+                        "state":state,
+                        "attempts":attempts,
+                        "observed_at":updated,
+                    })
+            reports.append({
+                "job_ref_sha256":hashlib.sha256(job_id.encode()).hexdigest(),
+                "job_status":status,
+                "source":progress.get("stage_scope","unknown"),
+                "independently_observed_node_results": (
+                    progress.get("tool_progress_is_actual_sqlite") is True),
+                "nodes":nodes,
+                "not_a_creative_quality_measure":True,
+            })
+        return reports
+
+    def diagnostic_snapshot(self):
+        """Real-time authenticated capability and model/BODY evidence overview.
+
+        No inference is launched by this GET; the reader never fabricates
+        creative-model scores. It does not return source prompts, paths, owner
+        facts, errors or private media bytes.
+        """
+        with self._connect() as db:
+            job_rows = db.execute(
+                "SELECT status, COUNT(*) FROM jobs GROUP BY status").fetchall()
+            has_sessions = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='creative_sessions'"
+            ).fetchone() is not None
+            session_rows = (
+                db.execute("SELECT state FROM creative_sessions "
+                           "ORDER BY rowid DESC LIMIT 64").fetchall()
+                if has_sessions else [])
+        sessions = []
+        for (raw,) in session_rows:
+            record = json.loads(raw)
+            if not isinstance(record, dict):
+                raise ValueError("Real creative session record is malformed")
+            sessions.append({
+                "status": record.get("status"),
+                "events": [{"result": event.get("result")} for event in
+                           record.get("events", []) if isinstance(event, dict)],
+            })
+        model = self.creative_sessions
+        identity = (model._model_identity().get("model_id")
+                    if model is not None else None)
+        with self._connect() as db:
+            trace_evidence=read_recent_host_events(db,limit=32)
+        return universal_diagnostics(
+            operation_records=body_catalog(self.projects).discover(),
+            job_records=[{"status": status, "count": count}
+                         for status, count in job_rows],
+            session_records=sessions,
+            host_capacity=self.host_resource_status(),
+            model_configured=model is not None,
+            model_id=identity,
+            trace_evidence=trace_evidence,
+            model_audition=(self.model_aptitude_sessions.latest()
+                            if self.model_aptitude_sessions is not None else None),
+            job_stage_evidence=self.recent_job_stage_evidence(),
+        )
 
     def list_jobs(self,*,limit=100):
         """Bounded honest job statuses for a standalone creative desktop client."""
@@ -543,6 +666,8 @@ class LocalBodyCoordinator:
         return len(ids)
 
     def close(self):
+        if self.model_aptitude_sessions is not None:
+            self.model_aptitude_sessions.close()
         if self.creative_sessions is not None:
             self.creative_sessions.close()
         self.executor.shutdown(wait=True)
@@ -649,6 +774,19 @@ def make_body_http_handler(coordinator,token):
                     return self._reply(200,coordinator.list_jobs())
                 if path=="/v1/resources":
                     return self._reply(200,coordinator.host_resource_status())
+                if path=="/v1/diagnostics":
+                    return self._reply(200,coordinator.diagnostic_snapshot())
+                if path=="/v1/diagnostics/audition":
+                    manager=coordinator.model_aptitude_sessions
+                    if manager is None:
+                        return self._reply(503,{"error":"No host-local model configured"})
+                    return self._reply(200,manager.latest())
+                if path.startswith("/v1/diagnostics/audition/"):
+                    manager=coordinator.model_aptitude_sessions
+                    if manager is None:
+                        return self._reply(503,{"error":"No host-local model configured"})
+                    identity=path.removeprefix("/v1/diagnostics/audition/")
+                    return self._reply(200,manager.inspect(identity))
                 if path=="/v1/affordances":
                     opts=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
                     if any(k not in ("capability","limit","cursor","include_unavailable") or
@@ -695,6 +833,16 @@ def make_body_http_handler(coordinator,token):
         def do_POST(self):
             if not self._authorized():return
             path=urlsplit(self.path).path
+            if path=="/v1/diagnostics/audition":
+                manager=coordinator.model_aptitude_sessions
+                if manager is None:
+                    return self._reply(503,{"error":"No host-local model configured"})
+                try:
+                    if self.headers.get("Content-Length","0") not in ("0",""):
+                        raise ValueError("Model aptitude run accepts no caller-authored prompts")
+                    return self._reply(202,manager.request())
+                except (ValueError,RuntimeError) as exc:
+                    return self._reply(409,{"error":str(exc)})
             if path == "/v1/research":
                 # Built into the authenticated loopback BODY. No additional
                 # research daemon/API key/configuration required after the
