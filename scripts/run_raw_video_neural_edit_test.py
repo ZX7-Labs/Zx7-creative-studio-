@@ -24,6 +24,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from studio_next.providers import LocalCreativeModel,LocalModelSettings
 from studio_next.media_vault import MediaVault,sha256_file
+from studio_next.raw_edit_coverage import assess_raw_edit_coverage
+from studio_next.raw_temporal_observer import inspect_raw_temporal_source
 from studio_next.body_mlt_editor import export_owned_mlt
 from studio_next.body_mlt_render import render_owned_mlt
 from studio_next.production_qc import full_decode_inspection
@@ -58,15 +60,18 @@ def receipt(path):
     p=Path(path)
     return {"path":str(p),"sha256":sha256_file(p),"bytes":p.stat().st_size}
 
-def shot_reel(raw,info,out):
+def shot_reel(raw,info,out,*,sample_times_seconds):
     """Retain 16 real sampled frames with source bound before model inference."""
     duration=info["duration"]
     cols=4;rows=4;width=320;height=180;label=30
     canvas=Image.new("RGB",(cols*width,rows*(height+label)),(12,18,25))
     draw=ImageDraw.Draw(canvas)
+    if (not isinstance(sample_times_seconds,list) or len(sample_times_seconds)!=16 or
+            any(type(t) not in (float,int) or not math.isfinite(t) or
+                t<0 or t>=duration for t in sample_times_seconds)):
+        raise ValueError("Camera contact sheet requires 16 actual-source times")
     samples=[]
-    for i in range(16):
-        sec=round(min(duration-0.15,(i+0.5)*duration/16),3)
+    for i,sec in enumerate(sample_times_seconds):
         cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin",
              "-ss",str(sec),"-i",str(raw),
              "-map","0:v:0","-frames:v","1","-vf",
@@ -265,7 +270,11 @@ def produce(args):
     model_archive.mkdir(exist_ok=True)
     try:
         frame_sheet=root/"camera-original-contact-sheet.png"
-        original_visual=shot_reel(src,spec,frame_sheet)
+        temporal=inspect_raw_temporal_source(src,spec["duration"])
+        evidence["physical_temporal_observation"]=temporal
+        safe_json(out/"raw-temporal-source-evidence.json",temporal)
+        original_visual=shot_reel(src,spec,frame_sheet,
+            sample_times_seconds=temporal["contact_sheet_sample_times_seconds"])
         evidence["physical_source_observation"]=original_visual
         lock=json.loads(Path(args.model_lock).read_text())
         with (out/"local-model-server.log").open("w") as log:
@@ -294,6 +303,13 @@ def produce(args):
                          "sha256":original_visual["thumbnail_sha256"],
                      }],
                      "sample_times_seconds":original_visual["sample_times_seconds"],
+                     "source_motion_observation":{
+                         "kind":temporal["kind"],
+                         "decoded_one_fps_frame_count":temporal["decoded_one_fps_frame_count"],
+                         "mean_adjacent_grayscale_delta_0_to_255":temporal["mean_adjacent_grayscale_delta_0_to_255"],
+                         "highest_change_seconds":temporal["highest_change_seconds"],
+                         "not_motion_semantics_or_artistic_quality":True,
+                         "not_audio_or_continuous_scene_understanding":True},
                      "source_is_actual_unedited_camera_video":True}
             decision=None
             for attempt in range(3):
@@ -360,6 +376,14 @@ def produce(args):
             native={"frame_rate":{"numerator":24,"denominator":1},
                     "frame_size":{"width":WIDTH,"height":HEIGHT},
                     "tracks":[{"clips":clips}],"audio_tracks":[]}
+            coverage=assess_raw_edit_coverage(
+                source_duration_seconds=spec["duration"],
+                source_sha256=evidence["source"]["sha256"],
+                source_has_audio=spec["has_audio"],
+                sample_times_seconds=original_visual["sample_times_seconds"],
+                edit=decision,native_plan=native)
+            evidence["source_selection_diagnostics"]=coverage
+            safe_json(out/"source-selection-diagnostics.json",coverage)
             native_source=root/"model-authored-native-edit.json"
             safe_json(native_source,native)
             native_project=root/"self-directed-camera-edit.mlt"
