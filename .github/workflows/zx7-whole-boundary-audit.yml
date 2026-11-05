@@ -79,6 +79,7 @@ jobs:
             studio_next.test_native_creative_control \
             studio_next.test_native_asset_identity \
             studio_next.test_native_top_level_preview \
+            studio_next.test_native_host_contract_probe \
             studio_next.test_native_machine_navigator \
             studio_next.test_native_picture_export_guard \
             studio_next.test_capability_fabric \
