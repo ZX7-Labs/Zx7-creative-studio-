@@ -1,11 +1,15 @@
 """Real executable multi-engine boundary regressions (no neural model mock success)."""
 import asyncio
 import json
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 
 from studio_next.capability_gateway import CapabilityGateway, CapabilityExecutionError
 from studio_next.capability_fabric import CapabilityContractError
+from studio_next.capability_attempts import (
+    CapabilityAttemptError, CapabilityAttemptStore)
 
 
 def tool(name, props=None, **schema):
@@ -324,6 +328,58 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["state"], "host_reported_success_unverified")
         self.assertEqual(engine.calls, [
             ("paging_read", {}), ("real_project_edit", {})])
+
+
+    async def test_universal_durable_write_id_survives_gateway_recreation(self):
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/"private"/"capability-attempts.sqlite3"
+            editor=Engine([tool("edit", {"content":{"type":"string"}})])
+            gateway=CapabilityGateway({"graphics":(editor,{"edit":"write"})},
+                attempt_store=CapabilityAttemptStore(path))
+            revision=(await gateway.refresh())["revision"]
+            actual=await gateway.invoke("graphics/edit",revision=revision,
+                inputs={"content":"private artwork"},request_id="host-stable-1")
+            self.assertEqual(actual["state"],"host_reported_success_unverified")
+            restarted=CapabilityGateway({"graphics":(editor,{"edit":"write"})},
+                attempt_store=CapabilityAttemptStore(path))
+            current=(await restarted.refresh())["revision"]
+            with self.assertRaises(CapabilityAttemptError):
+                await restarted.invoke("graphics/edit",revision=current,
+                    inputs={"content":"private artwork"},request_id="host-stable-1")
+            self.assertEqual(len(editor.calls),1)
+            self.assertNotIn(b"private artwork",path.read_bytes())
+
+    async def test_durable_write_missing_identity_never_dispatches(self):
+        with tempfile.TemporaryDirectory() as root:
+            editor=Engine([tool("create_audio", {"sample":{"type":"string"}})])
+            gateway=CapabilityGateway({"audio":(editor,{"create_audio":"write"})},
+                attempt_store=CapabilityAttemptStore(
+                    Path(root)/"private"/"capability-attempts.sqlite3"))
+            revision=(await gateway.refresh())["revision"]
+            with self.assertRaises(CapabilityAttemptError):
+                await gateway.invoke("audio/create_audio",revision=revision,
+                    inputs={"sample":"original"})
+            self.assertFalse(editor.calls)
+
+    async def test_durable_mcp_error_is_uncertain_and_never_replayed(self):
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/"private"/"capability-attempts.sqlite3"
+            editor=Engine([tool("create_motion")])
+            editor.result=SimpleNamespace(is_error=True,content=[])
+            store=CapabilityAttemptStore(path)
+            gateway=CapabilityGateway({"motion":(editor,{"create_motion":"write"})},
+                                      attempt_store=store)
+            rev=(await gateway.refresh())["revision"]
+            result=await gateway.invoke("motion/create_motion",revision=rev,
+                inputs={},request_id="host-motion-uncertain")
+            self.assertEqual(result["state"],
+                             "write_uncertain_reconciliation_required")
+            self.assertEqual(store.inspect("host-motion-uncertain")["state"],
+                             "write_uncertain_reconciliation_required")
+            with self.assertRaises(CapabilityAttemptError):
+                await gateway.invoke("motion/create_motion",revision=rev,
+                    inputs={},request_id="host-motion-uncertain")
+            self.assertEqual(len(editor.calls),1)
 
 
 if __name__ == "__main__":
