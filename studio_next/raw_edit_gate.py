@@ -45,8 +45,10 @@ def assess_minimum_editorial_evidence(edit, *, source_seconds, output_fps):
                         "source_in", "source_out", "speed", "contrast", "saturation"))):
             raise ValueError("Cannot audit unvalidated native source span")
         if (not 0 <= clip["source_in"] < clip["source_out"] <= source_seconds
-                or clip["speed"] <= 0):
-            raise ValueError("Native source span and speed must be physically possible")
+                or not 0.5 <= clip["speed"] <= 2.0
+                or not 0.6 <= clip["contrast"] <= 1.5
+                or not 0 <= clip["saturation"] <= 2.0):
+            raise ValueError("Native source and render controls must be physically admissible")
     beginning = cuts[0]["source_in"]
     ending = cuts[-1]["source_out"]
     contiguous = all(
