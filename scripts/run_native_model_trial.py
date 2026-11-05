@@ -398,6 +398,9 @@ async def trial(args, lock, artifacts, command):
             'native_original_camera_file_preserved': (
                 camera_original_saved if camera_seed is not None else None),
             'camera_mode_used': camera_seed is not None,
+            'original_camera_on_saved_native_timeline': (
+                camera_original_on_timeline if camera_seed is not None else None),
+            'native_camera_project_verification': camera_native_evidence,
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
             'decoded_frame_sequence_changed': changed_pixels,
             'verified_exports_after_final_revision': revised_exports,
