@@ -25,6 +25,7 @@ from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CR
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.native_action_schema import native_action_schema
+from studio_next.native_camera_seed import stage_attested_camera
 
 
 def sha(path):
@@ -122,8 +123,9 @@ def download(entry, root):
 
 class RecordedModel:
     """Trial-only passive transcript; all returned decisions come from inference."""
-    def __init__(self, model, artifacts):
+    def __init__(self, model, artifacts, *, initial_source_picture=None):
         self.model, self.settings, self.artifacts = model, model.settings, artifacts
+        self.initial_source_picture = initial_source_picture
         self.turn = 0
 
     @property
@@ -131,6 +133,10 @@ class RecordedModel:
         return self.model.last_call_usage
 
     def infer(self, context, images=()):
+        # Before the first model choice, show independently decoded ORIGINAL
+        # camera pixels. These are not a verified post-edit export observation.
+        if self.turn == 0 and self.initial_source_picture is not None:
+            images = (("image/png", self.initial_source_picture.read_bytes()),) + tuple(images)
         started = time.monotonic()
         self.model.settings.sampling['response_format'] = {'type': 'json_schema', 'json_schema': {
             'name': 'native_editor_action', 'strict': True,
