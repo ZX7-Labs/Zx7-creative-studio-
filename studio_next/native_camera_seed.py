@@ -137,9 +137,14 @@ def verify_native_original_timeline(native_document, original_sha256):
         raise NativeCameraSeedError("Saved project timelines not present")
     root = doc.parent.resolve()
     ids = set()
+    seen_asset_ids = set()
     for asset in project["assets"]:
         if not isinstance(asset, dict):
             raise NativeCameraSeedError("Native media record malformed")
+        key = asset.get("id")
+        if not isinstance(key, str) or not key or key in seen_asset_ids:
+            raise NativeCameraSeedError("Native project has ambiguous media identity")
+        seen_asset_ids.add(key)
         rel = asset.get("path")
         if not isinstance(rel, str) or not rel or Path(rel).is_absolute():
             continue
