@@ -193,7 +193,11 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 raise NativeJournalError("Duplicate or unbound creative session")
             continue
         if i == 0:
-            continue
+            # An arbitrary first event used to be skipped. That would allow
+            # a truncated or forged journal with no originating brief/session
+            # identity to be described as structurally valid. Fail closed.
+            raise NativeJournalError(
+                "Native journal must begin with a bound session_started receipt")
         if kind in ("host_project_bootstrap_observation", "host_project_bootstrap_error"):
             if (i != 1 or pending is not None or
                     event.get("tool") != "get_project" or
