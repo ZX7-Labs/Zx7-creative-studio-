@@ -359,6 +359,31 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         for tool in tools) or len(set(tools)) != len(tools)):
                 raise NativeJournalError("Untrusted or fabricated initial machine affordance")
             continue
+        if kind == "host_machine_frontier":
+            # Machine-state navigation is a host-scoped metadata option, never
+            # a model-selected tool, native write or creative achievement.
+            # Every suggested operation must exist in the exact host grant
+            # set; no executable authority can be added by journal text.
+            names=event.get("result_tool_names")
+            false_facts=event.get("false_host_facts")
+            if (pending is not None or type(event.get("turn")) is not int
+                    or event["turn"]<0 or
+                    not _sha(event.get("catalog_revision")) or
+                    not _sha(event.get("host_known_facts_sha256")) or
+                    event.get("host_sensing_only_no_artistic_choice") is not True or
+                    event.get("no_native_dispatch") is not True or
+                    not isinstance(false_facts,list) or
+                    not 1<=len(false_facts)<=16 or
+                    false_facts!=sorted(set(false_facts)) or
+                    any(not isinstance(x,str) or not re.fullmatch(
+                        r"[a-z][a-z0-9_]{1,100}",x) for x in false_facts) or
+                    not isinstance(names,list) or not 1<=len(names)<=8 or
+                    len(names)!=len(set(names)) or
+                    any(not isinstance(x,str) or x not in host_tool_access
+                        for x in names)):
+                raise NativeJournalError(
+                    "Host physical-state navigator invented tool or state evidence")
+            continue
         if kind == "capability_searched":
             tools = event.get("result_tool_names")
             inspected = event.get("inspectable_candidate_tool_names", [])
