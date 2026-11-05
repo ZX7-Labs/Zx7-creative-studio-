@@ -44,8 +44,8 @@ class SyntheticNativeStateSession:
         if name=="get_assets":
             if self.fail_assets:
                 raise ConnectionError("Test-only unreachable read; not a model error")
-            return self._receipt({"totalAssetCount":int(self.imported),
-                                  "returnedAssetCount":int(self.imported),
+            return self._receipt({"count":int(self.imported),
+                                  "limitApplied":False,
                                   "assets":[{"id":"source-from-native","name":"owner-video"}]
                                   if self.imported else []})
         if name=="get_timeline":
