@@ -376,21 +376,14 @@ async def trial(args, lock, artifacts, command):
     # A model's textual claim of importing the original is not evidence.
     # Re-open saved native documents and check their actual referenced bytes.
     camera_original_saved = False
+    camera_original_on_timeline = False
+    camera_native_evidence = []
     if camera_seed is not None:
         for native_path in native_projects:
-            native_doc = json.loads(native_path.read_text(encoding="utf-8"))
-            project_root = native_path.parent.resolve()
-            for asset in native_doc.get("assets", []):
-                relative = asset.get("path") if isinstance(asset, dict) else None
-                if not isinstance(relative, str) or Path(relative).is_absolute():
-                    continue
-                candidate = (project_root / relative).resolve()
-                if (candidate.is_relative_to(project_root) and candidate.is_file()
-                        and sha(candidate) == camera_seed["sha256"]):
-                    camera_original_saved = True
-                    break
-            if camera_original_saved:
-                break
+            checked = verify_native_original_timeline(native_path, camera_seed["sha256"])
+            camera_native_evidence.append(checked)
+            camera_original_saved |= checked["original_camera_bytes_preserved"]
+            camera_original_on_timeline |= checked["original_on_saved_native_timeline"]
     def decoded_frames(path):
         raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(path),
             '-map', '0:v:0', '-f', 'framemd5', '-'], timeout=60).decode()
