@@ -393,10 +393,16 @@ def main():
         parser.add_argument('--' + name, required=True, type=Path)
     parser.add_argument('--xvfb-binary', default='/usr/bin/Xvfb')
     parser.add_argument('--display', default='127.0.0.1:95')
+    parser.add_argument('--camera-video', type=Path, default=None,
+        help='Optional exact CC0-attested unedited original camera source')
+    parser.add_argument('--camera-rights', type=Path, default=None,
+        help='Rights/source SHA evidence for --camera-video')
     parser.add_argument('--model-lock', type=Path,
         default=ROOT / 'engines/velorn/local-model-trial.lock.json',
         help='Local pinned model manifest; default remains the verified 2B baseline')
     args = parser.parse_args()
+    if (args.camera_video is None) != (args.camera_rights is None):
+        parser.error('--camera-video and --camera-rights must be provided together')
     args.source, args.runtime, args.artifacts = (getattr(args, name).resolve() for name in ('source', 'runtime', 'artifacts'))
     args.artifacts.mkdir(parents=True, exist_ok=False)
     args.runtime.mkdir(parents=True, exist_ok=True)
