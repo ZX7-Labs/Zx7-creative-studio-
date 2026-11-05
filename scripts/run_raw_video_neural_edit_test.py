@@ -161,6 +161,19 @@ def validate_edit(plan,source_seconds):
         raise ValueError("Local AI musical decision exceeds actual renderer abilities")
     return total
 
+
+def validate_neural_edit_candidate(plan, source_seconds):
+    """Independent physical feasibility AND minimum non-no-op evidence.
+
+    This never specifies artistic style, shot order or soundtrack. The caller
+    receives only the measurable rejection and may ask a real model to decide
+    a different action. Passing is not an artistic-quality certification.
+    """
+    length = validate_edit(plan, source_seconds)
+    evidence = assess_minimum_editorial_evidence(
+        plan, source_seconds=source_seconds)
+    return length, evidence
+
 def create_graphic(item,path):
     text=item["text"]
     font=ImageFont.truetype(FONT,item["size"])
@@ -295,12 +308,8 @@ def produce(args):
                        "elapsed_seconds":round(time.monotonic()-started,2)}
                 transcript.append(event)
                 try:
-                    length=validate_edit(reply,spec["duration"])
-                    # This is *not* a preference for a style or shot list. Reject
-                    # the physically observed neutral contiguous source prefix
-                    # that previously passed all technical decoder checks.
-                    editorial=assess_minimum_editorial_evidence(reply,
-                        source_seconds=spec["duration"])
+                    length,editorial=validate_neural_edit_candidate(
+                        reply,spec["duration"])
                     event["minimum_editorial_evidence"]=editorial
                     evidence["minimum_editorial_evidence"]=editorial
                     decision=reply
