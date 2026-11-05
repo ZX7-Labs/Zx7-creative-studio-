@@ -84,6 +84,18 @@ class ZX7BodyClient:
         """Read host-observed facts; never claim an untested model is weak."""
         return self.request_json("GET", "/v1/diagnostics")
 
+    def start_model_audition(self):
+        """Owner-approved bounded LOCAL model test, with no creative mutations."""
+        return self.request_json("POST", "/v1/diagnostics/audition")
+
+    def model_audition(self, run_id=None):
+        """Inspect existing host test receipts without making an inference."""
+        if run_id is None:
+            return self.request_json("GET", "/v1/diagnostics/audition")
+        if not isinstance(run_id,str) or not re.fullmatch("[a-f0-9]{32}",run_id):
+            raise ValueError("Exact source-bound diagnostic run identity required")
+        return self.request_json("GET","/v1/diagnostics/audition/"+run_id)
+
     def tools(self):
         return self.request_json("GET","/v1/tools")
 
