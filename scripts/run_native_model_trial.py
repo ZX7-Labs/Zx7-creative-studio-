@@ -197,15 +197,34 @@ async def trial(args, lock, artifacts, command):
     for root in (projects, staging, outputs):
         root.mkdir()
     initial_project_effects = fresh_trial_project_open_effects(projects)
-    # Raw, neutral media available to the model; no timeline or artwork authored.
+    # Source bootstrap never authors timeline edits. The real local model still
+    # chooses every native mutation through granted tools.
     source_assets = []
-    for index, colors in enumerate((('0x102030', '0x607080'), ('0x302010', '0x807060'))):
-        path = staging / f'raw-gradient-{index}.mp4'
-        subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
-            f'gradients=s=640x360:r=24:d=4:c0={colors[0]}:c1={colors[1]}:seed={index + 10}',
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)], check=True, timeout=60)
-        source_assets.append({'path': str(path), 'sha256': sha(path),
-                              'rights': 'original generated neutral trial input'})
+    camera_seed = None
+    if args.camera_video is not None:
+        if args.camera_rights is None:
+            raise ValueError("An explicit attested camera-rights manifest is required")
+        camera_seed = stage_attested_camera(
+            args.camera_video, args.camera_rights, staging, artifacts)
+        source_assets.append({
+            "path": camera_seed["path"],
+            "sha256": camera_seed["sha256"],
+            "rights": camera_seed["rights"],
+            "duration_seconds": camera_seed["source_duration_seconds"],
+            "source_has_audio": camera_seed["source_has_audio"],
+            "camera_original": True,
+        })
+    else:
+        if args.camera_rights is not None:
+            raise ValueError("Rights manifest without source video is invalid")
+        # Original neutral technical fixture, unaffected by camera mode.
+        for index, colors in enumerate((('0x102030', '0x607080'), ('0x302010', '0x807060'))):
+            path = staging / f'raw-gradient-{index}.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                f'gradients=s=640x360:r=24:d=4:c0={colors[0]}:c1={colors[1]}:seed={index + 10}',
+                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)], check=True, timeout=60)
+            source_assets.append({'path': str(path), 'sha256': sha(path),
+                                  'rights': 'original generated neutral trial input'})
     (artifacts / 'source-assets.json').write_text(json.dumps(source_assets, indent=2))
     config = json.loads((ROOT / 'engines/velorn/editor.example.json').read_text())
     for helper in ('get_ai_review_passes', 'get_mcp_recipes'):
