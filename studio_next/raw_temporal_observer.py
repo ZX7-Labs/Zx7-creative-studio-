@@ -115,3 +115,58 @@ def inspect_raw_temporal_source(source, duration_seconds, *, ffmpeg="ffmpeg"):
         "not_motion_semantics_or_artistic_quality": True,
         "not_audio_or_continuous_scene_understanding": True,
     }
+
+
+def render_camera_contact_sheet(source, duration_seconds, sample_times_seconds, destination,
+                                *, ffmpeg="ffmpeg"):
+    """Decode the chosen real frames, preserving source and time receipts.
+
+    The 4x4 sheet is an observation transport; it does not imply motion
+    comprehension. Sampling times must come from independent source evidence.
+    """
+    import hashlib
+    from io import BytesIO
+    from PIL import Image, ImageDraw
+
+    if (type(duration_seconds) not in (float, int) or
+            not math.isfinite(duration_seconds) or duration_seconds <= 0 or
+            not isinstance(sample_times_seconds, list) or len(sample_times_seconds) != 16
+            or any(type(t) not in (int, float) or not math.isfinite(t) or
+                   t < 0 or t >= duration_seconds for t in sample_times_seconds)):
+        raise RawTemporalObservationError("Contact sheet requires 16 physical source times")
+    source = Path(source)
+    if not source.is_file():
+        raise RawTemporalObservationError("Camera source missing at contact-sheet render")
+    destination = Path(destination)
+    if destination.exists():
+        raise RawTemporalObservationError("Refusing to overwrite prior camera observation")
+    w, h, label = 320, 180, 30
+    sheet = Image.new("RGB", (w * 4, (h + label) * 4), (12, 18, 25))
+    draw = ImageDraw.Draw(sheet)
+    for i, second in enumerate(sample_times_seconds):
+        command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
+                   "-ss", str(second), "-i", str(source), "-map", "0:v:0",
+                   "-frames:v", "1", "-vf", "scale=320:180:flags=fast_bilinear",
+                   "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"]
+        try:
+            frame = subprocess.run(command, capture_output=True, check=True, timeout=45)
+            with Image.open(BytesIO(frame.stdout)) as decoded:
+                decoded.load()
+                if decoded.size != (w, h):
+                    raise RawTemporalObservationError("Camera frame geometry changed")
+                x, y = (i % 4) * w, (i // 4) * (h + label)
+                sheet.paste(decoded.convert("RGB"), (x, y))
+                draw.text((x + 8, y + h + 7), f"{second:.1f}s", fill="white")
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            raise RawTemporalObservationError("Camera frame sample failed physical decode") from exc
+    sheet.save(destination, format="PNG")
+    source_digest = hashlib.sha256()
+    with source.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            source_digest.update(block)
+    return {
+        "thumbnail_sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
+        "actual_video_sha256": source_digest.hexdigest(),
+        "sample_times_seconds": list(sample_times_seconds),
+        "samples_are_not_full_motion_semantic_understanding": True,
+    }
