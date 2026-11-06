@@ -312,6 +312,97 @@ raise SystemExit("Native crash hook was not reached")
             self.ledger.history(project_id="original",
                 tool_id="graphics/mask",input_name="plan")
 
+    def test_missing_previous_instrument_revision_blocks_head_and_history(self):
+        first=self.select(A)
+        middle=self.select(B,parent=first["revision_id"],base=A)
+        newest=self.select(C,parent=middle["revision_id"],base=B)
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            db.execute("DELETE FROM creative_document_revisions WHERE revision_id=?",
+                       (middle["revision_id"],))
+        with self.assertRaisesRegex(DocumentHeadCorrupt,"not connected"):
+            self.ledger.heads("original")
+        with self.assertRaisesRegex(DocumentHeadCorrupt,"not connected"):
+            self.ledger.history(project_id="original",
+                tool_id="graphics/mask",input_name="plan",limit=1)
+        self.assertNotEqual(newest["revision_id"],first["revision_id"])
+
+    def test_deep_deleted_ancestor_detected_on_bounded_history_page(self):
+        first=self.select(A)
+        middle=self.select(B,parent=first["revision_id"],base=A)
+        third=self.select(C,parent=middle["revision_id"],base=B)
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            db.execute("DELETE FROM creative_document_revisions WHERE revision_id=?",
+                       (first["revision_id"],))
+        # The current head's immediate predecessor still exists; only a
+        # later paginated lineage audit can prove this deeper missing root.
+        top=self.ledger.history(project_id="original",
+            tool_id="graphics/mask",input_name="plan",limit=1,offset=0)
+        self.assertEqual(top["revisions"][0]["revision_id"],third["revision_id"])
+        with self.assertRaisesRegex(DocumentHeadCorrupt,"root"):
+            self.ledger.history(project_id="original",
+                tool_id="graphics/mask",input_name="plan",limit=1,offset=1)
+
+    def test_head_must_be_latest_revision_not_older_valid_event(self):
+        first=self.select(A)
+        second=self.select(B,parent=first["revision_id"],base=A)
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            db.execute("""UPDATE creative_document_heads
+                SET revision_id=?,document_sha256=?
+                WHERE project_id='original' AND tool_id='graphics/mask'""",
+                (first["revision_id"],A))
+        with self.assertRaisesRegex(DocumentHeadCorrupt,"latest"):
+            self.ledger.heads("original")
+        with self.assertRaises(DocumentHeadCorrupt):
+            self.select(C,parent=first["revision_id"],base=A)
+        self.assertEqual(len(self.ledger.history(project_id="original",
+            tool_id="graphics/mask",input_name="plan")["revisions"]),2)
+        self.assertNotEqual(first["revision_id"],second["revision_id"])
+
+    def test_cross_capability_parent_substitution_fails_even_with_rehashed_event(self):
+        from studio_next.body_project_heads import _event_digest
+        artwork=self.select(A,tool="graphics/mask")
+        sound=self.select(B,tool="audio/original_score")
+        revised=self.select(C,tool="graphics/mask",
+            parent=artwork["revision_id"],base=A)
+        forged=_event_digest("original","graphics/mask","plan",
+                             sound["revision_id"],B,C)
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            db.execute("""UPDATE creative_document_revisions
+                SET parent_revision_id=?,parent_document_sha256=?,revision_id=?
+                WHERE revision_id=?""",
+                (sound["revision_id"],B,forged,revised["revision_id"]))
+            db.execute("""UPDATE creative_document_heads SET revision_id=?
+                WHERE project_id='original' AND tool_id='graphics/mask'""",
+                (forged,))
+        with self.assertRaisesRegex(DocumentHeadCorrupt,"not connected"):
+            self.ledger.heads("original")
+        with self.assertRaisesRegex(DocumentHeadCorrupt,"not connected"):
+            self.ledger.history(project_id="original",
+                tool_id="graphics/mask",input_name="plan")
+
+    def test_corrupt_instrument_head_aborts_whole_otherwise_valid_bundle(self):
+        art=self.select(A,tool="graphics/mask")
+        sound=self.select(B,tool="audio/original_score")
+        updated=self.select(C,tool="graphics/mask",
+            parent=art["revision_id"],base=A)
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            db.execute("""UPDATE creative_document_heads
+                SET revision_id=?,document_sha256=?
+                WHERE project_id='original' AND tool_id='graphics/mask'""",
+                (art["revision_id"],A))
+        with self.assertRaises(DocumentHeadCorrupt):
+            self._bundle([
+                self._entry("audio/original_score",C,
+                            parent=sound["revision_id"],base=B),
+                self._entry("graphics/mask",B,
+                            parent=art["revision_id"],base=A),
+            ])
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            total=db.execute("""SELECT COUNT(*) FROM creative_document_revisions
+                WHERE project_id='original'""").fetchone()[0]
+        self.assertEqual(total,3)
+        self.assertNotEqual(art["revision_id"],updated["revision_id"])
+
     def test_invalid_inputs_never_create_project_version(self):
         invalid=[
             {"project":"../outside"},{"tool":"bad\noperation"},
