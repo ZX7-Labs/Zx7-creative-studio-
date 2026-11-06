@@ -275,7 +275,11 @@ class LiveBodySignal:
                "document":original}
         if "input_name" in arguments:
             proof["input_name"]=arguments["input_name"]
-        independently_validated=self._author_original_plan(proof)
+        try:
+            independently_validated=self._author_original_plan(proof)
+        except (ValueError,TypeError) as exc:
+            raise BodyCommandRejected(
+                "Selected plan does not match an authorized installed BODY tool") from exc
         if independently_validated["sha256"]!=desired:
             raise BodyCommandRejected(
                 "Original document no longer matches its validated SHA256")
