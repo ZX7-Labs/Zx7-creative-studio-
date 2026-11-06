@@ -191,7 +191,13 @@ class CapabilityFabric:
                         schema, ensure_ascii=False, allow_nan=False)),
                     "schema_bytes": schema_bytes,
                     "name_tokens": _tokens(name + " " + namespace),
-                    "description_tokens": _tokens(summary),
+                    # Retrieval reads the COMPLETE bounded source-declared
+                    # operation description, while the model still sees only
+                    # the compact 128-char summary. Earlier source clipping
+                    # removed "clip" from the native asset placement tool
+                    # and biased "timeline clip add" toward marker operations.
+                    # This is indexing, not new model authority or a script.
+                    "description_tokens": _tokens(desc[:1024]),
                     "requires": list(requirements.get(name, ())),
                     # Potential effect is an affordance, NOT evidence that a
                     # later native call actually changed a project fact.
@@ -224,7 +230,14 @@ class CapabilityFabric:
         # selection even when the *name* is reused for a different ABI/grant.
         self.revision = hashlib.sha256(_wire([{
             "id": key, "access": value["access"],
-            "summary": value["description"], "schema": value["input_schema"],
+            "summary": value["description"],
+            # A changed host description can change search selection even
+            # when its 128-character preview is unchanged. Version the
+            # retrieval vocabulary with the executable native ABI.
+            "search_tokens_sha256": hashlib.sha256(
+                _wire(sorted(value["description_tokens"])).encode(
+                    "utf-8")).hexdigest(),
+            "schema": value["input_schema"],
             "requires": value["requires"], "may_enable": value["may_enable"]
         } for key, value in sorted(records.items())]).encode("utf-8")).hexdigest()
 
