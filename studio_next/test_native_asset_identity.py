@@ -48,6 +48,59 @@ class NativeAssetIdentityTests(unittest.TestCase):
             "asset_name_not_in_native_inventory")
         self.assertNotIn("/owner/private",str(inventory))
 
+    def test_nested_batch_references_must_match_actual_native_ids(self):
+        inventory=inventory_from_native_text([json.dumps({
+            "count":2,"limitApplied":False,
+            "assets":[{"id":"camera-native-1","name":"royal-source.webm"},
+                      {"id":"music-native-2","name":"original-music.wav"}]})])
+        valid=[
+            {"assetIds":["camera-native-1","music-native-2"]},
+            {"assetNames":["royal-source","original-music.wav"]},
+            {"assets":["camera-native-1"]},
+            {"assets":[{"assetId":"camera-native-1"},
+                       {"assetName":"music.wav"}]},
+            {"assets":[{"id":"music-native-2"}]},
+            {"assets":[{"name":"royal-source"}]},
+            {"latestCount":2,"layout":"sequential"},
+        ]
+        for payload in valid:
+            with self.subTest(payload=payload):
+                self.assertIsNone(check_native_asset_reference(payload,inventory))
+        cases=[
+            ({"assetIds":["camera-native-1","invented"]},
+             "asset_id_not_in_native_inventory"),
+            ({"assetNames":["royal-source","not-present"]},
+             "asset_name_not_in_native_inventory"),
+            ({"assets":[{"assetId":"invented-native-id"}]},
+             "asset_id_not_in_native_inventory"),
+            ({"assets":[{"id":"invented-native-id"}]},
+             "asset_id_not_in_native_inventory"),
+            ({"assets":[{"assetName":"unknown-private-name"}]},
+             "asset_name_not_in_native_inventory"),
+            ({"assets":[{"unsupported":"not a source id"}]},
+             "native_asset_batch_entry_without_identity"),
+            ({"assets":[42]},"invalid_native_asset_batch"),
+            ({"assets":[]},"invalid_native_asset_batch"),
+            ({"assetIds":["camera-native-1",42]},"invalid_native_asset_id"),
+            ({"assetNames":["royal-source",""]},"invalid_native_asset_name"),
+        ]
+        for payload,reason in cases:
+            with self.subTest(payload=payload):
+                self.assertEqual(check_native_asset_reference(payload,inventory),reason)
+
+    def test_partial_inventory_cannot_disprove_nested_unknown_ids(self):
+        inventory=inventory_from_native_text([json.dumps({
+            "count":5,"limitApplied":True,
+            "assets":[{"id":"seen-native-1","name":"one"}]})])
+        self.assertEqual(check_native_asset_reference(
+            {"assets":[{"assetId":"not-in-bounded-page"}]},inventory),
+            "native_asset_inventory_incomplete")
+        self.assertEqual(check_native_asset_reference(
+            {"assetIds":["seen-native-1","unknown"]},inventory),
+            "native_asset_inventory_incomplete")
+        self.assertIsNone(check_native_asset_reference(
+            {"assetIds":["seen-native-1"]},inventory))
+
     def test_incomplete_actual_native_inventory_does_not_invent_missing_asset(self):
         inventory=inventory_from_native_text([json.dumps({
             "count":8,"limitApplied":True,
