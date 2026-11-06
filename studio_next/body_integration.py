@@ -69,7 +69,8 @@ from .generative_video_providers import discover_local_generators
 from .comfy_video_runtime import render_actual_generated_scene,validate_video_job
 from .body_publication import (publication_record_exists, prepare_publication,
                                recover_publication, sync_published_file,
-                               current_trusted_attempt_tool)
+                               current_trusted_attempt_tool,
+                               authorized_publication)
 
 
 def _body_output(workspace,name,*,allowed=(".mp4",".otio",".png")):
@@ -319,24 +320,38 @@ def _commit_actual_body_output(final_path,render):
     overwrites instead of clobbering an earlier director-approved result.
     """
     final_path=Path(final_path)
-    recovered=recover_publication(final_path,witness=_witness,verify=_verify_witness)
-    if recovered is not None:
-        return recovered
-    if final_path.exists():
-        raise FileExistsError("Cannot overwrite original media output")
+    # Recovery may publish a staged inode. It is also a write and must be
+    # fenced to the *current* owner; the receipt identity remains stable.
+    with authorized_publication():
+        recovered=recover_publication(
+            final_path,witness=_witness,verify=_verify_witness)
+        if recovered is not None:
+            return recovered
+        if final_path.exists():
+            raise FileExistsError("Cannot overwrite original media output")
     stage=final_path.with_name(
         ".zx7-uncommitted-"+uuid.uuid4().hex+final_path.suffix)
     try:
+        # Slow, untrusted renderer work happens outside the SQLite lease
+        # transaction. Publication alone holds the short writer fence.
         render(stage)
         preliminary=_witness(stage)
         if not _verify_witness(preliminary):
             raise RuntimeError("Staged creative media failed real decoder validation")
-        prepare_publication(final_path,stage,preliminary)
-        os.link(stage,final_path)
-        # A journaled, physically verified film stays accepted even if the
-        # final directory fsync reports a late error. Never unlink a public
-        # destination that could have become another writer's approved movie.
-        sync_published_file(final_path)
+        with authorized_publication():
+            # A different verified worker may have published while this
+            # renderer ran. Never clobber its final artifact or receipt.
+            if final_path.exists():
+                recovered=recover_publication(
+                    final_path,witness=_witness,verify=_verify_witness)
+                if recovered is not None:
+                    return recovered
+                raise FileExistsError("Cannot overwrite original media output")
+            prepare_publication(final_path,stage,preliminary)
+            os.link(stage,final_path)
+            # The same lease transaction covers the durable receipt,
+            # final hardlink and directory fsync; no takeover in between.
+            sync_published_file(final_path)
         return _witness(final_path)
     finally:
         # Only our private encoded staging file is ours to remove. A previous

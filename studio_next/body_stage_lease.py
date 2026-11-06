@@ -12,6 +12,7 @@ for proof publication; the body's previous error/recovery semantics remain.
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 
 from .durable_graph import RecoveryBlocked
 
@@ -28,19 +29,41 @@ class RunningStageHeartbeat:
         self._stop=threading.Event()
         self._thread=None
         self._failure=None
+        # Coordinate a potentially slow fsync with the heartbeat: during
+        # publication, the SQLite owner transaction itself blocks takeover.
+        self._publication_lock=threading.RLock()
 
     def _pulse(self):
         while not self._stop.wait(self.interval):
             try:
-                actual=self.store.renew_running_lease(
-                    self.project,self.node,self.key,self.owner,self.seconds)
-                if actual is not True:
-                    raise RecoveryBlocked(
-                        "Original render lease was lost to another worker")
+                with self._publication_lock:
+                    if self._stop.is_set():
+                        return
+                    actual=self.store.renew_running_lease(
+                        self.project,self.node,self.key,self.owner,self.seconds)
+                    if actual is not True:
+                        raise RecoveryBlocked(
+                            "Original render lease was lost to another worker")
             except BaseException as exc:
                 self._failure=exc
                 self._stop.set()
                 return
+
+    @contextmanager
+    def publication_guard(self):
+        """Hold current host ownership across the final filesystem commit.
+
+        The regular pulse waits rather than falsely timing out on the same
+        transaction. SQLite still prevents other processes from taking over.
+        """
+        with self._publication_lock:
+            if (self._thread is None or self._stop.is_set()
+                    or self._failure is not None):
+                raise RecoveryBlocked("Renderer has no active publication lease")
+            with self.store.publication_lease(
+                    self.project,self.node,self.key,self.owner,
+                    lease_seconds=self.seconds):
+                yield
 
     def start(self):
         if self._thread is not None:
