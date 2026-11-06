@@ -58,6 +58,12 @@ def _limit(value):
     return value
 
 
+def _offset(value):
+    if type(value) is not int or not (0 <= value <= 100_000):
+        raise ValueError("Invalid or unbounded revision history page offset")
+    return value
+
+
 def _event_digest(project, tool, input_name, parent, previous_document, document):
     original = {
         "schema": "zx7-creative-document-head-v1",
@@ -208,55 +214,66 @@ class DocumentHeadLedger:
             "media_source_rights_independently_verified":False,
         }
 
-    def heads(self, project_id, *, limit=50):
+    def heads(self, project_id, *, limit=50, offset=0):
+        """One bounded page of all engine/input heads in this logical project."""
         project = _name(project_id, _PROJECT, "project identity")
         bounded = _limit(limit)
+        start = _offset(offset)
         connection = self._read_connection()
         if connection is None:
-            return {"project_id":project,"heads":[],"has_more":False}
+            return {"project_id":project,"heads":[],"has_more":False,
+                    "next_offset":None}
         with closing(connection) as db:
             if not db.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
                                  AND name='creative_document_heads'""").fetchone():
-                return {"project_id":project,"heads":[],"has_more":False}
+                return {"project_id":project,"heads":[],"has_more":False,
+                        "next_offset":None}
             rows = db.execute("""SELECT tool_id,input_name,revision_id,
                 document_sha256 FROM creative_document_heads
-                WHERE project_id=? ORDER BY tool_id,input_name LIMIT ?""",
-                (project,bounded+1)).fetchall()
+                WHERE project_id=? ORDER BY tool_id,input_name LIMIT ? OFFSET ?""",
+                (project,bounded+1,start)).fetchall()
             selected = rows[:bounded]
             result=[]
             for tool,slot,revision,document in selected:
                 head=self._verify_head(db,(revision,document),project,tool,slot)
                 result.append({"tool_id":tool,"input_name":slot,**head})
+            more=len(rows)>bounded
             return {"project_id":project,"heads":result,
-                    "has_more":len(rows)>bounded,
+                    "has_more":more,
+                    "next_offset":start+bounded if more else None,
                     "native_project_state_applied_or_verified":False}
 
-    def history(self, *, project_id, tool_id, input_name, limit=32):
+    def history(self, *, project_id, tool_id, input_name,
+                limit=32, offset=0):
+        """Bounded newest-first immutable lineage for an instrument input."""
         project = _name(project_id, _PROJECT, "project identity")
         tool = _name(tool_id, _TOOL, "installed tool identity")
         slot = _name(input_name, _INPUT, "document input identity")
         bounded = _limit(limit)
+        start = _offset(offset)
         connection = self._read_connection()
         if connection is None:
             return {"project_id":project,"tool_id":tool,"input_name":slot,
-                    "revisions":[],"has_more":False}
+                    "revisions":[],"has_more":False,"next_offset":None}
         with closing(connection) as db:
             if not db.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
                                  AND name='creative_document_revisions'""").fetchone():
                 return {"project_id":project,"tool_id":tool,"input_name":slot,
-                        "revisions":[],"has_more":False}
+                        "revisions":[],"has_more":False,"next_offset":None}
             rows = db.execute("""SELECT revision_id,parent_revision_id,
                 parent_document_sha256,document_sha256
                 FROM creative_document_revisions
                 WHERE project_id=? AND tool_id=? AND input_name=?
-                ORDER BY sequence DESC LIMIT ?""",
-                (project,tool,slot,bounded+1)).fetchall()
+                ORDER BY sequence DESC LIMIT ? OFFSET ?""",
+                (project,tool,slot,bounded+1,start)).fetchall()
             result=[]
             for revision,parent,previous,document in rows[:bounded]:
                 if _event_digest(project,tool,slot,parent,previous,document)!=revision:
                     raise DocumentHeadCorrupt("Historical creative revision lineage changed")
                 result.append({"revision_id":revision,"parent_revision_id":parent,
                                "document_sha256":document})
+            more=len(rows)>bounded
             return {"project_id":project,"tool_id":tool,"input_name":slot,
-                    "revisions":result,"has_more":len(rows)>bounded,
+                    "revisions":result,"has_more":more,
+                    "next_offset":start+bounded if more else None,
                     "native_project_state_applied_or_verified":False}
