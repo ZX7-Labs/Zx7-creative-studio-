@@ -256,6 +256,49 @@ def _bounded_error_digest(result):
     return hashlib.sha256(_wire(texts).encode("utf-8")).hexdigest(), False
 
 
+def _bounded_native_error_category(result):
+    """Privacy-safe, explicitly HEURISTIC native failure classification.
+
+    Native tools can echo private paths, user prompts, or filenames inside
+    error text. Never persist the original text or a copied substring. Even
+    a recognized category is NOT evidence that a stateful native write made
+    no changes, so the controller still stops and requires READ reconciliation.
+    Unknown/oversized responses remain unclassified rather than guessed.
+    """
+    blocks = _field(result, "content", ())
+    if not isinstance(blocks, (list, tuple)) or len(blocks) > 64:
+        return "unclassified_native_failure"
+    size = 0
+    for block in blocks:
+        if _field(block, "type") != "text":
+            continue
+        value = _field(block, "text")
+        if not isinstance(value, str) or len(value) > _MAX_RESULT_TEXT:
+            return "unclassified_native_failure"
+        size += len(value.encode("utf-8"))
+        if size > _MAX_RESULT_TEXT:
+            return "unclassified_native_failure"
+        message = value.casefold()
+        # These are bounded categories based on the pinned editor's real
+        # source error classes. They are diagnostics, NOT permission to retry.
+        if ("no matching placeable assets" in message or
+                "no unique placeable assets" in message):
+            return "no_matching_placeable_native_assets"
+        if ("asset" in message and
+                ("was not found" in message or "could not be found" in message)):
+            return "native_asset_not_found"
+        if ("could not create" in message and "track" in message):
+            return "native_track_creation_rejected"
+        if ("could not add" in message and "timeline" in message):
+            return "native_timeline_placement_rejected"
+        if ("no current timeline" in message or
+                "no active timeline" in message):
+            return "native_timeline_unavailable"
+        if ("no project" in message or "project is not open" in message):
+            return "native_project_unavailable"
+    return "unclassified_native_failure"
+
+
 def _native_tool_hints(available):
     """Host-derived compact affordances, not an action plan or new grants.
 
@@ -1642,6 +1685,8 @@ class NativeCreativeControl:
                                   "measured_native_mcp_wall_ms": native_ms,
                                   "error_sha256": digest,
                                   "error_text_exceeded_evidence_budget": out_of_budget,
+                                  "native_error_category_heuristic":
+                                      _bounded_native_error_category(result),
                                   "must_reconcile_native_state": True,
                                   "no_automatic_retry": True})
                     outcome = "native_error_requires_state_reconciliation"
