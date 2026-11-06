@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-import sqlite3
 import tempfile
 import time
 import unittest
@@ -110,10 +109,6 @@ class OriginalPublicationLeaseFenceTests(unittest.TestCase):
             with heart.publication_guard():
                 self.clock[0]+=1
                 time.sleep(.22)
-                with self.store._connect() as db:
-                    # Reads are permitted while a write txn is held only from
-                    # this same connection; inspecting externally would block.
-                    pass
             with self.store._connect() as db:
                 row=db.execute("""SELECT owner,lease_until
                     FROM node_results WHERE project_key=? AND node_id=?""",
@@ -149,11 +144,10 @@ class OriginalPublicationLeaseFenceTests(unittest.TestCase):
                 lease_seconds=.2):
             pass
 
-    def test_crashed_original_receipt_identity_recovers_with_new_lease(self):
+    def test_failed_link_receipt_can_be_replaced_by_later_verified_owner(self):
         old=self.acquire()
         target=self.root/"original.png"
         interrupted=[False]
-        original_link=__import__("os").link
         def die_before_link(source,final):
             interrupted[0]=True
             raise OSError("Simulated post-receipt native disk failure")
