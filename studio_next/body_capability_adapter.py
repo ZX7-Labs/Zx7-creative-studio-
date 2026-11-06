@@ -65,15 +65,28 @@ class InstalledBodyAdapter:
 
 
 async def connect_installed_zx7_body(workspace, *, allowed_access=("read", "write"),
-                                    editor_client=None):
-    """Create the universal execution gateway from a real installed BODY."""
-    from .capability_gateway import CapabilityGateway
+                                    editor_client=None,
+                                    durable_write_requests=False):
+    """Connect the real BODY with optional crash-durable write admission.
 
+    A host enabling this mode must assign a stable request_id to each WRITE.
+    Missing identity then fails before the native operation. READs retain
+    their original input interface and never consume write attempt IDs.
+    """
+    from .capability_gateway import CapabilityGateway
+    from .capability_attempts import CapabilityAttemptStore
+
+    if type(durable_write_requests) is not bool:
+        raise ValueError("Durable native admission requires an explicit boolean host policy")
     adapter = InstalledBodyAdapter(workspace, allowed_access=allowed_access,
                                    editor_client=editor_client)
+    ledger = (CapabilityAttemptStore(
+        Path(workspace).resolve() / ".zx7-host-private" /
+        "capability-attempts.sqlite3") if durable_write_requests else None)
     # This trusted host callback re-evaluates actual installed/allowed local
     # BODY operations on future refreshes. A creative model cannot mint
     # grants, and external plugin connections remain explicitly host-authorized.
-    gateway = CapabilityGateway({"zx7": (adapter, adapter.trusted_grants)})
+    gateway = CapabilityGateway({"zx7": (adapter, adapter.trusted_grants)},
+                                attempt_store=ledger)
     await gateway.refresh()
     return gateway
