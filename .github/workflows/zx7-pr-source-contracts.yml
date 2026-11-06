@@ -19,6 +19,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  universal-core-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install only declared BODY contract dependencies
+        run: python -m pip install --no-cache-dir '.[production,editor]'
+      - name: Compile shared capability/runtime source
+        run: python -m compileall -q studio_next
+      - name: Test cross-domain capability admission without media installs
+        run: |
+          python -m unittest \
+            studio_next.test_capability_attempts \
+            studio_next.test_capability_gateway \
+            studio_next.test_capability_fabric \
+            studio_next.test_body_capability_adapter \
+            studio_next.test_durable_graph \
+            studio_next.test_body_stage_lease -v
+
   source-and-native-project:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
