@@ -36,6 +36,44 @@ class CapabilityFabricTests(unittest.TestCase):
                          "motion/keyframe_curve")
         self.assertFalse(fabric.search("imaginary teleportation")["matches"])
 
+    def test_long_native_description_indexes_late_asset_clip_identity_not_only_summary(self):
+        # Actual pinned Velorn described native asset placement in a
+        # 200+ character sentence: the source's useful "clip" terminology
+        # occurs only after the formerly indexed 128-char short summary.
+        # "timeline clip add" must not rank a marker operation over the
+        # media placement operation just because its retrieval description
+        # was truncated. This is a generic retrieval-fidelity test.
+        late_clip = ("Preview or place a project asset on the active timeline. "
+                     "Can target a specific asset id/name or the latest generated "
+                     "asset, choose playhead/selected-clip/timeline-end placement, "
+                     "use an existing compatible track, or create a new top "
+                     "video/audio track. Defaults to previewOnly.")
+        marker_desc = "Add timeline markers and labels at selected times"
+        one = tool("add_asset_to_timeline", late_clip)
+        two = tool("add_timeline_markers", marker_desc)
+        fabric = CapabilityFabric({"native": (
+            [one, two],
+            {"add_asset_to_timeline": "write",
+             "add_timeline_markers": "write"})})
+        self.assertNotIn("clip", fabric.describe(
+            "native/add_asset_to_timeline",
+            revision=fabric.revision)["description"][:128].casefold())
+        hit = fabric.search("timeline clip add", limit=1)
+        self.assertEqual(hit["matches"][0]["id"],
+                         "native/add_asset_to_timeline")
+        self.assertFalse(hit["requires_refinement"])
+        # The human-visible summary remains compact even when search
+        # uses the full original host description.
+        self.assertLessEqual(len(hit["matches"][0]["description"]), 96)
+        updated = CapabilityFabric({"native": (
+            [tool("add_asset_to_timeline",
+                  late_clip.replace("selected-clip", "selected-frame")),
+             two], {"add_asset_to_timeline": "write",
+                    "add_timeline_markers": "write"})})
+        self.assertNotEqual(fabric.revision, updated.revision)
+        self.assertNotEqual(fabric.search("timeline clip add", limit=1),
+                            updated.search("timeline clip add", limit=1))
+
     def test_optional_search_facets_are_actual_host_granted_not_a_tool_manual(self):
         granted = [tool("create_project"), tool("get_timeline"),
                    tool("import_asset_from_path"), tool("add_clip_to_timeline")]
