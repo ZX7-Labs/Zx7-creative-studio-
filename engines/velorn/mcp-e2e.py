@@ -437,6 +437,64 @@ async def exercise(options):
             "source_media_sha_unchanged": True,
             "neural_artistic_success_asserted": False,
         }, sort_keys=True), flush=True)
+
+        # Distinguish an inherent batch-tool failure from one bad model-
+        # selected source selector: the original failed neural call did not
+        # retain its arguments. Exercise the native, *implicit* source
+        # selection path separately, on another truly empty sequence.
+        sequence = await call(session, "create_timeline", {
+            "name": "Native implicit video selection control",
+            "width": 320, "height": 180, "fps": 24,
+            "switchToTimeline": True, "previewOnly": False})
+        assert sequence.get("success") is True
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("name")
+            == "Native implicit video selection control")
+        before_implicit = await call(session, "get_timeline", {"includeClips": True})
+        assert before_implicit["clips"] == []
+        implicit_inputs = {
+            "type": "video", "count": 1, "trackStrategy": "newTracks",
+            "includeAudio": False, "startSeconds": 0,
+        }
+        implicit_preview = await call(session, "add_assets_to_timeline", {
+            **implicit_inputs, "previewOnly": True})
+        assert implicit_preview.get("previewOnly") is True
+        planned = implicit_preview.get("plan", {}).get("placements", [])
+        assert len(planned) == 1 and planned[0]["asset"]["id"] == video_ids[0]
+        assert (await call(session, "get_timeline", {
+            "includeClips": True}))["clips"] == []
+        implicit_apply = await call(session, "add_assets_to_timeline", {
+            **implicit_inputs, "previewOnly": False})
+        assert implicit_apply.get("success") is True
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("clipCount") == 1)
+        after_implicit = await call(session, "get_timeline", {
+            "includeClips": True})
+        assert len(after_implicit["clips"]) == 1
+        assert after_implicit["clips"][0]["assetId"] == video_ids[0]
+        # A wrong explicit selector must be rejected by native Velorn, and
+        # must not alter even this disposable working sequence. Do not expose
+        # the source path or native error text in logs.
+        bad_preview = await session.call_tool("add_assets_to_timeline", {
+            "assetIds": ["zx7-nonexistent-asset-reference"],
+            "trackStrategy": "newTracks",
+            "previewOnly": True})
+        assert bad_preview.is_error
+        unchanged = await call(session, "get_timeline", {
+            "includeClips": True})
+        assert [clip["id"] for clip in unchanged["clips"]] == [
+            clip["id"] for clip in after_implicit["clips"]]
+        assert digest(original) == original_hash
+        await call(session, "save_project", {"previewOnly": False})
+        print("ACTUAL_NATIVE_BATCH_SELECTOR_DISCRIMINATION " + json.dumps({
+            "technical_fixture_not_neural": True,
+            "implicit_editor_source_selection_preview_nonmutating": True,
+            "implicit_native_source_id_matched_read_inventory": True,
+            "implicit_batch_apply_created_exactly_one_real_clip": True,
+            "invalid_explicit_id_preview_rejected_without_edit": True,
+            "original_media_sha_unchanged": True,
+            "artistic_quality_approved": False,
+        }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
     audio = next(stream for stream in probe["streams"] if stream["codec_type"] == "audio")
@@ -464,6 +522,7 @@ async def exercise(options):
         "physicalHostObservedAssetBatchPlacementPassed": True,
         "physicalEmptyTimelineFirstNativeBatchPlacementPassed": True,
         "physicalNativeBatchProjectRestartPersistencePassed": True,
+        "physicalNativeBatchSelectorDiscriminationPassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
