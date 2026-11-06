@@ -1,4 +1,7 @@
 name: ZX7 Source-Compatible Qwen Camera Native Trial
+# Exact-source rerun: verify latest physical native asset IDs and project-read
+# reconciliation with genuine local Qwen, no pre-authored creative edit steps.
+# Earlier camera run 42124831468 used older source and did not pass.
 on:
   push:
     branches: ["engineering/unified-brain-body-architecture-audit-20261106"]
