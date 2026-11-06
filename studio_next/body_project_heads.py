@@ -80,13 +80,15 @@ class DocumentHeadLedger:
 
     def __init__(self, workspace):
         workspace = Path(workspace)
-        if workspace.is_symlink() or not workspace.is_dir():
-            raise ValueError("Project revision workspace must be an existing real directory")
+        if workspace.is_symlink() or (workspace.exists() and not workspace.is_dir()):
+            raise ValueError("Project revision workspace cannot be linked or non-directory")
         self.path = workspace / "production.sqlite3"
         if self.path.is_symlink():
             raise ValueError("Project revision database must not be a symlink")
 
     def _connect(self):
+        if self.path.parent.is_symlink() or not self.path.parent.is_dir():
+            raise ValueError("Cannot write project head into an absent or linked workspace")
         if self.path.is_symlink():
             raise ValueError("Project revision database cannot become a symlink")
         return connect_durable_database(self.path)
