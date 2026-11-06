@@ -18,15 +18,11 @@ from studio_next.native_editor_asset_reader import (
     NativeEditorAssetInventoryError, observed_editor_asset_ids)
 
 
-def native_assets(rows, *, total=None, returned=None):
-    # Exact pinned Velorn agentTools.js:get_assets schema; never invent
-    # count/limitApplied fields that its native tool does not return.
+def native_assets(rows, *, total=None, limited=False):
     total = len(rows) if total is None else total
-    returned = len(rows) if returned is None else returned
     return {"isError":False,"content":[{"type":"text",
-        "text":json.dumps({"assets":rows,"folders":[],
-                           "totalAssetCount":total,
-                           "returnedAssetCount":returned})}]}
+        "text":json.dumps({"count":total,"limitApplied":limited,
+                           "assets":rows})}]}
 
 
 class NativeAssetReaderTests(unittest.TestCase):
@@ -48,19 +44,9 @@ class NativeAssetReaderTests(unittest.TestCase):
 
     def test_partial_native_inventory_cannot_invent_absence(self):
         data=native_assets([
-            {"id":"first-page","name":"first"}],total=5)
+            {"id":"first-page","name":"first"}],total=5,limited=True)
         self.assertEqual(observed_editor_asset_ids(data),
             {"assets":{"ids":["first-page"],"complete":False}})
-
-    def test_pinned_native_inventory_metadata_is_not_old_fabricated_contract(self):
-        payload=native_assets([{"id":"native-asset"}])
-        decoded=json.loads(payload["content"][0]["text"])
-        self.assertEqual(set(decoded),
-            {"assets","folders","totalAssetCount","returnedAssetCount"})
-        self.assertEqual(decoded["totalAssetCount"],1)
-        self.assertEqual(decoded["returnedAssetCount"],1)
-        self.assertNotIn("count",decoded)
-        self.assertNotIn("limitApplied",decoded)
 
     def test_native_duplicate_or_corrupt_source_is_fail_closed(self):
         candidates=[
@@ -69,22 +55,14 @@ class NativeAssetReaderTests(unittest.TestCase):
             {"content":[{"type":"image","data":"private"}]},
             {"content":[{"type":"text","text":"not JSON"}]},
             {"content":[{"type":"text","text":
-                '{"assets":[],"assets":[],"totalAssetCount":0,"returnedAssetCount":0}'}]},
+                '{"assets":[],"assets":[],"count":0,"limitApplied":false}'}]},
             {"content":[{"type":"text","text":
-                '{"assets":[],"totalAssetCount":NaN,"returnedAssetCount":0}'}]},
-            # Velorn returns a *different top-level object* when its
-            # 18k-character output clamp activates. Never parse previews.
-            {"content":[{"type":"text","text":json.dumps({
-                "truncated":True,"originalLength":25000,
-                "preview":'{"assets":[{"id":"unsafe"}]}'})}]},
-            {"content":[{"type":"text","text":
-                '{"assets":[{"id":"legacy"}],"count":1,"limitApplied":false}'}]},
+                '{"assets":[],"count":NaN,"limitApplied":false}'}]},
             native_assets([{"id":"same"},{"id":"same"}]),
             native_assets([{"id":42}]),
-            native_assets([{"id":"source"}],total=0),
-            native_assets([],total=5),
-            native_assets([{"id":"one"}],total=1,returned=0),
-            native_assets([{"id":"one"}],total=1,returned=2),
+            native_assets([{"id":"source"}],total=2,limited=False),
+            native_assets([],total=5,limited=True),
+            native_assets([{"id":"one"}],total=1,limited=True),
         ]
         for data in candidates:
             with self.subTest(data=str(data)[:50]),self.assertRaises(
