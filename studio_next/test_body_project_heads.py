@@ -97,6 +97,49 @@ class CrossCapabilityDocumentHeadTests(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT count(*) FROM creative_document_revisions").fetchone()[0],0)
 
+    def test_real_process_death_mid_bundle_restores_no_partial_head(self):
+        # The child is killed inside SQLite itself after the FIRST instrument
+        # head has been written and while the SECOND history row is inserting.
+        # This is physical SQLite rollback recovery, not a mocked exception.
+        child=r'''
+import os,sys
+from studio_next.body_project_heads import DocumentHeadLedger
+from studio_next.durable_sqlite import connect_durable_database
+store=DocumentHeadLedger(sys.argv[1])
+with connect_durable_database(store.path) as db:
+    store._create_tables(db)
+    db.execute("""CREATE TRIGGER kill_mid_bundle
+        BEFORE INSERT ON creative_document_revisions
+        WHEN NEW.tool_id='audio/score'
+        BEGIN SELECT die_for_test(); END""")
+original=store._connect
+def installed_connection():
+    db=original()
+    db.create_function("die_for_test",0,lambda:os._exit(79))
+    return db
+store._connect=installed_connection
+store.select_bundle(project_id="original",selections=[
+    {"tool_id":"graphics/mask","input_name":"plan",
+     "document_sha256":"a"*64,
+     "expected_revision_id":None,"expected_document_sha256":None},
+    {"tool_id":"audio/score","input_name":"plan",
+     "document_sha256":"b"*64,
+     "expected_revision_id":None,"expected_document_sha256":None}])
+raise SystemExit("Native crash hook was not reached")
+'''
+        killed=subprocess.run([sys.executable,"-c",child,str(self.workspace)],
+                              capture_output=True,text=True,timeout=20)
+        self.assertEqual(killed.returncode,79,killed.stderr)
+        self.assertEqual(DocumentHeadLedger(self.workspace).heads("original")["heads"],[])
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM creative_document_revisions").fetchone()[0],0)
+            db.execute("DROP TRIGGER kill_mid_bundle")
+        recovered=self._bundle([self._entry("graphics/mask",A),
+                                self._entry("audio/score",B)])
+        self.assertTrue(recovered["atomic_plan_head_selection"])
+        self.assertEqual(len(self.ledger.heads("original")["heads"]),2)
+
     def test_two_concurrent_cross_engine_bundles_never_publish_mixed_heads(self):
         barrier=threading.Barrier(2)
         def worker(first,second):
