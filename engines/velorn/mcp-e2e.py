@@ -403,6 +403,8 @@ async def exercise(options):
         assert len(populated["clips"]) == 1
         assert populated["clips"][0].get("assetId") == observed_video[0]
         assert digest(original) == original_hash
+        await call(session, "save_project", {"previewOnly": False})
+        assert digest(native_path) != digest(fixture / "revision-2.comfystudio")
         print("ACTUAL_NATIVE_EMPTY_SEQUENCE_BATCH_PLACEMENT " + json.dumps({
             "scripted_control_not_neural": True,
             "source_id_reobserved_after_sequence_switch": True,
@@ -411,6 +413,29 @@ async def exercise(options):
             "physical_timeline_clip_count_after_first_placement": 1,
             "original_media_sha_unchanged": True,
             "artistic_quality_approved": False,
+        }, sort_keys=True), flush=True)
+
+    # The live clip count is insufficient: prove that the newly created
+    # sequence, its first native batch placement and exact original asset ID
+    # survive a fresh independent editor process before accepting this
+    # technical control as durable. Original source content must be untouched.
+    async with connected() as session:
+        await call(session, "open_project", {
+            "projectPath": str(project), "previewOnly": False})
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("name")
+            == "Original footage first-placement control"
+            and (state.get("currentTimeline") or {}).get("clipCount") == 1)
+        persisted = await call(session, "get_timeline", {"includeClips": True})
+        assert len(persisted["clips"]) == 1
+        assert persisted["clips"][0].get("assetId") == video_ids[0]
+        assert digest(original) == original_hash
+        print("ACTUAL_NATIVE_BATCH_REOPEN_PERSISTENCE " + json.dumps({
+            "new_process_reopened_saved_native_project": True,
+            "first_source_linked_video_clip_persisted": True,
+            "source_video_id_matches_prior_live_inventory": True,
+            "source_media_sha_unchanged": True,
+            "neural_artistic_success_asserted": False,
         }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
@@ -433,11 +458,12 @@ async def exercise(options):
         "physicalEditorExportIndependentlyDecoded": True,
         "deniedNetworkTool": True, "deniedOutsideImport": True,
         "existingSourceExportDenied": True, "outsideNativeDocumentDenied": True,
-        "invalidNativeArgumentsRejected": True, "editableTracks": 3, "savedVersions": 2,
+        "invalidNativeArgumentsRejected": True, "editableTracks": 3, "savedVersions": 3,
         "processRestartReopenPassed": True, "frames": 48, "fps": "24/1", "audioCodec": "aac",
         "fullDecodePassed": True, "physicalModelInterfaceAVTransportFixturePassed": True,
         "physicalHostObservedAssetBatchPlacementPassed": True,
         "physicalEmptyTimelineFirstNativeBatchPlacementPassed": True,
+        "physicalNativeBatchProjectRestartPersistencePassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
