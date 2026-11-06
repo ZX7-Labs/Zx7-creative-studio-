@@ -160,7 +160,8 @@ class UniversalBudgetTests(unittest.IsolatedAsyncioTestCase):
                                      inputs={"count": 1}, request_id="blocked")
             self.assertIsNone(journal.inspect("blocked"))
             self.assertEqual(len(source.calls), 1)
-            self.assertFalse(journal.inspect("first")["state"].endswith("verified"))
+            self.assertEqual(journal.inspect("first")["state"],
+                             "host_reported_success_unverified")
 
     async def test_invalid_or_unknown_host_policies_fail_before_discovery(self):
         for limits in (
