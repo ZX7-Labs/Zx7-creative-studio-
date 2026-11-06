@@ -24,7 +24,7 @@ from .film_ir import validate_film_ir
 from .body_document_schemas import validate_document
 from .body_project_heads import DocumentHeadLedger
 
-_ACTIONS=frozenset({"author_plan","revise_plan","select_plan","submit","pause","cancel","resume","retry"})
+_ACTIONS=frozenset({"author_plan","revise_plan","select_plan","select_plan_bundle","submit","pause","cancel","resume","retry"})
 _ACCESS=frozenset({"read","write","network","paid"})
 # Legacy edit/OTIO accept owner-supplied textual rights labels without real
 # MediaVault custody. Retain them for explicit historical migration, never
@@ -57,7 +57,7 @@ class BodyAuthority:
             not isinstance(self.tool_access,frozenset) or
             not self.tool_access or not self.tool_access.issubset(_ACCESS)):
             raise ValueError("Only narrow host-issued BODY authority is valid")
-        if (bool(self.operations & {"submit","author_plan","revise_plan","select_plan"})
+        if (bool(self.operations & {"submit","author_plan","revise_plan","select_plan","select_plan_bundle"})
                 and "write" not in self.tool_access):
             raise ValueError("Studio source creation requires host-issued write access")
 
@@ -101,6 +101,7 @@ class LiveBodySignal:
             "select_plan":["workspace_id","project_id","tool_id",
                            "document_sha256","expected_revision_id",
                            "expected_document_sha256"],
+            "select_plan_bundle":["workspace_id","project_id","selections"],
             "submit":["workspace_id","film_ir"],
             "pause":["job_id"],"cancel":["job_id"],
             "resume":["job_id"],"retry":["job_id"]}
@@ -259,22 +260,20 @@ class LiveBodySignal:
                 "changed_paths":[op["path"] for op in arguments["operations"] if op["op"]!="test"],
                 "body_implementation_changed":False}
 
-    def _select_original_plan(self, arguments):
-        """Select a real immutable instrument document under an exact CAS head.
-
-        Unlike a native editor WRITE, this only changes the host-designated
-        *plan reference*. The original document must already exist as the
-        exact physical bytes of its SHA and match a currently authorized,
-        installed BODY tool schema. No source rights or native media is
-        minted by selecting a plan.
-        """
-        workspace_id=arguments["workspace_id"]
-        desired=arguments["document_sha256"]
+    def _validated_plan_selection(self,workspace_id,selection):
+        """Host-check one immutable source, installed instrument and schema."""
+        required={"tool_id","document_sha256",
+                  "expected_revision_id","expected_document_sha256"}
+        if type(selection) is not dict or set(selection) not in (
+                required,required|{"input_name"}):
+            raise BodyCommandRejected(
+                "Plan bundle input must carry exact document and parent identities")
+        desired=selection["document_sha256"]
         original=self._read_original_plan(workspace_id,desired)
-        proof={"workspace_id":workspace_id,"tool_id":arguments["tool_id"],
-               "document":original}
-        if "input_name" in arguments:
-            proof["input_name"]=arguments["input_name"]
+        proof={"workspace_id":workspace_id,
+               "tool_id":selection["tool_id"],"document":original}
+        if "input_name" in selection:
+            proof["input_name"]=selection["input_name"]
         try:
             independently_validated=self._author_original_plan(proof)
         except (ValueError,TypeError) as exc:
@@ -283,19 +282,58 @@ class LiveBodySignal:
         if independently_validated["sha256"]!=desired:
             raise BodyCommandRejected(
                 "Original document no longer matches its validated SHA256")
+        return {
+            "tool_id":selection["tool_id"],
+            "input_name":independently_validated["document_input_name"],
+            "document_sha256":desired,
+            "expected_revision_id":selection["expected_revision_id"],
+            "expected_document_sha256":selection["expected_document_sha256"],
+        }
+
+    def _select_original_plan_bundle(self,arguments):
+        """Validate all source documents BEFORE atomic multi-engine CAS.
+
+        The host validates each actual installed instrument and its exact
+        original JSON independently. SQL commits all head selections or none.
+        This does not apply, save or independently observe a native editor.
+        """
+        workspace_id=arguments["workspace_id"]
+        workspace=self._workspace(workspace_id)
+        entries=arguments["selections"]
+        if type(entries) is not list or not 1<=len(entries)<=32:
+            raise BodyCommandRejected(
+                "Plan selection requires 1 to 32 installed instrument inputs")
+        prepared=[self._validated_plan_selection(workspace_id,item)
+                  for item in entries]
         try:
-            result=DocumentHeadLedger(self._workspace(workspace_id)).select(
-                project_id=arguments["project_id"],tool_id=arguments["tool_id"],
-                input_name=independently_validated["document_input_name"],
-                document_sha256=desired,
-                expected_revision_id=arguments["expected_revision_id"],
-                expected_document_sha256=arguments["expected_document_sha256"])
+            selected=DocumentHeadLedger(workspace).select_bundle(
+                project_id=arguments["project_id"],selections=prepared)
         except ValueError as exc:
             raise BodyCommandRejected(str(exc)) from exc
-        return {"protocol":self.VERSION,"workspace_id":workspace_id,**result,
-                "original_document_bytes_preserved":True,
-                "host_installed_document_schema_revalidated":True,
-                "native_media_rendered_or_approved":False}
+        return {
+            "protocol":self.VERSION,"workspace_id":workspace_id,**selected,
+            "original_document_bytes_preserved":True,
+            "host_installed_document_schema_revalidated":True,
+            "native_media_rendered_or_approved":False,
+        }
+
+    def _select_original_plan(self,arguments):
+        """Backward-compatible single original-document CAS using one ledger."""
+        selected=self._select_original_plan_bundle({
+            "workspace_id":arguments["workspace_id"],
+            "project_id":arguments["project_id"],
+            "selections":[{
+                key:value for key,value in arguments.items()
+                if key not in ("workspace_id","project_id")
+            }],
+        })
+        return {
+            "protocol":self.VERSION,"workspace_id":arguments["workspace_id"],
+            **selected["revisions"][0],
+            "original_document_bytes_preserved":True,
+            "host_installed_document_schema_revalidated":True,
+            "native_media_rendered_or_approved":False,
+        }
 
     def inspect_plan_heads(self,workspace_id,project_id,*,limit=50,offset=0):
         """Inspect all native-tool plan heads in one authorized logical project."""
@@ -351,6 +389,8 @@ class LiveBodySignal:
                   else {"workspace_id","project_id","tool_id","document_sha256",
                         "expected_revision_id","expected_document_sha256"}
                        if action=="select_plan"
+                  else {"workspace_id","project_id","selections"}
+                       if action=="select_plan_bundle"
                   else {"job_id"})
         if (set(arguments)!=expected and not (
                 action in ("author_plan","revise_plan","select_plan") and set(arguments)==expected|{"input_name"})):
@@ -361,6 +401,8 @@ class LiveBodySignal:
             return self._revise_original_plan(arguments)
         if action=="select_plan":
             return self._select_original_plan(arguments)
+        if action=="select_plan_bundle":
+            return self._select_original_plan_bundle(arguments)
         if action=="submit":
             workspace_id=arguments["workspace_id"]
             self._workspace(workspace_id)
