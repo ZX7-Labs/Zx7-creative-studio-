@@ -216,6 +216,15 @@ class InstalledNativeAssetAdmissionTests(unittest.IsolatedAsyncioTestCase):
             await self.gateway()
         self.assertFalse(self.path.is_file())
 
+    async def test_no_host_granted_asset_writer_does_not_create_sqlite(self):
+        # Validation must not create local durable state when the host has
+        # granted only inventory inspection and no guarded native mutation.
+        self.editor.allowed_tools={"get_assets":"read"}
+        with self.assertRaisesRegex(
+                ValueError,"No host-granted native asset writer"):
+            await self.gateway()
+        self.assertFalse(self.path.is_file())
+
     async def test_host_refuses_inert_or_malformed_native_policy_flag(self):
         for invalid in ("true",1,None):
             with self.subTest(invalid=invalid),self.assertRaises(ValueError):
