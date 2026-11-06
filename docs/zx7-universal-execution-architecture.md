@@ -60,9 +60,9 @@ A and B are NOT proof of C; playable/exported C is NOT proof of D. Tests using a
 
 A host may explicitly instantiate CapabilitySessionBudget(max_calls=N, max_writes=M, per_source={...}) and pass it to CapabilityGateway(session_budget=...). It has NO default hidden limits and preserves behavior of existing unbudgeted callers.
 
-A single atomic counter spans unrelated engines and concurrent invocations, and optional per-source limits restrict hot spots. Invalid model parameters do not consume a slot. Reservations conservatively remain consumed if a later durable duplicate check fails, the app reports an error, the process crashes or the native result is uncertain. The host receives an aggregate budget receipt containing no original inputs or media.
+A single atomic counter spans engines connected through the same budgeted CapabilityGateway and concurrent invocations. Direct legacy runners outside that gateway remain unbudgeted; routing them is a separate integration task. Optional per-source limits restrict hot spots. Invalid model parameters do not consume a slot. Reservations conservatively remain consumed if a later durable duplicate check fails, the app reports an error, the process crashes or the native result is uncertain. The host receives an aggregate budget receipt containing no original inputs or media.
 
-Critical scope: this is an IN-PROCESS ADMISSION LIMIT, NOT a token usage meter, dollar budget, production success metric or durable 24-hour spending control. Process restart can instantiate a fresh budget. Real autonomous agents require durable cross-process accounting that includes model usage and real external provider costs before claiming cost control.
+Critical scope: this is an IN-PROCESS ADMISSION LIMIT on the configured gateway, NOT a token usage meter, dollar budget, production success metric, blanket guard for every legacy call path or durable 24-hour spending control. Process restart can instantiate a fresh budget. Real autonomous agents require durable cross-process accounting that includes model usage and real external provider costs before claiming cost control.
 
 ## Work sequence by risk removed
 
