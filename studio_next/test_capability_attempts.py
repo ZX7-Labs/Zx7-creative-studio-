@@ -138,7 +138,9 @@ class AttemptStoreTests(unittest.TestCase):
             [x["request_id"] for x in first["attempts"]],
             ["host-video-1","host-audio-1"])
         self.assertTrue(first["has_more"])
-        self.assertIsInstance(first["next_cursor"],int)
+        self.assertEqual(first["next_cursor"]["request_id"],"host-audio-1")
+        self.assertEqual(first["next_cursor"]["admitted_ns"],
+                         first["attempts"][-1]["admitted_ns"])
         next_page=reopened.unverified_attempts(limit=2,
                                                cursor=first["next_cursor"])
         self.assertEqual([x["request_id"] for x in next_page["attempts"]],
@@ -160,24 +162,60 @@ class AttemptStoreTests(unittest.TestCase):
                     operation_id="graphics/create_layer",
                     catalog_revision=REV,input_sha256=DIGEST)
 
-    def test_recovery_pages_order_by_durable_row_not_wall_clock(self):
+    def test_recovery_pages_remain_stable_after_vacuum_and_clock_rollback(self):
         with patch("studio_next.capability_attempts.time.time_ns",
                    side_effect=[100,99,98]):
             for request in ("host-first","host-second","host-third"):
                 self.reserve(request)
         recovered=CapabilityAttemptStore(self.path)
-        observed=[]
-        cursor=None
-        while True:
-            page=recovered.unverified_attempts(limit=1,cursor=cursor)
-            observed.extend(x["request_id"] for x in page["attempts"])
-            if not page["has_more"]:
-                break
-            cursor=page["next_cursor"]
-        self.assertEqual(observed,["host-first","host-second","host-third"])
-        self.assertEqual(recovered.unverified_attempts(
-            cursor=cursor if cursor is not None else 2,limit=100
-        )["attempts"][-1]["request_id"],"host-third")
+        first=recovered.unverified_attempts(limit=1)
+        self.assertEqual(first["attempts"][0]["request_id"],"host-first")
+        cursor=first["next_cursor"]
+        self.assertEqual(cursor,{"admitted_ns":100,"request_id":"host-first"})
+        # SQLite explicitly warns that rowid may be modified by VACUUM.
+        # The externally visible cursor is based on persistent columns.
+        with recovered._connect() as db:
+            db.execute("VACUUM")
+        reopened=CapabilityAttemptStore(self.path)
+        second=reopened.unverified_attempts(limit=1,cursor=cursor)
+        self.assertEqual(second["attempts"][0]["request_id"],"host-second")
+        self.assertEqual(second["attempts"][0]["admitted_ns"],101)
+        third=reopened.unverified_attempts(
+            limit=1,cursor=second["next_cursor"])
+        self.assertEqual(third["attempts"][0]["request_id"],"host-third")
+        self.assertEqual(third["attempts"][0]["admitted_ns"],102)
+        self.assertFalse(third["has_more"])
+        self.assertIsNone(third["next_cursor"])
+        # A later admission cannot be hidden behind the stored first cursor
+        # even when its physical wall clock moves backwards.
+        with patch("studio_next.capability_attempts.time.time_ns",
+                   return_value=1):
+            reopened.admit(request_id="host-fourth",
+                           operation_id="audio/create_track",
+                           catalog_revision=REV,input_sha256=DIGEST)
+        behind=reopened.unverified_attempts(limit=5,cursor=cursor)
+        self.assertEqual([x["request_id"] for x in behind["attempts"]],
+                         ["host-second","host-third","host-fourth"])
+        self.assertEqual(behind["attempts"][-1]["admitted_ns"],103)
+
+    def test_paging_survives_deleting_unrelated_prior_row_after_vacuum(self):
+        self.reserve("host-first")
+        self.reserve("host-second")
+        self.reserve("host-third")
+        page=self.store.unverified_attempts(limit=2)
+        self.assertEqual([x["request_id"] for x in page["attempts"]],
+                         ["host-first","host-second"])
+        # Simulate a future explicit archival migration changing rowids.
+        # The current API never deletes an attempt; the ledger must not
+        # rely on rowids remaining stable if a later migration does.
+        with self.store._connect() as db:
+            db.execute("""DELETE FROM capability_attempts
+                WHERE request_id='host-first'""")
+            db.execute("VACUUM")
+        rest=CapabilityAttemptStore(self.path).unverified_attempts(
+            cursor=page["next_cursor"])
+        self.assertEqual([x["request_id"] for x in rest["attempts"]],
+                         ["host-third"])
 
     def test_private_recovery_inventory_never_returns_raw_model_inputs(self):
         self.reserve("host-private-1")
@@ -203,7 +241,13 @@ class AttemptStoreTests(unittest.TestCase):
         for limit in (0,True,101,-1,"10",1.2):
             with self.subTest(limit=limit),self.assertRaises(CapabilityAttemptError):
                 self.store.unverified_attempts(limit=limit)
-        for cursor in (True,-1,1.5,"1",{},2**63):
+        for cursor in (True,-1,1.5,"1",{},2**63,
+                       {"admitted_ns":True,"request_id":"host-valid"},
+                       {"admitted_ns":-1,"request_id":"host-valid"},
+                       {"admitted_ns":2**63,"request_id":"host-valid"},
+                       {"admitted_ns":1,"request_id":"invalid request"},
+                       {"admitted_ns":1,"request_id":""},
+                       {"admitted_ns":1,"request_id":"host-valid","extra":1}):
             with self.subTest(cursor=cursor),self.assertRaises(CapabilityAttemptError):
                 self.store.unverified_attempts(cursor=cursor)
         self.assertEqual(self.store.unverified_attempts()["attempts"],[])
