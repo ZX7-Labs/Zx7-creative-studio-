@@ -12,12 +12,13 @@ covers generic live editor/3D/audio/graphics tool side effects instead.
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
 from pathlib import Path
 import re
 import sqlite3
 import stat
 import time
+
+from .durable_sqlite import connect_durable_database
 
 
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
@@ -34,7 +35,7 @@ class CapabilityAttemptError(ValueError):
 
 
 class CapabilityAttemptStore:
-    """Host-owned SQLite WAL intent journal; no source paths, media or model text.
+    """Host-owned durable SQLite intent journal; no paths, media or model text.
 
     The caller supplies a stable, host-assigned request_id, not a generated
     per-RPC ID and not an unchecked model assertion of idempotency. One request
@@ -79,16 +80,11 @@ class CapabilityAttemptStore:
                 settled_ns INTEGER
             )""")
 
-    @contextmanager
     def _connect(self):
-        db = sqlite3.connect(self.path, timeout=10, isolation_level=None)
-        try:
-            db.execute("PRAGMA busy_timeout = 10000")
-            db.execute("PRAGMA journal_mode = WAL")
-            db.execute("PRAGMA synchronous = FULL")
-            yield db
-        finally:
-            db.close()
+        # Reuse the production SQLite policy rather than forcing WAL on
+        # runtimes affected by the upstream WAL-reset vulnerability.
+        # This also closes each connection after its transaction.
+        return connect_durable_database(self.path)
 
     @staticmethod
     def _validate(request_id, operation_id, catalog_revision, input_sha256):
