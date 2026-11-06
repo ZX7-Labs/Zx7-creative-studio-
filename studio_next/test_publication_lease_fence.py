@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -168,6 +170,78 @@ class OriginalPublicationLeaseFenceTests(unittest.TestCase):
             newer,target,lambda stage:Path(stage).write_bytes(b"fresh"*250))
         self.assertEqual(len(list((self.root/".zx7-publications").glob("*.json"))),1)
         self.assertEqual(target.read_bytes(),b"fresh"*250)
+
+
+    def test_actual_child_process_death_after_receipt_recovers_under_new_owner(self):
+        # This deliberately kills the process with the SQLite transaction
+        # open after a fsynced receipt but before the final hardlink.
+        # Bytes are fixtures: this proves crash ownership, not art quality.
+        child=r'''
+import hashlib,os,sys
+from pathlib import Path
+from unittest.mock import patch
+from studio_next.durable_graph import DurableFilmGraph
+from studio_next.body_publication import physical_tool_attempt
+from studio_next.body_integration import _commit_actual_body_output
+root=Path(sys.argv[1])
+store=DurableFilmGraph(root/"owner-ledger.sqlite3")
+_,_,owner=store.start_or_reuse(
+    "original-film","render-original","sha256-original-source",
+    trusted_idempotent=True,
+    existing_result_verifier=lambda _:True,lease_seconds=.10)
+def witness(path):
+    data=Path(path).read_bytes()
+    return {"path":str(Path(path).absolute()),
+            "sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)}
+with patch("studio_next.body_integration._witness",side_effect=witness), \
+     patch("studio_next.body_integration._verify_witness",return_value=True), \
+     patch("studio_next.body_integration.os.link",
+           side_effect=lambda *_:os._exit(73)):
+    with physical_tool_attempt(
+        "original-film","render-original","sha256-original-source",
+        "body.vector_png",
+        publication_guard=lambda:store.publication_lease(
+            "original-film","render-original","sha256-original-source",
+            owner,lease_seconds=.10)):
+        _commit_actual_body_output(
+            root/"original.png",
+            lambda path:Path(path).write_bytes(b"crashed-original"*100))
+raise SystemExit("Expected process-death hook was not reached")
+'''
+        run=subprocess.run([sys.executable,"-c",child,str(self.root)],
+            capture_output=True,text=True,timeout=25)
+        self.assertEqual(run.returncode,73,run.stderr)
+        target=self.root/"original.png"
+        self.assertFalse(target.exists())
+        self.assertEqual(len(list(self.root.glob(".zx7-uncommitted-*"))),1)
+        before_receipts=list((self.root/".zx7-publications").glob("*.json"))
+        self.assertEqual(len(before_receipts),1)
+        time.sleep(.15)
+        store=DurableFilmGraph(self.root/"owner-ledger.sqlite3")
+        status,_,new_owner=store.start_or_reuse(
+            self.PROJECT,self.NODE,self.INPUT,
+            trusted_idempotent=True,
+            existing_result_verifier=lambda _:True,lease_seconds=.20)
+        self.assertEqual(status,"execute")
+        rendered_again=[]
+        with patch("studio_next.body_integration._witness",self._witness), \
+             patch("studio_next.body_integration._verify_witness",
+                   lambda receipt:receipt["bytes"]>=100):
+            with physical_tool_attempt(
+                    self.PROJECT,self.NODE,self.INPUT,self.TOOL,
+                    publication_guard=lambda:store.publication_lease(
+                        self.PROJECT,self.NODE,self.INPUT,new_owner,
+                        lease_seconds=.20)):
+                result=_commit_actual_body_output(
+                    target,lambda stage:rendered_again.append(stage))
+        self.assertEqual(rendered_again,[])
+        self.assertEqual(target.read_bytes(),b"crashed-original"*100)
+        self.assertEqual(
+            result["sha256"],
+            hashlib.sha256(b"crashed-original"*100).hexdigest())
+        self.assertFalse(list(self.root.glob(".zx7-uncommitted-*")))
+        self.assertEqual(
+            len(list((self.root/".zx7-publications").glob("*.json"))),1)
 
 
 if __name__ == "__main__":
