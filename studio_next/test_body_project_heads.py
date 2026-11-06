@@ -141,22 +141,45 @@ class CrossCapabilityDocumentHeadTests(unittest.TestCase):
                 self.select(**arguments)
         self.assertEqual(self.ledger.heads("original")["heads"],[])
 
-    def test_archive_preserves_full_revision_history_without_recreating_art(self):
+    def test_same_path_restore_preserves_active_original_revision_history(self):
         first=self.select(A)
         second=self.select(B,parent=first["revision_id"],base=A)
-        destination=Path(self.temp.name)/"portable-project.tar.gz"
-        receipt=create_body_archive(self.workspace,destination)
-        restored=Path(self.temp.name)/"restored"
+        before=self.ledger.heads("original")["heads"]
+        archive=Path(self.temp.name)/"original-backup.tar.gz"
+        receipt=create_body_archive(self.workspace,archive)
+        # Preserve the original independently instead of deleting it to
+        # exercise a same-path recovery into its previously occupied address.
+        self.workspace.rename(Path(self.temp.name)/"offline-original-copy")
         actual=restore_body_archive(
-            destination,restored,expected_sha256=receipt["sha256"])
+            archive,self.workspace,expected_sha256=receipt["sha256"])
         self.assertTrue(actual["all_physical_bytes_verified"])
-        after=DocumentHeadLedger(restored)
-        self.assertEqual(after.heads("original")["heads"],
-                         self.ledger.heads("original")["heads"])
-        self.assertEqual(len(after.history(project_id="original",
+        self.assertFalse(actual["relocated"])
+        restored=DocumentHeadLedger(self.workspace)
+        self.assertEqual(restored.heads("original")["heads"],before)
+        self.assertEqual(len(restored.history(project_id="original",
             tool_id="graphics/mask",input_name="plan")["revisions"]),2)
-        self.assertEqual(after.heads("original")["heads"][0]["revision_id"],
+        self.assertEqual(restored.heads("original")["heads"][0]["revision_id"],
                          second["revision_id"])
+
+    def test_cross_host_relocation_preserves_history_but_quarantines_active_heads(self):
+        first=self.select(A)
+        second=self.select(B,parent=first["revision_id"],base=A)
+        archive=Path(self.temp.name)/"portable-project.tar.gz"
+        receipt=create_body_archive(self.workspace,archive)
+        relocated=Path(self.temp.name)/"new-host"
+        actual=restore_body_archive(
+            archive,relocated,expected_sha256=receipt["sha256"],relocate=True)
+        self.assertTrue(actual["all_physical_bytes_verified"])
+        self.assertTrue(actual["relocated"])
+        self.assertTrue(actual["old_execution_state_quarantined"])
+        self.assertFalse((relocated/"production.sqlite3").exists())
+        self.assertEqual(DocumentHeadLedger(relocated).heads("original")["heads"],[])
+        historical=DocumentHeadLedger(relocated/".zx7-relocated-history")
+        self.assertEqual(historical.heads("original")["heads"][0]["revision_id"],
+                         second["revision_id"])
+        self.assertEqual(len(historical.history(project_id="original",
+            tool_id="graphics/mask",input_name="plan")["revisions"]),2)
+        self.assertTrue((relocated/".zx7-relocation-report.json").is_file())
 
     def test_read_only_uncreated_workspace_does_not_create_an_empty_database(self):
         empty=Path(self.temp.name)/"never-authored"
