@@ -195,13 +195,34 @@ class UniversalNativeObjectAdmissionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_host_inventory_read_failure_does_not_dispatch_or_admit(self):
         gateway,rev=await self._gateway()
-        self.read_failure=ConnectionError("private original state reader offline")
-        with self.assertRaises(ConnectionError):
+        self.read_failure=ConnectionError(
+            "private original state reader offline /private/owner/source.blend")
+        with self.assertRaisesRegex(
+                CapabilityExecutionError,"native_identity_inventory_unavailable") as caught:
             await gateway.invoke("geometry/place_object",revision=rev,
                 inputs={"placements":[{"objectId":"real-blender-object"}]},
                 request_id="host-offline-1")
+        self.assertNotIn("/private/owner",str(caught.exception))
         self.assertEqual(self.engine.calls,[])
         self.assertIsNone(self.store.inspect("host-offline-1"))
+
+    async def test_async_live_inventory_reader_is_waited_for_before_admission(self):
+        async def observed_snapshot():
+            await asyncio.sleep(0)
+            return self.real_read()
+        binding=(self.engine,{"place_object":"write"},{},None,{},
+                 {"reader":observed_snapshot,
+                  "rules":{"place_object":{
+                      "/placements/*/objectId":"objects"}}})
+        gateway=CapabilityGateway({"geometry":binding},
+            attempt_store=CapabilityAttemptStore(self.path))
+        rev=(await gateway.refresh())["revision"]
+        result=await gateway.invoke("geometry/place_object",revision=rev,
+            inputs={"placements":[{"objectId":"real-blender-object"}]},
+            request_id="host-async-1")
+        self.assertEqual(result["state"],"host_reported_success_unverified")
+        self.assertEqual(self.read_count,1)
+        self.assertEqual(len(self.engine.calls),1)
 
     async def test_invalid_policy_is_not_registered_as_a_connected_engine(self):
         for broken in (
