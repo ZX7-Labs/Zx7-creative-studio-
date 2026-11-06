@@ -360,6 +360,58 @@ async def exercise(options):
             "original_media_sha_unchanged": True,
             "artistic_quality_approved": False,
         }, sort_keys=True), flush=True)
+
+        # The failed Qwen trial observed an imported video but zero timeline
+        # picture. A batch control over an already-edited timeline alone
+        # would not isolate that machine-state hypothesis. Create an EMPTY
+        # new native sequence in this disposable project, let the editor
+        # switch to it, and prove that the very first content placement works.
+        created_sequence = await call(session, "create_timeline", {
+            "name": "Original footage first-placement control",
+            "width": 320, "height": 180, "fps": 24,
+            "switchToTimeline": True, "previewOnly": False})
+        assert created_sequence.get("success") is True
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("name")
+            == "Original footage first-placement control")
+        empty_sequence = await call(session, "get_timeline", {"includeClips": True})
+        assert empty_sequence["clips"] == [], (
+            "New timeline has existing picture; first-placement control invalid")
+        initial_asset_inventory = await call(session, "get_assets", {"limit": 1000})
+        assert initial_asset_inventory.get("count") == 2
+        assert initial_asset_inventory.get("limitApplied") is False
+        observed_video = [a["id"] for a in initial_asset_inventory["assets"]
+                          if isinstance(a, dict) and a.get("type") == "video"
+                          and isinstance(a.get("id"), str) and a["id"]]
+        assert observed_video == video_ids
+        preview_first = await call(session, "add_assets_to_timeline", {
+            "assetIds": observed_video, "trackStrategy": "newTracks",
+            "layout": "stacked", "includeAudio": False, "startSeconds": 0,
+            "previewOnly": True})
+        assert preview_first.get("previewOnly") is True
+        still_empty = await call(session, "get_timeline", {"includeClips": True})
+        assert still_empty["clips"] == [], (
+            "Preview unexpectedly altered empty native timeline")
+        first_applied = await call(session, "add_assets_to_timeline", {
+            "assetIds": observed_video, "trackStrategy": "newTracks",
+            "layout": "stacked", "includeAudio": False, "startSeconds": 0,
+            "previewOnly": False})
+        assert first_applied.get("success") is True
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("clipCount") == 1)
+        populated = await call(session, "get_timeline", {"includeClips": True})
+        assert len(populated["clips"]) == 1
+        assert populated["clips"][0].get("assetId") == observed_video[0]
+        assert digest(original) == original_hash
+        print("ACTUAL_NATIVE_EMPTY_SEQUENCE_BATCH_PLACEMENT " + json.dumps({
+            "scripted_control_not_neural": True,
+            "source_id_reobserved_after_sequence_switch": True,
+            "preexisting_picture_clip_count": 0,
+            "first_native_batch_write_acknowledged": True,
+            "physical_timeline_clip_count_after_first_placement": 1,
+            "original_media_sha_unchanged": True,
+            "artistic_quality_approved": False,
+        }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
     audio = next(stream for stream in probe["streams"] if stream["codec_type"] == "audio")
@@ -385,6 +437,7 @@ async def exercise(options):
         "processRestartReopenPassed": True, "frames": 48, "fps": "24/1", "audioCodec": "aac",
         "fullDecodePassed": True, "physicalModelInterfaceAVTransportFixturePassed": True,
         "physicalHostObservedAssetBatchPlacementPassed": True,
+        "physicalEmptyTimelineFirstNativeBatchPlacementPassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
