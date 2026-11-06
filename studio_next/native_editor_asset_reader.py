@@ -32,11 +32,9 @@ def _nonfinite(_value):
 def observed_editor_asset_ids(response):
     """Turn one actual native get_assets MCP response into a trusted snapshot.
 
-    Pinned Velorn agentTools.js:get_assets returns
-    {assets, folders, totalAssetCount, returnedAssetCount}; when its
-    18,000-character response budget is exceeded it returns a truncated
-    preview instead. A partial asset read can establish only identities
-    actually returned; absent IDs remain UNKNOWN, never authorization.
+    The pinned Velorn get_assets JSON is {count, limitApplied, assets}. A
+    truncated asset read can prove presence only for IDs it returned; absence
+    of other IDs is UNKNOWN, never a reason to invent or replay an edit.
     """
     if not isinstance(response,dict):
         raise NativeEditorAssetInventoryError(
@@ -74,17 +72,14 @@ def observed_editor_asset_ids(response):
     if not isinstance(data,dict):
         raise NativeEditorAssetInventoryError(
             "native_asset_inventory_invalid_shape")
-    # The native tool has a hard 1000-asset maximum and may also
-    # truncate its *entire result* under a separate output-size cap. Never
-    # parse its preview as an inventory or mistake returned count for total.
-    total=data.get("totalAssetCount")
-    returned=data.get("returnedAssetCount")
+    total=data.get("count")
+    limited=data.get("limitApplied")
     assets=data.get("assets")
     if (type(total) is not int or total<0 or
-            type(returned) is not int or returned<0 or
-            not isinstance(assets,list) or
-            returned!=len(assets) or returned>1000 or returned>total or
-            (total>0 and returned==0) or data.get("truncated") is True):
+            type(limited) is not bool or not isinstance(assets,list) or
+            len(assets)>1000 or len(assets)>total or
+            (not limited and len(assets)!=total) or
+            (limited and (len(assets)==0 or len(assets)>=total))):
         raise NativeEditorAssetInventoryError(
             "native_asset_inventory_inconsistent_counts")
     ids=[]
@@ -103,4 +98,4 @@ def observed_editor_asset_ids(response):
         ids.append(source_id)
     # No names, source directories, media rights, prompt text or content are
     # returned to the host admission policy or saved in its private journal.
-    return {"assets":{"ids":ids,"complete":returned==total}}
+    return {"assets":{"ids":ids,"complete":not limited}}
