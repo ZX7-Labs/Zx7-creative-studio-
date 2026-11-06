@@ -18,19 +18,50 @@ from pathlib import Path
 
 
 _ATTEMPT = contextvars.ContextVar("zx7_physical_publication", default=None)
+_PUBLICATION_GUARD = contextvars.ContextVar(
+    "zx7_physical_publication_guard", default=None)
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 
 
 @contextmanager
-def physical_tool_attempt(project_key, node_id, input_key, tool_id):
-    """Only the trusted executor supplies identity, never model arguments."""
+def physical_tool_attempt(project_key, node_id, input_key, tool_id, *,
+                          publication_guard=None):
+    """Only the host executor supplies producer identity and lease authority.
+
+    The receipt identity is deliberately stable across safe recovery attempts;
+    the *live* worker owner is kept in a separate private context variable.
+    """
+    if publication_guard is not None and not callable(publication_guard):
+        raise TypeError("Only the host supplies an active publication guard")
     identity = {"project_key": project_key, "node_id": node_id,
                 "input_key": input_key, "tool_id": tool_id}
     token = _ATTEMPT.set(identity)
+    guard_token = _PUBLICATION_GUARD.set(publication_guard)
     try:
         yield
     finally:
+        _PUBLICATION_GUARD.reset(guard_token)
         _ATTEMPT.reset(token)
+
+
+@contextmanager
+def authorized_publication():
+    """Fence physical publication to the exact active durable worker owner.
+
+    The host guard holds the SQLite admission transaction while the final
+    hardlink/receipt is published, so another worker cannot take over between
+    checking an owner and publishing. No lease is inferred from model text.
+    """
+    if _ATTEMPT.get() is None:
+        # Legacy explicit tool invocation has no graph custody receipt.
+        yield
+        return
+    guard = _PUBLICATION_GUARD.get()
+    if guard is None:
+        raise PermissionError(
+            "Graph-bound media publication needs an active host worker lease")
+    with guard():
+        yield
 
 
 def current_trusted_attempt_tool():
