@@ -18,6 +18,7 @@ import json
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from .contracts import _json_like
@@ -139,6 +140,34 @@ class DurableFilmGraph:
                 (now+lease_seconds,now,project_key,node_id,input_sha,owner))
             return cursor.rowcount==1
         return self._transaction(operation)
+
+    @contextmanager
+    def publication_lease(self, project_key, node_id, input_sha, owner):
+        """Fence original media publication against replaced/expired workers.
+
+        Hold a short SQLite write transaction *only* across receipt creation,
+        hardlink and directory fsync, never while rendering or decoding large
+        media. An expired worker cannot publish after another worker acquires
+        the same durable scene. The transaction also prevents ownership from
+        changing between verification and the filesystem side effect.
+        """
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                row=db.execute("""SELECT node_state,owner,lease_until
+                    FROM node_results WHERE project_key=? AND node_id=?
+                      AND input_fingerprint=?""",
+                    (project_key,node_id,input_sha)).fetchone()
+                if (row is None or row[0]!="running" or row[1]!=owner
+                        or row[2] is None or row[2]<=self.clock()):
+                    raise RecoveryBlocked(
+                        "Original publication blocked: worker no longer owns the live lease")
+                yield
+                db.execute("COMMIT")
+            except BaseException:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise
 
     def complete(self,project_key,node_id,input_sha,owner,result):
         serial=_wire(result)
@@ -295,7 +324,10 @@ def execute_durable_film_graph(ir,catalog,*,fact_ids,store,
                     lease_seconds=lease_seconds)
                 try:
                     heart.start()
-                    with physical_tool_attempt(project_key,node_id,input_key,tid):
+                    with physical_tool_attempt(
+                            project_key,node_id,input_key,tid,
+                            publication_guard=lambda:store.publication_lease(
+                                project_key,node_id,input_key,owner)):
                         out=catalog.invoke(tid,inputs,allowed_access=permission)
                     if not output_verifier(tid,out):
                         raise ValueError("Tool provided no physically verified asset")
