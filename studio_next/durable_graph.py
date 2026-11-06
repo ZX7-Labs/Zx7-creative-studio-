@@ -174,10 +174,13 @@ class DurableFilmGraph:
                 # writer transaction prevents takeover during this period.
                 # Freshly arm the lease before releasing the transaction.
                 now=self.clock()
-                db.execute("""UPDATE node_results SET lease_until=?,updated_at=?
+                changed=db.execute("""UPDATE node_results SET lease_until=?,updated_at=?
                     WHERE project_key=? AND node_id=? AND input_fingerprint=?
                       AND owner=? AND node_state='running'""",
                     (now+lease_seconds,now,project_key,node_id,input_sha,owner))
+                if changed.rowcount!=1:
+                    raise RecoveryBlocked(
+                        "Original publication lost owner before final commit")
                 db.execute("COMMIT")
             except BaseException:
                 if db.in_transaction:
