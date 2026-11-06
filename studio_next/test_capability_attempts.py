@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 from pathlib import Path
 import sqlite3
@@ -120,6 +121,136 @@ class AttemptStoreTests(unittest.TestCase):
             self.assertEqual(
                 db.execute("PRAGMA journal_mode").fetchone()[0].lower(),
                 expected)
+
+    def test_host_can_find_all_unverified_writes_after_restart_by_stable_pages(self):
+        self.reserve("host-video-1")
+        self.reserve("host-audio-1")
+        self.store.settle(
+            request_id="host-video-1",
+            state="host_reported_success_unverified")
+        self.reserve("host-motion-1")
+        self.store.settle(
+            request_id="host-motion-1",
+            state="write_uncertain_reconciliation_required")
+        reopened=CapabilityAttemptStore(self.path)
+        first=reopened.unverified_attempts(limit=2)
+        self.assertEqual(
+            [x["request_id"] for x in first["attempts"]],
+            ["host-video-1","host-audio-1"])
+        self.assertTrue(first["has_more"])
+        self.assertEqual(first["next_cursor"]["request_id"],"host-audio-1")
+        self.assertEqual(first["next_cursor"]["admitted_ns"],
+                         first["attempts"][-1]["admitted_ns"])
+        next_page=reopened.unverified_attempts(limit=2,
+                                               cursor=first["next_cursor"])
+        self.assertEqual([x["request_id"] for x in next_page["attempts"]],
+                         ["host-motion-1"])
+        self.assertFalse(next_page["has_more"])
+        self.assertIsNone(next_page["next_cursor"])
+        self.assertEqual(
+            [x["state"] for x in first["attempts"]+next_page["attempts"]],
+            ["host_reported_success_unverified",
+             "submitted_unconfirmed",
+             "write_uncertain_reconciliation_required"])
+        self.assertTrue(all(
+            not x["native_application_state_independently_verified"]
+            for x in first["attempts"]+next_page["attempts"]))
+        self.assertTrue(first["no_native_write_replayed"])
+        for request in ("host-video-1","host-audio-1","host-motion-1"):
+            with self.assertRaises(CapabilityAttemptError):
+                reopened.admit(request_id=request,
+                    operation_id="graphics/create_layer",
+                    catalog_revision=REV,input_sha256=DIGEST)
+
+    def test_recovery_pages_remain_stable_after_vacuum_and_clock_rollback(self):
+        with patch("studio_next.capability_attempts.time.time_ns",
+                   side_effect=[100,99,98]):
+            for request in ("host-first","host-second","host-third"):
+                self.reserve(request)
+        recovered=CapabilityAttemptStore(self.path)
+        first=recovered.unverified_attempts(limit=1)
+        self.assertEqual(first["attempts"][0]["request_id"],"host-first")
+        cursor=first["next_cursor"]
+        self.assertEqual(cursor,{"admitted_ns":100,"request_id":"host-first"})
+        # SQLite explicitly warns that rowid may be modified by VACUUM.
+        # The externally visible cursor is based on persistent columns.
+        with recovered._connect() as db:
+            db.execute("VACUUM")
+        reopened=CapabilityAttemptStore(self.path)
+        second=reopened.unverified_attempts(limit=1,cursor=cursor)
+        self.assertEqual(second["attempts"][0]["request_id"],"host-second")
+        self.assertEqual(second["attempts"][0]["admitted_ns"],101)
+        third=reopened.unverified_attempts(
+            limit=1,cursor=second["next_cursor"])
+        self.assertEqual(third["attempts"][0]["request_id"],"host-third")
+        self.assertEqual(third["attempts"][0]["admitted_ns"],102)
+        self.assertFalse(third["has_more"])
+        self.assertIsNone(third["next_cursor"])
+        # A later admission cannot be hidden behind the stored first cursor
+        # even when its physical wall clock moves backwards.
+        with patch("studio_next.capability_attempts.time.time_ns",
+                   return_value=1):
+            reopened.admit(request_id="host-fourth",
+                           operation_id="audio/create_track",
+                           catalog_revision=REV,input_sha256=DIGEST)
+        behind=reopened.unverified_attempts(limit=5,cursor=cursor)
+        self.assertEqual([x["request_id"] for x in behind["attempts"]],
+                         ["host-second","host-third","host-fourth"])
+        self.assertEqual(behind["attempts"][-1]["admitted_ns"],103)
+
+    def test_paging_survives_deleting_unrelated_prior_row_after_vacuum(self):
+        self.reserve("host-first")
+        self.reserve("host-second")
+        self.reserve("host-third")
+        page=self.store.unverified_attempts(limit=2)
+        self.assertEqual([x["request_id"] for x in page["attempts"]],
+                         ["host-first","host-second"])
+        # Simulate a future explicit archival migration changing rowids.
+        # The current API never deletes an attempt; the ledger must not
+        # rely on rowids remaining stable if a later migration does.
+        with self.store._connect() as db:
+            db.execute("""DELETE FROM capability_attempts
+                WHERE request_id='host-first'""")
+            db.execute("VACUUM")
+        rest=CapabilityAttemptStore(self.path).unverified_attempts(
+            cursor=page["next_cursor"])
+        self.assertEqual([x["request_id"] for x in rest["attempts"]],
+                         ["host-third"])
+
+    def test_private_recovery_inventory_never_returns_raw_model_inputs(self):
+        self.reserve("host-private-1")
+        page=self.store.unverified_attempts(limit=1)
+        rendered=json.dumps(page,sort_keys=True)
+        self.assertNotIn("private owner footage",rendered)
+        self.assertNotIn("raw model prompt",rendered)
+        self.assertNotIn("path",rendered.lower())
+        self.assertFalse(
+            any("native_result" in row for row in page["attempts"]))
+        self.assertEqual(self.store.inspect("host-private-1")["state"],
+                         "submitted_unconfirmed")
+
+    def test_corrupted_recovery_record_fails_closed(self):
+        self.reserve("host-corrupt-1")
+        with self.store._connect() as db:
+            db.execute("""UPDATE capability_attempts SET input_sha256='bogus'
+                WHERE request_id=?""",("host-corrupt-1",))
+        with self.assertRaisesRegex(CapabilityAttemptError,"digests required"):
+            self.store.unverified_attempts(limit=1)
+
+    def test_invalid_recovery_paging_is_rejected_before_query(self):
+        for limit in (0,True,101,-1,"10",1.2):
+            with self.subTest(limit=limit),self.assertRaises(CapabilityAttemptError):
+                self.store.unverified_attempts(limit=limit)
+        for cursor in (True,-1,1.5,"1",{},2**63,
+                       {"admitted_ns":True,"request_id":"host-valid"},
+                       {"admitted_ns":-1,"request_id":"host-valid"},
+                       {"admitted_ns":2**63,"request_id":"host-valid"},
+                       {"admitted_ns":1,"request_id":"invalid request"},
+                       {"admitted_ns":1,"request_id":""},
+                       {"admitted_ns":1,"request_id":"host-valid","extra":1}):
+            with self.subTest(cursor=cursor),self.assertRaises(CapabilityAttemptError):
+                self.store.unverified_attempts(cursor=cursor)
+        self.assertEqual(self.store.unverified_attempts()["attempts"],[])
 
     def test_one_way_settlement_and_secret_free_private_journal(self):
         self.reserve()
@@ -245,6 +376,36 @@ class DurableGatewayTests(unittest.IsolatedAsyncioTestCase):
                 inputs={"not_declared":"sensitive"},request_id="rejected-1")
         self.assertEqual(self.graphics.calls,[])
         self.assertIsNone(self.store.inspect("rejected-1"))
+
+    async def test_restarted_gateway_can_inspect_unverified_native_writes_without_retry(self):
+        first,rev=await self._gateway()
+        await first.invoke("graphics/create_layer",revision=rev,
+                           inputs={"content":"Private original drawing"},
+                           request_id="crash-recovery-visual-1")
+        second,rev=await self._gateway()
+        report=second.unverified_native_writes(limit=1)
+        self.assertEqual(
+            [x["request_id"] for x in report["attempts"]],
+            ["crash-recovery-visual-1"])
+        self.assertEqual(report["attempts"][0]["operation_id"],
+                         "graphics/create_layer")
+        self.assertFalse(report["attempts"][0]
+                         ["native_application_state_independently_verified"])
+        self.assertEqual(len(self.graphics.calls),1)
+        self.assertNotIn("Private original drawing",str(report))
+        # A read of the recovery journal must not grant a second native edit.
+        with self.assertRaises(CapabilityAttemptError):
+            await second.invoke("graphics/create_layer",revision=rev,
+                inputs={"content":"Private original drawing"},
+                request_id="crash-recovery-visual-1")
+        self.assertEqual(len(self.graphics.calls),1)
+
+    async def test_recovery_requires_a_host_installed_durable_journal(self):
+        gateway=CapabilityGateway({"graphics":(
+            self.graphics,{"create_layer":"write"})})
+        await gateway.refresh()
+        with self.assertRaisesRegex(CapabilityExecutionError,"durable journal"):
+            gateway.unverified_native_writes(limit=1)
 
     async def test_concurrent_duplicate_request_admitted_once(self):
         gateway,rev=await self._gateway()

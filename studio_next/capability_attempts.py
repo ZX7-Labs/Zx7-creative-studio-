@@ -79,6 +79,9 @@ class CapabilityAttemptStore:
                 admitted_ns INTEGER NOT NULL,
                 settled_ns INTEGER
             )""")
+            db.execute("""CREATE INDEX IF NOT EXISTS
+                ix_capability_attempts_stable_scan
+                ON capability_attempts(admitted_ns, request_id)""")
 
     def _connect(self):
         # Reuse the production SQLite policy rather than forcing WAL on
@@ -104,11 +107,26 @@ class CapabilityAttemptStore:
         with self._connect() as db:
             try:
                 db.execute("BEGIN IMMEDIATE")
+                # An explicitly stored logical timestamp is the scan key.
+                # Clamp to the last committed admission so NTP/OS clock
+                # rollback cannot move a NEW write behind a recovery cursor.
+                last=db.execute(
+                    "SELECT MAX(admitted_ns) FROM capability_attempts"
+                ).fetchone()[0]
+                if last is not None and (
+                        type(last) is not int or not 0 <= last < 2**63-1):
+                    raise CapabilityAttemptError(
+                        "Durable native admission clock history is invalid")
+                now=time.time_ns()
+                admission=max(now, 0 if last is None else last+1)
+                if type(now) is not int or not 0 <= admission < 2**63:
+                    raise CapabilityAttemptError(
+                        "Durable native admission clock exceeded SQLite bounds")
                 db.execute("""INSERT INTO capability_attempts (
                     request_id,operation_id,catalog_revision,input_sha256,state,
                     admitted_ns,settled_ns) VALUES (?, ?, ?, ?, ?, ?, NULL)""",
                     (request_id, operation_id, catalog_revision, input_sha256,
-                     "submitted_unconfirmed", time.time_ns()))
+                     "submitted_unconfirmed", admission))
                 db.execute("COMMIT")
             except sqlite3.IntegrityError as exc:
                 db.execute("ROLLBACK")
@@ -153,3 +171,67 @@ class CapabilityAttemptStore:
         return (dict(zip(("request_id", "operation_id", "catalog_revision",
                           "input_sha256", "state", "admitted_ns", "settled_ns"),
                          record)) if record else None)
+
+    def unverified_attempts(self, *, limit=32, cursor=None):
+        """Host-only bounded recovery inventory; no native write is replayed.
+
+        Use the EXPLICITLY STORED (admitted_ns,request_id) B-tree key. SQLite
+        can reassign implicit rowids during VACUUM, so they are not a durable
+        cursor. Every new admission commits a logical timestamp greater than
+        the previous maximum (including after system-clock rollback), meaning
+        new rows cannot be inserted behind an already issued page cursor.
+
+        Transport ACK remains unverified native application state. No model
+        prompts, raw tool outputs, media, or local paths appear in the ledger.
+        """
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise CapabilityAttemptError(
+                "Host recovery inventory requires a bounded page of at most 100")
+        if cursor is None:
+            start_ns, start_request = 0, ""
+        else:
+            if (type(cursor) is not dict or
+                    set(cursor)!={"admitted_ns","request_id"} or
+                    type(cursor["admitted_ns"]) is not int or
+                    not 0 <= cursor["admitted_ns"] < 2**63 or
+                    not isinstance(cursor["request_id"],str) or
+                    not _REQUEST.fullmatch(cursor["request_id"])):
+                raise CapabilityAttemptError(
+                    "Recovery cursor needs exact stable journal identity")
+            start_ns, start_request = cursor["admitted_ns"], cursor["request_id"]
+        with self._connect() as db:
+            rows = db.execute("""SELECT request_id,operation_id,
+                catalog_revision,input_sha256,state,admitted_ns,settled_ns
+                FROM capability_attempts
+                WHERE (admitted_ns,request_id) > (?,?)
+                ORDER BY admitted_ns,request_id LIMIT ?""",
+                (start_ns,start_request,limit+1)).fetchall()
+        selected = rows[:limit]
+        entries = []
+        for row in selected:
+            request, operation, revision, digest, state, admitted, settled = row
+            self._validate(request, operation, revision, digest)
+            if (state not in _TERMINAL_STATES|{"submitted_unconfirmed"} or
+                    type(admitted) is not int or admitted < 0 or
+                    (settled is not None and
+                     (type(settled) is not int or settled < 0))):
+                raise CapabilityAttemptError(
+                    "Durable native attempt record is inconsistent")
+            entries.append({
+                "request_id":request,"operation_id":operation,
+                "catalog_revision":revision,"input_sha256":digest,
+                "state":state,"admitted_ns":admitted,
+                "settled_ns":settled,
+                "native_application_state_independently_verified":False,
+            })
+        more = len(rows)>limit
+        return {
+            "attempts":entries,"has_more":more,
+            "next_cursor":({
+                "admitted_ns":selected[-1][5],
+                "request_id":selected[-1][0],
+            } if more else None),
+            "durable_host_recovery_inventory":True,
+            "every_listed_attempt_requires_native_reconciliation":True,
+            "no_native_write_replayed":True,
+        }

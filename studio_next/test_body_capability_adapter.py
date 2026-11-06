@@ -78,6 +78,34 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(gateway.evidence()),1)
             self.assertIsNone(CapabilityAttemptStore(path).inspect("unissued"))
 
+    async def test_installed_body_recovers_denied_native_write_identity_after_restart(self):
+        with tempfile.TemporaryDirectory() as root:
+            initial=await connect_installed_zx7_body(
+                root,allowed_access=("read","write"),
+                durable_write_requests=True)
+            revision=initial._current().revision
+            # The actual installed source-provenance writer refuses an
+            # untrusted generated-media claim. That native failure is still
+            # a possibly submitted write, so retain its host request ID.
+            with self.assertRaises((PermissionError,ValueError)):
+                await initial.invoke("zx7/body.asset_vault",
+                    revision=revision,inputs={"source_witness":{}},
+                    request_id="host-vault-denied-1")
+            recovered=await connect_installed_zx7_body(
+                root,allowed_access=("read","write"),
+                durable_write_requests=True)
+            page=recovered.unverified_native_writes(limit=4)
+            self.assertEqual(len(page["attempts"]),1)
+            self.assertEqual(page["attempts"][0]["request_id"],"host-vault-denied-1")
+            self.assertEqual(page["attempts"][0]["operation_id"],
+                             "zx7/body.asset_vault")
+            self.assertEqual(page["attempts"][0]["state"],
+                             "write_uncertain_reconciliation_required")
+            self.assertFalse(page["attempts"][0]
+                             ["native_application_state_independently_verified"])
+            self.assertTrue(page["no_native_write_replayed"])
+            self.assertFalse((Path(root)/"movie.mp4").exists())
+
     async def test_installed_body_refuses_non_boolean_durable_policy(self):
         with tempfile.TemporaryDirectory() as root:
             for invalid in ("true",1,None):
