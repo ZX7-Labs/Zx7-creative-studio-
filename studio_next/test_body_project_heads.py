@@ -41,6 +41,111 @@ class CrossCapabilityDocumentHeadTests(unittest.TestCase):
             input_name=slot,document_sha256=document,
             expected_revision_id=parent,expected_document_sha256=base)
 
+    def _bundle(self, selections, project="original"):
+        return self.ledger.select_bundle(project_id=project,selections=selections)
+
+    @staticmethod
+    def _entry(tool, document, *, slot="plan", parent=None, base=None):
+        return {"tool_id":tool,"input_name":slot,
+                "document_sha256":document,
+                "expected_revision_id":parent,
+                "expected_document_sha256":base}
+
+    def test_original_graphics_audio_motion_heads_commit_as_one_transaction(self):
+        entries=[self._entry("graphics/mask",A),
+                 self._entry("audio/score",B),
+                 self._entry("motion/rig",C,slot="scene_json")]
+        selected=self._bundle(entries)
+        self.assertTrue(selected["atomic_plan_head_selection"])
+        self.assertFalse(selected["native_project_state_applied_or_verified"])
+        self.assertEqual(len(selected["revisions"]),3)
+        observed=self.ledger.heads("original")["heads"]
+        self.assertEqual(len(observed),3)
+        self.assertEqual({x["document_sha256"] for x in observed},{A,B,C})
+        self.assertEqual(len(DocumentHeadLedger(self.workspace).heads("original")["heads"]),3)
+
+    def test_stale_audio_parent_refuses_new_video_and_motion_in_one_bundle(self):
+        art=self.select(A,tool="graphics/mask")
+        sound=self.select(B,tool="audio/score")
+        candidate=[self._entry("graphics/mask",C,
+                    parent=art["revision_id"],base=A),
+                   self._entry("audio/score",A,
+                    parent=art["revision_id"],base=B)]
+        with self.assertRaisesRegex(DocumentHeadConflict,"Stale"):
+            self._bundle(candidate)
+        unchanged=self.ledger.heads("original")["heads"]
+        self.assertEqual(
+            {(x["tool_id"],x["document_sha256"]) for x in unchanged},
+            {("graphics/mask",A),("audio/score",B)})
+        for tool in ("graphics/mask","audio/score"):
+            self.assertEqual(len(self.ledger.history(
+                project_id="original",tool_id=tool,input_name="plan")["revisions"]),1)
+
+    def test_sqlite_abort_on_second_instrument_rolls_back_first(self):
+        from studio_next.durable_sqlite import connect_durable_database
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            self.ledger._create_tables(db)
+            db.execute("""CREATE TRIGGER refuse_audio
+                BEFORE INSERT ON creative_document_revisions
+                WHEN NEW.tool_id='audio/score'
+                BEGIN SELECT RAISE(ABORT,'forced second insert failure'); END""")
+        with self.assertRaisesRegex(Exception,"forced second insert failure"):
+            self._bundle([self._entry("graphics/mask",A),
+                          self._entry("audio/score",B)])
+        self.assertEqual(self.ledger.heads("original")["heads"],[])
+        with connect_durable_database(self.workspace/"production.sqlite3") as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM creative_document_revisions").fetchone()[0],0)
+
+    def test_two_concurrent_cross_engine_bundles_never_publish_mixed_heads(self):
+        barrier=threading.Barrier(2)
+        def worker(first,second):
+            barrier.wait(timeout=10)
+            try:
+                return self._bundle([
+                    self._entry("graphics/mask",first),
+                    self._entry("audio/score",second)])
+            except DocumentHeadConflict as exc:
+                return exc
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results=list(pool.map(lambda item:worker(*item),[(A,B),(B,C)]))
+        self.assertEqual(sum(isinstance(x,dict) for x in results),1)
+        self.assertEqual(sum(isinstance(x,DocumentHeadConflict) for x in results),1)
+        heads=self.ledger.heads("original")["heads"]
+        current={h["tool_id"]:h["document_sha256"] for h in heads}
+        self.assertIn(current,[
+            {"graphics/mask":A,"audio/score":B},
+            {"graphics/mask":B,"audio/score":C}])
+        self.assertEqual(len(heads),2)
+
+    def test_duplicate_or_oversized_bundle_never_publishes_partial_history(self):
+        same=self._entry("graphics/mask",A)
+        for entries in ([same,same],
+                        [],
+                        [same]*33,
+                        [same,{"tool_id":"audio/score","extra":"untrusted"}]):
+            with self.subTest(count=len(entries)),self.assertRaises(ValueError):
+                self._bundle(entries)
+        self.assertEqual(self.ledger.heads("original")["heads"],[])
+
+    def test_bundled_undo_keeps_every_original_and_new_revision(self):
+        first=self._bundle([self._entry("graphics/mask",A),
+                            self._entry("audio/score",B)])["revisions"]
+        updated=self._bundle([
+            self._entry("graphics/mask",C,parent=first[0]["revision_id"],base=A),
+            self._entry("audio/score",A,parent=first[1]["revision_id"],base=B),
+        ])["revisions"]
+        undone=self._bundle([
+            self._entry("graphics/mask",A,parent=updated[0]["revision_id"],base=C),
+            self._entry("audio/score",B,parent=updated[1]["revision_id"],base=A),
+        ])["revisions"]
+        self.assertNotEqual(undone[0]["revision_id"],first[0]["revision_id"])
+        for tool in ("graphics/mask","audio/score"):
+            history=self.ledger.history(
+                project_id="original",tool_id=tool,input_name="plan")
+            self.assertEqual(len(history["revisions"]),3)
+            self.assertFalse(history["native_project_state_applied_or_verified"])
+
     def test_project_streams_keep_multiple_native_capabilities_independent(self):
         artwork=self.select(A,tool="graphics/mask",slot="scene_json")
         sound=self.select(B,tool="audio/music",slot="plan")
@@ -232,7 +337,8 @@ class ActualBodySignalPlanHeadTests(unittest.TestCase):
         self.addCleanup(self.host.close)
         authority=BodyAuthority(
             workspace_ids=frozenset({"artist"}),
-            operations=frozenset({"author_plan","revise_plan","select_plan"}),
+            operations=frozenset({"author_plan","revise_plan","select_plan",
+                                  "select_plan_bundle"}),
             tool_access=frozenset({"read","write"}))
         self.signal=LiveBodySignal(self.host,authority=authority)
         self.plan={
@@ -255,6 +361,75 @@ class ActualBodySignalPlanHeadTests(unittest.TestCase):
             "document_sha256":document,
             "expected_revision_id":parent,
             "expected_document_sha256":base})
+
+    def test_host_validates_two_installed_instruments_and_commits_together(self):
+        rendered=self._author(self.plan)
+        mixed=self.signal.command("author_plan",{
+            "workspace_id":"artist","tool_id":"body.composite_mix",
+            "document":{
+                "canvas":{"width":128,"height":96,"fps":12,
+                          "duration":1,"background":"#111111"},
+                "video_layers":[],"audio_tracks":[]}})
+        submitted=self.signal.command("select_plan_bundle",{
+            "workspace_id":"artist","project_id":"film",
+            "selections":[
+                {"tool_id":"body.render_edit_owned",
+                 "document_sha256":rendered["sha256"],
+                 "expected_revision_id":None,
+                 "expected_document_sha256":None},
+                {"tool_id":"body.composite_mix",
+                 "document_sha256":mixed["sha256"],
+                 "expected_revision_id":None,
+                 "expected_document_sha256":None},
+            ]})
+        self.assertTrue(submitted["atomic_plan_head_selection"])
+        self.assertTrue(submitted["host_installed_document_schema_revalidated"])
+        self.assertFalse(submitted["native_media_rendered_or_approved"])
+        self.assertEqual(len(submitted["revisions"]),2)
+        self.assertEqual(len(self.signal.inspect_plan_heads("artist","film")["heads"]),2)
+        self.assertEqual(
+            {r["tool_id"] for r in submitted["revisions"]},
+            {"body.render_edit_owned","body.composite_mix"})
+        # The model could not force even one native writer to run by
+        # selecting multiple approved plans.
+        self.assertFalse((self.host._workspace("artist")/"export.mp4").exists())
+
+    def test_host_refuses_one_tampered_plan_without_selecting_other_head(self):
+        valid=self._author(self.plan)
+        untrusted=self.signal.command("author_plan",{
+            "workspace_id":"artist","tool_id":"body.composite_mix",
+            "document":{
+                "canvas":{"width":128,"height":96,"fps":12,
+                          "duration":1,"background":"#111111"},
+                "video_layers":[],"audio_tracks":[]}})
+        (self.host._workspace("artist")/untrusted["path"]).write_bytes(b'{"fake":true}')
+        before=self.signal.inspect_plan_heads("artist","film")
+        with self.assertRaises(BodyCommandRejected):
+            self.signal.command("select_plan_bundle",{
+                "workspace_id":"artist","project_id":"film",
+                "selections":[
+                    {"tool_id":"body.render_edit_owned",
+                     "document_sha256":valid["sha256"],
+                     "expected_revision_id":None,
+                     "expected_document_sha256":None},
+                    {"tool_id":"body.composite_mix",
+                     "document_sha256":untrusted["sha256"],
+                     "expected_revision_id":None,
+                     "expected_document_sha256":None}]})
+        self.assertEqual(self.signal.inspect_plan_heads("artist","film"),before)
+
+    def test_bundle_selection_requires_explicit_host_grant(self):
+        original=self._author(self.plan)
+        read_only=LiveBodySignal(self.host,authority=BodyAuthority(
+            workspace_ids=frozenset({"artist"})))
+        with self.assertRaises(PermissionError):
+            read_only.command("select_plan_bundle",{
+                "workspace_id":"artist","project_id":"film","selections":[{
+                    "tool_id":"body.render_edit_owned",
+                    "document_sha256":original["sha256"],
+                    "expected_revision_id":None,
+                    "expected_document_sha256":None}]})
+        self.assertEqual(self.signal.inspect_plan_heads("artist","film")["heads"],[])
 
     def test_real_installed_body_document_head_schema_cas_and_undo(self):
         self.assertEqual(self.signal.inspect_plan_heads("artist","film")["heads"],[])
