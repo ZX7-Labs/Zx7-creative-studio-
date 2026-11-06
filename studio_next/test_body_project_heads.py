@@ -6,9 +6,6 @@ output or asset has owner rights. Other suites prove those physical properties.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-import hashlib
-import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -138,7 +135,10 @@ class CrossCapabilityDocumentHeadTests(unittest.TestCase):
             {"parent":None,"base":A}]
         for problem in invalid:
             with self.subTest(problem=problem),self.assertRaises(ValueError):
-                self.select(A,**problem)
+                arguments={"document":A,"project":"original","tool":"graphics/mask",
+                           "slot":"plan","parent":None,"base":None}
+                arguments.update(problem)
+                self.select(**arguments)
         self.assertEqual(self.ledger.heads("original")["heads"],[])
 
     def test_archive_preserves_full_revision_history_without_recreating_art(self):
