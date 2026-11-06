@@ -172,6 +172,20 @@ never silently apply to a different parent. Undo selects an earlier revision
 as a new head event; it does not erase intervening artifacts. A rejected or
 failed native operation publishes no partial revision.
 
+Source-backed implemented subset: the `DocumentHeadLedger` uses the existing
+workspace `production.sqlite3` and immutable SHA-bound plans, with expected-parent
+CAS and an all-or-nothing selection bundle across up to 32 instrument inputs
+([#196](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/196),
+[#197](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/197)).
+**These are host-selected plan heads, not native editor application receipts.**
+The `CapabilityAttemptStore` and `CapabilityGateway` track attempted
+stateful native operations by host request identity; crash restart can enumerate
+unverified writes without reissuing them
+([#190](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/190),
+[#198](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/198)).
+Independent native-state postcondition witnesses remain an open integration
+gate. Do not collapse these distinct facts into a generic success flag.
+
 Stage files on the destination filesystem, validate them, fsync files and
 directories as appropriate, then commit the head and publication record. A
 SQLite transaction cannot atomically commit arbitrary external files: keep a
@@ -246,15 +260,16 @@ Retries depend on trusted idempotence and side-effect reconciliation. A remote
 model call of uncertain completion needs its own request identity/receipt;
 do not assume exactly-once execution from a local SQLite row.
 
-Source audit: `DurableFilmGraph.complete()` and lease renewal check the current
-owner plus input fingerprint, so reuse that database protection. However,
-`body_publication.physical_tool_attempt()` currently carries project/node/input/
-tool identities without the changing lease owner. This inspection does not
-establish end-to-end stale-worker fencing at file publication. Before enabling
-concurrent revision promotion, bind its attempt to the current host admission
-and verify it at head advancement. Immutable stale output may remain an orphan;
-it must never become the accepted project head. Test the actual lease-takeover
-and publication crash windows before declaring that gate passed.
+Implementation audit: `DurableFilmGraph.publication_lease()` now verifies the
+exact live owner and holds a short SQLite writer transaction across the source-
+aware physical artifact receipt and final hardlink/fsync. `RunningStageHeartbeat`
+coordinates renewal with the publication fence; the renderer itself runs outside
+the transaction. PR [#194](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/194)
+tested stale-owner takeover and killed-process receipt recovery, with follow-up
+[#195](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/195). This is
+fencing for the registered BODY artifact publication path, **not** proof that
+every future native application's internal edit/save is atomic. Interrupted
+native edits still need actual READ-only project-state reconciliation.
 
 ## Worker trust and extension mechanism
 
@@ -302,6 +317,26 @@ pending decision, actual tool result, evidence and budget. Replacing a model is
 an explicit new session/revision policy, not a reason to lose the project.
 Compact historical context with references to durable facts and evidence;
 avoid repeatedly appending transcripts to prompts or source documentation.
+
+### Actual model-to-native editor evidence
+
+The source-backed experiment record is
+[research/native-camera-model-evidence.json](../research/native-camera-model-evidence.json)
+(GitHub Actions [run 42149908182](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42149908182)).
+It covers pinned local Qwen3.5-2B, complete native Velorn, a physically decoded
+240-second original camera source, actual project creation and one imported
+asset independently observed in native `get_assets`. The local model next selected
+`add_assets_to_timeline`, which reported a native error. There were no observed
+image inputs to the model, model-authored post-observation revisions, saved
+native projects or verified exports. No creative field acceptance followed.
+
+The sanitized journal retained only error/argument hashes, so the exact source
+of that timeline placement error is **unknown**. The correct follow-up is to
+separate host rejection before dispatch from native error after dispatch, verify
+all explicitly selected source identities against the actual native inventory
+(including batch/nested IDs), and record privacy-safe error categories. Do not
+script the placement or infer that a failed write had no effects. An independent
+no-model native-editor export test cannot certify local-model creative ability.
 
 ## Owner access and deployment
 
