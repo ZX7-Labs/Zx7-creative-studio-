@@ -95,7 +95,8 @@ class InstalledBodyAdapter:
 
         async def observe_actual_native_assets():
             actual = await asyncio.to_thread(
-                client.call,"get_assets",{},allowed_access=frozenset({"read"}))
+                client.call,"get_assets",{"limit":1000},
+                allowed_access=frozenset({"read"}))
             return observed_editor_asset_ids(actual)
 
         return {"reader":observe_actual_native_assets,"rules":rules}
