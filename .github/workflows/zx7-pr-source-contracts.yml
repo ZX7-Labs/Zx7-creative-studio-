@@ -36,6 +36,7 @@ jobs:
           python -m unittest \
             studio_next.test_capability_attempts \
             studio_next.test_capability_gateway \
+            studio_next.test_capability_session_budget \
             studio_next.test_capability_fabric \
             studio_next.test_body_capability_adapter \
             studio_next.test_durable_graph \
@@ -104,6 +105,7 @@ jobs:
             studio_next.test_body_project_heads \
             studio_next.test_capability_fabric \
             studio_next.test_capability_gateway \
+            studio_next.test_capability_session_budget \
             studio_next.test_capability_attempts \
             studio_next.test_creative_research \
             studio_next.test_body_tool_contracts -v
