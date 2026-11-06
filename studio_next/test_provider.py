@@ -86,6 +86,51 @@ class ProviderTests(unittest.TestCase):
         self.assertIn("film",requests[0][1]["messages"][0]["content"].lower()+
                       " film") # accepted general film remit
         self.assertTrue(requests[0][0].startswith("http://127.0.0.1:8080"))
+    def test_local_pinned_native_decision_grammar_is_json_only_not_an_edit_script(self):
+        from studio_next.native_creative_control import (
+            NATIVE_CREATIVE_DECISION_SCHEMA, NATIVE_CREATIVE_SYSTEM)
+        import jsonschema
+        schema = NATIVE_CREATIVE_DECISION_SCHEMA
+        jsonschema.Draft202012Validator.check_schema(schema)
+        self.assertEqual(schema["required"], ["action", "arguments", "reason"])
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(set(schema["properties"]["action"]["enum"]), {
+            "search", "describe", "invoke", "discover", "finish"})
+        # This schema never specifies what file, clip, scene or tool the brain
+        # may create. Actual host tools must still be discovered and granted.
+        self.assertEqual(schema["properties"]["arguments"], {
+            "type": "object", "additionalProperties": True})
+        self.assertNotIn("tool", json.dumps(schema))
+        self.assertNotIn("previewOnly", json.dumps(schema))
+        response_format = {"type": "json_schema", "schema": schema}
+        model = LocalCreativeModel(LocalModelSettings(
+            model_id="zx7-pinned-local", sampling={
+                "response_format": response_format,
+            }), system_prompt=NATIVE_CREATIVE_SYSTEM)
+        generated = {
+            "action": "search", "arguments": {
+                "query": "inspect current native original video media",
+                "limit": 5,
+            }, "reason": "Model-chosen real editor discovery",
+        }
+        requests = []
+        def mock_urlopen(req, timeout):
+            requests.append(json.loads(req.data))
+            return FakeReply(answer(json.dumps(generated)))
+        with patch("studio_next.providers.urlopen", side_effect=mock_urlopen):
+            self.assertEqual(model.decide({"host_only": "safe"}), generated)
+        self.assertEqual(requests[0]["response_format"], response_format)
+        self.assertEqual(requests[0]["model"], "zx7-pinned-local")
+        self.assertTrue(jsonschema.Draft202012Validator(schema).is_valid(generated))
+        self.assertFalse(jsonschema.Draft202012Validator(schema).is_valid({
+            **generated, "action": "execute_shell"}))
+        # The unconstrained general creative-director provider remains
+        # backward-compatible with regular JSON object mode.
+        other = LocalCreativeModel(LocalModelSettings())
+        with patch("studio_next.providers.urlopen", side_effect=mock_urlopen):
+            other.decide({"brief": "Review licensed clips"})
+        self.assertEqual(requests[1]["response_format"], {"type": "json_object"})
+
     def test_critic_response_separate_role(self):
         c=LocalCreativeModel(LocalModelSettings())
         with patch("studio_next.providers.urlopen",return_value=FakeReply(
