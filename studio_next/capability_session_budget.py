@@ -1,4 +1,4 @@
-"""Host-owned, concurrency-safe invocation budget for every BODY engine.
+"""Host-owned invocation budget for engines routed through CapabilityGateway.
 
 A reservation is an *admission slot*, not a measured token, cost, physical
 native edit or successful tool invocation. Failed/uncertain submissions and
