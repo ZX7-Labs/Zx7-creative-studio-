@@ -138,19 +138,54 @@ class DocumentHeadLedger:
             ON creative_document_revisions(project_id,tool_id,input_name,sequence)""")
 
     @staticmethod
-    def _verify_head(db, row, project, tool, input_name):
+    def _verify_parent_link(db, project, tool, input_name, sequence,
+                            parent_revision, parent_document):
+        """Check actual append-only ancestry, not just a self-consistent SHA.
+
+        Each valid CAS selects the previous HEAD for this exact instrument
+        slot. A deleted ancestor, cross-tool link, or forged older parent can
+        leave an individually well-formed event digest; the ordered lineage
+        must also link to the immediately preceding original event.
+        """
+        preceding = db.execute("""SELECT revision_id,document_sha256
+            FROM creative_document_revisions
+            WHERE project_id=? AND tool_id=? AND input_name=? AND sequence<?
+            ORDER BY sequence DESC LIMIT 1""",
+            (project,tool,input_name,sequence)).fetchone()
+        if preceding is None:
+            if parent_revision is not None or parent_document is not None:
+                raise DocumentHeadCorrupt(
+                    "Original creative revision root has missing or forged ancestry")
+        elif (parent_revision != preceding[0] or
+              parent_document != preceding[1]):
+            raise DocumentHeadCorrupt(
+                "Original creative revision is not connected to its previous instrument head")
+
+    @classmethod
+    def _verify_head(cls, db, row, project, tool, input_name):
         if row is None:
             return None
         revision, document = row[0], row[1]
         recorded = db.execute("""SELECT parent_revision_id,
-            parent_document_sha256,document_sha256
+            parent_document_sha256,document_sha256,sequence
             FROM creative_document_revisions
             WHERE revision_id=? AND project_id=? AND tool_id=? AND input_name=?""",
             (revision,project,tool,input_name)).fetchone()
         if (recorded is None or recorded[2] != document
                 or _event_digest(project,tool,input_name,recorded[0],
                                  recorded[1],recorded[2]) != revision):
-            raise DocumentHeadCorrupt("Project head does not match immutable revision history")
+            raise DocumentHeadCorrupt(
+                "Project head does not match immutable revision history")
+        cls._verify_parent_link(db, project, tool, input_name, recorded[3],
+                                recorded[0], recorded[1])
+        newest = db.execute("""SELECT revision_id
+            FROM creative_document_revisions
+            WHERE project_id=? AND tool_id=? AND input_name=?
+            ORDER BY sequence DESC LIMIT 1""",
+            (project,tool,input_name)).fetchone()
+        if newest is None or newest[0] != revision:
+            raise DocumentHeadCorrupt(
+                "Project head cannot point behind the latest immutable revision")
         return {"revision_id":revision, "document_sha256":document}
 
     def select(self, *, project_id, tool_id, input_name, document_sha256,
@@ -319,15 +354,17 @@ class DocumentHeadLedger:
                 return {"project_id":project,"tool_id":tool,"input_name":slot,
                         "revisions":[],"has_more":False,"next_offset":None}
             rows = db.execute("""SELECT revision_id,parent_revision_id,
-                parent_document_sha256,document_sha256
+                parent_document_sha256,document_sha256,sequence
                 FROM creative_document_revisions
                 WHERE project_id=? AND tool_id=? AND input_name=?
                 ORDER BY sequence DESC LIMIT ? OFFSET ?""",
                 (project,tool,slot,bounded+1,start)).fetchall()
             result=[]
-            for revision,parent,previous,document in rows[:bounded]:
+            for revision,parent,previous,document,sequence in rows[:bounded]:
                 if _event_digest(project,tool,slot,parent,previous,document)!=revision:
                     raise DocumentHeadCorrupt("Historical creative revision lineage changed")
+                self._verify_parent_link(db,project,tool,slot,sequence,
+                                         parent,previous)
                 result.append({"revision_id":revision,"parent_revision_id":parent,
                                "document_sha256":document})
             more=len(rows)>bounded
