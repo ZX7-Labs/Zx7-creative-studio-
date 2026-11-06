@@ -320,6 +320,44 @@ async def exercise(options):
         preserved = next(clip for clip in unchanged["clips"] if clip["id"] == title_id)
         assert preserved["keyframes"] == title["keyframes"]
         assert digest(native_path) == digest(fixture / "revision-2.comfystudio")
+        # A real model selected native *batch* placement after import, then
+        # hit a native MCP error. Isolate the actual engine/ABI independent
+        # of the model using only IDs read from this reopened real project.
+        # This is a technical fixture, NOT a successful neural creative edit.
+        live_assets = await call(session, "get_assets", {"limit": 1000})
+        assert live_assets.get("count") == 2 and live_assets.get("limitApplied") is False
+        rows = live_assets.get("assets")
+        assert isinstance(rows, list) and len(rows) == 2
+        video_ids = [a["id"] for a in rows
+                     if isinstance(a, dict) and a.get("type") == "video"
+                     and isinstance(a.get("id"), str) and a["id"]]
+        assert len(video_ids) == 1, "Native source inventory has ambiguous video identities"
+        batch_args = {"assetIds": video_ids, "trackStrategy": "newTracks",
+                      "layout": "stacked", "startSeconds": 0,
+                      "includeAudio": False}
+        preview = await call(session, "add_assets_to_timeline", {
+            **batch_args, "previewOnly": True})
+        assert preview.get("previewOnly") is True
+        before = await call(session, "get_timeline", {"includeClips": True})
+        assert len(before["clips"]) == 3, "Native batch preview changed a real timeline"
+        applied = await call(session, "add_assets_to_timeline", {
+            **batch_args, "previewOnly": False})
+        assert applied.get("previewOnly") is False, "Native batch was not applied"
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("clipCount") == 4)
+        after = await call(session, "get_timeline", {"includeClips": True})
+        assert len(after["clips"]) == 4
+        assert sum(c.get("assetId") == video_ids[0] for c in after["clips"]) == 2
+        assert digest(original) == original_hash
+        print("ACTUAL_NATIVE_BATCH_PLACEMENT " + json.dumps({
+            "scripted_native_control_not_neural": True,
+            "host_observed_video_asset": True,
+            "preview_non_mutating": True,
+            "native_batch_write_acknowledged": True,
+            "post_write_native_clips": len(after["clips"]),
+            "original_media_sha_unchanged": True,
+            "artistic_quality_approved": False,
+        }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
     audio = next(stream for stream in probe["streams"] if stream["codec_type"] == "audio")
@@ -344,6 +382,7 @@ async def exercise(options):
         "invalidNativeArgumentsRejected": True, "editableTracks": 3, "savedVersions": 2,
         "processRestartReopenPassed": True, "frames": 48, "fps": "24/1", "audioCodec": "aac",
         "fullDecodePassed": True, "physicalModelInterfaceAVTransportFixturePassed": True,
+        "physicalHostObservedAssetBatchPlacementPassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
