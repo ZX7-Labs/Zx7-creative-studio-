@@ -516,7 +516,7 @@ async def exercise(options):
         "physicalEditorExportIndependentlyDecoded": True,
         "deniedNetworkTool": True, "deniedOutsideImport": True,
         "existingSourceExportDenied": True, "outsideNativeDocumentDenied": True,
-        "invalidNativeArgumentsRejected": True, "editableTracks": 3, "savedVersions": 3,
+        "invalidNativeArgumentsRejected": True, "editableTracks": 3, "savedVersions": 4,
         "processRestartReopenPassed": True, "frames": 48, "fps": "24/1", "audioCodec": "aac",
         "fullDecodePassed": True, "physicalModelInterfaceAVTransportFixturePassed": True,
         "physicalHostObservedAssetBatchPlacementPassed": True,
