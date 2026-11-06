@@ -1,6 +1,12 @@
 name: "ZX7 BODY — Real Source-Custody Editorial Proof"
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "studio_next/**"
+      - "pyproject.toml"
+      - ".github/workflows/studio-body-owned-edit-proof.yml"
   push:
     branches: [main]
     paths:

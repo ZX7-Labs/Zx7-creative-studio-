@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from studio_next.body_owned_edit import validate_owned_edit,render_verified_owned_edit
 from studio_next.body_integration import body_catalog,validate_witness
+from studio_next.durable_graph import DurableFilmGraph
 from studio_next.body_materials import fingerprint_physical_inputs
 from studio_next.media_vault import MediaVault,sha256_file
 
@@ -80,14 +81,31 @@ class TrueOwnerAttestedGenericEditorTests(unittest.TestCase):
         from studio_next.body_publication import physical_tool_attempt
         body=body_catalog(self.root)
         args={"edit":"director-edit.json","out":"recovered-owner-final.mp4"}
+        # A production publication receipt requires a real, currently owned
+        # durable stage. A bare context-label is no longer publication authority.
+        store=DurableFilmGraph(self.root/"owner-edit-lease.sqlite3")
+        state,_,owner=store.start_or_reuse(
+            "physical-project","artist-cut","exact-inputs",
+            trusted_idempotent=True,
+            existing_result_verifier=lambda _:True,
+            lease_seconds=60)
+        self.assertEqual(state,"execute")
         with physical_tool_attempt("physical-project","artist-cut","exact-inputs",
-                                   "body.render_edit_owned"):
+                                   "body.render_edit_owned",
+                                   publication_guard=lambda:store.publication_lease(
+                                       "physical-project","artist-cut","exact-inputs",
+                                       owner,lease_seconds=60)):
             first=body.invoke("body.render_edit_owned",args,allowed_access={"write"})
             first_sha=first["sha256"]
-            # Existing identical attempt must recover its verified physical
-            # master, not re-render, overwrite or lose source-count evidence.
-            second=body.invoke("body.render_edit_owned",args,allowed_access={"write"})
+            # Reopen the same physically verified master. Fail if any native
+            # encoder is invoked again; this is not a mocked successful movie.
+            with patch("studio_next.body_integration.render_verified_owned_edit",
+                       side_effect=AssertionError("Identical accepted movie was re-encoded")):
+                second=body.invoke("body.render_edit_owned",args,
+                                   allowed_access={"write"})
         self.assertEqual(second["sha256"],first_sha)
+        store.complete("physical-project","artist-cut","exact-inputs",owner,first)
+        self.assertEqual(store.inspect("physical-project")[0]["status"],"completed")
         self.assertEqual(second["source_custody_count"],2)
         self.assertEqual(second["distinct_originals"],2)
         self.assertEqual(second["director_plan_sha256"],sha256_file(self.plan_file))
