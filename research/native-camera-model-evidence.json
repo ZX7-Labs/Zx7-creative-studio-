@@ -1,0 +1,64 @@
+{
+  "schema": "zx7-native-model-experiment-evidence-v1",
+  "experiment": "original-camera-local-qwen-native-editor",
+  "source_commit": "8a7ea4958a4450e4a997ee6d26d18a10e3bc8037",
+  "workflow_run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42149908182",
+  "workflow_conclusion": "failure",
+  "transient_artifact_id": 13471688477,
+  "transient_artifact_retention_days": 5,
+  "native_editor": {
+    "name": "Velorn",
+    "pinned_git_sha": "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+  },
+  "pinned_local_model": {
+    "id": "unsloth/Qwen3.5-2B-GGUF",
+    "weight_sha256": "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+    "projector_sha256": "7035e9cb8d7c6a9681d07eef9a364783e86ea4cd73faab2eabb4f43a101830c7"
+  },
+  "source_media": {
+    "sha256": "52d9b05bec542094c5bada760bad18af2fdbec03374488db65ae0f45ef96184f",
+    "bytes": 44353030,
+    "duration_seconds": 240.032,
+    "full_video_decode_observed": true,
+    "source_declared_license": "CC0",
+    "independent_legal_clearance": false,
+    "private_media_committed": false
+  },
+  "audited": {
+    "journal_events": 26,
+    "journal_chain_structurally_valid": true,
+    "model_status": "native_error_requires_state_reconciliation",
+    "model_decision_turns_observed": 8,
+    "native_project_creation_acknowledged": true,
+    "native_project_open_host_read_confirmed": true,
+    "asset_import_preview_observed": true,
+    "native_asset_import_acknowledged": true,
+    "imported_native_asset_count_after_read_convergence": 1,
+    "selected_timeline_tool": "add_assets_to_timeline",
+    "timeline_placement_native_error_reported": true,
+    "timeline_tool_actual_error_category": "not_verified_privacy_bounded_error_digest_only",
+    "original_media_on_saved_native_timeline": false,
+    "image_inputs_sent_to_model": 0,
+    "mutations_after_observation": 0,
+    "verified_exports": 0,
+    "saved_native_projects": 0,
+    "technical_trial_completed": false,
+    "artistic_quality_approved": false,
+    "script_supplied_editor_mutations": 0
+  },
+  "provenance": {
+    "primary_evidence_files": [
+      "evidence.json",
+      "native-journal.jsonl",
+      "journal-audit.json"
+    ],
+    "original_tool_arguments_and_error_text_not_publicly_recorded": true,
+    "raw_private_media_and_prompts_not_committed": true
+  },
+  "interpretation": "Root cause of native timeline placement failure is undetermined. The journal shows an error after real imported asset readback, not whether model parameters, schema, native timeline state or engine action logic caused that error. No automated replay.",
+  "next_experiment": {
+    "goal": "Separate pre-dispatch invalid nested native asset reference from post-dispatch native engine rejection with privacy-safe categories; keep all creative operation choices model-authored.",
+    "success": "Real local model chooses placement, observes actual frame, independently revises, saves editable source and independently decoded export.",
+    "kill_condition": "If repeated source-attested valid native contracts/IDs still fail model-authored revision, benchmark a different pinned open-weights model; do not insert scripted edit substitutes."
+  }
+}
