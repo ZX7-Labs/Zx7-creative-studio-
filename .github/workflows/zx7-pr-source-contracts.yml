@@ -69,6 +69,7 @@ jobs:
         run: |
           python -m unittest \
             studio_next.test_body_motion_project \
+            studio_next.test_publication_lease_fence \
             studio_next.test_body_host_resources \
             studio_next.test_body_capabilities \
             studio_next.test_body_capability_adapter \
