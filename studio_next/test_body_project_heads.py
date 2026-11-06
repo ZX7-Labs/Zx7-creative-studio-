@@ -116,6 +116,43 @@ class CrossCapabilityDocumentHeadTests(unittest.TestCase):
             project_id="original",tool_id="graphics/mask",
             input_name="plan")["revisions"]),1)
 
+    def test_many_future_engine_inputs_are_discoverable_in_bounded_pages(self):
+        for number in range(115):
+            self.select(A,tool=f"creative/instrument-{number:03}",
+                        slot="scene_json")
+        pages=[self.ledger.heads("original",limit=31,offset=offset)
+               for offset in (0,31,62,93)]
+        self.assertEqual([len(x["heads"]) for x in pages],[31,31,31,22])
+        self.assertEqual([x["next_offset"] for x in pages],[31,62,93,None])
+        self.assertEqual(sum(len(x["heads"]) for x in pages),115)
+        names=[h["tool_id"] for page in pages for h in page["heads"]]
+        self.assertEqual(len(names),len(set(names)))
+        self.assertEqual(names,sorted(names))
+        for value in (-1,True,100001):
+            with self.assertRaises(ValueError):
+                self.ledger.heads("original",offset=value)
+
+    def test_history_pages_retain_every_immutable_parent_without_dumping_all(self):
+        previous=None
+        prev_doc=None
+        for number in range(1,16):
+            digest=f"{number:064x}"
+            recorded=self.select(digest,tool="audio/original_mix",
+                parent=previous,base=prev_doc)
+            previous=recorded["revision_id"]
+            prev_doc=digest
+        pages=[self.ledger.history(project_id="original",
+            tool_id="audio/original_mix",input_name="plan",
+            limit=6,offset=offset) for offset in (0,6,12)]
+        self.assertEqual([len(x["revisions"]) for x in pages],[6,6,3])
+        self.assertEqual([x["next_offset"] for x in pages],[6,12,None])
+        self.assertEqual(pages[0]["revisions"][0]["revision_id"],previous)
+        for value in (0,101,True):
+            with self.assertRaises(ValueError):
+                self.ledger.history(project_id="original",
+                    tool_id="audio/original_mix",input_name="plan",
+                    limit=value)
+
     def test_corruption_is_not_a_trusted_active_head_or_history(self):
         valid=self.select(A)
         with connect_durable_database(self.workspace/"production.sqlite3") as db:
