@@ -194,6 +194,15 @@ class CapabilityGateway:
             # creative app on each frame/operation. Cross-domain scaling
             # must not make single-engine edits O(all connected tools).
             session, _, conditions, fact_reader, effects = self._bindings[namespace]
+            # A plainly exhausted host budget must not spend more native
+            # tools/list RPCs discovering an action it can never dispatch.
+            # The later atomic reservation still handles cross-source races.
+            if self._session_budget is not None:
+                try:
+                    self._session_budget.check_available(
+                        source=namespace, access=record["access"])
+                except CapabilitySessionBudgetError as exc:
+                    raise CapabilityExecutionError(str(exc)) from exc
             grants = self._live_grants(namespace)
             advertised = await discover_all_live_tools(session)
             fresh = CapabilityFabric({namespace: (
