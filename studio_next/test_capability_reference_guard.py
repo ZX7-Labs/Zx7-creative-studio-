@@ -40,6 +40,22 @@ class NativeReferenceGuardContracts(unittest.TestCase):
         self.assertTrue(proof["host_source_snapshot_used"])
         self.assertFalse(proof["native_application_state_applied_or_verified"])
 
+    def test_scalar_native_asset_id_batch_matches_real_inventory(self):
+        # Native video batches use assetIds[] (strings), while animation
+        # tools use nested objectId keys. Both share the same policy engine.
+        rules=compile_reference_rules({
+            "/assetIds/*":"assets",
+            "/targets/*/trackId":"tracks"})
+        selected={"assetIds":["original-source-1","source-2"],
+                  "targets":[{"trackId":"picture-1"}]}
+        result=validate_live_references(selected,rules,self.snapshot)
+        self.assertEqual(result["host_reference_checks_passed"],3)
+        with self.assertRaisesRegex(CapabilityReferenceError,
+                                    "native_reference_not_in_live_inventory"):
+            validate_live_references(
+                {"assetIds":["original-source-1","fabricated-original"]},
+                rules,self.snapshot)
+
     def test_known_nested_source_does_not_mint_unobserved_graphics_object(self):
         with self.assertRaisesRegex(
                 CapabilityReferenceError,"native_reference_not_in_live_inventory"):
