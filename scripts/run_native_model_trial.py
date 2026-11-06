@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -191,6 +192,13 @@ async def trial(args, lock, artifacts, command):
     for root in (projects, staging, outputs):
         root.mkdir()
     initial_project_effects = fresh_trial_project_open_effects(projects)
+    # Pinned Velorn src/services/mcpActions.js
+    # handleImportAssetFromPath applies useAssetsStore.addAsset only after a
+    # real previewOnly:false import. This HOST fact says that import *may*
+    # create a project asset; it does not choose imports, clips or edits.
+    # Actual asset presence remains gated by live get_assets reads.
+    initial_project_effects["import_asset_from_path"] = [
+        "project_asset_available"]
     # Raw, neutral media available to the model; no timeline or artwork authored.
     source_assets = []
     for index, colors in enumerate((('0x102030', '0x607080'), ('0x302010', '0x807060'))):
@@ -254,7 +262,8 @@ async def trial(args, lock, artifacts, command):
         async with stdio_client(StdioServerParameters(command='node', args=params, cwd=ROOT), errlog=log) as (read, write):
             async with ClientSession(read, write, read_timeout_seconds=180) as session:
                 await session.initialize()
-                outcome = await asyncio.wait_for(NativeCreativeControl(session, model, max_turns=48,
+                try:
+                    outcome = await asyncio.wait_for(NativeCreativeControl(session, model, max_turns=48,
                     receipt_path=artifacts / 'native-journal.jsonl',
                     host_tool_access=host, catalog_mode="indexed",
                     host_preconditions={
@@ -283,6 +292,21 @@ async def trial(args, lock, artifacts, command):
                     required_evidence=completion_evidence,
                     host_content_revision_tools=host_content_revision_tools).run(brief),
                     timeout=2400)
+                except Exception as trial_error:
+                    # A disk-full/write failure while preserving a diagnostic
+                    # must never mask the actual editor/model failure.
+                    try:
+                        preserve_native_trial_failure_audit(
+                            artifacts, host_tool_access=host,
+                            expected_required_evidence=completion_evidence,
+                            host_content_revision_tools=host_content_revision_tools)
+                    except Exception as audit_error:
+                        trial_error.add_note(
+                            "Partial native audit preservation failed: " +
+                            type(audit_error).__name__)
+                    # An incomplete or timed-out run is *still a failure*.
+                    # Never let an audited prefix masquerade as a movie.
+                    raise
     audit = audit_native_journal(
         read_native_journal(artifacts / 'native-journal.jsonl'),
         host_tool_access=host, expected_required_evidence=completion_evidence,
@@ -297,6 +321,10 @@ async def trial(args, lock, artifacts, command):
         if 'decision' in record}
     observed_sources, revisions, last_revision, last_save, revised_exports = set(), 0, -1, -1, []
     exported_after_revision = set()
+    # Only actual native export ACKs can bind a model-requested timeline
+    # range to a physically verified resulting movie. Untrusted model text
+    # alone is never a delivery/custody attestation.
+    export_inputs_by_path = {}
     for index, event in enumerate(outcome['events']):
         if event.get('kind') != 'native_tool_result':
             continue
@@ -307,10 +335,16 @@ async def trial(args, lock, artifacts, command):
             last_revision = index
             revised_exports = []
             exported_after_revision = set()
+            export_inputs_by_path = {}
         if last_revision >= 0 and event.get('tool') == 'export_timeline':
-            output_path = decisions[event['turn']]['arguments']['inputs'].get('outputPath')
-            if isinstance(output_path, str):
-                exported_after_revision.add(Path(output_path).resolve())
+            selected = decisions[event['turn']]['arguments']['inputs']
+            output_path = selected.get('outputPath')
+            if isinstance(output_path, str) and output_path:
+                resolved = Path(output_path).resolve()
+                # Exact trial output root, not a model-authored arbitrary path.
+                if resolved.is_relative_to(outputs.resolve()):
+                    exported_after_revision.add(resolved)
+                    export_inputs_by_path[resolved] = selected
         verified = event.get('independently_verified_export_sha256')
         if (last_revision >= 0 and verified and verified not in observed_sources
                 and movies.get(verified, set()) & exported_after_revision):
@@ -319,6 +353,50 @@ async def trial(args, lock, artifacts, command):
             observed_sources.add(event['observed_export_sha256'])
     native_projects = [path for path in projects.glob('*/project.comfystudio')
         if any(timeline.get('clips') for timeline in json.loads(path.read_text()).get('timelines', []))]
+    # A project, animated synthetic background, or typography alone is not
+    # proof that the creative model edited the ORIGINAL caller-supplied videos.
+    # The pinned editor stores sourcePath and project-owned copied media after
+    # a real import_asset_from_path. Verify those physical bytes, then require
+    # a saved timeline clip to reference the actual imported asset identity.
+    # No source is imported on the model's behalf, no edit is scripted.
+    from studio_next.native_source_acceptance import (
+        verify_original_footage_on_native_timeline)
+    # Pinned Velorn resolves full export to max(saved duration, clip ends),
+    # and custom exports from model-authored startSeconds/endSeconds. Saved
+    # timeline.duration therefore CANNOT by itself prove what part of the
+    # source entered the actual MP4. Bind intervals to physically checked
+    # SHA-256, a real acknowledged export path, and its decoded VIDEO stream
+    # duration. Nothing is inferred from an unverified model claim.
+    host_verified_export_windows = []
+    for movie_digest in sorted(set(revised_exports)):
+        for movie in sorted(movies.get(movie_digest, set()) & exported_after_revision):
+            inputs = export_inputs_by_path.get(movie)
+            if not isinstance(inputs, dict) or sha(movie) != movie_digest:
+                continue
+            start = inputs.get('startSeconds', 0)
+            # Do not silently coerce an invalid model string, NaN or bool
+            # into a plausible time origin; the editor remains the judge of
+            # all valid native actions.
+            if type(start) not in (int, float) or not math.isfinite(start) or start < 0:
+                continue
+            raw_duration = subprocess.check_output([
+                'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                '-show_entries', 'stream=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                str(movie)], timeout=30).decode('utf-8').strip()
+            try:
+                duration = float(raw_duration)
+            except ValueError:
+                continue
+            if not math.isfinite(duration) or duration <= 0:
+                continue
+            if not math.isfinite(start + duration):
+                continue
+            host_verified_export_windows.append({
+                'start_seconds': start, 'end_seconds': start + duration})
+    original_footage = verify_original_footage_on_native_timeline(
+        projects, native_projects, source_assets,
+        host_verified_export_windows=host_verified_export_windows)
     def decoded_frames(path):
         raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(path),
             '-map', '0:v:0', '-f', 'framemd5', '-'], timeout=60).decode()
@@ -327,13 +405,69 @@ async def trial(args, lock, artifacts, command):
         for before in observed_sources for after in revised_exports if before in movies and after in movies)
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
+              and original_footage['actual_original_video_used_on_native_timeline']
               and bool(revised_exports) and changed_pixels)
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
             'decoded_frame_sequence_changed': changed_pixels,
             'verified_exports_after_final_revision': revised_exports,
-            'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects], 'audit': audit,
+            'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects],
+            'original_source_footage_on_native_timeline_verified':
+                original_footage['actual_original_video_used_on_native_timeline'],
+            'native_original_source_clip_proof':
+                original_footage['verified_native_source_clip_proof'],
+            'host_bound_verified_export_time_windows':
+                host_verified_export_windows,
+            'audit': audit,
             'acceptance_note': 'Source-chain and model-operation evidence only, not artistic acceptance'}
+
+
+
+def preserve_native_trial_failure_audit(
+        artifacts, *, host_tool_access, expected_required_evidence,
+        host_content_revision_tools):
+    """Preserve independently checked *partial* journal on trial failure.
+
+    A 40-minute CPU model budget may cancel an inference after valid previous
+    editor calls. Failure must retain an independently verifiable journal and
+    explicit NOT-complete metadata, never manufacture a finish, export or
+    creative approval. No native command is replayed.
+    """
+    artifacts = Path(artifacts)
+    ledger_path = artifacts / "native-journal.jsonl"
+    if not ledger_path.is_file():
+        return {"partial_journal_present": False,
+                "partial_journal_structurally_verified": False}
+    try:
+        checked = audit_native_journal(
+            read_native_journal(ledger_path),
+            host_tool_access=host_tool_access,
+            expected_required_evidence=expected_required_evidence,
+            host_content_revision_tools=host_content_revision_tools)
+        if (not isinstance(checked, dict) or
+                checked.get("journal_chain_structurally_valid") is not True):
+            raise ValueError("Partial native journal auditor did not verify its chain")
+    except Exception as exc:
+        result = {
+            "partial_journal_present": True,
+            "partial_journal_structurally_verified": False,
+            "partial_journal_audit_error_type": type(exc).__name__,
+            "technical_trial_completed": False,
+        }
+        (artifacts / "journal-audit-partial.json").write_text(
+            json.dumps(result, indent=2))
+        return result
+    result = {
+        **checked,
+        "partial_journal_present": True,
+        "partial_journal_structurally_verified": True,
+        "technical_trial_completed": False,
+        "artistic_quality_approved": False,
+        "incomplete_trial_no_native_write_replay": True,
+    }
+    (artifacts / "journal-audit-partial.json").write_text(
+        json.dumps(result, indent=2))
+    return result
 
 
 def main():
