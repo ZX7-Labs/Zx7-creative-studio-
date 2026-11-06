@@ -224,6 +224,54 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
         audit_native_journal(outcome["events"],host_tool_access=host_grants())
 
 
+    async def test_nested_batch_asset_hallucination_refused_before_native_write(self):
+        """Same source-neutral native-ID gate must cover nested batch selectors.
+
+        All reads and the first asset import below are test fixtures. This
+        is an admission/recovery regression, not real model or media proof.
+        """
+        session=SyntheticNativeStateSession()
+        session.tools.append(SimpleNamespace(
+            name="add_assets_to_timeline",
+            description="Place several native inventory assets onto tracks",
+            input_schema={"type":"object","properties":{
+                "assets":{"type":"array","items":{"type":"object",
+                    "properties":{"assetId":{"type":"string"}}}},
+                "previewOnly":{"type":"boolean"}}}))
+        grants={**host_grants(),"add_assets_to_timeline":"write"}
+        model=ScriptedModel([
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/operator-owned/real-camera.webm"}),
+            decision("invoke",tool="add_assets_to_timeline",
+                     inputs={"assets":[{"assetId":"model-invented-asset-id"}],
+                             "previewOnly":False}),
+            decision("finish",summary="No native timeline mutation accepted"),
+        ])
+        outcome=await NativeCreativeControl(
+            session,model,max_turns=3,catalog_mode="indexed",
+            host_tool_access=grants,host_preconditions={
+                "import_asset_from_path":["project_open"],
+                "add_assets_to_timeline":["project_open","assets_present"]},
+            host_possible_effects={
+                "import_asset_from_path":["assets_present"],
+                "add_assets_to_timeline":["timeline_picture_present"]},
+            ).run("Model independently selects real source")
+        self.assertEqual([n for n,_ in session.calls].count(
+            "import_asset_from_path"),1)
+        self.assertNotIn("add_assets_to_timeline",
+                         [n for n,_ in session.calls])
+        rejected=[e for e in outcome["events"]
+                  if e["kind"]=="model_action_rejected"]
+        self.assertEqual(len(rejected),1)
+        self.assertEqual(rejected[0]["tool"],"add_assets_to_timeline")
+        self.assertEqual(rejected[0]["reason"],
+                         "asset_id_not_in_native_inventory")
+        self.assertTrue(rejected[0]["no_native_dispatch"])
+        self.assertTrue(audit_native_journal(
+            outcome["events"],host_tool_access=grants)
+            ["journal_chain_structurally_valid"])
+        self.assertFalse(outcome["native_editing_capability_complete"])
+
     async def test_native_import_ack_requires_fresh_asset_identity_after_visibility_lag(self):
         session=DelayedNativeAssetSession(stale_post_import_reads=1)
         model=ScriptedModel([
