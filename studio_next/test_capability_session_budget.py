@@ -22,9 +22,11 @@ class LocalToolSource:
         self.name = name
         self.access = access
         self.calls = []
+        self.listings = 0
         self.fail = None
 
     async def list_tools(self):
+        self.listings += 1
         return SimpleNamespace(tools=[
             SimpleNamespace(
                 name=self.name,
@@ -76,6 +78,7 @@ class UniversalBudgetTests(unittest.IsolatedAsyncioTestCase):
             await gateway.invoke("documents/inspect_page",
                                  revision=revision, inputs={"count": 1})
         self.assertEqual(len(sources["documents"].calls), 1)
+        self.assertEqual(sources["documents"].listings, 2)
         self.assertEqual(budget.snapshot()["reserved_calls_by_source"],
                          {"documents": 1, "motion": 1, "video": 1})
 
@@ -142,6 +145,9 @@ class UniversalBudgetTests(unittest.IsolatedAsyncioTestCase):
             await gateway.invoke("graphics/update", revision=revision,
                                  inputs={"count": 1})
         self.assertEqual(len(source.calls), 1)
+        # One initial refresh + one admitted live revalidation. A depleted
+        # budget refuses the next request *before* another remote listing.
+        self.assertEqual(source.listings, 2)
         self.assertNotIn("owner/secret", str(gateway.host_budget_evidence()))
 
     async def test_exhausted_host_budget_cannot_create_durable_write_attempt(self):
