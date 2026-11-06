@@ -70,6 +70,36 @@ class NativeAssetReaderTests(unittest.TestCase):
                 observed_editor_asset_ids(data)
 
 
+    def test_malformed_native_transport_status_cannot_mint_asset_identity(self):
+        # An unreadable/error-like native status must not create trusted IDs.
+        valid = native_assets([{"id":"host-observed-source"}])
+        for status in (
+            {"isError":"false"}, {"isError":"true"}, {"isError":0},
+            {"isError":None}, {"is_error":"false"}, {"is_error":1},
+            {"isError":True}, {"is_error":True},
+            {"isError":False,"is_error":True},
+            {"isError":True,"is_error":False},
+        ):
+            with self.subTest(status=status), self.assertRaises(
+                    NativeEditorAssetInventoryError):
+                observed_editor_asset_ids({**valid, **status})
+
+    def test_optional_boolean_native_success_status_is_compatible(self):
+        valid = native_assets([{"id":"host-observed-source"}])
+        for status in (
+            {}, {"isError":False}, {"is_error":False},
+            {"isError":False,"is_error":False},
+        ):
+            with self.subTest(status=status):
+                observed = observed_editor_asset_ids({
+                    **{k:v for k,v in valid.items() if k!="isError"},
+                    **status,
+                })
+                self.assertEqual(
+                    observed["assets"]["ids"], ["host-observed-source"])
+
+
+
 class InstalledNativeAssetAdmissionTests(unittest.IsolatedAsyncioTestCase):
     class Editor:
         def __init__(self):
