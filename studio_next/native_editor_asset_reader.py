@@ -39,9 +39,19 @@ def observed_editor_asset_ids(response):
     if not isinstance(response,dict):
         raise NativeEditorAssetInventoryError(
             "native_asset_inventory_response_unavailable")
-    if response.get("isError") is True or response.get("is_error") is True:
-        raise NativeEditorAssetInventoryError(
-            "native_asset_inventory_response_unavailable")
+    # MCP isError is optional on successful reads, but every supplied status
+    # must be an actual boolean. A string/int status must not silently grant
+    # authority to a model-selected native object ID. The internal alias is
+    # checked too so contradictory adapters fail closed.
+    for status_field in ("isError", "is_error"):
+        if status_field in response:
+            status = response[status_field]
+            if type(status) is not bool:
+                raise NativeEditorAssetInventoryError(
+                    "native_asset_inventory_invalid_transport_status")
+            if status:
+                raise NativeEditorAssetInventoryError(
+                    "native_asset_inventory_response_unavailable")
     content=response.get("content")
     if (not isinstance(content,list) or len(content)!=1 or
             not isinstance(content[0],dict) or
