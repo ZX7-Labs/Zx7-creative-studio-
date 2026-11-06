@@ -804,6 +804,40 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.calls, [])
         self.assertEqual(outcome["status"], "model_finished_unverified")
 
+    async def test_selected_hint_dedup_keeps_full_native_schema(self):
+        from studio_next.native_creative_control import _nonduplicated_native_input_hints
+        raw = [{"tool": "update_text_clip", "input_properties": [{"name": "clipId"}]},
+               {"tool": "get_timeline", "input_properties": [{"name": "clipLimit"}]}]
+        schema = {"properties": {"clipId": {"type": "string"}}}
+        events = [{"kind": "native_tool_schema", "tool": "update_text_clip",
+                   "input_schema": schema}]
+        filtered = _nonduplicated_native_input_hints(raw, events)
+        self.assertEqual(filtered, raw[1:])
+        self.assertEqual(events[0]["input_schema"], schema)
+        self.assertEqual(_nonduplicated_native_input_hints(raw, [
+            {"kind": "native_tool_schema", "tool": "update_text_clip",
+             "input_schema": {"schema_too_large": True}}]), raw)
+        session = FakeSession()
+        model = ScriptedModel([
+            decision("search", query="update_text_clip"),
+            decision("describe", tool="update_text_clip"),
+            decision("finish", summary="Only source schema inspected"),
+        ])
+        grants = {tool.name: ("write" if tool.name == "update_text_clip"
+                              else "read") for tool in session.tools}
+        result = await NativeCreativeControl(
+            session, model, max_turns=3, catalog_mode="indexed",
+            host_tool_access=grants).run(
+            "Inspect editor native schema")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertTrue(any(x["tool"] == "update_text_clip" for x in
+            model.observed[1]["host_selected_native_input_hints"]))
+        self.assertFalse(any(x["tool"] == "update_text_clip" for x in
+            model.observed[2]["host_selected_native_input_hints"]))
+        self.assertEqual(model.observed[2]["latest_events"][-1]["input_schema"],
+                         session.tools[1].input_schema)
+        self.assertEqual(session.calls, [])
+
     async def test_tool_hints_bounded_in_aggregate_with_real_host_names_retained(self):
         from studio_next.native_creative_control import _native_tool_hints
         session = FakeSession()
@@ -899,6 +933,97 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(outcome["artistic_quality_independently_approved"])
 
 
+    async def test_foreign_preview_like_false_ack_is_not_a_safe_replay(self):
+        # Source-restricted preview classification: an unrelated native writer
+        # cannot turn an ambiguous failed write into a no-mutation guarantee.
+        from studio_next.native_creative_audit import audit_native_journal
+        class ForeignNativeWriter(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools.append(SimpleNamespace(
+                    name="foreign_writer", description="Unreviewed editor writer",
+                    input_schema={"type": "object", "properties": {
+                        "previewOnly": {"type": "boolean"}}}))
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, dict(arguments)))
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps({
+                        "success": False, "action": name,
+                        "result": {"previewOnly": True, "action": name,
+                                   "plan": {"previewOnly": True, "action": name}},
+                        "suggestedApplyCall": {"tool": name, "arguments": {
+                            **arguments, "previewOnly": False}},
+                    }))])
+        session = ForeignNativeWriter()
+        grants = {t.name: ("write" if t.name == "foreign_writer" else "read")
+                  for t in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="foreign_writer", inputs={"previewOnly": True}),
+            decision("invoke", tool="foreign_writer", inputs={"previewOnly": True}),
+        ])
+        outcome = await NativeCreativeControl(
+            session, model, max_turns=2, host_tool_access=grants).run(
+                "Do not retry an unverified native mutation")
+        self.assertEqual(outcome["status"], "native_error_requires_state_reconciliation")
+        self.assertEqual([name for name, _ in session.calls if name == "foreign_writer"],
+                         ["foreign_writer"])
+        self.assertFalse(any(e["kind"] == "native_tool_preview"
+                             for e in outcome["events"]))
+        self.assertEqual(outcome["events"][-1]["kind"], "native_tool_reported_error")
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
+    async def test_commit_intent_cannot_be_reclassified_as_legacy_preview(self):
+        from studio_next.native_creative_audit import audit_native_journal
+        class ContradictoryReceiptSession(FakeSession):
+            def __init__(self, *, with_preview_schema=True):
+                super().__init__()
+                self.tools.append(SimpleNamespace(
+                    name="create_project",
+                    description="Pinned create/preview native project",
+                    input_schema={"type": "object", "properties": {
+                        "name": {"type": "string"},
+                        **({"previewOnly": {"type": "boolean"}}
+                           if with_preview_schema else {}),
+                    }}))
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, dict(arguments)))
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps({
+                        "success": False, "action": name,
+                        "result": {"previewOnly": True,
+                                   "plan": {"name": "Not an acknowledged edit"}},
+                    }))])
+        for with_schema, args in (
+                (True, {"name": "Original", "previewOnly": False}),
+                (False, {"name": "Original"})):
+            with self.subTest(native_preview_schema=with_schema):
+                session = ContradictoryReceiptSession(
+                    with_preview_schema=with_schema)
+                grants = {t.name: ("write" if t.name == "create_project"
+                                   else "read") for t in session.tools}
+                model = ScriptedModel([
+                    decision("invoke", tool="create_project", inputs=args),
+                    decision("invoke", tool="create_project", inputs=args),
+                ])
+                result = await NativeCreativeControl(
+                    session, model, max_turns=2,
+                    host_tool_access=grants).run(
+                        "Do not automatically retry a committing native write")
+                self.assertEqual(result["status"],
+                                 "native_error_requires_state_reconciliation")
+                self.assertEqual([name for name, _ in session.calls],
+                                 ["create_project"])
+                self.assertFalse(any(e["kind"] == "native_tool_preview"
+                                     for e in result["events"]))
+                self.assertFalse(any(e["kind"] == "native_tool_result"
+                                     for e in result["events"]))
+                self.assertEqual(result["events"][-1]["kind"],
+                                 "native_tool_reported_error")
+                self.assertTrue(audit_native_journal(
+                    result["events"], host_tool_access=grants)[
+                        "journal_chain_structurally_valid"])
+
     async def test_host_preview_plan_never_mints_a_native_write_proof(self):
         from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
         session = FakeSession()
@@ -912,8 +1037,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             session.calls.append((name, inputs))
             if name == "create_project" and inputs.get("previewOnly", True):
                 receipt = {"success": False, "action": "create_project",
-                           "result": {"previewOnly": True,
-                                      "plan": {"name": inputs["name"]}},
+                           "result": {"previewOnly": True, "action": "create_project",
+                                      "plan": {"previewOnly": True, "action": "create_project",
+                                               "name": inputs["name"]}},
                            "suggestedApplyCall": {"tool": "create_project",
                                                   "arguments": {"name": inputs["name"],
                                                                 "previewOnly": False}}}
@@ -1892,7 +2018,17 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         async def native(name, args):
             session.calls.append((name, args))
             preview = args.get("previewOnly", True)
-            payload = {"success": not preview, "result": {"previewOnly": preview}}
+            # Match the pinned Velorn createProject → handleCreateProject
+            # envelope. A truncated mock is not evidence of a safe preview.
+            payload = ({"success": False, "action": name,
+                        "result": {"previewOnly": True, "action": name,
+                                   "plan": {"previewOnly": True, "action": name,
+                                            "name": args["name"]}},
+                        "suggestedApplyCall": {"tool": name, "arguments": {
+                            **args, "previewOnly": False}}}
+                       if preview else
+                       {"success": True, "action": name,
+                        "result": {"created": True, "action": name}})
             return SimpleNamespace(is_error=False, content=[
                 SimpleNamespace(type="text", text=json.dumps(payload))])
         session.call_tool = native
@@ -2395,10 +2531,17 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     return await super().call_tool(name, arguments)
                 self.calls.append((name, dict(arguments)))
                 is_preview = arguments.get("previewOnly", True)
+                payload = ({"success": False, "action": name,
+                            "result": {"previewOnly": True, "action": name,
+                                       "plan": {"previewOnly": True, "action": name,
+                                                "name": arguments["name"]}},
+                            "suggestedApplyCall": {"tool": name, "arguments": {
+                                **arguments, "previewOnly": False}}}
+                           if is_preview else
+                           {"success": True, "action": name,
+                            "result": {"created": True, "action": name}})
                 return SimpleNamespace(is_error=False, content=[
-                    SimpleNamespace(type="text", text=json.dumps({
-                        "success": not is_preview,
-                        "result": {"previewOnly": is_preview, "name": arguments["name"]}}))])
+                    SimpleNamespace(type="text", text=json.dumps(payload))])
         session = ProjectPreview()
         grants = {tool.name: ("write" if tool.name in (
             "update_text_clip", "create_project") else "read")
@@ -2552,6 +2695,111 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
 
 
 
+    async def test_direct_native_asset_plan_preview_allows_model_chosen_later_apply(self):
+        from studio_next.native_creative_audit import audit_native_journal
+        # Reproduce 4B run #41212032675: genuine imported asset exists,
+        # model selects an initial add_asset_to_timeline preview without
+        # previewOnly:false. The pinned *direct* MCP response is top-level,
+        # not runRendererActionTool's nested result. Never auto-apply.
+        class DirectNativePlan(FakeSession):
+            def __init__(self, malformed=None):
+                super().__init__()
+                self.malformed = malformed
+                self.tools.append(SimpleNamespace(
+                    name="add_asset_to_timeline",
+                    description="Place imported native asset (preview by default)",
+                    input_schema={"type": "object", "properties": {
+                        "assetName": {"type": "string"},
+                        "previewOnly": {"type": "boolean",
+                            "description": "When true, return a plan. Defaults to true."},
+                    }}))
+            async def call_tool(self, name, arguments):
+                if name != "add_asset_to_timeline":
+                    return await super().call_tool(name, arguments)
+                self.calls.append((name, dict(arguments)))
+                if arguments.get("previewOnly") is False:
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text=json.dumps({
+                            "success": True, "action": name,
+                            "result": {"success": True, "action": name}}))])
+                response = {
+                    "previewOnly": True, "action": name,
+                    "plan": {"action": name, "previewOnly": True,
+                             "asset": {"id": "actual-imported-asset"}},
+                    "suggestedApplyCall": {"tool": name, "arguments": {
+                        **arguments, "previewOnly": False}},
+                }
+                if self.malformed == "success_true":
+                    response["success"] = True
+                elif self.malformed == "mismatched_plan":
+                    response["plan"]["action"] = "delete_clips"
+                elif self.malformed == "mismatched_apply":
+                    response["suggestedApplyCall"]["tool"] = "delete_clips"
+                elif self.malformed == "wrong_apply_flag":
+                    response["suggestedApplyCall"]["arguments"]["previewOnly"] = True
+                elif self.malformed == "no_plan":
+                    response.pop("plan")
+                elif self.malformed == "nested_generic":
+                    response["result"] = {
+                        "previewOnly": True, "action": name}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(response))])
+
+        session = DirectNativePlan()
+        grants = {t.name: ("write" if t.name in (
+            "add_asset_to_timeline", "update_text_clip") else "read")
+            for t in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetName": "owner-original.mp4"}),
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetName": "owner-original.mp4",
+                             "previewOnly": False}),
+            decision("finish", summary="A model-selected native apply; not aesthetic QA"),
+        ])
+        outcome = await NativeCreativeControl(
+            session, model, host_tool_access=grants, max_turns=3,
+            required_evidence=("native_write_acknowledged",)).run(
+            "Import a real source and place it only after reviewing the native plan")
+        self.assertEqual(outcome["status"], "model_finished_unverified")
+        self.assertEqual([args.get("previewOnly") for name,args in session.calls
+                          if name == "add_asset_to_timeline"], [None, False])
+        self.assertEqual(model.observed[1]["last_native_preview_feedback"][
+            "native_declared_preview_control"]["field"], "previewOnly")
+        self.assertEqual(model.observed[1]["missing_completion_evidence"],
+                         ["native_write_acknowledged"])
+        self.assertEqual(sum(e["kind"] == "native_tool_preview"
+                             for e in outcome["events"]), 1)
+        self.assertEqual(sum(e["kind"] == "native_tool_result" and
+                             e.get("tool") == "add_asset_to_timeline"
+                             for e in outcome["events"]), 1)
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=grants,
+            expected_required_evidence=("native_write_acknowledged",))[
+                "journal_chain_structurally_valid"])
+        self.assertFalse(outcome["native_editing_capability_complete"])
+
+        for malformed in ("success_true", "mismatched_plan",
+                          "mismatched_apply", "wrong_apply_flag", "no_plan",
+                          "nested_generic"):
+            with self.subTest(malformed=malformed):
+                session = DirectNativePlan(malformed)
+                model = ScriptedModel([
+                    decision("invoke", tool="add_asset_to_timeline",
+                             inputs={"assetName": "owner-original.mp4"})])
+                fail = await NativeCreativeControl(
+                    session, model, host_tool_access=grants, max_turns=1).run(
+                    "Never consider forged native plan evidence a safe preview")
+                self.assertEqual(fail["status"],
+                                 "native_error_requires_state_reconciliation")
+                self.assertEqual(fail["events"][-1]["kind"],
+                                 "native_tool_uncertain_outcome")
+                self.assertFalse(any(x["kind"] == "native_tool_result"
+                                     for x in fail["events"]))
+                self.assertTrue(audit_native_journal(
+                    fail["events"], host_tool_access=grants)[
+                        "journal_chain_structurally_valid"])
+
     async def test_generic_velorn_mcp_omitted_success_is_valid_preview_not_uncertain_write(self):
         from studio_next.native_creative_audit import audit_native_journal
         class NativeMcpPreview(FakeSession):
@@ -2584,6 +2832,10 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     data.pop("previewOnly")
                 if self.variant == "wrong_inner_preview":
                     data["result"]["previewOnly"] = False
+                if self.variant == "inner_success_true":
+                    data["result"]["success"] = True
+                if self.variant == "inner_reported_error":
+                    data["result"]["error"] = "A previous native write may have happened"
                 return SimpleNamespace(is_error=False,
                     content=[SimpleNamespace(type="text", text=json.dumps(data))])
             @staticmethod
@@ -2614,7 +2866,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             output["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
         for variant in ("outer_action_mismatch", "inner_action_mismatch",
                         "contradictory_success", "missing_outer_preview",
-                        "wrong_inner_preview"):
+                        "wrong_inner_preview", "inner_success_true",
+                        "inner_reported_error"):
             with self.subTest(variant=variant):
                 session = NativeMcpPreview(variant)
                 model = ScriptedModel([
@@ -2631,6 +2884,94 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(audit_native_journal(
                     result["events"], host_tool_access=grants)[
                         "journal_chain_structurally_valid"])
+
+
+
+    async def test_pinned_marker_color_constraints_reject_bad_model_args_before_native_rpc(self):
+        # Reproduce actual physical Qwen3.5-2B run #41177861285:
+        # create_project was ACKed, then model passed color="000000"
+        # to add_timeline_markers, causing an uncertain native write error.
+        from studio_next.native_creative_audit import audit_native_journal
+        from studio_next.native_creative_control import _source_attested_native_admission
+        from copy import deepcopy
+        marker_schema = {
+            "type": "object", "properties": {
+                "markers": {"type": "array", "items": {"type": "object",
+                    "properties": {"timeSeconds": {"type": "number"},
+                                   "label": {"type": "string"},
+                                   "color": {"type": "string",
+                                             "description": "Optional hex #RRGGBB marker color."}}}},
+                "timeSeconds": {"type": "number"},
+                "label": {"type": "string"},
+                "color": {"type": "string",
+                          "description": "Default marker color as hex #RRGGBB. Defaults to yellow."},
+                "previewOnly": {"type": "boolean"},
+            }}
+        session = FakeSession()
+        session.tools.append(SimpleNamespace(
+            name="add_timeline_markers",
+            description="Real native app marker operation",
+            input_schema=marker_schema))
+        grants = {tool.name: ("write" if tool.name in
+                  ("update_text_clip", "add_timeline_markers") else "read")
+                  for tool in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="add_timeline_markers",
+                     inputs={"timeSeconds": 2.0, "label": "Chosen", "color": "000000"}),
+            decision("invoke", tool="add_timeline_markers",
+                     inputs={"markers": [{"timeSeconds": 2.0, "color": "ffaa33"}]}),
+            decision("invoke", tool="add_timeline_markers",
+                     inputs={"timeSeconds": 2.0, "label": "Chosen",
+                             "color": "#000000"}),
+            decision("finish", summary="One actual host ACK; not an edited film"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=4, host_tool_access=grants,
+            required_evidence=("native_write_acknowledged",),
+        ).run("Make an editable film from physical footage")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(session.calls, [("add_timeline_markers", {
+            "timeSeconds": 2.0, "label": "Chosen", "color": "#000000"})])
+        rejects = [e for e in result["events"] if e["kind"] == "model_action_rejected"]
+        self.assertEqual(len(rejects), 2)
+        self.assertTrue(all(e["validation_keyword"] == "pattern" and
+                            e["no_native_dispatch"] is True for e in rejects))
+        self.assertEqual(rejects[0]["schema_location"], "properties/color/pattern")
+        self.assertEqual(rejects[1]["schema_location"],
+                         "properties/markers/items/properties/color/pattern")
+        self.assertIn("#RRGGBB", model.observed[1][
+            "last_rejected_native_action_feedback"]["source_attested_format"])
+        self.assertNotIn("pattern", marker_schema["properties"]["color"])
+        self.assertNotIn("pattern", marker_schema["properties"][
+            "markers"]["items"]["properties"]["color"])
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants,
+            expected_required_evidence=("native_write_acknowledged",))[
+                "journal_chain_structurally_valid"])
+        self.assertFalse(result["artistic_quality_independently_approved"])
+
+        checked = _source_attested_native_admission(
+            "add_timeline_markers", deepcopy(marker_schema))
+        import jsonschema
+        validator = jsonschema.Draft202012Validator(checked)
+        for value in ("", "#ff0022", " #fF03aa ", "\t#000000"):
+            with self.subTest(color=value):
+                self.assertTrue(validator.is_valid({"color": value}))
+        for value in ("000000", "#fff", "#1234567", "blue", "tt#abcdef"):
+            with self.subTest(color=value):
+                self.assertFalse(validator.is_valid({"color": value}))
+        unreviewed = deepcopy(marker_schema)
+        unreviewed["properties"]["markers"]["items"]["properties"].pop("color")
+        with self.assertRaisesRegex(NativeCreativeControlError,
+                                    "source/schema mismatch"):
+            _source_attested_native_admission("add_timeline_markers", unreviewed)
+        foreign_engine = deepcopy(marker_schema)
+        foreign_engine["properties"]["color"]["description"] = "Named CSS colors supported."
+        with self.assertRaisesRegex(NativeCreativeControlError,
+                                    "source/schema mismatch"):
+            _source_attested_native_admission("add_timeline_markers", foreign_engine)
+        self.assertEqual(_source_attested_native_admission(
+            "other_tool", {"type": "object"}), {"type": "object"})
 
 
 
