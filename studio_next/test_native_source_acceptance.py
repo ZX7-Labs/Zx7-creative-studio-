@@ -1,0 +1,1120 @@
+"""Prove real licensed source footage rather than a synthetic empty edit."""
+import copy
+import hashlib
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+
+from studio_next.native_source_acceptance import (
+    verify_original_footage_on_native_timeline)
+
+
+class PhysicalNativeSourceAcceptanceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.sources = self.root / "staging"
+        self.projects = self.root / "projects"
+        self.sources.mkdir()
+        self.projects.mkdir()
+        self.src = self.sources / "original.mp4"
+        self.src.write_bytes(b"original-owner-footage-content")
+        self.owned = self.projects / "Movie"
+        self.owned.mkdir()
+        (self.owned / "media").mkdir()
+        self.copy = self.owned / "media" / "original.mp4"
+        self.copy.write_bytes(self.src.read_bytes())
+        self.saved = self.owned / "project.comfystudio"
+        self.manifest = [{"path": str(self.src),
+                          "sha256": hashlib.sha256(
+                              self.src.read_bytes()).hexdigest(),
+                          "video_duration_seconds": 4.0,
+                          "rights": "generated original owner media"}]
+        self.project = {
+            "assets": [{"id": "native-asset-12", "name": "Original",
+                        "type": "video", "absolutePath": str(self.copy),
+                        "settings": {"sourcePath": str(self.src),
+                                     "importedViaMcp": True}}],
+            "currentTimelineId": "native-timeline-1",
+            "timelines": [{"id": "native-timeline-1", "duration": 60.0,
+                           "tracks": [{"id": "video-1", "type": "video",
+                                       "visible": True}], "clips": [{
+                "id": "native-clip-88", "assetId": "native-asset-12",
+                "type": "video", "trackId": "video-1",
+                "startTime": 0, "duration": 4.0}]}],
+        }
+        self.save()
+        self._original_project = copy.deepcopy(self.project)
+
+    def save(self):
+        self.saved.write_text(json.dumps(self.project), encoding="utf-8")
+
+    def verify(self, export_windows=None):
+        return verify_original_footage_on_native_timeline(
+            self.projects, [self.saved], self.manifest,
+            host_verified_export_windows=export_windows)
+
+    def test_original_imported_video_must_have_physical_project_copy_and_clip(self):
+        receipt = self.verify()
+        self.assertTrue(receipt["actual_original_video_used_on_native_timeline"])
+        # A valid native *project* is not a verified delivered source frame.
+        self.assertFalse(receipt["actual_original_video_sampled_at_verified_output_frame"])
+        self.assertEqual(receipt["verified_output_sampled_original_clip_count"], 0)
+        self.assertEqual(receipt["physically_verified_native_source_clip_count"], 1)
+        self.assertFalse(receipt["professional_artistic_quality_approved"])
+        self.assertEqual(receipt["verified_native_source_clip_proof"][0][
+            "source_sha256"], self.manifest[0]["sha256"])
+
+    def test_native_optical_flow_cache_is_not_verified_original_video(self):
+        # The pinned renderer can sample a frame-interpolated cache instead
+        # of the original physical footage, EVEN when clip.cacheStatus is
+        # missing and the owner's imported asset SHA matches.
+        clip = self.project["timelines"][0]["clips"][0]
+        for sampling in ("optical-flow", "frame", "blend", None):
+            with self.subTest(native_sampling=sampling):
+                clip.pop("cacheStatus", None)
+                if sampling is None:
+                    clip.pop("frameSampling", None)
+                else:
+                    clip["frameSampling"] = sampling
+                self.save()
+                proof = self.verify([{
+                    "start_seconds": 0, "end_seconds": 4,
+                    "use_proxy_media": False
+                }])
+                self.assertEqual(
+                    proof["actual_original_video_used_on_native_timeline"],
+                    sampling != "optical-flow")
+                # The edit/project-only custody is still valid; optical-flow
+                # may be a legitimate creative effect, just unproven output
+                # source-byte provenance.
+                self.assertTrue(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+
+    def test_optical_flow_substitution_precedes_native_original_source(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        exporter = (root / "services/exporter.js").read_text(
+            encoding="utf-8")
+        sampling = (root / "utils/frameSampling.js").read_text(
+            encoding="utf-8")
+        self.assertIn("OPTICAL_FLOW: 'optical-flow'", sampling)
+        self.assertIn("opticalFlowSources.set(clip.id", exporter)
+        self.assertIn(
+            "cachedVideoSources.get(clip.id) || opticalFlowSources.get(clip.id)?.url",
+            exporter)
+        self.assertIn("const sourceUrl = overrideUrl || resolvedUrl", exporter)
+
+    def test_proxy_export_never_proves_original_source_bytes(self):
+        # An export with useProxyMedia:true may choose asset.proxyUrl or
+        # proxyPath instead of the SHA-verified original. Even if the proxy
+        # looks indistinguishable, this is not physical original-byte proof.
+        asset = self.project["assets"][0]
+        asset["proxyUrl"] = "file:///untrusted/different-video.mp4"
+        asset["proxyPath"] = "media/proxy.mp4"
+        self.save()
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+            "use_proxy_media": True
+        }])["actual_original_video_used_on_native_timeline"])
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+            "use_proxy_media": False
+        }])["actual_original_video_used_on_native_timeline"])
+
+        # Any proxy-only matching interval stays unproven; an independently
+        # verified ORIGINAL export in a different range can still count.
+        only_proxy = [
+            {"start_seconds": 0, "end_seconds": 4, "use_proxy_media": True},
+            {"start_seconds": 6, "end_seconds": 8, "use_proxy_media": False},
+        ]
+        self.assertFalse(self.verify(only_proxy)[
+            "actual_original_video_used_on_native_timeline"])
+        original_and_proxy = [
+            {"start_seconds": 0, "end_seconds": 4, "use_proxy_media": True},
+            {"start_seconds": 0, "end_seconds": 4, "use_proxy_media": False},
+        ]
+        self.assertTrue(self.verify(original_and_proxy)[
+            "actual_original_video_used_on_native_timeline"])
+
+        # No proxy field in old trusted unit fixtures retains direct-source
+        # default; the production trial ALWAYS supplies the actual boolean.
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4
+        }])["actual_original_video_used_on_native_timeline"])
+        for value in (None, 0, 1, "true", [], {}):
+            with self.subTest(untrusted_proxy_flag=repr(value)):
+                with self.assertRaisesRegex(ValueError, "export interval"):
+                    self.verify([{
+                        "start_seconds": 0, "end_seconds": 4,
+                        "use_proxy_media": value
+                    }])
+
+    def test_pinned_editor_proxy_export_selection_is_real_alternative_media(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn"
+        server = (root / "electron/mcpServer.js").read_text(
+            encoding="utf-8")
+        exporter = (root / "src/services/exporter.js").read_text(
+            encoding="utf-8")
+        self.assertIn("useProxyMedia: args.useProxyMedia === true", server)
+        self.assertIn("clip.type === 'video' && useProxyMedia && asset",
+                      exporter)
+        self.assertIn("getExportProxyUrl(asset, projectHandle)", exporter)
+        self.assertIn("const sourceUrl = overrideUrl || resolvedUrl", exporter)
+        self.assertIn("const resolvedUrl = proxyUrl ||", exporter)
+
+    def test_physically_rendered_frames_must_sample_the_original_clip(self):
+        # Pinned exporter.js samples native video at frame centers, not at
+        # arbitrary sub-frame time intersections. A clip can overlap a real
+        # 24-fps movie by milliseconds and still contribute ZERO pictures.
+        window = {
+            "start_seconds": 0, "end_seconds": 1,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 24,
+        }
+        clip = self.project["timelines"][0]["clips"][0]
+        for begin, length, expected in (
+            (0, 0.005, False),
+            (0.019, 0.004, True),
+            (0.023, 0.01, False),
+            (0.06, 0.004, True),
+            (0.065, 0.008, False),
+            (0.978, 0.015, True),
+            (0.995, 0.01, False),
+            (1.0, 0.1, False),
+        ):
+            with self.subTest(begin=begin, length=length):
+                clip["startTime"] = begin
+                clip["duration"] = length
+                self.save()
+                receipt = self.verify([window])
+                answer = receipt["actual_original_video_used_on_native_timeline"]
+                self.assertEqual(answer, expected)
+                self.assertEqual(
+                    receipt["actual_original_video_sampled_at_verified_output_frame"],
+                    expected)
+                self.assertEqual(
+                    receipt["verified_output_sampled_original_clip_count"],
+                    int(expected))
+        # The historical interval-only test describes project/timeline
+        # placement, not independently verified export-frame sampling.
+        clip["startTime"] = 0.023
+        clip["duration"] = 0.01
+        self.save()
+        interval_only = self.verify([{
+            "start_seconds": 0, "end_seconds": 1
+        }])
+        self.assertTrue(interval_only["actual_original_video_used_on_native_timeline"])
+        self.assertFalse(interval_only[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_output_frame_on_clip_but_past_original_source_eof_is_not_proof(self):
+        # The delivered video frame exists and intersects this visual clip,
+        # yet its FIRST video source decoder time is beyond original 4s EOF.
+        # Native renderer applies trimStart + localTime * sourceTimeScale *
+        # speed; a mere trimStart < duration check was a false positive.
+        clip = self.project["timelines"][0]["clips"][0]
+        frame_grid = {"start_seconds": 0, "end_seconds": 4,
+                      "video_frame_rate": 24,
+                      "decoded_video_frame_count": 96}
+        clip.update(trimStart=3.99, trimEnd=8, speed=1)
+        self.save()
+        verdict = self.verify([frame_grid])
+        self.assertFalse(verdict["actual_original_video_used_on_native_timeline"])
+        self.assertFalse(verdict[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        # Real slow motion gives a valid first source frame near 3.99 sec.
+        clip["speed"] = 0.05
+        self.save()
+        valid = self.verify([frame_grid])
+        self.assertTrue(valid["actual_original_video_used_on_native_timeline"])
+        self.assertTrue(valid[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_pinned_nullish_trim_end_falls_back_to_source_duration(self):
+        # clipPlaybackTiming.js: trimEnd ?? sourceDuration ?? computedEnd.
+        # An explicit JSON null is NOT an instruction to skip sourceDuration.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip.update(trimStart=3.99, trimEnd=None, sourceDuration=4)
+        window = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        self.save()
+        self.assertTrue(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        # Without the native sourceDuration clamp, the first 24-fps center
+        # would seek beyond original EOF and must be denied.
+        clip.pop("sourceDuration")
+        self.save()
+        self.assertFalse(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_pinned_source_scale_fallback_requires_both_frame_rates(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        window = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        clip.update(trimStart=3.99, trimEnd=8, speed=0.05,
+                    sourceTimeScale=0, timelineFps=24)
+        self.save()
+        # With only timelineFps, native JS uses 1, not an arbitrary ratio.
+        self.assertTrue(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["sourceFps"] = 1
+        self.save()
+        # With BOTH FPS values native scaling is 24x; first source seek
+        # crosses original EOF despite all timeline/clip IDs being valid.
+        self.assertFalse(self.verify([window])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_source_time_mapping_observes_reverse_and_native_source_scale(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        output = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        clip.update(reverse=True, trimStart=0, trimEnd=8, speed=1)
+        self.save()
+        self.assertFalse(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["trimEnd"] = 4
+        self.save()
+        self.assertTrue(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip.update(reverse=False, trimStart=3.99,
+                    trimEnd=8, sourceTimeScale=2)
+        self.save()
+        self.assertFalse(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["sourceTimeScale"] = 0.1
+        self.save()
+        self.assertTrue(self.verify([output])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_host_duration_and_speed_ramp_source_bound_is_conservative(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        export = {"start_seconds": 0, "end_seconds": 4,
+                  "video_frame_rate": 24, "decoded_video_frame_count": 96}
+        clip.update(trimStart=0, trimEnd=4, keyframes={
+            "speed": [{"time": 0, "value": 16},
+                      {"time": 4, "value": 0.05}]})
+        self.save()
+        self.assertTrue(self.verify([export])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["trimStart"] = 3.9
+        clip["trimEnd"] = 8
+        self.save()
+        # The runtime ramp may be as fast as 16x (or switched off to scalar
+        # fallback). Without a precise source-bound receipt, refuse to
+        # invent a guaranteed original-source frame near EOF.
+        self.assertFalse(self.verify([export])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip.pop("keyframes")
+        clip["speed"] = "fast"
+        self.save()
+        self.assertFalse(self.verify([export])[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_pinned_native_video_source_time_mapping_matches_verified_abi(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/src/utils/clipPlaybackTiming.js"
+                  ).read_text(encoding="utf-8")
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js"
+                    ).read_text(encoding="utf-8")
+        ramp = (Path(__file__).resolve().parents[1] /
+                "third_party/velorn/src/utils/timeRemap.js"
+                ).read_text(encoding="utf-8")
+        self.assertIn("const timeScale = baseScale * speedScale", source)
+        self.assertIn("const reverse = !!clip.reverse", source)
+        self.assertIn("const trimStart = clip.trimStart || 0", source)
+        self.assertIn("const safeMaxTime = Math.max(minTime, maxTime - endOffset)", source)
+        self.assertIn("getClipPlaybackTimingAtTimeline(clip, time, 0.001", exporter)
+        self.assertIn("const MAX_RAMP_SPEED = 16", ramp)
+        self.assertIn("getRampedSourceOffset(clip, localTime) * baseScale", source)
+
+    def test_custom_export_sample_grid_uses_actual_range_origin(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["startTime"] = 12
+        clip["duration"] = 0.02
+        self.save()
+        shifted = {"start_seconds": 12, "end_seconds": 13,
+                   "video_frame_rate": 24, "decoded_video_frame_count": 24}
+        # First frame center = 12.020833... outside source [12,12.02).
+        self.assertFalse(self.verify([shifted])[
+            "actual_original_video_used_on_native_timeline"])
+        clip["duration"] = 0.022
+        self.save()
+        self.assertTrue(self.verify([shifted])[
+            "actual_original_video_used_on_native_timeline"])
+
+    def test_frame_grid_validation_rejects_unverified_native_movie_metadata(self):
+        base = {"start_seconds": 0, "end_seconds": 1,
+                "video_frame_rate": 24, "decoded_video_frame_count": 24}
+        invalid = (
+            {"video_frame_rate": None},
+            {"video_frame_rate": 24},
+            {"decoded_video_frame_count": 24},
+            {"video_frame_rate": True, "decoded_video_frame_count": 24},
+            {"video_frame_rate": 0, "decoded_video_frame_count": 24},
+            {"video_frame_rate": float("inf"),
+             "decoded_video_frame_count": 24},
+            {"video_frame_rate": 24, "decoded_video_frame_count": True},
+            {"video_frame_rate": 24, "decoded_video_frame_count": "24"},
+            {"video_frame_rate": 24, "decoded_video_frame_count": 1},
+            {"video_frame_rate": 24, "decoded_video_frame_count": 99999999},
+        )
+        for bad in invalid:
+            with self.subTest(bad=repr(bad)):
+                candidate = ({**base, **bad} if
+                             "decoded_video_frame_count" in bad and
+                             "video_frame_rate" in bad else {
+                                 "start_seconds": 0, "end_seconds": 1, **bad})
+                with self.assertRaisesRegex(ValueError, "export frame grid"):
+                    self.verify([candidate])
+        self.assertTrue(self.verify([base])[
+            "actual_original_video_used_on_native_timeline"])
+
+    def test_native_output_frame_sample_time_is_pinned_to_editor_source(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/src/services/exporter.js").read_text(
+                      encoding="utf-8")
+        self.assertIn("sampleAtFrameCenter = true", source)
+        self.assertIn("const frameSampleOffset = sampleAtFrameCenter ? halfFrame : 0", source)
+        self.assertIn(
+            "const targetTime = rangeStart + frameIndex * frameDuration + frameSampleOffset",
+            source)
+
+    def test_original_source_clip_must_overlap_actual_export_window(self):
+        # Pinned renderer may extend a full export beyond timeline.duration;
+        # the *actual verified output interval* is the correct acceptance bound.
+        # A caller-supplied render at [0,60) excludes later original media.
+        clip = self.project["timelines"][0]["clips"][0]
+        for start, visible in ((60, False), (3600, False), (-10, False),
+                               (-2, True), (59, True), (0, True)):
+            with self.subTest(start=start):
+                clip["startTime"] = start
+                self.save()
+                self.assertEqual(self.verify([{
+                    "start_seconds": 0, "end_seconds": 60
+                }])["actual_original_video_used_on_native_timeline"], visible)
+
+    def test_pinned_video_track_visibility_contract_in_exporter(self):
+        # This exception must fail on a future Velorn change instead of
+        # persisting an invented understanding of native solo/mute behavior.
+        source = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        visibility = (source / "utils/videoTrackVisibility.js").read_text(
+            encoding="utf-8")
+        eligible = (source / "utils/exportVideoClipEligibility.js").read_text(
+            encoding="utf-8")
+        exporter = (source / "services/exporter.js").read_text(
+            encoding="utf-8")
+        self.assertIn("track.solo === true", visibility)
+        self.assertIn("if (track.visible === false) return false", visibility)
+        self.assertIn("if (track.muted === true) return false", visibility)
+        self.assertIn("if (anySolo && track.solo !== true) return false", visibility)
+        self.assertIn("hasVideoSolo(tracks)", eligible)
+        self.assertIn("isVideoTrackVisible(track, anyVideoSolo)", eligible)
+        self.assertIn("getRenderableVideoClipIds({", exporter)
+
+    def test_original_video_track_mute_and_solo_require_actual_visibility(self):
+        # Both lanes are legal original native video tracks. Solo monitoring
+        # overrides the normal visible/eye flag without changing the saved
+        # original source clip, so the verifier must honor the renderer's
+        # chosen active visual lane.
+        timeline = self.project["timelines"][0]
+        source_track = timeline["tracks"][0]
+        another_track = {"id": "video-2", "type": "video", "visible": True}
+        timeline["tracks"].append(another_track)
+        def check(expected):
+            self.save()
+            proof = self.verify([{"start_seconds": 0, "end_seconds": 4}])
+            self.assertEqual(
+                proof["actual_original_video_used_on_native_timeline"], expected)
+            self.assertEqual(
+                proof["physically_verified_native_source_clip_count"],
+                int(expected))
+        check(True)
+        source_track["muted"] = True
+        check(False)
+        source_track["muted"] = False
+        check(True)
+        source_track["muted"] = "false"
+        check(False)
+        source_track["muted"] = False
+        another_track["solo"] = True
+        check(False)
+        source_track["solo"] = True
+        check(True)
+        source_track["solo"] = False
+        check(False)
+        another_track["solo"] = False
+        check(True)
+        source_track["solo"] = 1
+        check(False)
+        source_track["solo"] = False
+        check(True)
+
+    def test_source_visibility_follows_pinned_native_playback_window(self):
+        source = Path(__file__).resolve().parents[1] / "third_party/velorn"
+        eligibility = (source / "src/utils/exportVideoClipEligibility.js").read_text(
+            encoding="utf-8")
+        visibility = (source / "electron/audioMixEligibility.mjs").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            "import { getClipPlaybackWindow } from './compoundPlayback.mjs'",
+            eligibility)
+        self.assertIn("const { start: clipStart, end: clipEnd } =",
+                      eligibility)
+        self.assertIn("getClipPlaybackWindow(clip)", eligibility)
+        self.assertIn("export const getClipPlaybackWindow = (clip) => {",
+                      visibility)
+        self.assertIn("start: Math.max(origin,", visibility)
+        self.assertIn("end: Math.min(origin + duration,", visibility)
+
+        clip = self.project["timelines"][0]["clips"][0]
+        def matches(begin, end):
+            self.save()
+            return self.verify([{
+                "start_seconds": begin, "end_seconds": end,
+            }])["actual_original_video_used_on_native_timeline"]
+        self.assertTrue(matches(0, 4))
+        clip["playbackWindowStart"] = 4
+        self.assertFalse(matches(0, 4))
+        clip["playbackWindowStart"] = 3.5
+        self.assertTrue(matches(0, 4))
+        self.assertFalse(matches(0, 3))
+        clip["playbackWindowEnd"] = 2
+        self.assertFalse(matches(0, 4))
+        clip["playbackWindowStart"] = 0
+        self.assertTrue(matches(0, 4))
+        self.assertTrue(matches(1, 3))
+        self.assertFalse(matches(2, 4))
+        for field in ("playbackWindowStart", "playbackWindowEnd"):
+            original = clip[field]
+            for invalid in (None, True, "0", float("nan"), float("inf")):
+                with self.subTest(field=field, invalid=repr(invalid)):
+                    clip[field] = invalid
+                    self.assertFalse(matches(0, 4))
+            clip[field] = original
+        clip.pop("playbackWindowStart")
+        clip.pop("playbackWindowEnd")
+        self.assertTrue(matches(0, 4))
+
+    def test_unverified_native_cache_must_not_impersonate_original_video_frames(self):
+        # The editor's default useCachedRenders=true may replace the native
+        # original source with an unrelated baked or legacy cache URL. Native
+        # asset SHA and original clip ID are not proof of cache derivation.
+        source = (Path(__file__).resolve().parents[1] /
+                  "third_party/velorn/src/services/exporter.js").read_text(
+                      encoding="utf-8")
+        self.assertIn("useCachedRenders = true", source)
+        self.assertIn("if (clip.cacheStatus !== 'cached') continue", source)
+        self.assertIn("cachedVideoSources.set(clip.id, clip.cacheUrl)", source)
+        self.assertIn("cachedVideoSources.set(clip.id, fileUrl)", source)
+        self.assertIn("const cachedSourceUrl = cachedVideoSources.get(clip.id)", source)
+        self.assertIn("const usingCachedRender = !!cachedSourceUrl", source)
+        clip = self.project["timelines"][0]["clips"][0]
+        def covered():
+            self.save()
+            return self.verify([{
+                "start_seconds": 0, "end_seconds": 4
+            }])["actual_original_video_used_on_native_timeline"]
+        self.assertTrue(covered())
+        for key in ("cacheUrl", "cachePath"):
+            clip["cacheStatus"] = "cached"
+            clip["cacheKind"] = "full"
+            clip[key] = ("file:///unverified/foreign-baked-media.mp4"
+                         if key == "cacheUrl" else "unverified-foreign-bake.mp4")
+            self.save()
+            with self.subTest(active_cache=key):
+                self.assertTrue(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+                self.assertFalse(covered())
+            clip.pop(key)
+        clip["cacheStatus"] = "stale"
+        clip["cacheUrl"] = "file:///unverified/foreign-baked-media.mp4"
+        self.assertTrue(covered())
+        clip["cacheStatus"] = "cached"
+        clip["cacheUrl"] = ""
+        self.assertTrue(covered())
+        clip["cacheUrl"] = "file:///unverified/foreign-baked-media.mp4"
+        clip["cacheKind"] = "mask"
+        self.assertFalse(covered())
+
+    def test_wholly_cropped_native_video_cannot_prove_original_picture(self):
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js").read_text(
+                        encoding="utf-8")
+        self.assertIn("export const applyClipCrop = (ctx, rect, transform) => {",
+                      exporter)
+        self.assertIn("Math.max(0, rect.width - left - right)", exporter)
+        self.assertIn("Math.max(0, rect.height - top - bottom)", exporter)
+        self.assertIn("const getVisibleLocalRect =", exporter)
+        clip = self.project["timelines"][0]["clips"][0]
+        def visible(left=0, right=0, top=0, bottom=0):
+            clip["transform"] = {"cropLeft": left, "cropRight": right,
+                                 "cropTop": top, "cropBottom": bottom}
+            self.save()
+            return self.verify([{"start_seconds": 0, "end_seconds": 4}])[
+                "actual_original_video_used_on_native_timeline"]
+        self.assertTrue(visible())
+        self.assertTrue(visible(left=45, right=45))
+        self.assertFalse(visible(left=50, right=50))
+        self.assertFalse(visible(left=100))
+        self.assertFalse(visible(top=100))
+        self.assertFalse(visible(top=60, bottom=40))
+        self.assertTrue(visible(top=49, bottom=50))
+        for invalid in (None, "0", True, float("inf"), float("nan")):
+            with self.subTest(invalid=repr(invalid)):
+                self.assertFalse(visible(left=invalid))
+
+    def test_completely_transparent_native_source_does_not_count_as_visible(self):
+        # Pinned exporter treats transform.opacity as percent, so zero
+        # hides the imported footage even when its track is visible.
+        clip = self.project["timelines"][0]["clips"][0]
+        for value in (0, -1, float("nan"), "0", None):
+            with self.subTest(opacity=repr(value)):
+                clip["transform"] = {"opacity": value}
+                self.save()
+                self.assertFalse(self.verify([{
+                    "start_seconds": 0, "end_seconds": 4
+                }])["actual_original_video_used_on_native_timeline"])
+        clip["transform"] = {"opacity": 55}
+        self.save()
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_native_opacity_animation_can_hide_entire_original_source(self):
+        # Actual pinned keyframes getValueAtTime: a sole alpha keyframe
+        # overrides static 100% for the entire clip, including before/after
+        # its authored keyframe time. Multiple zeros are also identically
+        # zero, independent of interpolation easing.
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {"opacity": 100}
+        output = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 96
+        }]
+        for frames in (
+            [{"time": 2.0, "value": 0}],
+            [{"time": 0, "value": 0, "easing": "linear"},
+             {"time": 4, "value": 0, "easing": "easeOut"}],
+            [{"time": 0, "value": 0, "easing": "cubic-bezier(0,1,1,0)"},
+             {"time": 4, "value": 0, "easing": "hold"}],
+        ):
+            with self.subTest(zero_animation=repr(frames)):
+                clip["keyframes"] = {"opacity": frames}
+                self.save()
+                self.assertFalse(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+                self.assertFalse(self.verify(output)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+        # Nonzero animated alpha is not rejected solely because a
+        # keyframe track exists; independent source and frame checks remain.
+        clip["keyframes"] = {"opacity": [
+            {"time": 0, "value": 100},
+            {"time": 4, "value": 25}
+        ]}
+        self.save()
+        self.assertTrue(self.verify(output)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        for bad in (
+            {"opacity": "transparent"},
+            {"opacity": [{"time": 1, "value": "0"}]},
+            {"opacity": [{"time": float("nan"), "value": 0}]},
+            ["invalid"],
+        ):
+            with self.subTest(malformed=repr(bad)):
+                clip["keyframes"] = bad
+                self.save()
+                self.assertFalse(self.verify(output)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_constant_animated_native_crop_can_remove_every_source_pixel(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        clip["transform"] = {
+            "opacity": 100, "cropLeft": 0, "cropRight": 0,
+            "cropTop": 0, "cropBottom": 0
+        }
+        window = [{
+            "start_seconds": 0, "end_seconds": 4,
+            "video_frame_rate": 24.0, "decoded_video_frame_count": 96
+        }]
+        for crop in (
+            {"cropLeft": [{"time": 0, "value": 100}]},
+            {"cropTop": [{"time": 0, "value": 100}]},
+            {"cropLeft": [{"time": 0, "value": 60},
+                          {"time": 4, "value": 60}],
+             "cropRight": [{"time": 0, "value": 40},
+                           {"time": 4, "value": 40}]},
+            {"cropBottom": [{"time": 0, "value": 100,
+                             "easing": "hold"}]},
+        ):
+            with self.subTest(fully_hidden_crop=repr(crop)):
+                clip["keyframes"] = crop
+                self.save()
+                self.assertFalse(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+                self.assertFalse(self.verify(window)[
+                    "actual_original_video_sampled_at_verified_output_frame"])
+        clip["keyframes"] = {"cropLeft": [
+            {"time": 0, "value": 10},
+            {"time": 4, "value": 10}
+        ]}
+        self.save()
+        self.assertTrue(self.verify(window)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+        clip["keyframes"] = {"cropLeft": [
+            {"time": 0, "value": "100"}
+        ]}
+        self.save()
+        self.assertFalse(self.verify(window)[
+            "actual_original_video_sampled_at_verified_output_frame"])
+
+    def test_pinned_keyframed_opacity_overrides_native_base_alpha(self):
+        root = Path(__file__).resolve().parents[1] / "third_party/velorn/src"
+        keyframes = (root / "utils/keyframes.js").read_text(encoding="utf-8")
+        exporter = (root / "services/exporter.js").read_text(encoding="utf-8")
+        start = keyframes.index("export function getAnimatedTransform(")
+        end = keyframes.index("export function getAnimatedAdjustmentSettings(", start)
+        actual_native_animation = keyframes[start:end]
+        self.assertIn("const propKeyframes = keyframes[prop.id]", actual_native_animation)
+        self.assertIn("getValueAtTime(", actual_native_animation)
+        self.assertIn("animatedTransform[prop.id] = getValueAtTime(", actual_native_animation)
+        alpha = keyframes.index("export function getValueAtTime(")
+        next_function = keyframes.index("function parseHexColor(", alpha)
+        actual_native_alpha = keyframes[alpha:next_function]
+        self.assertIn("return keyframes[0].value", actual_native_alpha)
+        self.assertIn("prevKeyframe.value +", actual_native_alpha)
+        self.assertIn("getAnimatedTransform(", exporter)
+        self.assertIn("clipTransform.opacity / 100", exporter)
+        self.assertIn("{ id: 'cropLeft'", keyframes)
+        self.assertIn("{ id: 'cropRight'", keyframes)
+        self.assertIn("{ id: 'cropTop'", keyframes)
+        self.assertIn("{ id: 'cropBottom'", keyframes)
+        self.assertIn("applyClipCrop(", exporter)
+
+    def test_pinned_exporter_uses_source_trim_for_video_frame_sampling(self):
+        # Source exception must not silently survive a Velorn upgrade that
+        # changes the editor's treatment of original clip source in-points.
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js").read_text(
+                        encoding="utf-8")
+        start = exporter.index("const getClipCursorEntry = (clip) => {")
+        end = exporter.index("const closeClipCursorEntry", start)
+        method = exporter[start:end]
+        self.assertIn("clip.trimStart || 0", method)
+        self.assertIn("getClipPlaybackWindow(clip).end", method)
+        self.assertIn("createClipFrameCursor({", method)
+        self.assertLess(method.index("clip.trimStart || 0"),
+                        method.index("createClipFrameCursor({"))
+
+    def test_native_source_trim_must_reach_actual_original_video_frames(self):
+        # An owner-copy SHA and a timeline overlap alone cannot prove source
+        # pixels were available. A model can request trimStart=600 from a real
+        # four-second original: that is not a visible edited original video.
+        clip = self.project["timelines"][0]["clips"][0]
+        for trim, accepted in (
+            (0, True), (3.75, True), (4, False), (5, False),
+            (-0.01, False), (float("nan"), False), (float("inf"), False),
+            (True, False), ("0", False), (None, False),
+        ):
+            with self.subTest(trim=repr(trim)):
+                clip["trimStart"] = trim
+                self.save()
+                proof = self.verify([{
+                    "start_seconds": 0, "end_seconds": 4,
+                }])
+                self.assertEqual(proof[
+                    "actual_original_video_used_on_native_timeline"], accepted)
+                self.assertEqual(proof[
+                    "physically_verified_native_source_clip_count"],
+                    1 if accepted else 0)
+        clip.pop("trimStart")
+        self.save()
+        self.assertTrue(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_delivered_footage_proof_requires_measured_source_duration(self):
+        # A manifest hash authenticates the file bytes, not where its stream
+        # ends; project-only custody remains distinguishable from delivery.
+        self.manifest[0].pop("video_duration_seconds")
+        self.assertTrue(self.verify()[
+            "actual_original_video_used_on_native_timeline"])
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 4,
+        }])["actual_original_video_used_on_native_timeline"])
+        for invalid in (0, -1, float("nan"), float("inf"),
+                        "4", True, 1_000_001):
+            with self.subTest(value=repr(invalid)):
+                self.manifest[0]["video_duration_seconds"] = invalid
+                with self.assertRaisesRegex(ValueError, "duration"):
+                    self.verify([{"start_seconds": 0, "end_seconds": 4}])
+
+    def test_repeated_native_source_clips_must_each_pass_independent_trim(self):
+        timeline = self.project["timelines"][0]
+        second = copy.deepcopy(timeline["clips"][0])
+        second["id"] = "native-clip-trim-outside-source"
+        second["startTime"] = 5
+        second["trimStart"] = 60
+        timeline["clips"].append(second)
+        self.save()
+        receipt = self.verify([{"start_seconds": 0, "end_seconds": 10}])
+        self.assertEqual(receipt["physically_verified_native_source_clip_count"], 1)
+        self.assertEqual(receipt["verified_native_source_clip_proof"][0][
+            "native_clip_id"], "native-clip-88")
+        timeline["clips"][0]["trimStart"] = 12
+        self.save()
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 10
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_multiple_placed_clips_using_same_original_count_separately(self):
+        timeline = self.project["timelines"][0]
+        second = copy.deepcopy(timeline["clips"][0])
+        second["id"] = "native-clip-89"
+        second["startTime"] = 6
+        timeline["clips"].append(second)
+        self.save()
+        proof = self.verify([{"start_seconds": 0, "end_seconds": 10}])
+        self.assertTrue(proof["actual_original_video_used_on_native_timeline"])
+        self.assertEqual(proof["physically_verified_native_source_clip_count"], 2)
+        self.assertEqual(
+            {item["native_clip_id"] for item in
+             proof["verified_native_source_clip_proof"]},
+            {"native-clip-88", "native-clip-89"})
+        partial = self.verify([{"start_seconds": 6, "end_seconds": 8}])
+        self.assertEqual(partial["physically_verified_native_source_clip_count"], 1)
+        self.assertEqual(partial["verified_native_source_clip_proof"][0][
+            "native_clip_id"], "native-clip-89")
+
+    def test_pinned_editor_full_export_extends_past_timeline_duration(self):
+        # electron/mcpServer.js uses max(timeline.duration, all clip ends)
+        # when range=full. Do not reject genuine media at second 3600 just
+        # because the saved project timeline's nominal duration is 60.
+        self.project["timelines"][0]["clips"][0]["startTime"] = 3600
+        self.save()
+        self.assertTrue(self.verify()[
+            "actual_original_video_used_on_native_timeline"])
+        self.assertFalse(self.verify([{
+            "start_seconds": 0, "end_seconds": 60
+        }])["actual_original_video_used_on_native_timeline"])
+        self.assertTrue(self.verify([{
+            "start_seconds": 3600, "end_seconds": 3604
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_verified_export_windows_fail_closed_on_invalid_or_unseen_output(self):
+        self.assertFalse(self.verify([])[
+            "actual_original_video_used_on_native_timeline"])
+        for windows in (
+            "all", [{"start_seconds": True, "end_seconds": 60}],
+            [{"start_seconds": 0, "end_seconds": 0}],
+            [{"start_seconds": 60, "end_seconds": 4}],
+            [{"start_seconds": 0, "end_seconds": float("inf")}],
+            [{"start_seconds": 0, "end_seconds": 60, "path": "/private"}],
+        ):
+            with self.subTest(windows=repr(windows)):
+                with self.assertRaisesRegex(ValueError, "export"):
+                    self.verify(windows)
+        self.assertFalse(self.verify([{
+            "start_seconds": 4, "end_seconds": 8
+        }])["actual_original_video_used_on_native_timeline"])
+        self.assertTrue(self.verify([{
+            "start_seconds": 3, "end_seconds": 8
+        }])["actual_original_video_used_on_native_timeline"])
+
+    def test_malformed_source_time_and_active_duration_fail_closed(self):
+        clip = self.project["timelines"][0]["clips"][0]
+        for start in ("0", True, None, float("nan"), float("inf")):
+            with self.subTest(start=repr(start)):
+                clip["startTime"] = start
+                self.save()
+                self.assertFalse(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+        clip["startTime"] = 0
+        for duration in (None, 0, -1, float("nan"), float("inf")):
+            with self.subTest(duration=repr(duration)):
+                self.project["timelines"][0]["duration"] = duration
+                self.save()
+                with self.assertRaisesRegex(ValueError, "duration"):
+                    self.verify()
+
+    def test_original_media_in_project_but_not_on_timeline_is_not_editing(self):
+        self.project["timelines"][0]["clips"] = []
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_markers_text_titles_and_synthetic_visuals_cannot_replace_source(self):
+        self.project["timelines"][0]["clips"] = [{
+            "id": "text-clip", "type": "text", "assetId": "native-asset-12",
+            "startTime": 0, "duration": 4.0}]
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_dormant_timeline_is_not_the_current_delivered_movie(self):
+        self.project["timelines"][0]["id"] = "unused-timeline"
+        self.project["timelines"].append({
+            "id": "native-timeline-1", "duration": 60.0,
+            "tracks": [{"id": "video-1", "type": "video", "visible": True}],
+            "clips": []})
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_disabled_clip_or_hidden_track_does_not_prove_visible_source(self):
+        current = self.project["timelines"][0]
+        current["clips"][0]["enabled"] = False
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+        current["clips"][0]["enabled"] = True
+        current["tracks"][0]["visible"] = False
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+        current["tracks"][0]["visible"] = True
+        current["clips"][0]["trackId"] = "invented-video-track"
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_spoofed_provenance_without_import_refused(self):
+        self.project["assets"][0]["settings"]["importedViaMcp"] = False
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_wrong_or_missing_copy_refused_even_if_asset_path_looks_native(self):
+        self.copy.write_bytes(b"other-content")
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+        self.copy.unlink()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_external_symlink_or_direct_source_path_is_not_project_copy(self):
+        self.project["assets"][0]["absolutePath"] = str(self.src)
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+        link = self.owned / "media" / "link.mp4"
+        link.symlink_to(self.src)
+        self.project["assets"][0]["absolutePath"] = str(link)
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_native_exporter_path_precedence_cannot_borrow_other_project_copy(self):
+        # A valid secondary 'path' must not rescue a malicious/invalid
+        # absolutePath when pinned Velorn selects absolutePath first.
+        asset = self.project["assets"][0]
+        asset["path"] = "media/original.mp4"
+        for bad_absolute in (
+            str(self.sources / "unrelated.mp4"),
+            str(self.src),
+            str(self.projects / "other-project" / "lost.mp4"),
+        ):
+            with self.subTest(absolute=bad_absolute):
+                asset["absolutePath"] = bad_absolute
+                self.save()
+                self.assertFalse(self.verify([{
+                    "start_seconds": 0, "end_seconds": 4
+                }])["actual_original_video_used_on_native_timeline"])
+        wrong_copy = self.owned / "media" / "another.mp4"
+        wrong_copy.write_bytes(b"not the caller original frames")
+        asset["absolutePath"] = str(wrong_copy)
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+        # When the authoritative absolutePath genuinely resolves to the
+        # right copied file, an unrelated secondary field must not hijack it.
+        asset["absolutePath"] = str(self.copy)
+        asset["path"] = "media/does-not-exist.mp4"
+        self.save()
+        self.assertTrue(self.verify()["actual_original_video_used_on_native_timeline"])
+
+        # Absence/empty absolutePath legitimately enables the relative path
+        # branch in getExportAssetPath. It still stays under the owned root.
+        for absence in (None, "", "   "):
+            with self.subTest(absence=repr(absence)):
+                if absence is None:
+                    asset.pop("absolutePath", None)
+                else:
+                    asset["absolutePath"] = absence
+                asset["path"] = "media/original.mp4"
+                self.save()
+                self.assertTrue(self.verify()[
+                    "actual_original_video_used_on_native_timeline"])
+
+    def test_vendored_native_exporter_has_authoritative_path_precedence(self):
+        exporter = (Path(__file__).resolve().parents[1] /
+                    "third_party/velorn/src/services/exporter.js").read_text(
+                        encoding="utf-8")
+        start = exporter.index("async function getExportAssetPath(")
+        end = exporter.index("async function getExportAssetSignature(", start)
+        segment = exporter[start:end]
+        self.assertIn("if (typeof asset.absolutePath === 'string'", segment)
+        self.assertIn("return asset.absolutePath", segment)
+        self.assertIn("if (asset.path)", segment)
+        self.assertLess(segment.index("return asset.absolutePath"),
+                        segment.index("if (asset.path)"))
+
+    def test_untrusted_project_metadata_cannot_select_extra_host_paths(self):
+        self.project["assets"][0]["settings"]["sourcePath"] = (
+            "/not-owner-provided/unrelated-private-file.mp4")
+        self.save()
+        result = self.verify()
+        self.assertFalse(result["actual_original_video_used_on_native_timeline"])
+
+    def test_changed_original_hash_fails_closed(self):
+        self.src.write_bytes(b"changed-after-attestation")
+        with self.assertRaisesRegex(ValueError, "changed"):
+            self.verify()
+
+    def test_empty_or_invented_manifest_never_approves_film(self):
+        self.assertFalse(verify_original_footage_on_native_timeline(
+            self.projects, [self.saved], [])[
+                "actual_original_video_used_on_native_timeline"])
+        with self.assertRaises(ValueError):
+            verify_original_footage_on_native_timeline(
+                self.projects, [self.saved],
+                [{"path": str(self.src), "sha256": "x" * 64}])
+
+    def test_ambiguous_native_asset_timeline_track_and_clip_ids_are_not_proof(self):
+        # An editor may resolve duplicate IDs differently from the acceptance
+        # verifier. Reject every ambiguity instead of selecting a favorable one.
+        for category in ("asset", "timeline", "track", "clip"):
+            with self.subTest(category=category):
+                project = copy.deepcopy(self._original_project)
+                timeline = project["timelines"][0]
+                if category == "asset":
+                    project["assets"].append({
+                        "id": project["assets"][0]["id"],
+                        "type": "video", "settings": {}})
+                elif category == "timeline":
+                    project["timelines"].append({
+                        "id": timeline["id"], "tracks": [], "clips": []})
+                elif category == "track":
+                    timeline["tracks"].append({
+                        "id": timeline["tracks"][0]["id"],
+                        "type": "video", "visible": False})
+                else:
+                    timeline["clips"].append({
+                        "id": timeline["clips"][0]["id"], "type": "text",
+                        "startTime": 0, "duration": 4.0})
+                self.project = project
+                self.save()
+                with self.assertRaisesRegex(ValueError, "ambiguous"):
+                    self.verify()
+
+    def test_nonboolean_visibility_and_enabled_values_are_not_visible_proof(self):
+        # The upstream JS editor uses `!== false` for fallback display;
+        # this verifier deliberately requires actual booleans to reject
+        # malformed saved project state instead of relying on coercion.
+        for field in ("track", "clip"):
+            for falsey_value in (0, "", None, []):
+                with self.subTest(field=field, value=falsey_value):
+                    self.project = copy.deepcopy(self._original_project)
+                    timeline = self.project["timelines"][0]
+                    if field == "track":
+                        timeline["tracks"][0]["visible"] = falsey_value
+                    else:
+                        timeline["clips"][0]["enabled"] = falsey_value
+                    self.save()
+                    self.assertFalse(
+                        self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_nonfinite_or_missing_source_clip_start_cannot_prove_use(self):
+        for bad_start in (float("nan"), float("inf"), float("-inf"), "0", None):
+            with self.subTest(start=repr(bad_start)):
+                self.project = copy.deepcopy(self._original_project)
+                self.project["timelines"][0]["clips"][0]["startTime"] = bad_start
+                # JSON NaN/Infinity are nonstandard but are sometimes written
+                # by permissive serializers; saved acceptance must fail closed.
+                self.save()
+                self.assertFalse(
+                    self.verify()["actual_original_video_used_on_native_timeline"])
+        self.project = copy.deepcopy(self._original_project)
+        self.project["timelines"][0]["clips"][0].pop("startTime")
+        self.save()
+        self.assertFalse(self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_negative_start_is_not_automatically_invalid(self):
+        # A clip can cross timeline time zero: -1 start + 4 duration
+        # yields 3 seconds of visible footage. Temporal-overlap validation
+        # belongs to the independent active-duration gate.
+        self.project["timelines"][0]["clips"][0]["startTime"] = -1
+        self.save()
+        self.assertTrue(
+            self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_nonfinite_or_non_numeric_source_clip_duration_cannot_prove_use(self):
+        for bad_duration in (float("nan"), float("inf"), float("-inf"), "4", None):
+            with self.subTest(duration=repr(bad_duration)):
+                self.project = copy.deepcopy(self._original_project)
+                self.project["timelines"][0]["clips"][0]["duration"] = bad_duration
+                self.save()
+                self.assertFalse(
+                    self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_hardlinked_original_is_not_an_independent_project_owned_copy(self):
+        # Equal digest and an in-root path are insufficient when the native
+        # project media inode is literally the owner's original video.
+        self.copy.unlink()
+        try:
+            os.link(self.src, self.copy)
+        except OSError as exc:
+            self.skipTest(f"Filesystem cannot create a hardlink fixture: {exc}")
+        self.assertTrue(os.path.samefile(self.src, self.copy))
+        self.assertFalse(
+            self.verify()["actual_original_video_used_on_native_timeline"])
+
+    def test_duplicate_json_fields_cannot_choose_favorable_provenance(self):
+        # Upstream JSON.stringify does not emit duplicates. A manually forged
+        # native receipt with duplicate project fields is ambiguous.
+        text = self.saved.read_text(encoding="utf-8")
+        anchor = '"currentTimelineId": "native-timeline-1"'
+        self.assertIn(anchor, text)
+        self.saved.write_text(
+            text.replace(anchor, anchor + ', ' + anchor, 1),
+            encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "duplicate JSON"):
+            self.verify()
+
+    def test_export_window_is_not_attributable_across_two_saved_projects(self):
+        # A valid original clip in an unrelated project cannot prove the
+        # actually rendered movie from another project contains that clip.
+        sibling = self.projects / "second-project"
+        sibling.mkdir()
+        second = sibling / "project.comfystudio"
+        second.write_text(json.dumps({
+            "currentTimelineId": "other-active-timeline",
+            "assets": [], "timelines": [{
+                "id": "other-active-timeline", "duration": 4.0,
+                "tracks": [], "clips": []
+            }]
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            verify_original_footage_on_native_timeline(
+                self.projects, [self.saved, second], self.manifest,
+                host_verified_export_windows=[
+                    {"start_seconds": 0, "end_seconds": 4}])
+        # No delivered movie => still no positive proof, even with multiple
+        # projects. This is not a restriction on normal native editing.
+        for path in (self.saved, second):
+            self.assertFalse(verify_original_footage_on_native_timeline(
+                self.projects, [path], self.manifest,
+                host_verified_export_windows=[])[
+                    "actual_original_video_used_on_native_timeline"])
+
+    def test_oversize_project_is_refused_before_json_decode(self):
+        # Sparse on-disk fixture avoids allocating an enormous Python string.
+        with self.saved.open("wb") as target:
+            target.truncate(32 * 1024 * 1024 + 1)
+        with self.assertRaisesRegex(ValueError, "size limit"):
+            self.verify()
+
+    def test_project_path_escape_and_corrupt_native_project_refused(self):
+        outside = self.root / "project.comfystudio"
+        outside.write_text(json.dumps(self.project))
+        with self.assertRaisesRegex(ValueError, "outside"):
+            verify_original_footage_on_native_timeline(
+                self.projects, [outside], self.manifest)
+        self.saved.write_text('{"assets":[],"timelines":null}')
+        with self.assertRaises(ValueError):
+            self.verify()
+
+
+if __name__ == "__main__":
+    unittest.main()
