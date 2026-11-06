@@ -143,6 +143,19 @@ class CapabilityGateway:
         """Only bounded identity/digest and outcome, never raw private media."""
         return copy.deepcopy(self._events)
 
+    def unverified_native_writes(self, *, limit=32, cursor=None):
+        """Trusted host recovery view, never a model-executable capability.
+
+        This does not authorize replay, grant new native tools, or attest any
+        application commit. It exposes only bounded host-generated identities
+        already recorded in the durable attempt journal.
+        """
+        if self._attempt_store is None:
+            raise CapabilityExecutionError(
+                "Crash-recovery inspection requires the installed durable journal")
+        return self._attempt_store.unverified_attempts(
+            limit=limit, cursor=cursor)
+
     async def invoke(self, operation_id, *, revision, inputs, request_id=None):
         """One model-selected operation; never auto-retry uncertain writes.
 
