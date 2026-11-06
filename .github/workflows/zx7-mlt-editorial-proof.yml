@@ -17,6 +17,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Source-attested preview regression reads the exact pinned Velorn
+          # mcpServer.js; the full-suite checkout must include this submodule.
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
