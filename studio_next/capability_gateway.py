@@ -19,6 +19,8 @@ from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
 from .body_editor_mcp import _local_schema_references
 from .capability_attempts import CapabilityAttemptStore
+from .capability_reference_guard import (
+    CapabilityReferenceError, compile_reference_rules, validate_live_references)
 
 
 class CapabilityExecutionError(ValueError):
@@ -49,9 +51,11 @@ class CapabilityGateway:
     """Trusted host-owned source connections, not a model/plugin write proxy.
 
     bindings: namespace -> (connected_session, trusted grants, [prerequisites],
-                             [trusted async or sync fact reader]).
-    The fact reader accepts no model-provided data and returns a mapping of
-    host-attested boolean facts. Missing facts deny prerequisite admission.
+                             [trusted fact reader], [possible effects],
+                             [host live object identity policy]).
+    Source inventory readers must perform independent read-only native
+    observations. Nothing supplied by a model or an engine description can
+    mint grant or reference authority.
     """
 
     def __init__(self, bindings: Mapping, *, attempt_store=None):
@@ -63,12 +67,30 @@ class CapabilityGateway:
         self._bindings = {}
         self._locks = {}
         for namespace, entry in bindings.items():
-            if not isinstance(entry, tuple) or len(entry) not in (2, 3, 4, 5):
+            if not isinstance(entry, tuple) or len(entry) not in (2, 3, 4, 5, 6):
                 raise CapabilityExecutionError("Source requires a real connection and grants")
             session, grants = entry[:2]
             requires = entry[2] if len(entry) >= 3 else {}
             facts = entry[3] if len(entry) >= 4 else None
-            possible_effects = entry[4] if len(entry) == 5 else {}
+            possible_effects = entry[4] if len(entry) >= 5 else {}
+            identity_policy = entry[5] if len(entry) == 6 else None
+            if identity_policy is not None:
+                if (not isinstance(identity_policy, Mapping) or
+                        set(identity_policy) != {"reader", "rules"} or
+                        not callable(identity_policy["reader"]) or
+                        not isinstance(identity_policy["rules"], Mapping) or
+                        not 1 <= len(identity_policy["rules"]) <= 256):
+                    raise CapabilityExecutionError("Invalid trusted native identity policy")
+                compiled = {}
+                try:
+                    for name, rules in identity_policy["rules"].items():
+                        if not isinstance(name, str) or not 1 <= len(name) <= 160:
+                            raise CapabilityReferenceError("invalid_host_reference_policy")
+                        compiled[name] = compile_reference_rules(rules)
+                except CapabilityReferenceError as exc:
+                    raise CapabilityExecutionError(str(exc)) from exc
+                identity_policy = {"reader": identity_policy["reader"],
+                                   "rules": compiled}
             if (not callable(getattr(session, "list_tools", None)) or
                     not callable(getattr(session, "call_tool", None)) or
                     not (isinstance(grants, Mapping) or callable(grants)) or
@@ -83,7 +105,8 @@ class CapabilityGateway:
             grant_source = grants if callable(grants) else dict(grants)
             self._bindings[namespace] = (session, grant_source,
                                          copy.deepcopy(requires), facts,
-                                         copy.deepcopy(possible_effects))
+                                         copy.deepcopy(possible_effects),
+                                         identity_policy)
             self._locks[namespace] = asyncio.Lock()
         self._fabric = None
         self._events = []
@@ -126,7 +149,7 @@ class CapabilityGateway:
         self._current()
         if namespace not in self._bindings:
             raise CapabilityExecutionError("Unknown connected creative engine")
-        _, _, _, reader, _ = self._bindings[namespace]
+        _, _, _, reader, _, _ = self._bindings[namespace]
         if reader is None:
             raise CapabilityExecutionError("Missing trusted source state reader")
         facts = reader()
@@ -174,7 +197,8 @@ class CapabilityGateway:
             # Revalidate ONLY the selected engine, not every connected
             # creative app on each frame/operation. Cross-domain scaling
             # must not make single-engine edits O(all connected tools).
-            session, _, conditions, fact_reader, effects = self._bindings[namespace]
+            session, _, conditions, fact_reader, effects, identity = (
+                self._bindings[namespace])
             grants = self._live_grants(namespace)
             advertised = await discover_all_live_tools(session)
             fresh = CapabilityFabric({namespace: (
@@ -225,6 +249,29 @@ class CapabilityGateway:
                 if not readiness["admissible"]:
                     raise CapabilityExecutionError(
                         "Machine prerequisite absent or unknown; inspect host state")
+            if record["access"] == "write" and identity is not None:
+                rules = identity["rules"].get(name)
+                if rules is not None:
+                    # The host owns the inventory reader. Fetch a NEW native
+                    # read-only snapshot within the source lock, immediately
+                    # before admitting any non-idempotent write. Cached model
+                    # narrative, source filenames and old object IDs are not
+                    # substitutes for the live installed engine's IDs.
+                    try:
+                        inventory = identity["reader"]()
+                        if inspect.isawaitable(inventory):
+                            inventory = await inventory
+                        validate_live_references(inputs,rules,inventory)
+                    except CapabilityReferenceError as exc:
+                        # Only a categorical reason is exposed; raw private
+                        # names/IDs and inventory never enter the evidence.
+                        raise CapabilityExecutionError(str(exc)) from exc
+                    except Exception:
+                        # Native reader exceptions can contain private paths
+                        # and raw media filenames. Failed observations do not
+                        # authorize a write, and are not echoed to the brain.
+                        raise CapabilityExecutionError(
+                            "native_identity_inventory_unavailable") from None
             digest = hashlib.sha256(encoded_inputs).hexdigest()
             durable_write = (self._attempt_store is not None and
                              record["access"] == "write")
