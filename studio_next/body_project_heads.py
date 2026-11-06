@@ -155,63 +155,121 @@ class DocumentHeadLedger:
 
     def select(self, *, project_id, tool_id, input_name, document_sha256,
                expected_revision_id, expected_document_sha256):
-        """Atomically select a physically present, host-validated plan revision.
+        """Select one immutable plan using the same atomic engine as a bundle.
 
-        A stale parent is a conflict even if the proposed plan bytes are valid.
-        Selecting a historical document under today's expected parent is a
-        NEW revision (undo); neither historical rows nor files are overwritten.
+        This keeps the existing single-input host API and recorded history
+        format unchanged; no separate revision implementation can drift.
+        """
+        result = self.select_bundle(project_id=project_id, selections=[{
+            "tool_id": tool_id, "input_name": input_name,
+            "document_sha256": document_sha256,
+            "expected_revision_id": expected_revision_id,
+            "expected_document_sha256": expected_document_sha256,
+        }])
+        return result["revisions"][0]
+
+    def select_bundle(self, *, project_id, selections):
+        """Atomically CAS several authorized creative instrument plan heads.
+
+        All candidate *immutable* documents must have been individually
+        checked against the actual installed tool and original SHA bytes by
+        the trusted host BEFORE calling this method. The SQLite transaction
+        rechecks EVERY parent before changing ANY head; a stale audio plan
+        cannot leave a new video head partially published, or vice versa.
+
+        This is plan selection, NOT evidence of native editor state, rights,
+        sample/frame fidelity or a completed cross-engine render. It never
+        calls native engines and does not erase old versions.
         """
         project = _name(project_id, _PROJECT, "project identity")
-        tool = _name(tool_id, _TOOL, "installed tool identity")
-        slot = _name(input_name, _INPUT, "document input identity")
-        document = _digest(document_sha256, "Document")
-        expected = _digest(expected_revision_id, "Expected revision", nullable=True)
-        previous = _digest(expected_document_sha256, "Expected document", nullable=True)
-        if (expected is None) != (previous is None):
-            raise ValueError("Project head and base document must both be specified or both be null")
+        if type(selections) not in (list, tuple) or not 1 <= len(selections) <= 32:
+            raise ValueError("Creative plan bundle must contain 1 to 32 instrument inputs")
+        required = frozenset({
+            "tool_id", "input_name", "document_sha256",
+            "expected_revision_id", "expected_document_sha256"})
+        prepared = []
+        seen = set()
+        for item in selections:
+            if type(item) is not dict or set(item) != required:
+                raise ValueError("Bundle entry needs only exact, host-validated input fields")
+            tool = _name(item["tool_id"], _TOOL, "installed tool identity")
+            slot = _name(item["input_name"], _INPUT, "document input identity")
+            document = _digest(item["document_sha256"], "Document")
+            expected = _digest(item["expected_revision_id"], "Expected revision",
+                               nullable=True)
+            previous = _digest(item["expected_document_sha256"],
+                               "Expected document", nullable=True)
+            if (expected is None) != (previous is None):
+                raise ValueError(
+                    "Project head and base document must both be specified or both be null")
+            key = (tool, slot)
+            if key in seen:
+                raise ValueError("One bundle cannot select the same instrument input twice")
+            seen.add(key)
+            prepared.append((tool, slot, document, expected, previous))
+
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
                 self._create_tables(db)
-                row = db.execute("""SELECT revision_id,document_sha256
-                    FROM creative_document_heads
-                    WHERE project_id=? AND tool_id=? AND input_name=?""",
-                    (project,tool,slot)).fetchone()
-                head = self._verify_head(db,row,project,tool,slot)
-                if ((head["revision_id"] if head else None) != expected or
-                    (head["document_sha256"] if head else None) != previous):
-                    raise DocumentHeadConflict(
-                        "Stale creative plan head; inspect and explicitly rebase or undo")
-                if head and head["document_sha256"] == document:
-                    raise DocumentHeadConflict("No changed creative document to select")
-                revision = _event_digest(project,tool,slot,expected,previous,document)
+                revisions = []
+                # FIRST validate every current head and every expected parent.
+                # No SQL writes to project heads or history occur in this pass.
+                for tool, slot, document, expected, previous in prepared:
+                    row = db.execute("""SELECT revision_id,document_sha256
+                        FROM creative_document_heads
+                        WHERE project_id=? AND tool_id=? AND input_name=?""",
+                        (project,tool,slot)).fetchone()
+                    head = self._verify_head(db, row, project, tool, slot)
+                    if ((head["revision_id"] if head else None) != expected or
+                        (head["document_sha256"] if head else None) != previous):
+                        raise DocumentHeadConflict(
+                            "Stale creative plan bundle; no instrument heads selected")
+                    if head and head["document_sha256"] == document:
+                        raise DocumentHeadConflict(
+                            "No changed creative document to select in bundle")
+                    revision = _event_digest(
+                        project,tool,slot,expected,previous,document)
+                    revisions.append({
+                        "project_id": project, "tool_id": tool,
+                        "input_name": slot, "revision_id": revision,
+                        "parent_revision_id": expected,
+                        "document_sha256": document,
+                        "host_plan_head_selected": True,
+                        "native_project_state_applied_or_verified": False,
+                        "media_source_rights_independently_verified": False,
+                    })
+                # THEN publish all heads/history rows inside ONE transaction.
+                # A process death or failed insert cannot expose a subset.
                 instant = time.time_ns()
-                db.execute("""INSERT INTO creative_document_revisions
-                    (project_id,tool_id,input_name,revision_id,parent_revision_id,
-                    parent_document_sha256,document_sha256,recorded_ns)
-                    VALUES (?,?,?,?,?,?,?,?)""",
-                    (project,tool,slot,revision,expected,previous,document,instant))
-                db.execute("""INSERT INTO creative_document_heads
-                    (project_id,tool_id,input_name,revision_id,
-                     document_sha256,modified_ns)
-                    VALUES(?,?,?,?,?,?)
-                    ON CONFLICT(project_id,tool_id,input_name)
-                    DO UPDATE SET revision_id=excluded.revision_id,
-                                  document_sha256=excluded.document_sha256,
-                                  modified_ns=excluded.modified_ns""",
-                    (project,tool,slot,revision,document,instant))
+                for record, (_, _, document, expected, previous) in zip(
+                        revisions, prepared):
+                    tool, slot = record["tool_id"], record["input_name"]
+                    revision = record["revision_id"]
+                    db.execute("""INSERT INTO creative_document_revisions
+                        (project_id,tool_id,input_name,revision_id,parent_revision_id,
+                        parent_document_sha256,document_sha256,recorded_ns)
+                        VALUES (?,?,?,?,?,?,?,?)""",
+                        (project,tool,slot,revision,expected,previous,document,instant))
+                    db.execute("""INSERT INTO creative_document_heads
+                        (project_id,tool_id,input_name,revision_id,
+                         document_sha256,modified_ns)
+                        VALUES(?,?,?,?,?,?)
+                        ON CONFLICT(project_id,tool_id,input_name)
+                        DO UPDATE SET revision_id=excluded.revision_id,
+                                      document_sha256=excluded.document_sha256,
+                                      modified_ns=excluded.modified_ns""",
+                        (project,tool,slot,revision,document,instant))
                 db.execute("COMMIT")
             except BaseException:
                 if db.in_transaction:
                     db.execute("ROLLBACK")
                 raise
         return {
-            "project_id":project,"tool_id":tool,"input_name":slot,
-            "revision_id":revision,"parent_revision_id":expected,
-            "document_sha256":document,
-            "host_plan_head_selected":True,
-            "native_project_state_applied_or_verified":False,
-            "media_source_rights_independently_verified":False,
+            "project_id": project, "revisions": revisions,
+            "atomic_plan_head_selection": True,
+            "native_project_state_applied_or_verified": False,
+            "media_source_rights_independently_verified": False,
         }
 
     def heads(self, project_id, *, limit=50, offset=0):
