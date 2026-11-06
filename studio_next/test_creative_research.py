@@ -97,6 +97,33 @@ class CreativeResearchTests(unittest.TestCase):
         self.assertEqual(params["filter"],["type:journal-article"])
         self.assertEqual(urlsplit(provider.calls[0]).hostname,"api.crossref.org")
 
+    def test_untrusted_crossref_publication_shape_cannot_crash_or_forge_a_year(self):
+        cases = (
+            "2026", 2026, False, [],
+            {"date-parts": "2026"},
+            {"date-parts": [["2026"]]},
+            {"date-parts": [[True]]},
+            {"date-parts": [[10000]]},
+            {"date-parts": [[]]},
+        )
+        for malformed in cases:
+            with self.subTest(publication=repr(malformed)):
+                provider = FakePublicAPIs()
+                provider.response = {"message": {"items": [{
+                    "type": "journal-article",
+                    "DOI": "10.1234/creative-research",
+                    "title": ["Potential media study"],
+                    "published": malformed,
+                }]}}
+                result = CreativeResearch(provider).studies(
+                    query="visual storytelling", limit=1)
+                self.assertEqual(len(result["results"]), 1)
+                self.assertIsNone(result["results"][0]["year"])
+                self.assertFalse(result["results"][0][
+                    "study_results_verified"])
+                self.assertFalse(result["results"][0][
+                    "peer_review_independently_verified"])
+
     def test_artic_filter_excludes_copyrighted_artworks(self):
         provider = FakePublicAPIs()
         provider.response = {"data": [
