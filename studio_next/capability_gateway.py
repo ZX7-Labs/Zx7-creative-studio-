@@ -257,15 +257,21 @@ class CapabilityGateway:
                     # before admitting any non-idempotent write. Cached model
                     # narrative, source filenames and old object IDs are not
                     # substitutes for the live installed engine's IDs.
-                    inventory = identity["reader"]()
-                    if inspect.isawaitable(inventory):
-                        inventory = await inventory
                     try:
+                        inventory = identity["reader"]()
+                        if inspect.isawaitable(inventory):
+                            inventory = await inventory
                         validate_live_references(inputs,rules,inventory)
                     except CapabilityReferenceError as exc:
                         # Only a categorical reason is exposed; raw private
                         # names/IDs and inventory never enter the evidence.
                         raise CapabilityExecutionError(str(exc)) from exc
+                    except Exception:
+                        # Native reader exceptions can contain private paths
+                        # and raw media filenames. Failed observations do not
+                        # authorize a write, and are not echoed to the brain.
+                        raise CapabilityExecutionError(
+                            "native_identity_inventory_unavailable") from None
             digest = hashlib.sha256(encoded_inputs).hexdigest()
             durable_write = (self._attempt_store is not None and
                              record["access"] == "write")
