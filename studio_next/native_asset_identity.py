@@ -68,29 +68,87 @@ def inventory_from_native_text(texts):
 
 
 def check_native_asset_reference(inputs, inventory):
-    """Return structured source error or None; no native edit is executed.
+    """Validate every EXPLICIT native asset reference against a fresh READ.
 
-    The Velorn placement API permits ID/name/latest selection. At least one
-    known real asset must be imported; any explicitly supplied ID must match
-    the actual inventory. A partial response cannot prove an ID is absent,
-    so reject with incomplete-inventory rather than inventing certainty.
+    Source references can live in a single tool input, batch assetIds /
+    assetNames, or entries under a batch assets list. Checking only a top-level
+    assetId allowed invented nested IDs through to stateful native operations.
+    No media/source path or model-chosen name is ever placed into an error code.
+
+    This does NOT infer an asset from a filename, pick a creative shot or
+    claim that the native timeline changed. The host independently reads
+    get_assets before invoking any native placement with the prerequisite.
     """
     if not isinstance(inputs, dict) or not isinstance(inventory, dict):
         raise NativeAssetEvidenceError("Native source validation needs typed inputs")
     if inventory["total"] == 0:
         return "native_project_has_no_imported_assets"
-    identity = inputs.get("assetId")
-    if identity is not None:
-        if not isinstance(identity, str) or not identity.strip():
+
+    def known_id(value):
+        if not isinstance(value, str) or not value.strip():
             return "invalid_native_asset_id"
-        if identity not in inventory["ids"]:
+        if value not in inventory["ids"]:
             return ("native_asset_inventory_incomplete" if not inventory["complete"]
                     else "asset_id_not_in_native_inventory")
-    name = inputs.get("assetName")
-    if name is not None and not isinstance(name, str):
-        return "invalid_native_asset_name"
-    if name is not None and name and not any(name.casefold() in x.casefold()
-                                              for x in inventory["names"]):
-        return ("native_asset_inventory_incomplete" if not inventory["complete"]
-                else "asset_name_not_in_native_inventory")
+        return None
+
+    def known_name(value):
+        if not isinstance(value, str) or not value.strip():
+            return "invalid_native_asset_name"
+        if not any(value.casefold() in name.casefold()
+                   for name in inventory["names"]):
+            return ("native_asset_inventory_incomplete" if not inventory["complete"]
+                    else "asset_name_not_in_native_inventory")
+        return None
+
+    # Preserve the upstream source-selection contract: a caller may request
+    # the native editor's current "latest" choice without naming an asset.
+    # The host does not manufacture an ID for that choice.
+    if "assetId" in inputs and inputs["assetId"] is not None:
+        issue = known_id(inputs["assetId"])
+        if issue:
+            return issue
+    if "assetName" in inputs and inputs["assetName"] is not None:
+        issue = known_name(inputs["assetName"])
+        if issue:
+            return issue
+    for field, validator in (("assetIds", known_id),
+                             ("assetNames", known_name)):
+        if field not in inputs:
+            continue
+        values = inputs[field]
+        if (not isinstance(values, list) or not values or
+                len(values) > 1000):
+            return ("invalid_native_asset_id" if field == "assetIds"
+                    else "invalid_native_asset_name")
+        for value in values:
+            issue = validator(value)
+            if issue:
+                return issue
+
+    if "assets" in inputs:
+        entries = inputs["assets"]
+        if (not isinstance(entries, list) or not entries or
+                len(entries) > 1000):
+            return "invalid_native_asset_batch"
+        for entry in entries:
+            if isinstance(entry, str):
+                issue = known_id(entry)
+            elif isinstance(entry, dict):
+                if "assetId" in entry:
+                    issue = known_id(entry["assetId"])
+                elif "id" in entry:
+                    issue = known_id(entry["id"])
+                elif "assetName" in entry:
+                    issue = known_name(entry["assetName"])
+                elif "name" in entry:
+                    issue = known_name(entry["name"])
+                else:
+                    # An opaque object is not an editor asset. An explicit
+                    # batch entry needs a source selector, not guessed media.
+                    return "native_asset_batch_entry_without_identity"
+            else:
+                return "invalid_native_asset_batch"
+            if issue:
+                return issue
     return None
