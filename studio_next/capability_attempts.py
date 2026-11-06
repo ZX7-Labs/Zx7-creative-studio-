@@ -153,3 +153,53 @@ class CapabilityAttemptStore:
         return (dict(zip(("request_id", "operation_id", "catalog_revision",
                           "input_sha256", "state", "admitted_ns", "settled_ns"),
                          record)) if record else None)
+
+    def unverified_attempts(self, *, limit=32, cursor=None):
+        """Host-only, bounded crash-recovery inventory for ALL admitted writes.
+
+        A strict MCP transport ACK is still not independent native application
+        evidence: all three persisted states require further observation.
+        Ordering uses SQLite's persistent rowid, not wall-clock time (which
+        can move backwards across restart). Existing rows are never deleted
+        or silently retried. No model text, original media or raw tool outputs
+        are returned; request identifiers are host-owned.
+        """
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise CapabilityAttemptError(
+                "Host recovery inventory requires a bounded page of at most 100")
+        if cursor is not None and (type(cursor) is not int or cursor < 0):
+            raise CapabilityAttemptError(
+                "Host recovery cursor must be a nonnegative integer")
+        start = 0 if cursor is None else cursor
+        with self._connect() as db:
+            rows = db.execute("""SELECT rowid,request_id,operation_id,
+                catalog_revision,input_sha256,state,admitted_ns,settled_ns
+                FROM capability_attempts
+                WHERE rowid>? ORDER BY rowid ASC LIMIT ?""",
+                (start,limit+1)).fetchall()
+        selected = rows[:limit]
+        entries = []
+        for row in selected:
+            seq, request, operation, revision, digest, state, admitted, settled = row
+            self._validate(request, operation, revision, digest)
+            if (state not in _TERMINAL_STATES|{"submitted_unconfirmed"} or
+                    type(admitted) is not int or admitted < 0 or
+                    (settled is not None and
+                     (type(settled) is not int or settled < 0))):
+                raise CapabilityAttemptError(
+                    "Durable native attempt record is inconsistent")
+            entries.append({
+                "request_id":request,"operation_id":operation,
+                "catalog_revision":revision,"input_sha256":digest,
+                "state":state,"admitted_ns":admitted,
+                "settled_ns":settled,
+                "native_application_state_independently_verified":False,
+            })
+        more = len(rows)>limit
+        return {
+            "attempts":entries,"has_more":more,
+            "next_cursor":selected[-1][0] if more else None,
+            "durable_host_recovery_inventory":True,
+            "every_listed_attempt_requires_native_reconciliation":True,
+            "no_native_write_replayed":True,
+        }
