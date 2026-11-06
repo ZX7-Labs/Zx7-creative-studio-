@@ -76,6 +76,58 @@ class FakeSession:
 
 
 class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
+    async def test_private_native_write_failure_has_only_bounded_heuristic_category(self):
+        from studio_next.native_creative_control import _bounded_native_error_category
+        from studio_next.native_creative_audit import audit_native_journal
+        private="/owner/medical/private-shot.webm"
+        categories=[
+            ("No matching placeable assets were found for batch placement.",
+             "no_matching_placeable_native_assets"),
+            ("Asset "+private+" was not found.",
+             "native_asset_not_found"),
+            ("Could not create the batch placement track.",
+             "native_track_creation_rejected"),
+            ("Could not add private-shot to the timeline.",
+             "native_timeline_placement_rejected"),
+            ("No current timeline is available.",
+             "native_timeline_unavailable"),
+            ("No project is open.", "native_project_unavailable"),
+            ("private native backend internal error "+private,
+             "unclassified_native_failure"),
+        ]
+        for raw,expected in categories:
+            reply=SimpleNamespace(is_error=True,content=[
+                SimpleNamespace(type="text",text=raw)])
+            self.assertEqual(_bounded_native_error_category(reply),expected)
+        self.assertEqual(_bounded_native_error_category(SimpleNamespace(
+            is_error=True,content=[SimpleNamespace(
+                type="text",text="bad native error"*200000)])),
+            "unclassified_native_failure")
+        session=FakeSession()
+        session.custom_response=SimpleNamespace(is_error=True,content=[
+            SimpleNamespace(type="text",text=
+                "Asset "+private+" was not found.")])
+        grants={item.name:("write" if item.name=="update_text_clip"
+                           else "read") for item in session.tools}
+        model=ScriptedModel([decision("invoke",tool="update_text_clip",
+                                      inputs={"clipId":"one","text":"Artistic title"})])
+        outcome=await NativeCreativeControl(
+            session,model,max_turns=1,
+            host_tool_access=grants).run("Original creative title")
+        self.assertEqual(outcome["status"],"native_error_requires_state_reconciliation")
+        error=next(e for e in outcome["events"]
+                   if e["kind"]=="native_tool_reported_error")
+        self.assertEqual(error["native_error_category_heuristic"],
+                         "native_asset_not_found")
+        self.assertTrue(error["no_automatic_retry"])
+        self.assertNotIn(private,str(outcome["events"]))
+        self.assertNotIn("Artistic title",str(outcome["events"]))
+        self.assertTrue(audit_native_journal(
+            outcome["events"],host_tool_access=grants)
+            ["journal_chain_structurally_valid"])
+        self.assertEqual([n for n,_ in session.calls],
+                         ["update_text_clip"])
+
     async def test_host_required_evidence_refuses_false_finish_and_allows_independent_correction(self):
         from studio_next.native_creative_audit import audit_native_journal
         session = FakeSession()
