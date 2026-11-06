@@ -134,16 +134,19 @@ async def connect_installed_zx7_body(workspace, *, allowed_access=("read", "writ
         raise ValueError("Native asset reference guard needs an explicit boolean host policy")
     adapter = InstalledBodyAdapter(workspace, allowed_access=allowed_access,
                                    editor_client=editor_client)
+    # Validate host-owned native read/write grants before constructing durable
+    # storage. A refused connection must not create a private SQLite journal
+    # or otherwise mutate the requested workspace.
+    connection=(adapter,adapter.trusted_grants)
+    if verify_native_editor_asset_ids:
+        policy=adapter.native_asset_reference_policy()
+        connection=(*connection,{},None,{},policy)
     ledger = (CapabilityAttemptStore(
         Path(workspace).resolve() / ".zx7-host-private" /
         "capability-attempts.sqlite3") if durable_write_requests else None)
     # This trusted host callback re-evaluates actual installed/allowed local
     # BODY operations on future refreshes. A creative model cannot mint
     # grants, and external plugin connections remain explicitly host-authorized.
-    connection=(adapter,adapter.trusted_grants)
-    if verify_native_editor_asset_ids:
-        policy=adapter.native_asset_reference_policy()
-        connection=(*connection,{},None,{},policy)
     gateway = CapabilityGateway({"zx7": connection},
                                 attempt_store=ledger)
     await gateway.refresh()
