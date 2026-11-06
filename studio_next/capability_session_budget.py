@@ -54,22 +54,35 @@ class CapabilitySessionBudget:
         if not self._per_source.keys() <= set(names):
             raise CapabilitySessionBudgetError("unknown_host_budget_source")
 
-    def reserve(self, *, source: str, access: str):
-        """Atomic, conservative slot reservation before durable/native work."""
+    def _check_locked(self, source, access):
+        """Inspect limits under the same lock used for actual admission."""
         if (not isinstance(source, str) or not _NAMESPACE.fullmatch(source)
                 or access not in ("read", "write")):
             raise CapabilitySessionBudgetError("invalid_capability_budget_request")
+        if self._calls >= self._max_calls:
+            raise CapabilitySessionBudgetError(
+                "host_session_call_budget_exhausted")
+        if access == "write" and self._writes >= self._max_writes:
+            raise CapabilitySessionBudgetError(
+                "host_session_write_budget_exhausted")
+        limit = self._per_source.get(source)
+        if limit is not None and self._counts.get(source, 0) >= limit:
+            raise CapabilitySessionBudgetError(
+                "host_source_call_budget_exhausted")
+
+    def check_available(self, *, source: str, access: str):
+        """Non-reserving preflight, preventing needless remote discovery.
+
+        Another source can reserve between this check and dispatch, so the
+        final atomic reserve remains mandatory. This is only an optimization.
+        """
         with self._lock:
-            if self._calls >= self._max_calls:
-                raise CapabilitySessionBudgetError(
-                    "host_session_call_budget_exhausted")
-            if access == "write" and self._writes >= self._max_writes:
-                raise CapabilitySessionBudgetError(
-                    "host_session_write_budget_exhausted")
-            limit = self._per_source.get(source)
-            if limit is not None and self._counts.get(source, 0) >= limit:
-                raise CapabilitySessionBudgetError(
-                    "host_source_call_budget_exhausted")
+            self._check_locked(source, access)
+
+    def reserve(self, *, source: str, access: str):
+        """Atomic, conservative slot reservation before durable/native work."""
+        with self._lock:
+            self._check_locked(source, access)
             self._calls += 1
             if access == "write":
                 self._writes += 1
