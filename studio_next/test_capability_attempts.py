@@ -13,6 +13,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 from types import SimpleNamespace
 import unittest
 
@@ -20,6 +21,7 @@ from studio_next.capability_attempts import (
     CapabilityAttemptError, CapabilityAttemptStore)
 from studio_next.capability_gateway import (
     CapabilityExecutionError, CapabilityGateway)
+from studio_next.durable_sqlite import _safe_wal
 
 
 REV = "a" * 64
@@ -98,6 +100,26 @@ class AttemptStoreTests(unittest.TestCase):
             journal.admit(request_id="crashed-host-request",
                 operation_id="motion/create_curve",
                 catalog_revision=REV,input_sha256=DIGEST)
+
+    def test_version_aware_shared_sqlite_journal_policy_survives_reopen(self):
+        # An unsupported built-in SQLite version must use full-sync rollback
+        # journaling, not the vulnerable unconditional WAL path.
+        with patch("studio_next.durable_sqlite._safe_wal", return_value=False):
+            with self.store._connect() as db:
+                mode = db.execute("PRAGMA journal_mode").fetchone()[0]
+                sync = db.execute("PRAGMA synchronous").fetchone()[0]
+                self.assertEqual(mode.lower(), "delete")
+                self.assertEqual(sync, 2)
+            self.reserve(request_id="rollback-policy-1")
+        reopened = CapabilityAttemptStore(self.path)
+        self.assertEqual(reopened.inspect("rollback-policy-1")["state"],
+                         "submitted_unconfirmed")
+        with reopened._connect() as db:
+            expected = ("wal" if _safe_wal(sqlite3.sqlite_version_info)
+                        else "delete")
+            self.assertEqual(
+                db.execute("PRAGMA journal_mode").fetchone()[0].lower(),
+                expected)
 
     def test_one_way_settlement_and_secret_free_private_journal(self):
         self.reserve()
