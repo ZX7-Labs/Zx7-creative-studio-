@@ -16,8 +16,23 @@ from pathlib import Path
 import re
 import stat
 
+from .native_state_evidence import (
+    _PINNED_NO_IMAGE_SEQUENCE_ERROR,
+    _PINNED_UNKNOWN_BETWEEN_TRANSITION_CLIPS,
+    _SOURCE_REVIEWED_NONMUTATING_PREVIEWS)
+
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+# Exact source-pinned no-write error normalized as the controller serializes
+# MCP text observations. Arbitrary tool failures cannot impersonate it.
+_PINNED_NO_SEQUENCE_ERROR_DIGEST = hashlib.sha256(json.dumps(
+    [_PINNED_NO_IMAGE_SEQUENCE_ERROR], sort_keys=True,
+    ensure_ascii=False, allow_nan=False, separators=(",", ":")
+).encode("utf-8")).hexdigest()
+_PINNED_NO_TRANSITION_CLIPS_DIGEST = hashlib.sha256(json.dumps(
+    [_PINNED_UNKNOWN_BETWEEN_TRANSITION_CLIPS], sort_keys=True,
+    ensure_ascii=False, allow_nan=False, separators=(",", ":")
+).encode("utf-8")).hexdigest()
 _OBSERVERS = frozenset({
     "zx7_observe_verified_export_frame",
     "zx7_observe_verified_export_samples",
@@ -355,6 +370,113 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         for tool in tools) or len(set(tools)) != len(tools)):
                 raise NativeJournalError("Untrusted or fabricated initial machine affordance")
             continue
+        if kind == "host_native_empty_asset_frontier":
+            # A real native get_project snapshot was followed immediately by a
+            # host-granted READ of get_assets. It reported an EMPTY complete
+            # inventory. Advertise possible tools only; no native write or
+            # model-authored operation is performed by this frontier.
+            tools = event.get("result_tool_names")
+            inventory = events[i - 1] if i >= 1 else {}
+            state = events[i - 2] if i >= 2 else {}
+            if (pending is not None or
+                    host_tool_access.get("get_assets") != "read" or
+                    state.get("kind") not in
+                    ("host_project_bootstrap_observation",
+                     "host_native_state_progress_observation",
+                     "host_project_post_write_observation") or
+                    (state.get("kind") == "host_project_post_write_observation" and
+                     state.get("project_presence") != "present") or
+                    (state.get("kind") == "host_project_bootstrap_observation" and
+                     state.get("project_presence") != "present") or
+                    inventory.get("kind") != "host_native_asset_inventory_observed" or
+                    inventory.get("tool") != "get_assets" or
+                    inventory.get("host_attested_read_only") is not True or
+                    not _sha(inventory.get("text_sha256")) or
+                    type(event.get("turn")) is not int or
+                    event["turn"] < 0 or
+                    event.get("trusted_machine_fact") != "project_asset_available" or
+                    event.get("host_observed_value") is not False or
+                    event.get("native_project_asset_count") != 0 or
+                    event.get("no_native_dispatch") is not True or
+                    not _sha(event.get("catalog_revision")) or
+                    not isinstance(tools, list) or not 1 <= len(tools) <= 4 or
+                    any(not isinstance(tool, str) or
+                        host_tool_access.get(tool) != "write" for tool in tools) or
+                    len(tools) != len(set(tools))):
+                raise NativeJournalError("Empty-project source frontier lacked native custody")
+            continue
+        if kind == "host_native_asset_capability_frontier":
+            # This is never a native tool call. The controller saw a real
+            # host-granted get_assets EMPTY catalog and refused a model's
+            # nonexistent asset ID. Advertised possible asset-producing
+            # operations come exclusively from host effect grants, not from
+            # model-authored names or a fixed creative script.
+            tools = event.get("result_tool_names")
+            rejected = events[i - 1] if i >= 1 else {}
+            inventory = events[i - 2] if i >= 2 else {}
+            if (pending is not None or
+                    host_tool_access.get("get_assets") != "read" or
+                    rejected.get("kind") != "model_action_rejected" or
+                    rejected.get("validation_keyword") != "native_asset_not_imported" or
+                    inventory.get("kind") != "host_native_asset_inventory_observed" or
+                    inventory.get("tool") != "get_assets" or
+                    event.get("turn") != rejected.get("turn") or
+                    event.get("trusted_machine_fact") != "project_asset_available" or
+                    event.get("host_observed_value") is not False or
+                    event.get("native_project_asset_count") != 0 or
+                    event.get("no_native_dispatch") is not True or
+                    not _sha(event.get("catalog_revision")) or
+                    not isinstance(tools, list) or not 1 <= len(tools) <= 4 or
+                    any(not isinstance(tool, str) or
+                            host_tool_access.get(tool) != "write" for tool in tools) or
+                    len(tools) != len(set(tools))):
+                raise NativeJournalError("Host asset-effect frontier lacked physical inventory")
+            continue
+        if kind in ("host_native_asset_inventory_observed",
+                    "host_native_asset_inventory_read_error",
+                    "host_native_timeline_inventory_observed",
+                    "host_native_timeline_inventory_read_error"):
+            # Evidence-only source object inventory obtained via a granted
+            # native READ. It does not authorize a mutating operation or
+            # certify an asset, clip or track referenced by model text.
+            expected_tool = ("get_assets" if "asset" in kind else "get_timeline")
+            inventory_observed = kind.endswith("_observed")
+            if (pending is not None or
+                    event.get("tool") != expected_tool or
+                    host_tool_access.get(expected_tool) != "read" or
+                    event.get("host_attested_read_only") is not True or
+                    event.get("no_native_dispatch") is not True):
+                raise NativeJournalError("Native object inventory read lacks host custody")
+            if inventory_observed:
+                if (not _sha(event.get("text_sha256")) or
+                        event.get("error_type") is not None):
+                    raise NativeJournalError("Native inventory lacks receipt digest")
+            elif (not isinstance(event.get("error_type"), str) or
+                  not 1 <= len(event["error_type"]) <= 128 or
+                  event.get("text_sha256") is not None):
+                raise NativeJournalError("Failed native inventory was misreported")
+            continue
+        if kind in ("host_native_state_progress_observation",
+                    "host_native_state_progress_read_error"):
+            # Independent, non-mutating post-write project counts. They
+            # neither validate creativity nor author a native tool call.
+            if (pending is not None or event.get("tool") != "get_project" or
+                    host_tool_access.get("get_project") != "read" or
+                    event.get("host_attested_read_only") is not True or
+                    event.get("no_model_selected_mutation") is not True or
+                    not writes):
+                raise NativeJournalError("Post-write native progress lacks grounded read")
+            if kind == "host_native_state_progress_observation":
+                if (not _sha(event.get("text_sha256")) or
+                        not _sha(event.get("summary_sha256")) or
+                        event.get("error_type") is not None):
+                    raise NativeJournalError("Native progress omitted source or summary digest")
+            elif (not isinstance(event.get("error_type"), str) or
+                  not 1 <= len(event["error_type"]) <= 128 or
+                  event.get("text_sha256") is not None or
+                  event.get("summary_sha256") is not None):
+                raise NativeJournalError("Failed native project read was misreported")
+            continue
         if kind == "capability_searched":
             tools = event.get("result_tool_names")
             inspected = event.get("inspectable_candidate_tool_names", [])
@@ -412,11 +534,49 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             if (not isinstance(tool, str) or tool not in host_tool_access or
                     not _sha(event.get("inputs_sha256")) or not (legacy or hashed)):
                 raise NativeJournalError("Native operation lacks model intent or host grant")
+            consent = event.get("model_approved_preview_receipt_sha256")
+            if consent is not None:
+                # A model-consented apply must refer to a real immediately
+                # preceding, separately returned pinned editor preview for
+                # exactly this native tool. A stale hash, switched tool or
+                # second use cannot mint a fresh write or hide a replay.
+                if host_tool_access[tool] != "write" or not _sha(consent):
+                    raise NativeJournalError("Model approval lacks exact preview receipt")
+                previous = [
+                    (index, prior) for index, prior in enumerate(events[:i])
+                    if prior.get("kind") == "native_tool_preview" and
+                    prior.get("tool") == tool and
+                    type(prior.get("turn")) is int and
+                    prior["turn"] == event.get("turn") - 1 and
+                    prior.get("text_sha256") == [consent]
+                ]
+                if len(previous) != 1:
+                    raise NativeJournalError("Model consent references a stale or absent preview")
+                preview_index, source_preview = previous[0]
+                # The application, not an invented MODEL argument, owned the
+                # proposed commit inputs. The controller hashes those exact
+                # editor-suggested arguments before offering short consent.
+                # A substituted source/path/clip in the committed input is
+                # NOT equivalent approval.
+                if (not _sha(source_preview.get(
+                        "source_suggested_apply_inputs_sha256")) or
+                        source_preview["source_suggested_apply_inputs_sha256"] !=
+                        event["inputs_sha256"]):
+                    raise NativeJournalError("Model approval changed the editor plan")
+                if any(prior.get("kind") in (
+                        "native_tool_submitted", "native_tool_result",
+                        "native_tool_preview", "native_tool_reported_error",
+                        "native_tool_uncertain_outcome")
+                        for prior in events[preview_index + 1:i]):
+                    raise NativeJournalError("Model approval replayed after another native call")
             pending = (event.get("turn"), tool, host_tool_access[tool])
             continue
         if kind in ("native_tool_result", "native_tool_preview",
                     "native_tool_reported_error", "native_tool_uncertain_outcome",
-                    "native_observation_rejected", "native_read_tool_reported_error"):
+                    "native_observation_rejected", "native_read_tool_reported_error",
+                    "native_source_preview_reported_error",
+                    "native_source_preimport_reported_error",
+                    "native_source_pretransition_reported_error"):
             if pending is None or (event.get("turn"), event.get("tool")) != pending[:2]:
                 raise NativeJournalError("Native outcome does not match a submitted call")
             turn, tool, access = pending
@@ -427,6 +587,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 # Its exact bounded text remains hash-attested; physical
                 # mutation proof requires a distinct later native result.
                 hashes = event.get("text_sha256")
+                native_suggestion = event.get("source_suggested_apply_inputs_sha256")
+                if native_suggestion is not None and not _sha(native_suggestion):
+                    raise NativeJournalError("Native preview offered unhashable editor plan")
                 if (access != "write" or
                         event.get("host_reported_preview_only") is not True or
                         event.get("no_accepted_write_evidence") is not True or
@@ -434,6 +597,46 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         not isinstance(hashes, list) or len(hashes) != 1 or
                         not all(_sha(x) for x in hashes)):
                     raise NativeJournalError("Native preview was forged as an applied write")
+                continue
+            if kind == "native_source_preview_reported_error":
+                # The pinned native adapter's explicit non-mutating preview
+                # path was source-reviewed; this is not a native WRITE result.
+                # Its error digest cannot certify completed editing work.
+                digest = event.get("error_sha256")
+                exceeded = event.get("error_text_exceeded_evidence_budget")
+                if (access != "write" or
+                        tool not in _SOURCE_REVIEWED_NONMUTATING_PREVIEWS or
+                        event.get("host_source_proved_readonly_preview") is not True or
+                        event.get("no_accepted_write_evidence") is not True or
+                        type(exceeded) is not bool or
+                        ((digest is None) != exceeded) or
+                        (digest is not None and not _sha(digest))):
+                    raise NativeJournalError("Native preview failure was misrepresented")
+                continue
+            if kind == "native_source_preimport_reported_error":
+                # Pinned Velorn forced-sequence detection happens BEFORE
+                # importAsset, addAsset, and project save. This failure has
+                # no completed native write and can be corrected by the model.
+                if (access != "write" or tool != "import_asset_from_path" or
+                        event.get("error_sha256") !=
+                            _PINNED_NO_SEQUENCE_ERROR_DIGEST or
+                        event.get("error_text_exceeded_evidence_budget") is not False or
+                        event.get("host_source_proved_no_import_attempt") is not True or
+                        event.get("no_accepted_write_evidence") is not True):
+                    raise NativeJournalError(
+                        "Native import error lacks source-attested no-write proof")
+                continue
+            if kind == "native_source_pretransition_reported_error":
+                # Pinned addTransition resolves two clip IDs before mutation.
+                # Only exact source-digested no-write errors may continue.
+                if (access != "write" or tool != "add_transition" or
+                        event.get("error_sha256") !=
+                            _PINNED_NO_TRANSITION_CLIPS_DIGEST or
+                        event.get("error_text_exceeded_evidence_budget") is not False or
+                        event.get("host_source_proved_no_transition_mutation") is not True or
+                        event.get("no_accepted_write_evidence") is not True):
+                    raise NativeJournalError(
+                        "Native transition error lacks exact no-write source proof")
                 continue
             if kind == "native_read_tool_reported_error":
                 # This branch is only valid for a host-attested READ. Failed
@@ -457,6 +660,22 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         not isinstance(event.get("image_sha256"), list) or
                         any(not _sha(d) for d in event["image_sha256"])):
                     raise NativeJournalError("Native data has malformed source checksums")
+                # The editor's export application ACK uniquely identifies
+                # which physical native project/timeline initiated rendering.
+                # A later saved project with a different active timeline may
+                # NOT borrow the original-source proof of this output.
+                project_binding = event.get("native_export_project_path_sha256")
+                output_binding = event.get("native_export_output_path_sha256")
+                timeline_binding = event.get("native_export_timeline_id")
+                if any(value is not None for value in (
+                        project_binding, output_binding, timeline_binding)):
+                    if (tool != "export_timeline" or access != "write" or
+                            not _sha(project_binding) or
+                            not _sha(output_binding) or
+                            not isinstance(timeline_binding, str) or
+                            not 1 <= len(timeline_binding) <= 512):
+                        raise NativeJournalError(
+                            "Native export project/timeline receipt is incomplete or forged")
                 new_sha = event.get("independently_verified_export_sha256")
                 seen_sha = event.get("observed_export_sha256")
                 if access == "write":
