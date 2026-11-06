@@ -342,7 +342,9 @@ async def exercise(options):
         assert len(before["clips"]) == 3, "Native batch preview changed a real timeline"
         applied = await call(session, "add_assets_to_timeline", {
             **batch_args, "previewOnly": False})
-        assert applied.get("previewOnly") is False, "Native batch was not applied"
+        # Pinned Electron MCP apply response uses success:true and omits
+        # previewOnly; independent timeline readback proves actual mutation.
+        assert applied.get("success") is True and applied.get("action") == "add_assets_to_timeline"
         await wait(session, lambda state:
             (state.get("currentTimeline") or {}).get("clipCount") == 4)
         after = await call(session, "get_timeline", {"includeClips": True})
