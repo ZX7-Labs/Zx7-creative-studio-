@@ -297,16 +297,17 @@ class LiveBodySignal:
                 "host_installed_document_schema_revalidated":True,
                 "native_media_rendered_or_approved":False}
 
-    def inspect_plan_heads(self,workspace_id,project_id,*,limit=50):
+    def inspect_plan_heads(self,workspace_id,project_id,*,limit=50,offset=0):
         """Inspect all native-tool plan heads in one authorized logical project."""
         if "read" not in self._authority.tool_access:
             raise PermissionError("Host did not grant creative project inspection")
         workspace=self._workspace(workspace_id)
         return {"protocol":self.VERSION,"workspace_id":workspace_id,
-                **DocumentHeadLedger(workspace).heads(project_id,limit=limit)}
+                **DocumentHeadLedger(workspace).heads(
+                    project_id,limit=limit,offset=offset)}
 
     def inspect_plan_history(self,workspace_id,project_id,tool_id,input_name,
-                             *,limit=32):
+                             *,limit=32,offset=0):
         """Bounded immutable parent lineage, without raw creative documents."""
         if "read" not in self._authority.tool_access:
             raise PermissionError("Host did not grant creative revision inspection")
@@ -314,7 +315,7 @@ class LiveBodySignal:
         return {"protocol":self.VERSION,"workspace_id":workspace_id,
                 **DocumentHeadLedger(workspace).history(
                     project_id=project_id,tool_id=tool_id,
-                    input_name=input_name,limit=limit)}
+                    input_name=input_name,limit=limit,offset=offset)}
 
     def observe(self,job_id,*,include_artifacts=False,max_stages=16):
         if type(include_artifacts) is not bool:
