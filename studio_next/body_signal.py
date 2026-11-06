@@ -22,8 +22,9 @@ from .body_integration import body_catalog
 from .body_sensory import sense_body_job
 from .film_ir import validate_film_ir
 from .body_document_schemas import validate_document
+from .body_project_heads import DocumentHeadLedger
 
-_ACTIONS=frozenset({"author_plan","revise_plan","submit","pause","cancel","resume","retry"})
+_ACTIONS=frozenset({"author_plan","revise_plan","select_plan","submit","pause","cancel","resume","retry"})
 _ACCESS=frozenset({"read","write","network","paid"})
 # Legacy edit/OTIO accept owner-supplied textual rights labels without real
 # MediaVault custody. Retain them for explicit historical migration, never
@@ -56,7 +57,7 @@ class BodyAuthority:
             not isinstance(self.tool_access,frozenset) or
             not self.tool_access or not self.tool_access.issubset(_ACCESS)):
             raise ValueError("Only narrow host-issued BODY authority is valid")
-        if (bool(self.operations & {"submit","author_plan","revise_plan"})
+        if (bool(self.operations & {"submit","author_plan","revise_plan","select_plan"})
                 and "write" not in self.tool_access):
             raise ValueError("Studio source creation requires host-issued write access")
 
@@ -97,6 +98,9 @@ class LiveBodySignal:
         signatures={
             "author_plan":["workspace_id","tool_id","document"],
             "revise_plan":["workspace_id","tool_id","base_sha256","operations"],
+            "select_plan":["workspace_id","project_id","tool_id",
+                           "document_sha256","expected_revision_id",
+                           "expected_document_sha256"],
             "submit":["workspace_id","film_ir"],
             "pause":["job_id"],"cancel":["job_id"],
             "resume":["job_id"],"retry":["job_id"]}
@@ -255,6 +259,64 @@ class LiveBodySignal:
                 "changed_paths":[op["path"] for op in arguments["operations"] if op["op"]!="test"],
                 "body_implementation_changed":False}
 
+    def _select_original_plan(self, arguments):
+        """Select a real immutable instrument document under an exact CAS head.
+
+        Unlike a native editor WRITE, this only changes the host-designated
+        *plan reference*. The original document must already exist as the
+        exact physical bytes of its SHA and match a currently authorized,
+        installed BODY tool schema. No source rights or native media is
+        minted by selecting a plan.
+        """
+        workspace_id=arguments["workspace_id"]
+        desired=arguments["document_sha256"]
+        original=self._read_original_plan(workspace_id,desired)
+        proof={"workspace_id":workspace_id,"tool_id":arguments["tool_id"],
+               "document":original}
+        if "input_name" in arguments:
+            proof["input_name"]=arguments["input_name"]
+        try:
+            independently_validated=self._author_original_plan(proof)
+        except (ValueError,TypeError) as exc:
+            raise BodyCommandRejected(
+                "Selected plan does not match an authorized installed BODY tool") from exc
+        if independently_validated["sha256"]!=desired:
+            raise BodyCommandRejected(
+                "Original document no longer matches its validated SHA256")
+        try:
+            result=DocumentHeadLedger(self._workspace(workspace_id)).select(
+                project_id=arguments["project_id"],tool_id=arguments["tool_id"],
+                input_name=independently_validated["document_input_name"],
+                document_sha256=desired,
+                expected_revision_id=arguments["expected_revision_id"],
+                expected_document_sha256=arguments["expected_document_sha256"])
+        except ValueError as exc:
+            raise BodyCommandRejected(str(exc)) from exc
+        return {"protocol":self.VERSION,"workspace_id":workspace_id,**result,
+                "original_document_bytes_preserved":True,
+                "host_installed_document_schema_revalidated":True,
+                "native_media_rendered_or_approved":False}
+
+    def inspect_plan_heads(self,workspace_id,project_id,*,limit=50,offset=0):
+        """Inspect all native-tool plan heads in one authorized logical project."""
+        if "read" not in self._authority.tool_access:
+            raise PermissionError("Host did not grant creative project inspection")
+        workspace=self._workspace(workspace_id)
+        return {"protocol":self.VERSION,"workspace_id":workspace_id,
+                **DocumentHeadLedger(workspace).heads(
+                    project_id,limit=limit,offset=offset)}
+
+    def inspect_plan_history(self,workspace_id,project_id,tool_id,input_name,
+                             *,limit=32,offset=0):
+        """Bounded immutable parent lineage, without raw creative documents."""
+        if "read" not in self._authority.tool_access:
+            raise PermissionError("Host did not grant creative revision inspection")
+        workspace=self._workspace(workspace_id)
+        return {"protocol":self.VERSION,"workspace_id":workspace_id,
+                **DocumentHeadLedger(workspace).history(
+                    project_id=project_id,tool_id=tool_id,
+                    input_name=input_name,limit=limit,offset=offset)}
+
     def observe(self,job_id,*,include_artifacts=False,max_stages=16):
         if type(include_artifacts) is not bool:
             raise BodyCommandRejected("Artifact detail must be a boolean")
@@ -286,14 +348,19 @@ class LiveBodySignal:
         expected=({"film_ir","workspace_id"} if action=="submit" else
                   {"workspace_id","tool_id","document"} if action=="author_plan"
                   else {"workspace_id","tool_id","base_sha256","operations"} if action=="revise_plan"
+                  else {"workspace_id","project_id","tool_id","document_sha256",
+                        "expected_revision_id","expected_document_sha256"}
+                       if action=="select_plan"
                   else {"job_id"})
         if (set(arguments)!=expected and not (
-                action in ("author_plan","revise_plan") and set(arguments)==expected|{"input_name"})):
+                action in ("author_plan","revise_plan","select_plan") and set(arguments)==expected|{"input_name"})):
             raise BodyCommandRejected("Unapproved BODY command argument fields")
         if action=="author_plan":
             return self._author_original_plan(arguments)
         if action=="revise_plan":
             return self._revise_original_plan(arguments)
+        if action=="select_plan":
+            return self._select_original_plan(arguments)
         if action=="submit":
             workspace_id=arguments["workspace_id"]
             self._workspace(workspace_id)
