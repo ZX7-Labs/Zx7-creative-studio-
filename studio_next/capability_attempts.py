@@ -167,7 +167,7 @@ class CapabilityAttemptStore:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise CapabilityAttemptError(
                 "Host recovery inventory requires a bounded page of at most 100")
-        if cursor is not None and (type(cursor) is not int or cursor < 0):
+        if cursor is not None and (type(cursor) is not int or not 0 <= cursor <= 2**63-1):
             raise CapabilityAttemptError(
                 "Host recovery cursor must be a nonnegative integer")
         start = 0 if cursor is None else cursor
@@ -180,7 +180,7 @@ class CapabilityAttemptStore:
         selected = rows[:limit]
         entries = []
         for row in selected:
-            seq, request, operation, revision, digest, state, admitted, settled = row
+            _seq, request, operation, revision, digest, state, admitted, settled = row
             self._validate(request, operation, revision, digest)
             if (state not in _TERMINAL_STATES|{"submitted_unconfirmed"} or
                     type(admitted) is not int or admitted < 0 or
