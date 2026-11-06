@@ -58,6 +58,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
+      - name: Verify actual owner-custody recovery uses a live stage lease (Python 3.12)
+        run: |
+          python -m unittest studio_next.test_body_owned_edit.TrueOwnerAttestedGenericEditorTests.test_exact_owned_cas_render_recovery_reuses_physical_original_without_reencoding -v
       - name: Compile all checked-in Python source
         run: python -m compileall -q studio_next motion_studio creative_director director_research voice_lab src scripts
       - name: Prove independent Linux model-process peak RSS evidence fails closed
@@ -120,7 +123,8 @@ jobs:
           python -m unittest \
             studio_next.test_media_vault.MediaVaultProductionTests.test_multichannel_extensible_pcm_keeps_exact_samples_on_python_311 \
             studio_next.test_media_vault.MediaVaultProductionTests.test_wav_cannot_claim_unrecorded_pcm_audio_samples \
-            studio_next.test_body_mlt_editor.VerifiedMLTEditorialTests.test_native_pcm_wav_multichannel_is_not_silently_downmixed -v
+            studio_next.test_body_mlt_editor.VerifiedMLTEditorialTests.test_native_pcm_wav_multichannel_is_not_silently_downmixed \
+            studio_next.test_body_owned_edit.TrueOwnerAttestedGenericEditorTests.test_exact_owned_cas_render_recovery_reuses_physical_original_without_reencoding -v
 
   python311-no-ffmpeg-source-custody:
     runs-on: ubuntu-24.04
