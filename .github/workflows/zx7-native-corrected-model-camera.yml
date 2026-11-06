@@ -1,7 +1,9 @@
 name: ZX7 Source-Compatible Qwen Camera Native Trial
 # Exact-source rerun: verify latest physical native asset IDs and project-read
 # reconciliation with genuine local Qwen, no pre-authored creative edit steps.
-# Earlier camera run 42124831468 used older source and did not pass.
+# Prior current-source run 42149908182 reached real import/readback but failed
+# after model-selected add_assets_to_timeline. This rerun checks actual nested
+# source-ID admission and preserves only privacy-bounded native error categories.
 on:
   push:
     branches: ["engineering/unified-brain-body-architecture-audit-20261106"]
@@ -134,4 +136,4 @@ jobs:
             output/native-camera-pilot/journal-audit.json
             output/native-camera-pilot/native-journal.jsonl
           if-no-files-found: warn
-          retention-days: 5
+          retention-days: 90
