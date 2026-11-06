@@ -134,9 +134,9 @@ async def connect_installed_zx7_body(workspace, *, allowed_access=("read", "writ
         raise ValueError("Native asset reference guard needs an explicit boolean host policy")
     adapter = InstalledBodyAdapter(workspace, allowed_access=allowed_access,
                                    editor_client=editor_client)
-    # Validate host-owned native read/write grants before constructing durable
-    # storage. A refused connection must not create a private SQLite journal
-    # or otherwise mutate the requested workspace.
+    # Validate the optional identity policy's native grants before
+    # constructing durable storage. Rejecting this policy must not create
+    # a SQLite journal in the requested workspace.
     connection=(adapter,adapter.trusted_grants)
     if verify_native_editor_asset_ids:
         policy=adapter.native_asset_reference_policy()
