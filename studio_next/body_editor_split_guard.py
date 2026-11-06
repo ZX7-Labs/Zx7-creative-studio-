@@ -154,7 +154,7 @@ def preflight_non_destructive_native_split(client, arguments: dict, *,
     for identity in ids:
         try:
             detail = _native_json(client.call(
-                "inspect_clip", {"clipId": identity, "includeImage": False}, allowed_access=allowed_access), "inspect_clip")
+                "inspect_clip", {"clipId": identity}, allowed_access=allowed_access), "inspect_clip")
         except (ValueError, KeyError, StopIteration) as exc:
             raise EditorAccessError("Native split target does not exist or cannot be inspected") from exc
         clip = detail.get("clip", detail)

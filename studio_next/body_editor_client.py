@@ -201,7 +201,7 @@ class LocalEditorClient:
         arguments = _json_arguments(arguments)
         if self._policy is not None and self._policy(tool_name, arguments, access) is not True:
             raise EditorAccessError("Native tool rejected by host policy")
-        if tool_name == "split_clip" and arguments.get("previewOnly") is False:
+        if tool_name == "split_clip":
             # The upstream inspect_clip summary omits effects/keyframes.
             # Require both the existing per-clip identity inspection and the
             # complete native get_timeline creative-state snapshot.

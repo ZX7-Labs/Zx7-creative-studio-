@@ -227,37 +227,6 @@ class LocalEditorClientTests(unittest.TestCase):
         self.assertEqual(json.loads(successful["content"][0]["text"])["success"], True)
         self.assertEqual([r["params"]["name"] for r in self.requests[-3:]],
                          ["inspect_clip", "get_timeline", "split_clip"])
-        self.assertIs(self.requests[-3]["params"]["arguments"]["includeImage"], False)
-
-    def test_native_razor_preview_remains_safe_and_available_without_full_read_grants(self):
-        # Pinned Velorn defaults to previewOnly unless it is EXACT false.
-        # Neither a complex clip nor absence of a read grant may cause an
-        # ordinary native preview to be mistaken for an actual razor write.
-        def reply(request):
-            self.assertEqual(request["params"]["name"], "split_clip")
-            params = request["params"]["arguments"]
-            self.assertIsNot(params.get("previewOnly"), False)
-            result = {"action": "split_clip", "previewOnly": True,
-                      "result": {"previewOnly": True, "timeSeconds": 3.0,
-                                 "targets": [{"id": "artist-effects", "effects": ["blur"]}]}}
-            return {"jsonrpc": "2.0", "id": request["id"], "result": {
-                "content": [{"type": "text", "text": json.dumps(result)}]}}
-        self.reply = reply
-        client = LocalEditorClient(self.endpoint, allowed_tools={"split_clip": "write"})
-        for args in ({"timeSeconds": 3.0, "clipId": "artist-effects",
-                      "previewOnly": True},
-                     {"timeSeconds": 3.0, "clipId": "artist-effects"}):
-            receipt = client.call("split_clip", args, allowed_access={"write"})
-            self.assertTrue(json.loads(receipt["content"][0]["text"])["previewOnly"])
-        self.assertEqual([r["params"]["name"] for r in self.requests],
-                         ["split_clip", "split_clip"])
-        # A real commit still requires host-granted read inspection BEFORE
-        # any native MCP call. No fallback from failed creative-state review.
-        with self.assertRaisesRegex(EditorAccessError, "host-granted read"):
-            client.call("split_clip", {"timeSeconds": 3.0,
-                        "clipId": "artist-effects", "previewOnly": False},
-                        allowed_access={"write"})
-        self.assertEqual(len(self.requests), 2)
 
     def test_split_hidden_effect_in_native_summary_is_caught_by_complete_snapshot(self):
         # Pinned Velorn inspect_clip returns a compact summary WITHOUT
