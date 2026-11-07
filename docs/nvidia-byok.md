@@ -9,9 +9,11 @@ endpoint, with the existing host-granted BODY native gateway.
 ## Supported provider
 
 - Endpoint: `https://integrate.api.nvidia.com/v1/chat/completions` (fixed).
-- Catalog model: `qwen/qwen3.5-122b-a10b` by default. Check the
-  [official model API contract](https://docs.api.nvidia.com/nim/reference/qwen-qwen3-5-122b-a10b-infer)
-  before choosing another catalog ID.
+- Default catalog candidate: `nvidia/nemotron-3.5-super-vl-120b-a12b`,
+  whose [NVIDIA catalog page](https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b)
+  currently advertises a free development endpoint and text/image/video input.
+  `qwen/qwen3.5-122b-a10b` remains selectable, but its free endpoint
+  is marked *deprecated*, so access must be tested per operator account.
 - Credential: `NVIDIA_API_KEY`, read at call time from the trusted process
   environment. The key must never appear in a CLI argument, model prompt,
   checked-in file, chat transcript, debug dump, public issue or source archive.
@@ -46,7 +48,7 @@ To start a BODY brief service:
 
 ```sh
 zx7-body --workspace-root ./workspace --creative-provider nvidia \
-  --creative-model qwen/qwen3.5-122b-a10b
+  --creative-model nvidia/nemotron-3.5-super-vl-120b-a12b
 ```
 
 As before, the service also requires a distinct, privately configured
@@ -57,7 +59,7 @@ installing the pinned native editor and MCP dependencies):
 
 ```sh
 python engines/velorn/native-model-client.py \
-  --provider nvidia --model-id qwen/qwen3.5-122b-a10b \
+  --provider nvidia --model-id nvidia/nemotron-3.5-super-vl-120b-a12b \
   --source ./third_party/velorn --config /private/editor-config.json \
   --state /private/editor-state --brief-file /private/creative-brief.txt \
   --receipt /private/new-trial-receipt.jsonl --max-turns 8
