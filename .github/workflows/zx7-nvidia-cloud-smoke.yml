@@ -1,0 +1,58 @@
+name: ZX7 NVIDIA API — Manual Credentialed No-Media Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_variant:
+        description: "Choose the actual NVIDIA catalog route to evaluate"
+        type: choice
+        required: true
+        default: nemotron-super-vl
+        options:
+          - nemotron-super-vl
+          - qwen3.5-122b
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zx7-nvidia-manual-smoke
+  cancel-in-progress: false
+
+jobs:
+  real-remote-nvidia-protocol:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+    steps:
+      - name: Check out exact publicly auditable source, without writable checkout credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify provider safety contract without network calls
+        run: python -m unittest studio_next.test_nvidia_model -v
+      - name: Refuse any network attempt without explicitly provisioned secret
+        shell: bash
+        run: |
+          if [ -z "${NVIDIA_API_KEY:-}" ]; then
+            echo "Missing NVIDIA_API_KEY Actions secret. No request attempted."
+            exit 2
+          fi
+      - name: Bounded real no-media NVIDIA inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.model_variant }}" in
+            nemotron-super-vl)
+              model="nvidia/nemotron-3.5-super-vl-120b-a12b" ;;
+            qwen3.5-122b)
+              model="qwen/qwen3.5-122b-a10b" ;;
+            *)
+              echo "Unknown operator-selected NVIDIA catalog model"
+              exit 2 ;;
+          esac
+          python scripts/nvidia_api_smoke.py --model-id "$model"
