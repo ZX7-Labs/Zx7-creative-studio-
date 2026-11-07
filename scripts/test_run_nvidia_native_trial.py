@@ -10,6 +10,9 @@ import subprocess
 import tempfile
 import unittest
 
+from scripts.nvidia_native_trial_request import validate_native_trial_request
+from scripts.nvidia_smoke_request import SmokeRequestError
+
 from scripts.run_nvidia_native_trial import (
     _ALLOWED_MODEL, _HOST_ALLOWED, _SOURCE_EDITOR, prepare_trial, run_trial,
 )
@@ -38,6 +41,27 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertFalse(ledger[0]["preauthored_timeline"])
             with self.assertRaisesRegex(ValueError, "must not preexist"):
                 prepare_trial(workspace, source=_SOURCE_EDITOR)
+
+    def test_cloud_media_consent_is_exactly_synthetic_and_bounded(self):
+        request_path = (Path(__file__).resolve().parents[1] /
+                        "research" / "nvidia-native-trial-request.json")
+        self.assertEqual(validate_native_trial_request(request_path), _ALLOWED_MODEL)
+        baseline = json.loads(request_path.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as root:
+            candidate = Path(root) / "request.json"
+            for changes in (
+                {"synthetic_only": False},
+                {"cloud_synthetic_frames_allowed": False},
+                {"model_id": "untrusted/remote-model"},
+                {"max_turns": 800},
+                {"max_turns": True},
+                {"kind": "upload-private-footage"},
+                {"api_key": "not-a-permitted-field"},
+            ):
+                candidate.write_text(
+                    json.dumps({**baseline, **changes}), encoding="utf-8")
+                with self.subTest(changes=changes), self.assertRaises(SmokeRequestError):
+                    validate_native_trial_request(candidate)
 
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
