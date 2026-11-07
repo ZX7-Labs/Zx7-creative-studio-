@@ -52,6 +52,14 @@ jobs:
             studio_next.test_native_creative_control \
             studio_next.test_native_creative_audit \
             studio_next.test_native_host_contract_probe
+      - name: Gate the earlier 4B stale-timeline failure on exact source-neutral readback recovery
+        run: |
+          # Source-neutral host sensing only; no canned model editing action.
+          # Real Velorn single-clip convergence independently passed on main:
+          # https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42329101381
+          python -m unittest -q \
+            studio_next.test_native_machine_navigator.NativeMachineNavigatorTests.test_first_picture_write_reconciles_real_source_via_bounded_reads \
+            studio_next.test_native_machine_navigator.NativeMachineNavigatorTests.test_stale_empty_readback_cannot_authorize_duplicate_native_placement
       - name: Re-check fixed GPL native editor source and sandbox identity
         run: |
           test "$(id -u)" -ne 0
