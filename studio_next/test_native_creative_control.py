@@ -1972,6 +1972,113 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             outcome["events"], host_tool_access=grants)[
                 "journal_chain_structurally_valid"])
 
+
+    async def test_observed_empty_project_rejects_asset_placement_before_model_import(self):
+        """Physical 2B failure #42398794079: staged footage is not imported.
+
+        Protocol fixture: only the model selects source import and placement.
+        Exactly one actual native import and placement occurs, never a retry
+        or a host-authored creative operation.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+        session = FakeSession()
+        session.tools += [
+            SimpleNamespace(name="get_project", description="Actual project state",
+                input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="import_asset_from_path",
+                description="Import host-authorized original footage",
+                input_schema={"type": "object", "properties": {
+                    "path": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
+            SimpleNamespace(name="add_asset_to_timeline",
+                description="Place project asset from actual native inventory",
+                input_schema={"type": "object", "properties": {
+                    "assetName": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
+        ]
+        native_count = 0
+
+        async def native_call(name, arguments):
+            nonlocal native_count
+            session.calls.append((name, arguments))
+            if name == "get_project":
+                payload = {"mcp": {"hasProject": True},
+                           "project": {"name": "Original editable film",
+                                       "assetCount": native_count},
+                           "assetCount": native_count}
+            elif name == "import_asset_from_path":
+                native_count += 1
+                payload = {"success": True, "result": {
+                    "assetId": "host-import-1", "previewOnly": False}}
+            else:
+                payload = {"success": True, "result": {
+                    "clipId": "host-clip-1", "previewOnly": False}}
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text", text=json.dumps(payload))])
+        session.call_tool = native_call
+        grants = {t.name: ("read" if t.name in (
+            "get_project", "get_timeline", "zx7_verify_native_export",
+            "zx7_observe_verified_export_frame") else "write")
+                  for t in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="add_asset_to_timeline", inputs={
+                "assetName": "staged-but-not-yet-imported.mp4", "previewOnly": False}),
+            decision("invoke", tool="import_asset_from_path", inputs={
+                "path": "/host-allowed/staged-original.mp4", "previewOnly": False}),
+            decision("invoke", tool="add_asset_to_timeline", inputs={
+                "assetName": "staged-original.mp4", "previewOnly": False}),
+            decision("finish", summary="Fake model only tests host safety"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=4, host_tool_access=grants,
+            catalog_mode="full",
+            host_preconditions={
+                "import_asset_from_path": ["project_open"],
+                "add_asset_to_timeline": [
+                    "project_open", "project_assets_available"]},
+        ).run("Edit native footage after importing real original video")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual([name for name, _ in session.calls],
+                         ["get_project", "import_asset_from_path", "get_project",
+                          "add_asset_to_timeline", "get_project"])
+        rejects = [e for e in result["events"]
+                   if e["kind"] == "model_action_rejected"]
+        self.assertEqual(len(rejects), 1)
+        self.assertEqual(rejects[0]["validation_keyword"], "host_precondition")
+        self.assertEqual(rejects[0]["schema_location"], "project_assets_available")
+        self.assertTrue(rejects[0]["no_native_dispatch"])
+        self.assertEqual(model.observed[0]["host_verified_execution_progress"][
+            "project_asset_count_from_native_read"], 0)
+        self.assertEqual(model.observed[1][
+            "last_rejected_native_action_feedback"]["missing_machine_facts"],
+            ["project_assets_available"])
+        self.assertEqual(model.observed[2]["host_verified_execution_progress"][
+            "project_asset_count_from_native_read"], 1)
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+        self.assertFalse(result["native_editing_capability_complete"])
+
+    def test_project_asset_count_never_trusts_malformed_or_conflicting_read(self):
+        from studio_next.native_creative_control import (
+            _native_project_asset_count_from_text,)
+        def receipt(count, *, nested=None):
+            if nested is None:
+                nested = count
+            return [json.dumps({
+                "mcp": {"hasProject": True},
+                "project": {"assetCount": nested}, "assetCount": count,
+            })]
+        self.assertEqual(_native_project_asset_count_from_text(receipt(0)), 0)
+        self.assertEqual(_native_project_asset_count_from_text(receipt(3)), 3)
+        for invalid in (
+            receipt(0, nested=1), receipt(True), receipt(-1),
+            ['{"mcp":{"hasProject":true},"project":{}}'],
+            ['{"mcp":{"hasProject":false},"project":{"assetCount":0},"assetCount":0}'],
+            ['{"mcp":{"hasProject":true},"project":{"assetCount":0},"assetCount":0,"assetCount":1}'],
+            [], ["not a native JSON receipt"],
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertIsNone(_native_project_asset_count_from_text(invalid))
+
     async def test_wrong_order_import_is_rejected_without_stateful_editor_rpc(self):
         from studio_next.native_creative_audit import audit_native_journal
         session = FakeSession()
