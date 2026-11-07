@@ -93,6 +93,13 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             set(requires), {"import_asset_from_path", "add_text_clip", "save_project"})
         self.assertEqual(effects, {"create_project": ["project_open"]})
         self.assertNotIn("add_asset_to_timeline", requires)
+        with_asset = {**granted, "add_asset_to_timeline": "write",
+                      "replace_clip_with_asset": "write"}
+        source_rules, _ = method(with_asset, fresh=True)
+        self.assertEqual(source_rules["add_asset_to_timeline"],
+                         ["project_open", "project_assets_available"])
+        self.assertEqual(source_rules["replace_clip_with_asset"],
+                         ["project_open", "project_assets_available"])
         tools = [{"name": name, "description": "", "inputSchema": {
             "type": "object", "properties": {}}} for name in granted]
         fabric = CapabilityFabric({

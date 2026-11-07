@@ -48,8 +48,9 @@ def trial_machine_contracts(grants, *, fresh):
         return {}, {}
     prerequisites = {
         "import_asset_from_path": ("project_open",),
-        "add_asset_to_timeline": ("project_open",),
-        "add_assets_to_timeline": ("project_open",),
+        "add_asset_to_timeline": ("project_open", "project_assets_available"),
+        "add_assets_to_timeline": ("project_open", "project_assets_available"),
+        "replace_clip_with_asset": ("project_open", "project_assets_available"),
         "add_text_clip": ("project_open",),
         "add_shape_clip": ("project_open",),
         "update_text_clip": ("project_open",),
