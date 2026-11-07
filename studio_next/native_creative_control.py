@@ -511,6 +511,19 @@ def _native_project_presence_from_text(texts):
 
 
 
+def _native_project_current_clip_count_from_text(texts):
+    """Independent current-timeline clip count; no asset identity inferred."""
+    if len(texts) != 1:
+        return None
+    try:
+        state = _strict_receipt(texts, "native project current timeline")
+    except NativeCreativeControlError:
+        return None
+    current = state.get("currentTimeline") if isinstance(state, dict) else None
+    count = current.get("clipCount") if isinstance(current, dict) else None
+    return count if type(count) is int and 0 <= count <= 1_000_000 else None
+
+
 def _native_timeline_picture_presence_from_text(texts):
     """Read-only Velorn get_timeline snapshot; unknown is never treated as empty."""
     try:
@@ -647,6 +660,10 @@ class NativeCreativeControl:
         self._imports_awaiting_native_visibility: dict[tuple[str, str], str | None] = {}
         self._last_native_timeline_picture_state = "unknown"
         self._host_timeline_observation_attempted = False
+        # App-level source placement ACK may precede actual renderer
+        # state convergence. Never let a stale empty read authorize another
+        # first-placement write before independent native readback.
+        self._first_picture_write_unreconciled = False
         self._verified_exports: set[str] = set()
         self._model_wall_ms_total = 0.0
         self._native_mcp_wall_ms_total = 0.0
@@ -1063,6 +1080,14 @@ class NativeCreativeControl:
                                             "Timeline project sensing cannot contain unbound media")
                                     picture_state = _native_timeline_picture_presence_from_text(
                                         timeline_texts)
+                                    if picture_state == "present":
+                                        self._first_picture_write_unreconciled = False
+                                    elif (picture_state == "absent" and
+                                          self._first_picture_write_unreconciled):
+                                        # Native first-placement ACK + old empty
+                                        # snapshot is a CONTRADICTION, not a
+                                        # trustworthy fact that no clip exists.
+                                        picture_state = "unknown"
                                     digest = hashlib.sha256(
                                         _wire(timeline_texts).encode("utf-8")).hexdigest()
                                 except NativeCreativeControlError:
@@ -1178,6 +1203,12 @@ class NativeCreativeControl:
                     # A successful write and a lagging native READ are a
                     # contradiction, never permission to create again.
                     "last_host_project_write_reconciliation": self._post_write_state_warning,
+                    "last_native_first_picture_write_reconciliation": (
+                        {"host_application_write_acknowledged": True,
+                         "native_picture_readback_not_yet_confirmed": True,
+                         "do_not_repeat_source_placement_without_readback": True,
+                         "read_only_native_timeline_inspection_available": True}
+                        if self._first_picture_write_unreconciled else None),
                     "last_native_source_import_reconciliation": (
                         {"native_import_acknowledged": True,
                          "specific_imported_asset_not_yet_observed": True,
@@ -1502,6 +1533,24 @@ class NativeCreativeControl:
                                   "schema_location": "",
                                   "no_native_dispatch": True})
                     continue
+                if (self._first_picture_write_unreconciled and
+                        self.host_tool_access is not None and
+                        self.host_tool_access.get(native_name) == "write" and
+                        "timeline_picture_present" in
+                        self._host_possible_effects.get(native_name, ())):
+                    self._last_preflight_feedback = {
+                        "tool": native_name,
+                        "validation_keyword": "unreconciled_first_picture_write",
+                        "first_picture_write_previously_acknowledged": True,
+                        "read_only_get_timeline_can_reconcile": True,
+                        "no_native_dispatch": True}
+                    self._append({"kind": "model_action_rejected", "turn": turn,
+                                  **timing, "tool": native_name,
+                                  "inputs_sha256": hashlib.sha256(
+                                      _wire(args["inputs"]).encode()).hexdigest(),
+                                  "validation_keyword": "unreconciled_first_picture_write",
+                                  "no_native_dispatch": True})
+                    continue
                 invalid = next(validators[native_name].iter_errors(args["inputs"]), None)
                 if invalid is not None:
                     schema = validators[native_name].schema
@@ -1672,6 +1721,13 @@ class NativeCreativeControl:
                                       "no_native_dispatch": True})
                         continue
                 self._last_preflight_feedback = None
+                requires_first_picture_readback = (
+                    self.catalog_mode == "indexed" and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(native_name) == "write" and
+                    self._last_native_timeline_picture_state == "absent" and
+                    "timeline_picture_present" in
+                    self._host_possible_effects.get(native_name, ()))
                 self._append({"kind": "native_tool_submitted", "turn": turn,
                               **timing,
                               "tool": native_name,
@@ -2020,6 +2076,72 @@ class NativeCreativeControl:
                               "audio_sent_to_model_for_next_decision": bool(audio),
                               "audio_semantically_heard": False,
                               "human_or_artistic_quality_approved": False})
+                # The pinned native Electron/editor tests prove a successful
+                # source-placement ACK can be followed by get_project AND
+                # get_timeline both reporting the prior empty state. A
+                # larger real Qwen run (#42327595943) then repeated the
+                # placement and failed. Reconcile using trusted read-only
+                # observations *before* the next costly model decision.
+                # This does NOT choose/edit video or claim artistic success.
+                if requires_first_picture_readback:
+                    self._first_picture_write_unreconciled = True
+                    timeline_read_args = {"includeClips": True, "limit": 1000}
+                    if (self.host_tool_access.get("get_project") == "read" and
+                            self.host_tool_access.get("get_timeline") == "read" and
+                            "get_project" in validators and
+                            "get_timeline" in validators and
+                            validators["get_project"].is_valid({}) and
+                            validators["get_timeline"].is_valid(timeline_read_args)):
+                        # A newly created native clip converged after several
+                        # get_project polls in the physically pinned editor.
+                        # Bound both attempts and delay; never retry the WRITE.
+                        for check_index in range(6):
+                            if check_index:
+                                await asyncio.sleep(.25)
+                            try:
+                                project_reply = await self.session.call_tool(
+                                    "get_project", {})
+                                timeline_reply = await self.session.call_tool(
+                                    "get_timeline", timeline_read_args)
+                                if (_native_mcp_error_status(project_reply) or
+                                        _native_mcp_error_status(timeline_reply)):
+                                    break
+                                project_texts, project_images, project_audio = (
+                                    _native_content(project_reply))
+                                timeline_texts, timeline_images, timeline_audio = (
+                                    _native_content(timeline_reply))
+                                if (project_images or project_audio or
+                                        timeline_images or timeline_audio):
+                                    break
+                                project_count = _native_project_current_clip_count_from_text(
+                                    project_texts)
+                                observed_picture = _native_timeline_picture_presence_from_text(
+                                    timeline_texts)
+                            except (Exception, ValueError):
+                                break
+                            if project_count is not None and project_count > 0 and (
+                                    observed_picture == "present"):
+                                self._first_picture_write_unreconciled = False
+                                self._last_native_timeline_picture_state = "present"
+                                self._host_timeline_observation_attempted = True
+                                self._append({
+                                    "kind": "host_native_timeline_picture_observation",
+                                    "turn": turn, "picture_state": "present",
+                                    "observed_text_sha256": hashlib.sha256(
+                                        _wire(timeline_texts).encode()).hexdigest(),
+                                    "host_attested_read_only": True,
+                                    "no_native_edit_dispatched": True})
+                                break
+                    if self._first_picture_write_unreconciled:
+                        # Failure to converge is UNKNOWN state; the prior
+                        # mutation may have happened. Model gets a bounded
+                        # diagnostic and cannot blindly repeat placement.
+                        self._last_native_timeline_picture_state = "unknown"
+                        self._host_timeline_observation_attempted = False
+                        self._post_write_state_warning = {
+                            "first_picture_write_readback_unconfirmed": True,
+                            "must_inspect_native_timeline": True,
+                            "no_automatic_write_retry": True}
                 if native_name in self._host_once_after_ack and self.catalog_mode == "indexed":
                     # A one-time host operation has already been acknowledged.
                     # Its old search result is no longer an actionable frontier;
