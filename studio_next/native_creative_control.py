@@ -1769,18 +1769,16 @@ class NativeCreativeControl:
                 # fresh host read. This left project_open UNKNOWN immediately
                 # after a successful asset import, so the next model-selected
                 # timeline edit was refused by the trusted prerequisite gate.
-                # Re-observe after any host-authorized WRITE which either
-                # establishes OR requires project_open. A native ACK alone
-                # never proves that the editor remains on the same project.
-                # Reuse the bounded, independently journaled read-only
-                # reconciliation; never retry the model-selected WRITE.
-                effects = self._host_possible_effects.get(native_name, ())
-                prerequisites = self._host_preconditions.get(native_name, ())
+                # Re-observe after EVERY acknowledged native editor write
+                # when the host has granted get_project. The actual 26-turn
+                # Qwen run lost its project/asset-count evidence after
+                # add_timeline_markers, which had no project_open prerequisite.
+                # A native write ACK cannot preserve the previous state fact.
+                # This is a bounded READ-only reconciliation, never replay
+                # of a model-authored write; an error remains unknown.
                 reobserve_project = (
-                    (isinstance(effects, (list, tuple)) and
-                     "project_open" in effects) or
-                    (isinstance(prerequisites, (list, tuple)) and
-                     "project_open" in prerequisites))
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(native_name) == "write")
                 if (reobserve_project and
                         self.host_tool_access is not None and
                         self.host_tool_access.get("get_project") == "read" and
