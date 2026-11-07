@@ -29,6 +29,11 @@ _HOST_ALLOWED = frozenset({
 })
 
 
+def _no_cloud_credentials():
+    """Never let ordinary FFmpeg or Git worker subprocesses read API keys."""
+    return {k: v for k, v in os.environ.items() if k != "NVIDIA_API_KEY"}
+
+
 def _sha256(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as source:
@@ -46,7 +51,8 @@ def prepare_trial(workspace: Path, *, source: Path):
     if not source.is_dir():
         raise ValueError("Pinned native editor source checkout missing")
     rev = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"],
-                         check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+                         check=True, capture_output=True, text=True, timeout=15,
+                         env=_no_cloud_credentials()).stdout.strip()
     if rev != _PINNED_EDITOR:
         raise ValueError("Unpinned native editor source cannot enter trial")
     os.umask(0o077)
@@ -61,8 +67,7 @@ def prepare_trial(workspace: Path, *, source: Path):
         ["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
          "gradients=s=640x360:r=24:d=4:c0=0x20364c:c1=0x85bbc1:seed=13",
          "-c:v", "libx264", "-pix_fmt", "yuv420p", str(image_path)],
-        check=True, timeout=90, env={k: v for k, v in os.environ.items()
-                                     if k != "NVIDIA_API_KEY"})
+        check=True, timeout=90, env=_no_cloud_credentials())
     source_ledger = [{
         "path": str(image_path),
         "sha256": _sha256(image_path),
@@ -161,8 +166,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     for path in mp4s:
         subprocess.run(
             ["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"],
-            check=True, timeout=90, env={k: v for k, v in os.environ.items()
-                                         if k != "NVIDIA_API_KEY"})
+            check=True, timeout=90, env=_no_cloud_credentials())
         media.append({"path": str(path), "sha256": _sha256(path),
                       "bytes": path.stat().st_size})
     evaluated = {
