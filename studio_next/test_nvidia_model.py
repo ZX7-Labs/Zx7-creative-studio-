@@ -24,7 +24,7 @@ def _reply(body='{"action":"finish","reason":"tested"}'):
 class NvidiaProviderContractTest(unittest.TestCase):
     def test_validated_host_owned_cloud_model(self):
         good = NvidiaModelSettings()
-        self.assertEqual(good.model_id, "qwen/qwen3.5-122b-a10b")
+        self.assertEqual(good.model_id, "nvidia/nemotron-3.5-super-vl-120b-a12b")
         for changes in (
             {"base_url": "http://127.0.0.1:12345"},
             {"base_url": "https://attacker.example"},
@@ -72,7 +72,7 @@ class NvidiaProviderContractTest(unittest.TestCase):
         self.assertEqual(req.get_header("Authorization"), "Bearer " + credential)
         self.assertEqual(timeout, 180)
         body = json.loads(req.data)
-        self.assertEqual(body["model"], "qwen/qwen3.5-122b-a10b")
+        self.assertEqual(body["model"], "nvidia/nemotron-3.5-super-vl-120b-a12b")
         self.assertFalse(body["stream"])
         self.assertEqual(body["max_tokens"], 2048)
         self.assertNotIn("response_format", body)
