@@ -1688,14 +1688,16 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             "import_asset_from_path", "add_asset_to_timeline",
             "update_text_clip") else "read") for x in session.tools}
         model = ScriptedModel([
+            decision("search", query="import asset from path"),
             decision("invoke", tool="import_asset_from_path",
                      inputs={"path": "/authorized/camera.mp4", "previewOnly": False}),
+            decision("search", query="add asset to timeline"),
             decision("invoke", tool="add_asset_to_timeline",
                      inputs={"assetId": "asset-from-real-editor", "previewOnly": False}),
             decision("finish", summary="Native decisions are only a fixture"),
         ])
         outcome = await NativeCreativeControl(
-            session, model, max_turns=3, host_tool_access=grants,
+            session, model, max_turns=5, catalog_mode="indexed", host_tool_access=grants,
             host_preconditions={
                 "import_asset_from_path": ["project_open"],
                 "add_asset_to_timeline": ["project_open"],
@@ -1704,9 +1706,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([name for name, _ in session.calls], [
             "get_project", "import_asset_from_path", "get_project",
             "add_asset_to_timeline", "get_project"])
-        self.assertEqual(model.observed[1][
-            "native_project_presence_from_last_inspection"], "present")
         self.assertEqual(model.observed[2][
+            "native_project_presence_from_last_inspection"], "present")
+        self.assertEqual(model.observed[4][
             "native_project_presence_from_last_inspection"], "present")
         observations = [e for e in outcome["events"]
                         if e["kind"] == "host_project_post_write_observation"]
@@ -1754,23 +1756,25 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             "import_asset_from_path", "add_asset_to_timeline") else "read")
             for x in session.tools}
         model = ScriptedModel([
+            decision("search", query="import asset from path"),
             decision("invoke", tool="import_asset_from_path",
                      inputs={"path": "/authorized/source.mp4"}),
+            decision("search", query="add asset to timeline"),
             decision("invoke", tool="add_asset_to_timeline",
                      inputs={"assetId": "unverified-asset"}),
             decision("finish", summary="Not verified"),
         ])
         outcome = await NativeCreativeControl(
-            session, model, max_turns=3, host_tool_access=grants,
+            session, model, max_turns=5, catalog_mode="indexed", host_tool_access=grants,
             host_preconditions={
                 "import_asset_from_path": ["project_open"],
                 "add_asset_to_timeline": ["project_open"],
             }).run("No uncertain native writes")
         self.assertEqual([name for name, _ in session.calls],
                          ["get_project", "import_asset_from_path", "get_project"])
-        self.assertEqual(model.observed[1][
+        self.assertEqual(model.observed[2][
             "native_project_presence_from_last_inspection"], "unknown")
-        self.assertTrue(model.observed[1][
+        self.assertTrue(model.observed[2][
             "last_host_project_write_reconciliation"]["project_state_unknown"])
         rejected = [e for e in outcome["events"]
                     if e["kind"] == "model_action_rejected"]
