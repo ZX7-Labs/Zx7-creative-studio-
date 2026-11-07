@@ -25,8 +25,15 @@ class LocalModelOutputError(ValueError):
     """
 
     def __init__(self, code: str):
-        if code not in ("duplicate_json_field", "invalid_json", "truncated_response",
-                        "empty_response", "non_object_json"):
+        if code not in (
+                "duplicate_json_field", "invalid_json", "truncated_response",
+                "empty_response", "non_object_json",
+                # Hosted function-call grammar is model-originated data.
+                # None of these conditions grants or replays a native edit.
+                "oversize_tool_envelope", "tool_choice_count",
+                "truncated_tool_decision", "missing_or_multiple_function_calls",
+                "unexpected_native_function", "invalid_native_function_arguments",
+                "invalid_tool_response_envelope"):
             raise ValueError("Unknown model output failure classification")
         self.code = code
         message = ("Duplicate local model JSON field" if code == "duplicate_json_field"

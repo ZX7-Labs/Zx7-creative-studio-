@@ -19,11 +19,14 @@ endpoint, with the existing host-granted BODY native gateway.
   checked-in file, chat transcript, debug dump, public issue or source archive.
   Do not paste a real key into tests. Rotate keys if exposure is suspected.
 - No automatic cloud fallback; no network request in the default local mode.
-- The NVIDIA API currently documents chat + images/video and tools, but not
-  a guaranteed `response_format` strict JSON-schema parameter. The adapter
-  sends a JSON-only prompt and verifies returned JSON locally; this is **not
-  server-enforced constrained decoding**. The local/native client rejects
-  `--structured-actions` with NVIDIA to avoid a false guarantee.
+- The NVIDIA API advertises function calling, but provider-side strict
+  JSON Schema constrained decoding is **not guaranteed**. The legacy adapter
+  requests JSON in a prompt and validates locally. For a native-editor session,
+  explicit `--structured-actions` selects the separate, forced single-function
+  `NvidiaToolCreativeModel`; each actual action still passes independent
+  host grants, schema validation and state checks. This is **not** proof that
+  the hosted endpoint or a neural edit works: a real no-media function-call
+  smoke and physical editor trial are separate acceptance gates.
 - All inference text, including user briefs, tool descriptions, source paths,
   and prior responses selected by the controller, is sent to the chosen
   provider when cloud mode is explicitly enabled. **Private media bytes**
@@ -62,7 +65,8 @@ python engines/velorn/native-model-client.py \
   --provider nvidia --model-id nvidia/nemotron-3.5-super-vl-120b-a12b \
   --source ./third_party/velorn --config /private/editor-config.json \
   --state /private/editor-state --brief-file /private/creative-brief.txt \
-  --receipt /private/new-trial-receipt.jsonl --max-turns 8
+  --receipt /private/new-trial-receipt.jsonl --max-turns 8 \
+  --structured-actions
 ```
 
 This command cannot upload observed video frames unless the operator adds

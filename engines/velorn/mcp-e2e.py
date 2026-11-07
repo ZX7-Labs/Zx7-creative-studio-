@@ -100,6 +100,17 @@ async def exercise(options):
         for tool in discovered:
             if tool.name in native:
                 assert tool.input_schema == native[tool.name]["inputSchema"]
+        # One genuine pinned-editor catalog audit, not an inference or an
+        # execution guarantee. Do not grant absent specialist/cloud tools.
+        from studio_next.native_capability_audit import audit_native_coverage
+        coverage = audit_native_coverage(list(native.values()), tools)
+        assert (coverage["native_advertised"], coverage["host_granted"],
+                coverage["host_ungranted"]) == (130, 77, 53), coverage
+        assert {"generate_music", "import_stock_media",
+                "queue_timeline_generation_batch"}.issubset(
+                    coverage["ungranted_native_names"])
+        print("ACTUAL_NATIVE_EDITOR_CAPABILITY_COVERAGE " +
+              json.dumps(coverage, sort_keys=True))
         # The universal host admission gateway must actually work against
         # this installed native Electron editor, not merely a fake tool
         # listing or a separate BODY operation. All operations exposed here

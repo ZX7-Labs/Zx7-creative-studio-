@@ -36,6 +36,25 @@ class CapabilityFabricTests(unittest.TestCase):
                          "motion/keyframe_curve")
         self.assertFalse(fabric.search("imaginary teleportation")["matches"])
 
+    def test_exact_operation_phrase_beats_longer_native_sibling(self):
+        ops = [
+            tool("create_project", "Create a project"),
+            tool("create_project_checkpoint", "Create a project checkpoint"),
+            tool("create_timeline", "Create the timeline"),
+        ]
+        fabric = CapabilityFabric({"native": (
+            ops, {entry.name: "write" for entry in ops})})
+        broad = fabric.search("create", limit=1)
+        self.assertTrue(broad["requires_refinement"])
+        self.assertFalse(broad["matches"])
+        precise = fabric.search("create project", limit=1)
+        self.assertEqual([x["id"] for x in precise["matches"]],
+                         ["native/create_project"])
+        self.assertFalse(precise["requires_refinement"])
+        self.assertTrue(precise["has_more"])
+        self.assertEqual(fabric.search("create project checkpoint", limit=1)
+                         ["matches"][0]["id"], "native/create_project_checkpoint")
+
     def test_optional_search_facets_are_actual_host_granted_not_a_tool_manual(self):
         granted = [tool("create_project"), tool("get_timeline"),
                    tool("import_asset_from_path"), tool("add_clip_to_timeline")]

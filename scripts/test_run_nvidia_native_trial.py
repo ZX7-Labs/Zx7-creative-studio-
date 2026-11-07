@@ -10,6 +10,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from scripts.nvidia_native_trial_request import validate_native_trial_request
 from scripts.nvidia_smoke_request import SmokeRequestError
@@ -99,6 +101,55 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "authorized project creator"):
             method({"save_project": "write"}, fresh=True)
         self.assertEqual(method({}, fresh=False), ({}, {}))
+
+    def test_real_native_client_can_use_nvidia_function_tool_model(self):
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        factory = runpy.run_path(str(script), run_name="native_model_route_test")[
+            "native_decision_model"]
+        common = dict(provider="nvidia", base_url="http://127.0.0.1:8080",
+                      model_id=_ALLOWED_MODEL, model_timeout=60,
+                      allow_cloud_image_upload=False)
+        with patch("studio_next.nvidia_model.NvidiaCreativeModel.verify_host_credentials") as check:
+            structured = factory(SimpleNamespace(**common, structured_actions=True))
+            legacy = factory(SimpleNamespace(**common, structured_actions=False))
+        self.assertEqual(type(structured).__name__, "NvidiaToolCreativeModel")
+        self.assertEqual(type(legacy).__name__, "NvidiaCreativeModel")
+        self.assertEqual(check.call_count, 2)
+        with self.assertRaisesRegex(ValueError, "fixed"):
+            factory(SimpleNamespace(**{**common, "base_url": "https://other.invalid"},
+                                    structured_actions=True))
+
+    def test_local_indexed_and_full_grammar_modes_both_use_live_host_context(self):
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        factory = runpy.run_path(str(script), run_name="native_local_route_test")[
+            "native_decision_model"]
+        common = dict(provider="local", base_url="http://127.0.0.1:8080",
+                      model_id="test", model_timeout=15,
+                      allow_cloud_image_upload=False)
+        structured = factory(SimpleNamespace(**common, structured_actions=True))
+        legacy = factory(SimpleNamespace(**common, structured_actions=False))
+        self.assertEqual(type(structured).__name__, "LocalNativeStructuredCreativeModel")
+        self.assertEqual(type(legacy).__name__, "LocalCreativeModel")
+        self.assertNotIn("response_format", structured.settings.sampling)
+
+    def test_native_trial_actually_requests_structured_actions(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            workspace = Path(scratch) / "trial"
+            workspace.mkdir()
+            roots = {"state": workspace / "state", "outputs": workspace / "out"}
+            failed = subprocess.CompletedProcess([], 1, "", "test failure")
+            with patch("scripts.run_nvidia_native_trial.prepare_trial",
+                       return_value=(roots, workspace / "host.json")), patch(
+                    "scripts.run_nvidia_native_trial.subprocess.run",
+                    return_value=failed) as native_call:
+                with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                    run_trial(workspace, model_id=_ALLOWED_MODEL,
+                              xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95")
+            command = native_call.call_args.args[0]
+            self.assertIn("--structured-actions", command)
+            self.assertIn("--indexed-catalog", command)
 
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:

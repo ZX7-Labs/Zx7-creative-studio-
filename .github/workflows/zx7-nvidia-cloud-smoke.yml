@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Verify provider safety contract without network calls
-        run: python -m unittest studio_next.test_nvidia_model scripts.test_nvidia_smoke_request -v
+        run: python -m unittest studio_next.test_nvidia_model studio_next.test_nvidia_tool_model scripts.test_nvidia_smoke_request -v
       - name: Validate explicit no-media evaluation request
         shell: bash
         env:
@@ -78,3 +78,16 @@ jobs:
               exit 2 ;;
           esac
           python -m scripts.nvidia_api_smoke --model-id "$model"
+      - name: Verify real hosted NVIDIA function-call tool-choice, without native dispatch
+        if: env.MODEL_VARIANT == 'nemotron-super-vl'
+        shell: bash
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NVIDIA_API_KEY:-}" ]; then
+            echo "Missing operator cloud secret; no function-call request"
+            exit 2
+          fi
+          python -m scripts.nvidia_tool_choice_smoke
+
