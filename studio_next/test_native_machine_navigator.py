@@ -132,6 +132,36 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(proof["recorded_native_write_result_count"],0)
         self.assertFalse(proof["human_or_artistic_quality_approved"])
 
+    async def test_real_prerequisite_import_survives_unrelated_model_searches_without_auto_write(self):
+        # The real Qwen original-camera run 42154781482 repeatedly searched
+        # for placement/transitions despite a live empty import inventory.
+        # This exercises only the host's source-neutral capability surface,
+        # not a scripted model's claimed artistic skill.
+        session=SyntheticNativeStateSession()
+        model=ScriptedModel([
+            decision("search",query="add existing video asset to timeline"),
+            decision("search",query="native transition and effects"),
+            decision("invoke",tool="import_asset_from_path",
+                     inputs={"path":"/owner-authorized/source.webm"}),
+            decision("finish",summary="Editor source imported; no film delivered"),
+        ])
+        outcome=await controls(session,model,4).run("Make a real source-based film")
+        observed=model.observed[2]
+        self.assertFalse(observed["host_observed_machine_facts"]["assets_present"])
+        self.assertIn("import_asset_from_path",observed["selectable_native_tools"])
+        self.assertIn("invoke",observed["available_actions"])
+        self.assertIn("import_asset_from_path",observed[
+            "last_capability_search_result"][
+                "host_machine_prerequisite_candidates_still_selectable"])
+        self.assertEqual([name for name,_ in session.calls].count(
+            "import_asset_from_path"),1)
+        self.assertEqual([name for name,_ in session.calls].count(
+            "add_asset_to_timeline"),0)
+        self.assertFalse(outcome["native_editing_capability_complete"])
+        self.assertFalse(any(e["kind"]=="native_tool_result" and
+                             e.get("tool")=="add_asset_to_timeline"
+                             for e in outcome["events"]))
+
     async def test_brain_can_choose_import_and_then_picture_tool_without_one_metadata_search(self):
         session=SyntheticNativeStateSession()
         model=ScriptedModel([
