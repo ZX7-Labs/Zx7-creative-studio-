@@ -2257,6 +2257,86 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(invalid=invalid):
                 self.assertIsNone(_native_project_asset_count_from_text(invalid))
 
+    def test_native_clip_count_requires_current_host_timeline_identity(self):
+        from studio_next.native_creative_control import (
+            _native_timeline_clip_count_from_text,)
+
+        def receipt(count, *, active="timeline-1", selected="timeline-1"):
+            return [json.dumps({
+                "mcp": {"hasProject": True},
+                "project": {"currentTimelineId": selected},
+                "currentTimeline": {"id": active, "clipCount": count},
+            })]
+
+        self.assertEqual(_native_timeline_clip_count_from_text(receipt(0)), 0)
+        self.assertEqual(_native_timeline_clip_count_from_text(receipt(3)), 3)
+        for invalid in (
+            receipt(True), receipt(-1), receipt(0, active="stale-timeline"),
+            receipt(0, selected="stale-project-head"),
+            ['{"mcp":{"hasProject":true},"project":{"currentTimelineId":"t"},"currentTimeline":{"id":"t"}}'],
+            ['{"mcp":{"hasProject":false},"project":{"currentTimelineId":"t"},"currentTimeline":{"id":"t","clipCount":0}}'],
+            ['{"mcp":{"hasProject":true},"project":{"currentTimelineId":"t"},"currentTimeline":{"id":"t","clipCount":0,"clipCount":4}}'],
+            [], ["bad json"], receipt(0) + receipt(2),
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertIsNone(_native_timeline_clip_count_from_text(invalid))
+
+    async def test_real_empty_timeline_rejects_duplicate_before_stateful_native_rpc(self):
+        """Physical Qwen failure #42420526258: source filename is not
+        an existing editable clip id. A false host precondition is not
+        permission to ask the native editor to duplicate it.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+        session = FakeSession()
+        session.tools.extend([
+            SimpleNamespace(name="get_project", description="Actual project timeline",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="duplicate_clip", description="Duplicate existing clip",
+                            input_schema={"type": "object", "properties": {
+                                "clipId": {"type": "string"}},
+                                "required": ["clipId"]}),
+        ])
+
+        async def native_call(name, arguments):
+            session.calls.append((name, arguments))
+            if name != "get_project":
+                raise AssertionError("Unproven native duplicate reached stateful MCP")
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text", text=json.dumps({
+                    "mcp": {"hasProject": True},
+                    "project": {"currentTimelineId": "native-timeline"},
+                    "currentTimeline": {"id": "native-timeline", "clipCount": 0},
+                }))])
+        session.call_tool = native_call
+        grants = {tool.name: ("write" if tool.name in (
+            "update_text_clip", "duplicate_clip") else "read")
+            for tool in session.tools}
+        model = ScriptedModel([
+            decision("search", query="duplicate_clip", limit=1),
+            decision("invoke", tool="duplicate_clip",
+                     inputs={"clipId": "raw-gradient-0"}),
+            decision("finish", summary="No native duplicate was authorized"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, catalog_mode="indexed", max_turns=3,
+            host_tool_access=grants,
+            host_preconditions={"duplicate_clip": [
+                "project_open", "timeline_clips_available"]}).run(
+                    "Edit imported camera footage without inventing clip identities")
+        self.assertEqual(session.calls, [("get_project", {})])
+        self.assertEqual(model.observed[1]["host_verified_execution_progress"][
+            "active_timeline_clip_count_from_native_read"], 0)
+        rejected = [e for e in result["events"] if
+                    e["kind"] == "model_action_rejected"]
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0]["tool"], "duplicate_clip")
+        self.assertEqual(rejected[0]["validation_keyword"], "host_precondition")
+        self.assertEqual(rejected[0]["schema_location"], "timeline_clips_available")
+        self.assertEqual(model.observed[2]["last_rejected_native_action_feedback"][
+            "missing_machine_facts"], ["timeline_clips_available"])
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
     async def test_wrong_order_import_is_rejected_without_stateful_editor_rpc(self):
         from studio_next.native_creative_audit import audit_native_journal
         session = FakeSession()
