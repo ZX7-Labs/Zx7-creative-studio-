@@ -559,7 +559,12 @@ async def exercise(options):
             "range": "custom", "startSeconds": 0, "endSeconds": 2,
             "includeAudio": False,
         }
-        readiness = await call(session, "check_export_readiness", single_export)
+        # Read-only readiness has no outputPath in its pinned native schema.
+        # Keep destination selection exclusively in preview/apply export calls;
+        # the strict host bridge must reject undeclared parameters.
+        readiness_args = {key: value for key, value in single_export.items()
+                          if key != "outputPath"}
+        readiness = await call(session, "check_export_readiness", readiness_args)
         assert readiness["ready"] is True and readiness["blockers"] == [], readiness
         assert readiness["counts"]["exportableVisualClipCount"] == 1, readiness
         preview = await call(session, "export_timeline", {
