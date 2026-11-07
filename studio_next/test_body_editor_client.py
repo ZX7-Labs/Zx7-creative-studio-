@@ -81,6 +81,30 @@ class LocalEditorClientTests(unittest.TestCase):
         client.call("edit", {}, allowed_access={"write"})
         self.assertEqual(len(self.requests), 1)
 
+    def test_shared_native_editor_client_blocks_unimplemented_marker_previews_before_http(self):
+        """Pinned Velorn marker add/remove handlers ignore previewOnly.
+        This transport-level boundary protects all BODY callers, not only
+        one neural trial harness. No write is dispatched for a preview.
+        """
+        for tool_name, payload in (
+                ("add_timeline_markers", {"markers": [{"timeSeconds": 1.0}]}),
+                ("remove_timeline_markers", {"all": True})):
+            client = LocalEditorClient(
+                self.endpoint, allowed_tools={tool_name: "write"})
+            for inputs in (payload, {**payload, "previewOnly": True},
+                           {**payload, "previewOnly": None},
+                           {**payload, "previewOnly": "false"}):
+                with self.subTest(tool=tool_name, inputs=inputs):
+                    with self.assertRaisesRegex(EditorAccessError,
+                                                "Native marker preview"):
+                        client.call(tool_name, inputs, allowed_access={"write"})
+            self.assertEqual(self.requests, [])
+            committed = {**payload, "previewOnly": False}
+            client.call(tool_name, committed, allowed_access={"write"})
+            self.assertEqual(self.requests[-1]["params"],
+                             {"name": tool_name, "arguments": committed})
+            self.requests.clear()
+
     def test_only_exact_true_policy_accepts_before_http(self):
         for verdict in [False, None, 1, "yes"]:
             with self.subTest(verdict=verdict), self.assertRaises(EditorAccessError):
