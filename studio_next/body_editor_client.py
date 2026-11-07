@@ -199,6 +199,16 @@ class LocalEditorClient:
         if access not in _access_modes(allowed_access):
             raise EditorAccessError(f"Native tool requires {access} access")
         arguments = _json_arguments(arguments)
+        # Pinned Velorn b3c02adb's marker add/remove handlers ignore their
+        # advertised previewOnly flag. A client saying "preview" would
+        # inadvertently mutate the user's actual editable project.
+        # Require the caller itself to explicitly choose a write; never
+        # emulate or assume a safe preview that this implementation lacks.
+        if (tool_name in ("add_timeline_markers", "remove_timeline_markers") and
+                arguments.get("previewOnly") is not False):
+            raise EditorAccessError(
+                "Native marker preview is unsupported; explicit previewOnly:false "
+                "is required for an actual edit")
         if self._policy is not None and self._policy(tool_name, arguments, access) is not True:
             raise EditorAccessError("Native tool rejected by host policy")
         if tool_name == "split_clip" and arguments.get("previewOnly") is False:
