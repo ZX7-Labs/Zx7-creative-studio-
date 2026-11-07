@@ -8,6 +8,7 @@ from studio_next.body_capability_adapter import (
 from studio_next.capability_gateway import CapabilityExecutionError
 from studio_next.capability_attempts import CapabilityAttemptError, CapabilityAttemptStore
 from studio_next.capability_fabric import CapabilityContractError
+from studio_next.capability_session_budget import CapabilitySessionBudget
 
 
 class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
@@ -53,6 +54,41 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(any("Markdown" in str(t) for t in real.tools))
             self.assertIsNone(real.nextCursor)
 
+
+    async def test_real_installed_body_respects_host_supplied_call_budget(self):
+        with tempfile.TemporaryDirectory() as root:
+            budget = CapabilitySessionBudget(
+                max_calls=1, max_writes=0, per_source={"zx7": 1})
+            gateway = await connect_installed_zx7_body(
+                root, allowed_access=("read",), session_budget=budget)
+            revision = gateway._current().revision
+            args = {"frame_index": 48, "numerator": 24,
+                    "denominator": 1, "drop_frame": False}
+            actual = await gateway.invoke(
+                "zx7/body.timecode_format", revision=revision, inputs=args)
+            self.assertEqual(actual["state"], "host_reported_success_unverified")
+            with self.assertRaisesRegex(
+                    CapabilityExecutionError, "host_session_call_budget_exhausted"):
+                await gateway.invoke(
+                    "zx7/body.timecode_format", revision=revision, inputs=args)
+            self.assertEqual(len(gateway.evidence()), 1)
+            self.assertEqual(gateway.host_budget_evidence()["reserved_calls"], 1)
+            self.assertEqual(gateway.host_budget_evidence()["reserved_writes"], 0)
+
+    async def test_invalid_body_budget_refuses_before_creating_durable_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            for invalid in (
+                {"max_calls": 1}, "host-created-string",
+                CapabilitySessionBudget(
+                    max_calls=1, max_writes=0,
+                    per_source={"not-connected": 1}),
+            ):
+                with self.subTest(invalid=str(invalid)), self.assertRaises(ValueError):
+                    await connect_installed_zx7_body(
+                        root, allowed_access=("read",),
+                        durable_write_requests=True, session_budget=invalid)
+                self.assertFalse(
+                    (Path(root) / ".zx7-host-private").exists())
 
     async def test_installed_body_opt_in_durable_writes_preserve_read_tools(self):
         with tempfile.TemporaryDirectory() as root:

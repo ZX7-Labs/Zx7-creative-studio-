@@ -66,7 +66,8 @@ class InstalledBodyAdapter:
 
 async def connect_installed_zx7_body(workspace, *, allowed_access=("read", "write"),
                                     editor_client=None,
-                                    durable_write_requests=False):
+                                    durable_write_requests=False,
+                                    session_budget=None):
     """Connect the real BODY with optional crash-durable write admission.
 
     A host enabling this mode must assign a stable request_id to each WRITE.
@@ -75,7 +76,18 @@ async def connect_installed_zx7_body(workspace, *, allowed_access=("read", "writ
     """
     from .capability_gateway import CapabilityGateway
     from .capability_attempts import CapabilityAttemptStore
+    from .capability_session_budget import (
+        CapabilitySessionBudget, CapabilitySessionBudgetError)
 
+    # Reject malformed host budgets before any SQLite directory is created.
+    # Existing callers without this optional policy remain unchanged.
+    if session_budget is not None:
+        if not isinstance(session_budget, CapabilitySessionBudget):
+            raise ValueError("Installed BODY requires a host-owned execution budget")
+        try:
+            session_budget.validate_sources(("zx7",))
+        except CapabilitySessionBudgetError as exc:
+            raise ValueError(str(exc)) from exc
     if type(durable_write_requests) is not bool:
         raise ValueError("Durable native admission requires an explicit boolean host policy")
     adapter = InstalledBodyAdapter(workspace, allowed_access=allowed_access,
@@ -87,6 +99,7 @@ async def connect_installed_zx7_body(workspace, *, allowed_access=("read", "writ
     # BODY operations on future refreshes. A creative model cannot mint
     # grants, and external plugin connections remain explicitly host-authorized.
     gateway = CapabilityGateway({"zx7": (adapter, adapter.trusted_grants)},
-                                attempt_store=ledger)
+                                attempt_store=ledger,
+                                session_budget=session_budget)
     await gateway.refresh()
     return gateway

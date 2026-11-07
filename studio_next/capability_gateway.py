@@ -19,6 +19,8 @@ from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
 from .body_editor_mcp import _local_schema_references
 from .capability_attempts import CapabilityAttemptStore
+from .capability_session_budget import (
+    CapabilitySessionBudget, CapabilitySessionBudgetError)
 
 
 class CapabilityExecutionError(ValueError):
@@ -54,7 +56,13 @@ class CapabilityGateway:
     host-attested boolean facts. Missing facts deny prerequisite admission.
     """
 
-    def __init__(self, bindings: Mapping, *, attempt_store=None):
+    def __init__(self, bindings: Mapping, *, attempt_store=None,
+                 session_budget=None):
+        if session_budget is not None and not isinstance(
+                session_budget, CapabilitySessionBudget):
+            raise CapabilityExecutionError(
+                "Only a host-owned capability session budget is permitted")
+        self._session_budget = session_budget
         if attempt_store is not None and not isinstance(attempt_store, CapabilityAttemptStore):
             raise CapabilityExecutionError("Only the trusted durable capability ledger is permitted")
         self._attempt_store = attempt_store
@@ -85,6 +93,11 @@ class CapabilityGateway:
                                          copy.deepcopy(requires), facts,
                                          copy.deepcopy(possible_effects))
             self._locks[namespace] = asyncio.Lock()
+        if self._session_budget is not None:
+            try:
+                self._session_budget.validate_sources(self._bindings)
+            except CapabilitySessionBudgetError as exc:
+                raise CapabilityExecutionError(str(exc)) from exc
         self._fabric = None
         self._events = []
 
@@ -143,6 +156,12 @@ class CapabilityGateway:
         """Only bounded identity/digest and outcome, never raw private media."""
         return copy.deepcopy(self._events)
 
+    def host_budget_evidence(self):
+        """Host-only call admission facts, not LLM token or price accounting."""
+        if self._session_budget is None:
+            return None
+        return self._session_budget.snapshot()
+
     def unverified_native_writes(self, *, limit=32, cursor=None):
         """Trusted host recovery view, never a model-executable capability.
 
@@ -175,6 +194,15 @@ class CapabilityGateway:
             # creative app on each frame/operation. Cross-domain scaling
             # must not make single-engine edits O(all connected tools).
             session, _, conditions, fact_reader, effects = self._bindings[namespace]
+            # A plainly exhausted host budget must not spend more native
+            # tools/list RPCs discovering an action it can never dispatch.
+            # The later atomic reservation still handles cross-source races.
+            if self._session_budget is not None:
+                try:
+                    self._session_budget.check_available(
+                        source=namespace, access=record["access"])
+                except CapabilitySessionBudgetError as exc:
+                    raise CapabilityExecutionError(str(exc)) from exc
             grants = self._live_grants(namespace)
             advertised = await discover_all_live_tools(session)
             fresh = CapabilityFabric({namespace: (
@@ -225,6 +253,16 @@ class CapabilityGateway:
                 if not readiness["admissible"]:
                     raise CapabilityExecutionError(
                         "Machine prerequisite absent or unknown; inspect host state")
+            # A single trusted budget spans all connected creative engines.
+            # Reserve only after live grant/schema/machine preflight, but
+            # before a durable intent or any native read/write RPC. A failed
+            # remote attempt conservatively consumes the reserved slot.
+            if self._session_budget is not None:
+                try:
+                    self._session_budget.reserve(
+                        source=namespace, access=record["access"])
+                except CapabilitySessionBudgetError as exc:
+                    raise CapabilityExecutionError(str(exc)) from exc
             digest = hashlib.sha256(encoded_inputs).hexdigest()
             durable_write = (self._attempt_store is not None and
                              record["access"] == "write")
