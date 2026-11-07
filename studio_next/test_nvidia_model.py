@@ -100,6 +100,22 @@ class NvidiaProviderContractTest(unittest.TestCase):
         self.assertNotIn(credential, str(observed.exception))
         self.assertNotIn("private-media", str(observed.exception))
 
+    def test_untrusted_response_envelope_never_echoes_private_fields(self):
+        credential = "nvapi-" + "Z" * 32
+        class Opener:
+            def open(self, request, timeout):
+                return BytesIO(b'{"private-media":1,"private-media":2}')
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": credential}), patch(
+                "studio_next.nvidia_model.build_opener", return_value=Opener()):
+            with self.assertRaises(NvidiaTransportError) as caught:
+                NvidiaCreativeModel().decide({"brief": "private-media"})
+        self.assertNotIn("private-media", str(caught.exception))
+
+    def test_cloud_images_bounded_even_with_explicit_consent(self):
+        model = NvidiaCreativeModel(allow_image_upload=True)
+        with self.assertRaisesRegex(NvidiaConfigurationError, "egress budget"):
+            model.decide_with_images({}, [("image/png", b"x" * 10)] * 5)
+
     def test_cloud_does_not_pretend_nvidia_enforces_json_schema(self):
         settings = NvidiaModelSettings()
         model = NvidiaCreativeModel(settings)
