@@ -5,6 +5,7 @@ These tests do not simulate a neural edit or claim an artistic result.
 from __future__ import annotations
 
 import json
+import runpy
 from pathlib import Path
 import subprocess
 import tempfile
@@ -62,6 +63,17 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                     json.dumps({**baseline, **changes}), encoding="utf-8")
                 with self.subTest(changes=changes), self.assertRaises(SmokeRequestError):
                     validate_native_trial_request(candidate)
+
+    def test_real_editor_child_does_not_inherit_cloud_provider_key(self):
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        module = runpy.run_path(str(script), run_name="native_client_test")
+        given = {"PATH": "/usr/bin", "NVIDIA_API_KEY": "synthetic-secret-test-value",
+                 "OTHER_SETTING": "keep"}
+        child = module["native_editor_child_environment"](given)
+        self.assertNotIn("NVIDIA_API_KEY", child)
+        self.assertEqual(child, {"PATH": "/usr/bin", "OTHER_SETTING": "keep"})
+        self.assertIn("NVIDIA_API_KEY", given)
 
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
