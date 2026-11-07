@@ -1625,6 +1625,84 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
         self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_empty_native_project_exposes_import_as_host_option_without_autonomous_execution(self):
+        """Actual failure #42420526258: an empty project must expose the
+        installed *possible* source import, not pretend the staged media
+        were already imported or choose a creative edit for the model.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+        class EmptyProjectSession(FakeSession):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    payload = {
+                        "mcp": {"hasProject": True},
+                        "project": {"id": "existing-project", "assetCount": 0},
+                        "assetCount": 0,
+                    }
+                elif name == "import_asset_from_path":
+                    payload = {"success": True, "result": {
+                        "previewOnly": False, "assetId": "created-by-native-editor"}}
+                else:
+                    raise AssertionError("No other native operation expected")
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(payload))])
+        session = EmptyProjectSession()
+        session.tools += [
+            SimpleNamespace(name="get_project", description="Current native project",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="import_asset_from_path",
+                            description="Import original footage into this project",
+                            input_schema={"type": "object", "properties": {
+                                "path": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
+        ]
+        grants = {item.name: ("write" if item.name == "import_asset_from_path"
+                             else "read") for item in session.tools}
+        effects = {"import_asset_from_path": ["project_assets_available"]}
+        requirements = {"import_asset_from_path": ["project_open"]}
+        # A model that does not elect to import receives information, NOT a
+        # secretly scripted write. A model that does elect it gets exact
+        # native host validation and a read-after-write state inspection.
+        observing = ScriptedModel([
+            decision("search", query="other tool"),
+            decision("finish", summary="Host did not import a source for me"),
+        ])
+        result = await NativeCreativeControl(
+            session, observing, max_turns=2, catalog_mode="indexed",
+            host_tool_access=grants, host_preconditions=requirements,
+            host_possible_effects=effects).run("Original video edit")
+        for observation in observing.observed:
+            options = observation["host_observed_machine_affordances"]
+            self.assertEqual([x["tool"] for x in options["matches"]],
+                             ["import_asset_from_path"])
+            self.assertEqual(options["observed_missing_machine_facts"],
+                             ["project_assets_available"])
+            self.assertIn("import_asset_from_path",
+                          observation["selectable_native_tools"])
+        self.assertEqual(session.calls, [("get_project", {})])
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
+        session.calls.clear()
+        acting = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path", inputs={
+                "path": "/approved/source.mp4", "previewOnly": False}),
+            decision("finish", summary="Only the native import was acknowledged"),
+        ])
+        result = await NativeCreativeControl(
+            session, acting, max_turns=2, catalog_mode="indexed",
+            host_tool_access=grants, host_preconditions=requirements,
+            host_possible_effects=effects).run("Use original footage")
+        self.assertEqual([name for name, _ in session.calls],
+                         ["get_project", "import_asset_from_path", "get_project"])
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(sum(e.get("tool") == "import_asset_from_path" and
+                             e["kind"] == "native_tool_result"
+                             for e in result["events"]), 1)
+        self.assertFalse(result["native_editing_capability_complete"])
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
     async def test_unknown_project_state_does_not_grant_invented_affordances(self):
         session = FakeSession()
         session.tools += [
