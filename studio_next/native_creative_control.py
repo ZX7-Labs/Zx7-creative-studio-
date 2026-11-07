@@ -933,7 +933,76 @@ class NativeCreativeControl:
                     "successful_native_tool_results": sum(
                         event.get("kind") == "native_tool_result"
                         for event in self.events),
+                    # A stable factual checkpoint independent of recent
+                    # conversation windows. An acknowledged edit is NOT proof
+                    # the saved timeline is nonempty; an imported asset is
+                    # NOT a completed film. IDs remain model-observed only.
+                    "host_verified_execution_progress": {
+                        "project_presence": self._project_presence,
+                        "acknowledged_native_writes": sum(
+                            e.get("kind") == "native_tool_result" and
+                            e.get("host_application_write_acknowledged") is True
+                            for e in self.events),
+                        "acknowledged_source_import_operations": sum(
+                            e.get("kind") == "native_tool_result" and
+                            e.get("tool") == "import_asset_from_path" and
+                            e.get("host_application_write_acknowledged") is True
+                            for e in self.events),
+                        "acknowledged_native_content_edit_operations": sum(
+                            e.get("kind") == "native_tool_result" and
+                            e.get("tool") in self.host_content_revision_tools and
+                            e.get("host_application_write_acknowledged") is True
+                            for e in self.events),
+                        "verified_export_receipts": sum(
+                            e.get("kind") == "native_tool_result" and
+                            e.get("independently_verified_export_sha256") is not None
+                            for e in self.events),
+                        "verified_export_frame_observations": sum(
+                            e.get("kind") == "native_tool_result" and
+                            e.get("observed_export_sha256") is not None and
+                            bool(e.get("image_sha256"))
+                            for e in self.events),
+                    },
                 }
+                # Optional provider-neutral native tool contracts. They are
+                # derived from the *current actual MCP list* AND BODY grants,
+                # never from model text, a canned manifest or another agent.
+                # The ordinary local structured-JSON backend is unchanged.
+                if getattr(self.model, "requires_native_function_contracts", False):
+                    visible_names = (list(self._selectable_tools)
+                                     if self.catalog_mode == "indexed"
+                                     else list(self.tools))
+                    specs = []
+                    for candidate in visible_names:
+                        if (candidate not in self.tools or
+                                self.host_tool_access is None or
+                                self.host_tool_access.get(candidate) not in ("read", "write")):
+                            raise NativeCreativeControlError(
+                                "Native provider tool contract lacks an actual host grant")
+                        if self._host_write_already_acknowledged(candidate):
+                            continue
+                        item = self.tools[candidate]
+                        schema = _field(item, "input_schema",
+                                        _field(item, "inputSchema"))
+                        if not isinstance(schema, dict) or schema.get("type") != "object":
+                            raise NativeCreativeControlError(
+                                "Native function signature is not an object schema")
+                        description = _field(item, "description", "")
+                        specs.append({
+                            "name": candidate,
+                            "description": " ".join(
+                                description.split())[:256] if isinstance(
+                                    description, str) else "",
+                            "input_schema": copy.deepcopy(schema),
+                        })
+                    if (len(specs) > 48 or
+                            len(_wire(specs).encode("utf-8")) > 96_000):
+                        # For future multi-engine catalogs, choose indexed
+                        # admission rather than silently truncating authority
+                        # or dumping a huge schema into a model request.
+                        raise NativeCreativeControlError(
+                            "Direct tool catalog too large; use host indexed discovery")
+                    context["host_native_tool_contracts"] = specs
                 # A small local brain should not have to infer what 60+
                 # native operation names mean. Offer genuine, bounded host
                 # descriptions only initially/after explicit discovery. This

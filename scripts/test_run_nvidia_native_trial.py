@@ -113,7 +113,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         with patch("studio_next.nvidia_model.NvidiaCreativeModel.verify_host_credentials") as check:
             structured = factory(SimpleNamespace(**common, structured_actions=True))
             legacy = factory(SimpleNamespace(**common, structured_actions=False))
-        self.assertEqual(type(structured).__name__, "NvidiaToolCreativeModel")
+        self.assertEqual(type(structured).__name__, "NvidiaNativeToolCreativeModel")
         self.assertEqual(type(legacy).__name__, "NvidiaCreativeModel")
         self.assertEqual(check.call_count, 2)
         with self.assertRaisesRegex(ValueError, "fixed"):

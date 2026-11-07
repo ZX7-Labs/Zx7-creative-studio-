@@ -2838,5 +2838,66 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
 
 
 
+class HostNativeFunctionContractTests(unittest.IsolatedAsyncioTestCase):
+    """The trusted BODY gives each replaceable model an identical actual grant contract."""
+
+    async def test_only_live_granted_schemas_exposed_to_opted_in_model(self):
+        session = FakeSession()
+        # The physical gateway requires an EXACT tool/host grant set.
+        # Do not weaken it just to make an adapter test pass.
+        session.tools = session.tools[:2]
+        class NativeFunctionAwareStub(ScriptedModel):
+            requires_native_function_contracts = True
+        grants = {"get_timeline": "read", "update_text_clip": "write"}
+        model = NativeFunctionAwareStub([
+            decision("invoke", tool="update_text_clip",
+                     inputs={"clipId": "actual", "text": "original model choice"}),
+            decision("finish", summary="Only a native write, not an export"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=2, host_tool_access=grants,
+            host_once_after_acknowledged_write=("update_text_clip",)).run(
+                "Edit native content")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        first = model.observed[0]
+        self.assertEqual({x["name"] for x in first["host_native_tool_contracts"]},
+                         {"get_timeline", "update_text_clip"})
+        self.assertNotIn("zx7_verify_native_export",
+                         [x["name"] for x in first["host_native_tool_contracts"]])
+        native = next(x for x in first["host_native_tool_contracts"]
+                      if x["name"] == "update_text_clip")
+        self.assertEqual(native["input_schema"], session.tools[1].input_schema)
+        self.assertEqual(
+            model.observed[1]["host_native_tool_contracts"][0]["name"], "get_timeline")
+        self.assertEqual(len(model.observed[1]["host_native_tool_contracts"]), 1)
+        self.assertEqual(model.observed[1]["host_verified_execution_progress"][
+            "acknowledged_native_writes"], 1)
+        self.assertEqual(model.observed[1]["host_verified_execution_progress"][
+            "acknowledged_native_content_edit_operations"], 0)
+        self.assertEqual(session.calls[0][0], "update_text_clip")
+        self.assertEqual(len(session.calls), 1)
+        # The model sees isolated schema copies, not mutable host authority.
+        native["input_schema"]["type"] = "array"
+        self.assertEqual(session.tools[1].input_schema["type"], "object")
+
+    async def test_oversized_toolset_fails_closed_before_any_model_decision(self):
+        session = FakeSession()
+        session.tools = [
+            SimpleNamespace(name=f"read_operation_{i}", description="Read",
+                            input_schema={"type": "object", "properties": {}})
+            for i in range(49)]
+        class NativeFunctionAwareStub(ScriptedModel):
+            requires_native_function_contracts = True
+        model = NativeFunctionAwareStub([decision("discover")])
+        with self.assertRaisesRegex(
+                NativeCreativeControlError, "Direct tool catalog too large"):
+            await NativeCreativeControl(
+                session, model, max_turns=1,
+                host_tool_access={t.name: "read" for t in session.tools}).run(
+                    "Inspect installed tools")
+        self.assertEqual(model.observed, [])
+        self.assertEqual(session.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
