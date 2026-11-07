@@ -40,6 +40,76 @@ class NvidiaProviderContractTest(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(NvidiaConfigurationError):
                 NvidiaModelSettings(**changes)
 
+    def test_published_nvidia_reasoning_config_is_explicit_and_bounded(self):
+        config = NvidiaModelSettings(
+            max_tokens=8192, sampling={
+                "temperature": 1.0, "top_p": 0.95,
+                "chat_template_kwargs": {
+                    "enable_thinking": True, "medium_effort": True}})
+        self.assertEqual(config.max_tokens, 8192)
+        for bad in (
+            {"enable_thinking": "true"},
+            {"enable_thinking": False, "medium_effort": True},
+            {"enable_thinking": True, "medium_effort": False},
+            {"enable_thinking": True, "medium_effort": "true"},
+            {"enable_thinking": True, "unknown_effort": True},
+            {"medium_effort": True},
+        ):
+            with self.subTest(kwargs=bad), self.assertRaises(NvidiaConfigurationError):
+                NvidiaModelSettings(sampling={"chat_template_kwargs": bad})
+        with self.assertRaises(NvidiaConfigurationError):
+            NvidiaModelSettings(max_tokens=8193)
+        # A frozen dataclass does not freeze a nested dictionary. Mutation
+        # after validation must fail before ANY credentialed provider egress.
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "A"*32}):
+            config.sampling["chat_template_kwargs"]["invented"] = True
+            with self.assertRaises(NvidiaConfigurationError):
+                NvidiaCreativeModel(config)._open_request({
+                    "model": config.model_id, "stream": False,
+                    "response_format": {"type": "json_object"}})
+
+    def test_hosted_reasoning_effort_wire_is_validated_before_egress(self):
+        # The hosted endpoint documents none/low/high; not "medium".
+        settings = NvidiaModelSettings(
+            max_tokens=8192, sampling={
+                "temperature": 1.0, "top_p": 0.95,
+                "reasoning_effort": "low"})
+        seen = []
+        class Opener:
+            def open(self, request, timeout):
+                seen.append((json.loads(request.data), timeout))
+                return _reply('{"action":"finish","reason":"wire test"}')
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Y"*32}), patch(
+                "studio_next.nvidia_model.build_opener", return_value=Opener()):
+            self.assertEqual(
+                NvidiaCreativeModel(settings).decide({"brief": "Synthetic"}),
+                {"action": "finish", "reason": "wire test"})
+        self.assertEqual(len(seen), 1)
+        request, timeout = seen[0]
+        self.assertEqual(request["reasoning_effort"], "low")
+        self.assertNotIn("chat_template_kwargs", request)
+        self.assertEqual(request["max_tokens"], 8192)
+        self.assertEqual(timeout, 180)
+        for invalid in ("medium", "MEDIUM", "", True, 0, None):
+            with self.subTest(invalid=invalid), self.assertRaises(
+                    NvidiaConfigurationError):
+                NvidiaModelSettings(sampling={"reasoning_effort": invalid})
+        with self.assertRaisesRegex(NvidiaConfigurationError, "Conflicting"):
+            NvidiaModelSettings(sampling={
+                "reasoning_effort": "low",
+                "chat_template_kwargs": {"enable_thinking": True}})
+        # Mutation after settings creation must never reach credentials/network.
+        settings.sampling["reasoning_effort"] = "medium"
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Y"*32}), patch(
+                "studio_next.nvidia_model.build_opener") as network:
+            with self.assertRaisesRegex(
+                    NvidiaConfigurationError, "reasoning_effort"):
+                NvidiaCreativeModel(settings)._open_request({
+                    "model": settings.model_id, "stream": False,
+                    "response_format": {"type": "json_object"}})
+            network.assert_not_called()
+
     def test_no_key_no_network_and_no_key_in_settings(self):
         class Never:
             def open(self, *args, **kwargs):
