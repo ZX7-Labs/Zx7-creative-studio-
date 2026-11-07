@@ -495,6 +495,58 @@ async def exercise(options):
             "original_media_sha_unchanged": True,
             "artistic_quality_approved": False,
         }, sort_keys=True), flush=True)
+
+        # An actual Qwen4B camera trial (#42327595943) applied a source-
+        # linked single-clip write, saved that source, but its subsequent
+        # get_timeline snapshot still reported no picture. Isolate whether
+        # the native single-clip tool and snapshot converge without a
+        # model. No scripted creative success is inferred from this test.
+        single_created = await call(session, "create_timeline", {
+            "name": "Independent single-clip readback control",
+            "width": 320, "height": 180, "fps": 24,
+            "switchToTimeline": True, "previewOnly": False})
+        assert single_created.get("success") is True
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("name")
+            == "Independent single-clip readback control"
+            and (state.get("currentTimeline") or {}).get("clipCount") == 0)
+        assert (await call(session, "get_timeline", {
+            "includeClips": True}))["clips"] == []
+        single_ack = await call(session, "add_asset_to_timeline", {
+            "assetId": video_ids[0], "startSeconds": 0,
+            "includeAudio": False, "previewOnly": False})
+        assert single_ack.get("success") is True
+        immediately = await call(session, "get_timeline", {
+            "includeClips": True, "limit": 1000})
+        immediate_project = await call(session, "get_project")
+        # Inspect the two live observations without private media contents.
+        # A delayed snapshot must not be called 'no clip' authoritatively.
+        immediate_source_clips = sum(
+            isinstance(clip, dict) and clip.get("assetId") == video_ids[0]
+            for clip in immediately.get("clips", []))
+        immediate_project_count = (
+            (immediate_project.get("currentTimeline") or {}).get("clipCount"))
+        await wait(session, lambda state:
+            (state.get("currentTimeline") or {}).get("name")
+            == "Independent single-clip readback control"
+            and (state.get("currentTimeline") or {}).get("clipCount") == 1)
+        converged = await call(session, "get_timeline", {
+            "includeClips": True, "limit": 1000})
+        assert len(converged["clips"]) == 1
+        assert converged["clips"][0].get("assetId") == video_ids[0]
+        assert digest(original) == original_hash
+        await call(session, "save_project", {"previewOnly": False})
+        print("ACTUAL_NATIVE_SINGLE_CLIP_READ_CONVERGENCE " + json.dumps({
+            "technical_native_fixture_not_neural": True,
+            "model_camera_original_error_was_not_assumed": True,
+            "immediate_get_timeline_original_clip_count": immediate_source_clips,
+            "immediate_get_project_clip_count": immediate_project_count,
+            "after_independent_read_convergence_source_clip_count":
+                len(converged["clips"]),
+            "original_media_sha_unchanged": True,
+            "native_saved_after_single_source_placement": True,
+            "artistic_quality_approved": False,
+        }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
     audio = next(stream for stream in probe["streams"] if stream["codec_type"] == "audio")
@@ -516,13 +568,14 @@ async def exercise(options):
         "physicalEditorExportIndependentlyDecoded": True,
         "deniedNetworkTool": True, "deniedOutsideImport": True,
         "existingSourceExportDenied": True, "outsideNativeDocumentDenied": True,
-        "invalidNativeArgumentsRejected": True, "editableTracks": 3, "savedVersions": 4,
+        "invalidNativeArgumentsRejected": True, "editableTracks": 3, "savedVersions": 5,
         "processRestartReopenPassed": True, "frames": 48, "fps": "24/1", "audioCodec": "aac",
         "fullDecodePassed": True, "physicalModelInterfaceAVTransportFixturePassed": True,
         "physicalHostObservedAssetBatchPlacementPassed": True,
         "physicalEmptyTimelineFirstNativeBatchPlacementPassed": True,
         "physicalNativeBatchProjectRestartPersistencePassed": True,
         "physicalNativeBatchSelectorDiscriminationPassed": True,
+        "physicalNativeSingleClipReadConvergencePassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
