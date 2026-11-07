@@ -74,7 +74,7 @@ jobs:
           elif [ "$RUN_EVENT" = workflow_dispatch ]; then
             case "$MANUAL_VARIANT" in
               nemotron-super-vl|qwen3.5-122b)
-                printf 'MODEL_VARIANT=%s\\n' "$MANUAL_VARIANT" >> "$GITHUB_ENV" ;;
+                echo "MODEL_VARIANT=$MANUAL_VARIANT" >> "$GITHUB_ENV" ;;
               *)
                 echo "Unknown manually selected model"; exit 2 ;;
             esac
