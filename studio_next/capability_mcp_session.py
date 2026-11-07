@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from .capability_fabric import discover_all_live_tools, CapabilityContractError
+from .capability_fabric import (
+    discover_all_live_tools, CapabilityContractError, CapabilityFabric)
 from .capability_gateway import CapabilityExecutionError, CapabilityGateway
 
 
@@ -57,6 +58,16 @@ class CapabilityGatewayMcpSession:
                 "Native BODY catalog changed; create a newly admitted session")
         live = await discover_all_live_tools(self._session)
         current_grants = self._gateway._live_grants(self._namespace)
+        # Reuse the same canonical host catalog compiler: it normalizes long
+        # tool descriptions and JSON schemas. Comparing raw descriptions to
+        # the admitted summary would reject perfectly stable real BODY tools.
+        bound = self._gateway._bindings[self._namespace]
+        try:
+            fresh = CapabilityFabric({self._namespace: (
+                live, current_grants, bound[2], bound[4])})
+        except CapabilityContractError as exc:
+            raise CapabilityExecutionError(
+                "Native tool discovery no longer matches host admission") from exc
         allowed = []
         for tool in live:
             name = getattr(tool, "name", None)
@@ -64,16 +75,16 @@ class CapabilityGatewayMcpSession:
                     current_grants.get(name) == self._original_grants.get(name) and
                     name in self._original_grants):
                 try:
+                    operation = self._operation(name)
                     current = self._gateway._current().resolve(
-                        self._operation(name), revision=self._revision)
+                        operation, revision=self._revision)
+                    actual = fresh.resolve(operation, revision=fresh.revision)
                 except CapabilityContractError as exc:
                     raise CapabilityExecutionError(
                         "Native tool discovery diverged from host admission") from exc
-                schema = getattr(tool, "input_schema", getattr(tool, "inputSchema", None))
-                description = getattr(tool, "description", None)
-                if (current["input_schema"] != schema or
-                        current["description"] != description or
-                        current["access"] != current_grants[name]):
+                if any(current[key] != actual[key] for key in (
+                        "input_schema", "description", "access",
+                        "requires", "may_enable")):
                     raise CapabilityExecutionError(
                         "Native tool metadata changed; host must refresh discovery")
                 allowed.append(tool)
