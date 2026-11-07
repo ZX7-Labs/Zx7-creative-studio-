@@ -1,0 +1,92 @@
+name: "ZX7 NVIDIA — Genuine Native Editor Creative Revision Trial"
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "research/nvidia-native-trial-request.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zx7-nvidia-native-creative-acceptance
+  cancel-in-progress: false
+
+jobs:
+  real-model-native-editor-and-export:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Fetch exact BODY and pinned real editor without writable credentials
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install original-media codec, sandbox and real MCP dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg xvfb xauth x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Verify actual pinned third-party code and no root execution
+        run: |
+          test "$(id -u)" -ne 0
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+      - name: Run offline strict credential and real synthetic fixture admission tests
+        run: |
+          python -m unittest studio_next.test_nvidia_model \
+            scripts.test_nvidia_smoke_request \
+            scripts.test_run_nvidia_native_trial -v
+      - name: Verify owner-reviewed synthetic-only cloud native evaluation request
+        run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
+      - name: Build actual existing source editor with no provider credential available
+        working-directory: third_party/velorn
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          test -s dist/index.html
+      - name: Preserve real Chromium sandbox
+        working-directory: third_party/velorn
+        run: |
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(stat -c '%u:%a' "$helper")" = "0:4755"
+      - name: Real NVIDIA creative decisions -> actual native edit -> frame review -> revision -> export
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NVIDIA_API_KEY:-}" ]; then
+            echo "No NVIDIA_API_KEY Actions secret. Refusing cloud trial."
+            exit 2
+          fi
+          python -u -m scripts.run_nvidia_native_trial \
+            --workspace "$RUNNER_TEMP/zx7-nvidia-native-trial" \
+            --xvfb-binary /usr/bin/Xvfb --display 127.0.0.1:95
+      - name: Independently confirm pinned editor code was never modified
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+      - name: Preserve redacted source custody, actual project, native journal and real export
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-real-nvidia-native-creative-${{ github.sha }}
+          path: ${{ runner.temp }}/zx7-nvidia-native-trial/
+          if-no-files-found: warn
+          retention-days: 7
