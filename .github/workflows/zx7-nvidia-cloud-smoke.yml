@@ -1,4 +1,4 @@
-name: ZX7 NVIDIA API — Manual Credentialed No-Media Smoke
+name: ZX7 NVIDIA API — Explicit Credentialed No-Media Smoke
 
 on:
   workflow_dispatch:
@@ -12,20 +12,23 @@ on:
           - nemotron-super-vl
           - qwen3.5-122b
 
+  push:
+    branches: [main]
+    paths:
+      - "research/nvidia-smoke-request.json"
+
 permissions:
   contents: read
 
 concurrency:
-  group: zx7-nvidia-manual-smoke
+  group: zx7-nvidia-authorized-smoke
   cancel-in-progress: false
 
 jobs:
   real-remote-nvidia-protocol:
     runs-on: ubuntu-24.04
     timeout-minutes: 6
-    env:
-      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-      MODEL_VARIANT: ${{ inputs.model_variant }}
+
     steps:
       - name: Check out exact publicly auditable source, without writable checkout credentials
         uses: actions/checkout@v4
@@ -36,17 +39,58 @@ jobs:
           python-version: "3.12"
       - name: Verify provider safety contract without network calls
         run: python -m unittest studio_next.test_nvidia_model -v
-      - name: Refuse any network attempt without explicitly provisioned secret
+      - name: Validate explicit no-media evaluation request
         shell: bash
+        env:
+          RUN_EVENT: ${{ github.event_name }}
+          MANUAL_VARIANT: ${{ inputs.model_variant }}
         run: |
-          if [ -z "${NVIDIA_API_KEY:-}" ]; then
-            echo "Missing NVIDIA_API_KEY Actions secret. No request attempted."
-            exit 2
+          set -euo pipefail
+          if [ "$RUN_EVENT" = push ]; then
+            python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          import re
+          from pathlib import Path
+          request = Path("research/nvidia-smoke-request.json")
+          if request.is_symlink() or not request.is_file() or request.stat().st_size > 2048:
+              raise SystemExit("Missing, linked or oversize explicit smoke request")
+          try:
+              data = json.loads(request.read_text(encoding="utf-8"))
+          except (UnicodeError, ValueError):
+              raise SystemExit("Invalid explicit smoke request JSON") from None
+          required = {"schema", "kind", "model_variant", "media_upload",
+                      "max_tokens", "request_id"}
+          if (type(data) is not dict or set(data) != required or
+                  type(data["schema"]) is not int or data["schema"] != 1 or
+                  data["kind"] != "nvidia-no-media-protocol-smoke" or
+                  data["model_variant"] not in ("nemotron-super-vl", "qwen3.5-122b") or
+                  data["media_upload"] is not False or
+                  type(data["max_tokens"]) is not int or data["max_tokens"] != 128 or
+                  not isinstance(data["request_id"], str) or
+                  not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", data["request_id"])):
+              raise SystemExit("Request violates explicit no-media smoke contract")
+          print("MODEL_VARIANT=" + data["model_variant"])
+          PY
+          elif [ "$RUN_EVENT" = workflow_dispatch ]; then
+            case "$MANUAL_VARIANT" in
+              nemotron-super-vl|qwen3.5-122b)
+                printf 'MODEL_VARIANT=%s\\n' "$MANUAL_VARIANT" >> "$GITHUB_ENV" ;;
+              *)
+                echo "Unknown manually selected model"; exit 2 ;;
+            esac
+          else
+            echo "Unsupported event; no inference"; exit 2
           fi
       - name: Bounded real no-media NVIDIA inference
         shell: bash
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         run: |
           set -euo pipefail
+          if [ -z "${NVIDIA_API_KEY:-}" ]; then
+            echo "Missing NVIDIA_API_KEY Actions secret; no remote request attempted"
+            exit 2
+          fi
           case "$MODEL_VARIANT" in
             nemotron-super-vl)
               model="nvidia/nemotron-3.5-super-vl-120b-a12b" ;;
