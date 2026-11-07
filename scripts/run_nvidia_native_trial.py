@@ -224,6 +224,40 @@ def verify_saved_native_trial(workspace: Path):
         "artistic_quality_approved": False,
     }
 
+def decoded_video_frames_sha256(path: Path):
+    """Hash decoded RGB frames, not compressed MP4 bytes or container metadata.
+
+    This deliberately compares the physical visible frame sequence. Rewrapping
+    the same footage or changing export metadata cannot impersonate an
+    independently visible model-selected creative revision. Human artistic
+    approval is a separate judgment.
+    """
+    result = subprocess.run(
+        ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+         "-i", str(path), "-map", "0:v:0",
+         "-vf", "format=rgb24",
+         "-f", "framehash", "-hash", "SHA256", "-"],
+        check=True, capture_output=True, text=True, timeout=90,
+        env=_no_cloud_credentials())
+    if len(result.stdout.encode("utf-8")) > 128_000:
+        raise ValueError("Native video frame evidence exceeds safe output budget")
+    hashes = []
+    for line in result.stdout.splitlines():
+        if line.startswith("#"):
+            continue
+        fields = [part.strip() for part in line.split(",")]
+        if (len(fields) != 6 or fields[0] != "0" or
+                not fields[5] or len(fields[5]) != 64 or
+                any(char not in "0123456789abcdef" for char in fields[5]) or
+                not fields[4].isdigit() or int(fields[4]) <= 0):
+            raise ValueError("Malformed native decoded-frame SHA256 receipt")
+        hashes.append(fields[5])
+        if len(hashes) > 240:
+            raise ValueError("Synthetic trial exceeds bounded decoded video frames")
+    if not hashes:
+        raise ValueError("Native output contains no decoded video frames")
+    return tuple(hashes)
+
 
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):
     if model_id != _ALLOWED_MODEL:
@@ -274,12 +308,18 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         raise RuntimeError("Real native client has no final structured status") from None
     mp4s = sorted(roots["outputs"].rglob("*.mp4"))
     media = []
+    decoded_frame_sequences = []
     for path in mp4s:
         subprocess.run(
             ["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"],
             check=True, timeout=90, env=_no_cloud_credentials())
+        decoded_frame_sequences.append(decoded_video_frames_sha256(path))
         media.append({"path": str(path), "sha256": _sha256(path),
-                      "bytes": path.stat().st_size})
+                      "bytes": path.stat().st_size,
+                      "decoded_video_frames": len(decoded_frame_sequences[-1]),
+                      "decoded_rgb_frame_sequence_sha256": hashlib.sha256(
+                          json.dumps(decoded_frame_sequences[-1],
+                                     separators=(",", ":")).encode()).hexdigest()})
     # Preserve forensic evidence even when final native state fails acceptance.
     # Never let an empty timeline disappear behind an early RuntimeError.
     try:
@@ -299,9 +339,11 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
             "native_project_rejection_type": type(exc).__name__,
         }
     export_variants = len({entry["sha256"] for entry in media})
+    independently_different_picture_exports = len(set(decoded_frame_sequences))
     evaluated = {
         **saved_native,
         "different_decoded_export_count": export_variants,
+        "different_decoded_picture_sequence_count": independently_different_picture_exports,
         "status": summary.get("status"),
         "host_evidence_satisfied": summary.get("evaluation_evidence_satisfied") is True,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
@@ -318,6 +360,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
             summary.get("evaluation_evidence_satisfied") is not True or
             len(media) < 2 or
             export_variants < 2 or
+            independently_different_picture_exports < 2 or
             saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
     return evaluated

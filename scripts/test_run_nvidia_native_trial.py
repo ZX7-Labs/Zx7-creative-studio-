@@ -223,6 +223,40 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 verify_saved_native_trial(workspace)
 
+
+    def test_native_export_revision_requires_changed_decoded_picture_not_new_container(self):
+        """Actual FFmpeg decoder, not a mocked model or a filename assertion."""
+        import hashlib
+        import shutil
+        from scripts.run_nvidia_native_trial import decoded_video_frames_sha256
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("Physical native-video framehash requires installed FFmpeg")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def make(color, title, filename):
+                destination = root / filename
+                subprocess.run(
+                    ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+                     "-f", "lavfi", "-i",
+                     f"color=c={color}:s=64x36:r=24:d=0.5",
+                     "-metadata", f"title={title}",
+                     "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                     "-y", str(destination)],
+                    check=True, timeout=30)
+                return destination
+            original = make("blue", "original", "original.mp4")
+            rewrapped = make("blue", "different metadata", "rewrapped.mp4")
+            revised = make("red", "revision", "revised.mp4")
+            self.assertNotEqual(
+                hashlib.sha256(original.read_bytes()).digest(),
+                hashlib.sha256(rewrapped.read_bytes()).digest())
+            first = decoded_video_frames_sha256(original)
+            self.assertEqual(first, decoded_video_frames_sha256(rewrapped))
+            self.assertNotEqual(first, decoded_video_frames_sha256(revised))
+            self.assertEqual(len(first), 12)
+            with self.assertRaises((subprocess.CalledProcessError, ValueError)):
+                decoded_video_frames_sha256(root / "missing.mp4")
+
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "not-created"
