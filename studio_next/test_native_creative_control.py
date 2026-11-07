@@ -1632,15 +1632,18 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         """
         from studio_next.native_creative_audit import audit_native_journal
         class EmptyProjectSession(FakeSession):
+            imported = 0
+
             async def call_tool(self, name, arguments):
                 self.calls.append((name, arguments))
                 if name == "get_project":
                     payload = {
                         "mcp": {"hasProject": True},
-                        "project": {"id": "existing-project", "assetCount": 0},
-                        "assetCount": 0,
+                        "project": {"id": "existing-project", "assetCount": self.imported},
+                        "assetCount": self.imported,
                     }
                 elif name == "import_asset_from_path":
+                    self.imported += 1
                     payload = {"success": True, "result": {
                         "previewOnly": False, "assetId": "created-by-native-editor"}}
                 else:
@@ -1696,6 +1699,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([name for name, _ in session.calls],
                          ["get_project", "import_asset_from_path", "get_project"])
         self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(acting.observed[1]["host_verified_execution_progress"][
+            "project_asset_count_from_native_read"], 1)
+        self.assertIsNone(acting.observed[1]["host_observed_machine_affordances"])
         self.assertEqual(sum(e.get("tool") == "import_asset_from_path" and
                              e["kind"] == "native_tool_result"
                              for e in result["events"]), 1)
