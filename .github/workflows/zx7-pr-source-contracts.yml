@@ -39,6 +39,7 @@ jobs:
             studio_next.test_capability_session_budget \
             studio_next.test_capability_mcp_session \
             studio_next.test_capability_fabric \
+            studio_next.test_native_capability_audit \
             studio_next.test_body_capability_adapter \
             studio_next.test_durable_graph \
             studio_next.test_body_stage_lease \
