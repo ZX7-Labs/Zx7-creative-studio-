@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 6
     env:
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      MODEL_VARIANT: ${{ inputs.model_variant }}
     steps:
       - name: Check out exact publicly auditable source, without writable checkout credentials
         uses: actions/checkout@v4
@@ -46,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "${{ inputs.model_variant }}" in
+          case "$MODEL_VARIANT" in
             nemotron-super-vl)
               model="nvidia/nemotron-3.5-super-vl-120b-a12b" ;;
             qwen3.5-122b)
@@ -55,4 +56,4 @@ jobs:
               echo "Unknown operator-selected NVIDIA catalog model"
               exit 2 ;;
           esac
-          python scripts/nvidia_api_smoke.py --model-id "$model"
+          python -m scripts.nvidia_api_smoke --model-id "$model"
