@@ -130,7 +130,11 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         "--provider", "nvidia",
         "--model-id", model_id,
         "--allow-cloud-image-upload",
-        "--indexed-catalog",
+        # The real 120B NVIDIA run #42383427031 burned 30 of 40
+        # model decisions re-searching ambiguous tools while only 24 actual
+        # host-granted tools existed. Full catalog is the cheaper honest
+        # transport for this trial; all BODY grants/schema checks remain.
+        # There is NO host-authored creative edit or automatic invocation.
         "--structured-actions",
         "--fresh-trial-project",
         "--evaluation-evidence", "reviewed-revision",

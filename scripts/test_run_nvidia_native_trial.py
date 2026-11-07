@@ -149,7 +149,9 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                               xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95")
             command = native_call.call_args.args[0]
             self.assertIn("--structured-actions", command)
-            self.assertIn("--indexed-catalog", command)
+            self.assertNotIn("--indexed-catalog", command)
+            self.assertIn("--fresh-trial-project", command)
+            self.assertEqual(command[command.index("--max-turns") + 1], "40")
 
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
