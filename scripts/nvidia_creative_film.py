@@ -64,6 +64,12 @@ shots: 2..4 distinct model-authored scenes, total 5..16 seconds. Each:
  y?:[[time,value],...],scale?:[[time,value],...],
  angle?:[[time,value],...],reveal?:[[time,value],...]
  }},...],
+ IMPORTANT: every layer scale, scale_x, scale_y and EVERY scale animation
+ keyframe value MUST be >=0.01 and <=30. ZERO (0) scale is INVALID and
+ causes a physical render failure. For an appearance or disappearance use
+ OPACITY 0..1 and a positive scale such as 0.05, NOT zero scale.
+ All time keyframes are strictly increasing, >=0 and <=shot duration.
+ Every opacity, reveal value MUST be 0..1; font/text sizes 2..256.
  cues:[{type:'synth',at:number,seconds:number,gain:number,noise_gain:number,
  seed:integer,partials:[{start_hz:number,end_hz:number,amplitude:number,
  phase_radians:number},...],envelope:[[0,amplitude],...,[seconds,amplitude]]},...] }.
@@ -184,7 +190,7 @@ def author_film(model, out):
             context={"owner":OWNER,"technical_contract":SYSTEM,
                      "previous_draft":previous,
                      "validator_feedback":message,
-                     "instruction":"Repair actual schema/rights/execution issues while preserving your own original artistic intent. Return the complete corrected Film IR."}
+                     "instruction":"Repair the EXACT listed invalid numeric parameter(s) in your own original IR. Do not repeat an invalid scale=0. Scale and scale keyframes must be between 0.01 and 30. Preserve your original artistic intent, decisions and sound. Return the complete corrected Film IR."}
             continue
         attempts.append({"round":turn,"accepted":True,
                          "elapsed_seconds":round(time.monotonic()-started,3),
