@@ -116,6 +116,24 @@ class NvidiaProviderContractTest(unittest.TestCase):
         with self.assertRaisesRegex(NvidiaConfigurationError, "egress budget"):
             model.decide_with_images({}, [("image/png", b"x" * 10)] * 5)
 
+    def test_body_cli_selects_actual_nvidia_brain_without_network(self):
+        from studio_next import body_service
+        chosen = []
+        def start(root, *, secret, port, workers, creative_model):
+            chosen.append(creative_model)
+        args = ["zx7-body", "--workspace-root", "/tmp/zx7-nvidia-contract",
+                "--creative-provider", "nvidia", "--creative-model",
+                "nvidia/nemotron-3.5-super-vl-120b-a12b"]
+        with patch.dict(os.environ, {"ZX7_BODY_API_TOKEN": "P" * 48,
+                                     "NVIDIA_API_KEY": ""}), patch(
+                "studio_next.body_service.start_local_body_service", side_effect=start), patch(
+                "sys.argv", args):
+            body_service.main()
+        self.assertEqual(len(chosen), 1)
+        self.assertIsInstance(chosen[0], NvidiaCreativeModel)
+        self.assertEqual(chosen[0].settings.provider_id, "nvidia")
+        self.assertFalse(chosen[0].allow_image_upload)
+
     def test_cloud_does_not_pretend_nvidia_enforces_json_schema(self):
         settings = NvidiaModelSettings()
         model = NvidiaCreativeModel(settings)
