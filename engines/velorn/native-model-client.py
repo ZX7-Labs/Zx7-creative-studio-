@@ -36,6 +36,34 @@ def native_editor_child_environment(environ=None):
     return child
 
 
+def trial_machine_contracts(grants, *, fresh):
+    """Construct machine facts from *only* the host-granted native catalog.
+
+    A tool outside the configured grant set cannot acquire constraints,
+    possible effects or affordance visibility by accident. This contract
+    merely explains observed machine state, not what to edit or how.
+    """
+    if type(fresh) is not bool or not isinstance(grants, dict):
+        raise ValueError("Machine facts require validated owner tool grants")
+    if not fresh:
+        return {}, {}
+    prerequisites = {
+        "import_asset_from_path": ("project_open",),
+        "add_asset_to_timeline": ("project_open",),
+        "add_assets_to_timeline": ("project_open",),
+        "add_text_clip": ("project_open",),
+        "add_shape_clip": ("project_open",),
+        "update_text_clip": ("project_open",),
+        "save_project": ("project_open",),
+        "export_timeline": ("project_open",),
+    }
+    if grants.get("create_project") != "write":
+        raise ValueError("Fresh trial requires the real authorized project creator")
+    return ({name: list(facts) for name, facts in prerequisites.items()
+             if name in grants},
+            {"create_project": ["project_open"]})
+
+
 async def main(args):
     for path in (args.source, args.config, args.brief_file):
         if not path.exists():
@@ -131,20 +159,14 @@ async def main(args):
                 model.settings.sampling['response_format'] = {
                     'type': 'json_schema', 'json_schema': {'name': 'native_editor_action',
                         'strict': True, 'schema': native_action_schema([tool.name for tool in discovered])}}
+            preconditions, machine_effects = trial_machine_contracts(
+                host_grants, fresh=fresh)
             outcome = await NativeCreativeControl(
                 admitted, model, max_turns=args.max_turns,
                 host_tool_access=host_grants,
                 catalog_mode=("indexed" if args.indexed_catalog else "full"),
-                host_preconditions=({
-                    "import_asset_from_path": ["project_open"],
-                    "add_asset_to_timeline": ["project_open"],
-                    "add_assets_to_timeline": ["project_open"],
-                    "add_text_clip": ["project_open"],
-                    "save_project": ["project_open"],
-                    "export_timeline": ["project_open"],
-                } if fresh else {}),
-                host_possible_effects=(
-                    {"create_project": ["project_open"]} if fresh else {}),
+                host_preconditions=preconditions,
+                host_possible_effects=machine_effects,
                 host_once_after_acknowledged_write=(
                     ("create_project",) if fresh else ()),
                 required_evidence=required,
