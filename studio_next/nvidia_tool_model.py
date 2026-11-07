@@ -81,8 +81,8 @@ class NvidiaToolCreativeModel(NvidiaCreativeModel):
             if (mime not in ("image/png", "image/jpeg") or
                     not isinstance(raw, bytes) or not 8 <= len(raw) <= 3_000_000):
                 raise NvidiaConfigurationError("NVIDIA image requires bounded original bytes")
-            if (mime == "image/png" and not raw.startswith(b"\\x89PNG\\r\\n\\x1a\\n")) or (
-                    mime == "image/jpeg" and not raw.startswith(b"\\xff\\xd8\\xff")):
+            if (mime == "image/png" and not raw.startswith(b"\x89PNG\r\n\x1a\n")) or (
+                    mime == "image/jpeg" and not raw.startswith(b"\xff\xd8\xff")):
                 raise NvidiaConfigurationError("NVIDIA image mime and magic mismatch")
             total += len(raw)
             if total > 4 * 1024 * 1024:
