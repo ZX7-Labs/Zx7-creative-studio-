@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from io import BytesIO
 import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -111,6 +113,35 @@ class LocalNativeStructuredModelTests(unittest.TestCase):
                 with self.subTest(context=context), self.assertRaises(ValueError):
                     self.model.decide(context)
         remote.assert_not_called()
+
+    def test_real_cpu_trial_recorder_uses_same_per_turn_model_adapter(self):
+        # A fixture confirms wiring and provider envelope only. Neural model
+        # success and artistic editing require a separate actual CPU run.
+        from scripts.run_native_model_trial import RecordedModel
+        with tempfile.TemporaryDirectory() as temp:
+            recorder = RecordedModel(self.model, Path(temp))
+            context = {"compact_tool_catalog": True,
+                       "available_actions": ["search"],
+                       "selectable_native_tools": [],
+                       "inspectable_native_tools": [],
+                       "actual_granted_native_tools": []}
+            requests = []
+            def serve(request, timeout):
+                requests.append(json.loads(request.data))
+                return BytesIO(decision("search", {"query": "import original footage"}))
+            with patch("studio_next.providers.urlopen", side_effect=serve):
+                answer = recorder.decide(context)
+            self.assertEqual(answer["action"], "search")
+            self.assertEqual(recorder.settings.sampling, {})
+            self.assertEqual(recorder.last_call_usage["total_tokens"], 11)
+            self.assertEqual(len(requests), 1)
+            schema = requests[0]["response_format"]["json_schema"]["schema"]
+            self.assertEqual(set(self._action_map(schema)), {"search"})
+            transcript = (Path(temp) / "inference-transcript.jsonl").read_text()
+            record = json.loads(transcript)
+            self.assertEqual(record["context"], context)
+            self.assertEqual(record["decision"], answer)
+            self.assertEqual(record["server_reported_token_usage"]["total_tokens"], 11)
 
     def test_no_schema_leaks_to_configuration_or_separate_model_turn(self):
         first = {"compact_tool_catalog": True, "available_actions": ["search"],

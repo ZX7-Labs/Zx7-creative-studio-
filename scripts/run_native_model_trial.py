@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
-from studio_next.providers import LocalCreativeModel, LocalModelSettings
-from studio_next.native_action_schema import native_action_schema
+from studio_next.providers import LocalModelSettings
+from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
@@ -155,13 +155,11 @@ class RecordedModel:
 
     def infer(self, context, images=()):
         started = time.monotonic()
-        self.model.settings.sampling['response_format'] = {'type': 'json_schema', 'json_schema': {
-            'name': 'native_editor_action', 'strict': True,
-            'schema': native_action_schema(context['actual_granted_native_tools'],
-                 compact_catalog=context.get('compact_tool_catalog', False),
-                 selected_tools=context.get('selectable_native_tools', []),
-                 inspectable_tools=context.get('inspectable_native_tools', []),
-                 allow_finish=not context.get('missing_completion_evidence', []))}}
+        # The actual local trial uses the SAME host-current dynamic native
+        # schema adapter as the production native-model client. Previously
+        # this wrapper mutated shared sampling configuration and independently
+        # constructed the grammar, risking drift after every native read/write.
+        # The passive recorder never selects actions or alters model policy.
         record = {'turn': self.turn, 'context': context, 'image_sha256': []}
         for index, (_, raw) in enumerate(images):
             path = self.artifacts / 'observations' / f'{self.turn}-{index}.png'
@@ -248,7 +246,7 @@ async def trial(args, lock, artifacts, command):
     params = [str(ROOT / 'engines/velorn/mcp.mjs'), '--source', str(args.source),
               '--config', str(config_path), '--state', str(args.runtime / 'editor-state'),
               '--python', sys.executable, '--xvfb-binary', args.xvfb_binary, '--display', args.display]
-    model = RecordedModel(LocalCreativeModel(LocalModelSettings(
+    model = RecordedModel(LocalNativeStructuredCreativeModel(LocalModelSettings(
         model_id=lock['server']['alias'], base_url='http://127.0.0.1:8080', timeout_seconds=300),
         system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts)
     # This mapping originates in the trusted host config, not the
