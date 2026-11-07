@@ -4,5 +4,5 @@
   "model_variant": "nemotron-super-vl",
   "media_upload": false,
   "max_tokens": 128,
-  "request_id": "20261107-nvidia-structured-function-call-protocol-smoke"
+  "request_id": "20261107-nvidia-initial-protocol-check"
 }
