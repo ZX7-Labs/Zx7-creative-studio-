@@ -75,13 +75,22 @@ are future acceptance gates, not available functionality.
 ## Real API smoke with GitHub Actions
 
 The repository also includes
-[`ZX7 NVIDIA API — Manual Credentialed No-Media Smoke`](../.github/workflows/zx7-nvidia-cloud-smoke.yml).
-It runs only on **manual dispatch**, never on a code push, pull request or
-app installation. It requires a secret named `NVIDIA_API_KEY` added via the
+[`ZX7 NVIDIA API — Explicit Credentialed No-Media Smoke`](../.github/workflows/zx7-nvidia-cloud-smoke.yml).
+It runs on manual dispatch, or on an explicit `main`-branch change to
+[`research/nvidia-smoke-request.json`](../research/nvidia-smoke-request.json).
+The reviewed request is strictly limited to one selected catalog model, a
+synthetic no-media prompt and 128 maximum output tokens. Other source pushes,
+pull requests and app installations cannot activate cloud inference.
+Only the final network step receives the API key; checkout, setup, testing
+and input validation steps do not. It requires a secret named
+`NVIDIA_API_KEY` added via the
 repository's **Settings → Secrets and variables → Actions → New repository
 secret**. Do not put the credential in workflow inputs or commit it.
 
-After this workflow is available on the repository default branch, go to
+To re-run after a deliberate reviewed request, change the request_id in the
+explicit JSON file in a new commit to `main`. Each authorized request is kept
+in Git history; do not place a key, owner-private prompt or media in it.
+Alternatively, go to
 **Actions → ZX7 NVIDIA API — Manual Credentialed No-Media Smoke →
 Run workflow** and select the catalog model. The test sends only a synthetic
 JSON protocol challenge and reports bounded result metadata, not the key,
