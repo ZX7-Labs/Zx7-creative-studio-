@@ -92,6 +92,59 @@ class DelayedNativeAssetSession(SyntheticNativeStateSession):
         return await super().call_tool(name,args)
 
 
+class LaggingNativeFirstPictureSession(SyntheticNativeStateSession):
+    """Application ACK is faster than real read-only project/timeline state.
+
+    This is a test double. The real pinned source's measured lag is proven in
+    the independent Electron/MCP CI, not by this fixture.
+    """
+
+    def __init__(self, *, never_converge=False):
+        super().__init__()
+        self.imported = True
+        self.placed = False
+        self.project_reads_since_write = 0
+        self.never_converge = never_converge
+        self.placement_calls = 0
+
+    def _picture_visible(self):
+        return (self.placed and not self.never_converge and
+                self.project_reads_since_write >= 3)
+
+    async def call_tool(self, name, args):
+        if name == "get_project":
+            self.calls.append((name, args))
+            if self.placed:
+                self.project_reads_since_write += 1
+            return self._receipt({
+                "mcp": {"hasProject": True},
+                "project": {"id": "native-original"},
+                "currentTimeline": {
+                    "id": "timeline-source", "clipCount":
+                    1 if self._picture_visible() else 0}})
+        if name == "get_timeline":
+            self.calls.append((name, args))
+            return self._receipt({
+                "clips": [{
+                    "id": "native-source-linked-clip",
+                    "type": "video", "assetId": "source-from-native",
+                }] if self._picture_visible() else [],
+                "clipLimitApplied": False})
+        if name == "add_asset_to_timeline":
+            self.calls.append((name, args))
+            self.placement_calls += 1
+            if self.placement_calls != 1:
+                raise AssertionError(
+                    "No repeated unverified source placement allowed")
+            self.placed = True
+            return self._receipt({
+                "success": True, "action": name,
+                "result": {"success": True, "clip": {
+                    "id": "native-source-linked-clip",
+                    "assetId": "source-from-native"}}})
+        return await super().call_tool(name, args)
+
+
 def host_grants():
     return {
         "get_project":"read","get_assets":"read","get_timeline":"read",
@@ -161,6 +214,56 @@ class NativeMachineNavigatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e["kind"]=="native_tool_result" and
                              e.get("tool")=="add_asset_to_timeline"
                              for e in outcome["events"]))
+
+    async def test_first_picture_write_reconciles_real_source_via_bounded_reads(self):
+        session=LaggingNativeFirstPictureSession()
+        model=ScriptedModel([
+            decision("invoke",tool="add_asset_to_timeline",
+                     inputs={"assetId":"source-from-native"}),
+            decision("finish",summary="Physical clip proven, not a completed film"),
+        ])
+        outcome=await controls(session,model,2).run("Use source footage")
+        self.assertEqual(session.placement_calls,1)
+        self.assertGreaterEqual(session.project_reads_since_write,3)
+        self.assertIn("get_timeline",[name for name,_ in session.calls])
+        self.assertTrue(any(e["kind"]=="host_native_timeline_picture_observation"
+                            and e["picture_state"]=="present"
+                            for e in outcome["events"]))
+        self.assertFalse(model.observed[1][
+            "last_native_first_picture_write_reconciliation"])
+        self.assertTrue(model.observed[1]["host_observed_machine_facts"][
+            "timeline_picture_present"])
+        self.assertFalse(outcome["native_editing_capability_complete"])
+        self.assertTrue(audit_native_journal(
+            outcome["events"],host_tool_access=host_grants())
+            ["journal_chain_structurally_valid"])
+
+    async def test_stale_empty_readback_cannot_authorize_duplicate_native_placement(self):
+        session=LaggingNativeFirstPictureSession(never_converge=True)
+        model=ScriptedModel([
+            decision("invoke",tool="add_asset_to_timeline",
+                     inputs={"assetId":"source-from-native"}),
+            decision("search",query="place video on timeline"),
+            decision("invoke",tool="add_asset_to_timeline",
+                     inputs={"assetId":"source-from-native"}),
+            decision("finish",summary="Prior native write still unresolved"),
+        ])
+        outcome=await controls(session,model,4).run("Do not repeat uncertain edits")
+        self.assertEqual(session.placement_calls,1)
+        self.assertTrue(model.observed[1][
+            "last_native_first_picture_write_reconciliation"][
+                "native_picture_readback_not_yet_confirmed"])
+        self.assertNotIn("timeline_picture_present",
+            model.observed[1]["host_observed_machine_facts"])
+        refused=[e for e in outcome["events"]
+                 if e["kind"]=="model_action_rejected"
+                 and e.get("validation_keyword")=="unreconciled_first_picture_write"]
+        self.assertEqual(len(refused),1)
+        self.assertTrue(refused[0]["no_native_dispatch"])
+        self.assertFalse(outcome["native_editing_capability_complete"])
+        self.assertTrue(audit_native_journal(
+            outcome["events"],host_tool_access=host_grants())
+            ["journal_chain_structurally_valid"])
 
     async def test_brain_can_choose_import_and_then_picture_tool_without_one_metadata_search(self):
         session=SyntheticNativeStateSession()
