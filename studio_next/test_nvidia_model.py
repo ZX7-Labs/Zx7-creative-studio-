@@ -134,6 +134,15 @@ class NvidiaProviderContractTest(unittest.TestCase):
         self.assertEqual(chosen[0].settings.provider_id, "nvidia")
         self.assertFalse(chosen[0].allow_image_upload)
 
+    def test_post_validation_mutation_cannot_replace_model_context(self):
+        model = NvidiaCreativeModel()
+        model.settings.sampling["messages"] = [{"role": "user", "content": "override"}]
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Z" * 32}), patch(
+                "studio_next.nvidia_model.build_opener") as opener:
+            with self.assertRaisesRegex(NvidiaConfigurationError, "after host admission"):
+                model.decide({"brief": "Keep original context"})
+            opener.assert_not_called()
+
     def test_cloud_does_not_pretend_nvidia_enforces_json_schema(self):
         settings = NvidiaModelSettings()
         model = NvidiaCreativeModel(settings)
