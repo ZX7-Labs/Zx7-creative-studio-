@@ -10,6 +10,7 @@ OpenAI-compatible inference service, not a scripted test fixture.
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -101,7 +102,13 @@ async def main(args):
     if args.evaluation_evidence == "reviewed-revision" and not args.allow_cloud_image_upload:
         raise ValueError("Observed cloud trial requires explicit synthetic image upload permission")
     brief = args.brief_file.read_text(encoding="utf-8")
-    conn = StdioServerParameters(command="node", args=params, cwd=ROOT)
+    # NVIDIA_API_KEY must stay solely in the trusted Python Brain process.
+    # The native editor, Electron children, FFmpeg, and arbitrary editor plugins
+    # must never inherit a hosted-provider credential even for synthetic trials.
+    editor_env = dict(os.environ)
+    editor_env.pop("NVIDIA_API_KEY", None)
+    conn = StdioServerParameters(command="node", args=params, cwd=ROOT,
+                                 env=editor_env)
     async with stdio_client(conn) as (read, write):
         async with ClientSession(read, write, read_timeout_seconds=120) as session:
             await session.initialize()
