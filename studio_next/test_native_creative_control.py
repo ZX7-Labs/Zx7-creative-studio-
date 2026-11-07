@@ -108,7 +108,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 model=ScriptedModel([decision("invoke",tool="update_text_clip",
                                inputs={"clipId":"owner-original","text":"Changed"})])
                 controller=NativeCreativeControl(session,model,max_turns=1,
-                    host_tool_access={"update_text_clip":"write"})
+                    host_tool_access={tool.name: (
+                        "write" if tool.name=="update_text_clip" else "read")
+                        for tool in session.tools})
                 with self.assertRaisesRegex(
                         NativeCreativeControlError, "boolean status"):
                     await controller.run("Original artistic edit")
@@ -131,7 +133,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(type="text",text='{"success":true}')])
         controller=NativeCreativeControl(session,
             ScriptedModel([decision("invoke",tool="get_timeline", inputs={})]),
-            max_turns=1,host_tool_access={"get_timeline":"read"})
+            max_turns=1,host_tool_access={tool.name: (
+                "write" if tool.name=="update_text_clip" else "read")
+                for tool in session.tools})
         with self.assertRaisesRegex(NativeCreativeControlError, "boolean status"):
             await controller.run("Inspect real timeline")
         warning=next(e for e in controller.events if
