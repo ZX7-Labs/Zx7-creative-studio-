@@ -2949,9 +2949,14 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             model = ScriptedModel([
                 decision("finish", summary="No source-backed project created"),
             ])
+            # This focused fixture only grants create/open; filter optional
+            # real-trial effects to the exact mock host grant surface. The
+            # production trial keeps its full installed import/placement grants.
+            permitted_effects = {name: value for name, value in effects.items()
+                                 if name in grants}
             result = await NativeCreativeControl(
                 session, model, catalog_mode="indexed", host_tool_access=grants,
-                host_possible_effects=effects, max_turns=1).run(
+                host_possible_effects=permitted_effects, max_turns=1).run(
                     "Choose a safe first native project action")
             self.assertEqual(session.calls, [("get_project", {})])
             self.assertEqual(model.observed[0]["selectable_native_tools"],
