@@ -250,7 +250,7 @@ def author_film(model, out):
             context={"owner":OWNER,"technical_contract":SYSTEM,
                      "previous_draft":previous,
                      "validator_feedback":message,
-                     "instruction":"Repair the EXACT listed invalid numeric parameter(s) in your own original IR. Do not repeat an invalid scale=0. Scale and scale keyframes must be between 0.01 and 30. Preserve your original artistic intent, decisions and sound. Return the complete corrected Film IR."}
+                     "instruction":"Correct the EXACT reported renderer ABI field/type/value, preserving your actual original art and sound. Layer scale and keyframe scale >=0.01 and <=30. Shape fill/stroke and background must be actual opaque/transparent colours (#RRGGBB or #RRGGBBAA); unsupported CSS gradients can only be expressed by new model-authored drawable shapes, never by a fictional CSS paint string. Keep the same original artistic purpose. Recheck all real native constraints in the provided technical contract and return one COMPLETE corrected Film IR JSON."}
             continue
         attempts.append({"round":turn,"accepted":True,
                          "elapsed_seconds":round(time.monotonic()-started,3),
