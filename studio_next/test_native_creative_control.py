@@ -1709,6 +1709,74 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(audit_native_journal(
             result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
 
+    async def test_native_marker_write_reobserves_empty_project_before_model_selected_import(self):
+        """Real 26-turn failure: unrelated marker writes must not erase
+        the trusted empty-asset fact and trap later source import.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+        class EditorSession(FakeSession):
+            imported = 0
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    payload = {"mcp": {"hasProject": True},
+                               "project": {"id": "native-one", "assetCount": self.imported},
+                               "assetCount": self.imported}
+                elif name == "add_timeline_markers":
+                    payload = {"success": True, "result": {
+                        "added": len(arguments["markers"])}}
+                elif name == "import_asset_from_path":
+                    self.imported += 1
+                    payload = {"success": True, "result": {
+                        "assetId": "real-native-import", "previewOnly": False}}
+                else:
+                    raise AssertionError("Unexpected native editor dispatch")
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(payload))])
+
+        session = EditorSession()
+        session.tools += [
+            SimpleNamespace(name="get_project", description="Current project status",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="add_timeline_markers", description="Native timeline markers",
+                            input_schema={"type": "object", "properties": {
+                                "markers": {"type": "array", "items": {"type": "object"}}}}),
+            SimpleNamespace(name="import_asset_from_path", description="Import actual file",
+                            input_schema={"type": "object", "properties": {
+                                "path": {"type": "string"},
+                                "previewOnly": {"type": "boolean"}}}),
+        ]
+        grants = {t.name: ("write" if t.name in (
+            "update_text_clip", "add_timeline_markers", "import_asset_from_path")
+            else "read") for t in session.tools}
+        model = ScriptedModel([
+            decision("search", query="add_timeline_markers", limit=1),
+            decision("invoke", tool="add_timeline_markers",
+                     inputs={"markers": [{"timeSeconds": 1.0}]}),
+            decision("invoke", tool="import_asset_from_path",
+                     inputs={"path": "/allowed/footage.mp4", "previewOnly": False}),
+            decision("finish", summary="Import acknowledged, no creative film claimed"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, catalog_mode="indexed", max_turns=4,
+            host_tool_access=grants,
+            host_preconditions={"import_asset_from_path": ["project_open"]},
+            host_possible_effects={
+                "import_asset_from_path": ["project_assets_available"],
+            }).run("Author an original editable film")
+        self.assertEqual([tool for tool, _ in session.calls], [
+            "get_project", "add_timeline_markers", "get_project",
+            "import_asset_from_path", "get_project"])
+        self.assertEqual(model.observed[2]["host_verified_execution_progress"][
+            "project_asset_count_from_native_read"], 0)
+        self.assertIn("import_asset_from_path",
+                      model.observed[2]["selectable_native_tools"])
+        self.assertIsNone(model.observed[3]["host_observed_machine_affordances"])
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
     async def test_unknown_project_state_does_not_grant_invented_affordances(self):
         session = FakeSession()
         session.tools += [
