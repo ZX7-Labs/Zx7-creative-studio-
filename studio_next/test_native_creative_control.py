@@ -1780,6 +1780,132 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             outcome["events"], host_tool_access=grants)[
                 "journal_chain_structurally_valid"])
 
+
+    async def test_native_asset_and_timeline_reads_survive_each_other_but_not_next_write(self):
+        """The real run's imported asset ID was lost to automatic get_project.
+
+        A fake model verifies only host-context continuity, never creativity.
+        The native-write ACK and each read remain distinct, non-authoritative
+        observations; a new write invalidates all previous read snapshots.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class StatefulNativeSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools += [
+                    SimpleNamespace(name="get_project", description="Project",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_assets", description="Real asset IDs",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="import_asset_from_path", description="Import",
+                                    input_schema={"type": "object", "properties": {
+                                        "path": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
+                    SimpleNamespace(name="add_asset_to_timeline", description="Place",
+                                    input_schema={"type": "object", "properties": {
+                                        "assetId": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
+                ]
+
+            async def call_tool(self, name, args):
+                self.calls.append((name, args))
+                if name == "get_project":
+                    payload = {"project": {"id": "native-project"},
+                               "mcp": {"hasProject": True}}
+                elif name == "get_assets":
+                    payload = {"assets": [{"id": "native-asset-id-17"}]}
+                elif name == "get_timeline":
+                    payload = {"timeline": {"id": "native-timeline-9", "clips": []}}
+                elif name == "import_asset_from_path":
+                    payload = {"success": True, "result": {
+                        "previewOnly": False, "assetId": "native-asset-id-17"}}
+                elif name == "add_asset_to_timeline":
+                    payload = {"success": True, "result": {
+                        "previewOnly": False, "clipId": "native-clip-5"}}
+                else:
+                    payload = {"success": True}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(payload))])
+
+        session = StatefulNativeSession()
+        grants = {item.name: ("write" if item.name in (
+            "import_asset_from_path", "add_asset_to_timeline",
+            "update_text_clip") else "read") for item in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path", inputs={
+                "path": "/owner-original-footage.mp4", "previewOnly": False}),
+            decision("invoke", tool="get_assets", inputs={}),
+            decision("invoke", tool="get_timeline", inputs={}),
+            decision("invoke", tool="add_asset_to_timeline", inputs={
+                "assetId": "native-asset-id-17", "previewOnly": False}),
+            decision("finish", summary="Only an offline memory fixture"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=5, host_tool_access=grants,
+            host_preconditions={
+                "import_asset_from_path": ["project_open"],
+                "add_asset_to_timeline": ["project_open"],
+            }).run("Independently edit original video in the native editor")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual([name for name, _ in session.calls], [
+            "get_project", "import_asset_from_path", "get_project",
+            "get_assets", "get_timeline", "add_asset_to_timeline", "get_project"])
+        # Existing last_native_result_texts retains the genuine post-write
+        # project inspection, but now it cannot hide the imported asset ID.
+        self.assertIn("native-project",
+                      model.observed[1]["last_native_result_texts"][0])
+        imported = model.observed[1]["last_acknowledged_native_write"]
+        self.assertEqual(imported["tool"], "import_asset_from_path")
+        self.assertTrue(imported["native_application_acknowledged"])
+        self.assertIn("native-asset-id-17", imported["result_texts"][0])
+        self.assertEqual([x["tool"] for x in
+                          model.observed[3]["native_read_snapshot_cache"]],
+                         ["get_project", "get_assets", "get_timeline"])
+        self.assertIn("native-asset-id-17", json.dumps(
+            model.observed[3]["native_read_snapshot_cache"]))
+        self.assertIn("native-timeline-9", json.dumps(
+            model.observed[3]["native_read_snapshot_cache"]))
+        # The next acknowledged model-selected edit has already invalidated
+        # all pre-edit read caches; reconciliation can repopulate get_project.
+        self.assertEqual([x["tool"] for x in
+                          model.observed[4]["native_read_snapshot_cache"]],
+                         ["get_project"])
+        revised = model.observed[4]["last_acknowledged_native_write"]
+        self.assertEqual(revised["tool"], "add_asset_to_timeline")
+        self.assertIn("native-clip-5", revised["result_texts"][0])
+        self.assertNotIn("owner-original-footage", json.dumps(result["events"]))
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+
+    async def test_native_read_cache_never_truncates_large_receipts_as_valid_json(self):
+        """Omit an oversized cache entry instead of inventing partial state."""
+        session = FakeSession()
+        session.tools.append(SimpleNamespace(
+            name="get_assets", description="Read native assets",
+            input_schema={"type": "object", "properties": {}}))
+
+        async def call_tool(name, inputs):
+            session.calls.append((name, inputs))
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text", text=json.dumps(
+                    {"asset_data": "original-rights-ledger-" * 850}))])
+        session.call_tool = call_tool
+        grants = {tool.name: ("write" if tool.name == "update_text_clip"
+                               else "read") for tool in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="get_assets", inputs={}),
+            decision("finish", summary="A large response remains available once"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=2, host_tool_access=grants).run(
+                "Read original native asset inventory")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertGreater(len(model.observed[1]["last_native_result_texts"][0]),
+                           12000)
+        self.assertEqual(model.observed[1]["native_read_snapshot_cache"], [])
+        self.assertIsNone(model.observed[1]["last_acknowledged_native_write"])
+        self.assertEqual(len(session.calls), 1)
+
     async def test_post_import_contradictory_host_read_blocks_next_edit(self):
         """Write ACK plus uncertain READ must never enable a guessed edit."""
         from studio_next.native_creative_audit import audit_native_journal
