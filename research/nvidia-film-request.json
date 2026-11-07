@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "kind": "nvidia-original-model-authored-film",
+  "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "synthetic_only": true,
+  "allow_external_stock_media": false,
+  "max_model_attempts": 3,
+  "request_id": "20261107-original-motion-sound-directed-film-v1"
+}
