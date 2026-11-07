@@ -115,9 +115,9 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             legacy = factory(SimpleNamespace(**common, structured_actions=False))
         self.assertEqual(type(structured).__name__, "NvidiaNativeToolCreativeModel")
         self.assertEqual(type(legacy).__name__, "NvidiaCreativeModel")
-        # Exact NVIDIA model-card reasoning policy, not an alternate editor.
-        self.assertEqual(structured.settings.sampling["chat_template_kwargs"],
-                         {"enable_thinking": True, "medium_effort": True})
+        # Hosted API reasoning contract; self-hosted template knobs excluded.
+        self.assertEqual(structured.settings.sampling["reasoning_effort"], "low")
+        self.assertNotIn("chat_template_kwargs", structured.settings.sampling)
         self.assertEqual(structured.settings.sampling["temperature"], 1.0)
         self.assertEqual(structured.settings.sampling["top_p"], 0.95)
         self.assertEqual(structured.settings.max_tokens, 8192)

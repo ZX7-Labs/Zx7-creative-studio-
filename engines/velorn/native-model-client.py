@@ -83,8 +83,9 @@ def native_decision_model(args):
         # NVIDIA's pinned Nemotron 3.5 VL is a REASONING tool model. The
         # initial live editor trials unintentionally DISABLED its reasoning,
         # capped output at 2048 and produced repeated imports and no clips.
-        # The official card recommends temperature 1/top_p .95; medium
-        # thinking uses fewer tokens while retaining explicit reasoning.
+        # The hosted API documents reasoning_effort none/low/high, not the
+        # self-hosted medium_effort chat-template knob. Start with documented
+        # low reasoning within the already reviewed 8192-token budget.
         # Keep legacy smoke/older transport settings and local model intact.
         nvidia_settings = (
             NvidiaModelSettings(
@@ -92,9 +93,7 @@ def native_decision_model(args):
                 max_tokens=8192,
                 sampling={
                     "temperature": 1.0, "top_p": 0.95,
-                    "chat_template_kwargs": {
-                        "enable_thinking": True, "medium_effort": True,
-                    },
+                    "reasoning_effort": "low",
                 })
             if args.structured_actions else
             NvidiaModelSettings(model_id=args.model_id,
