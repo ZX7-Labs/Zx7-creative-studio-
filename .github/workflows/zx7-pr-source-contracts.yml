@@ -46,6 +46,54 @@ jobs:
             studio_next.test_body_project_heads \
             studio_next.test_publication_lease_fence -v
 
+  visual-scipy-native-differential:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install separately selected mature native image engine
+        run: python -m pip install --no-cache-dir '.[production,visual_acceleration]'
+      - name: Prove compiled backend retains original working color and alpha semantics
+        run: |
+          python -m compileall -q studio_next/body_visual_graph.py studio_next/body_visual_render.py
+          python -m unittest \
+            studio_next.test_visual_scipy_reuse \
+            studio_next.test_body_visual_graph.NativePixelGraphTests -v
+      - name: Measure native convolution without assuming a machine-independent speedup
+        run: |
+          python - <<'PY'
+          import json, platform, statistics, time
+          import numpy as np
+          import scipy
+          from studio_next.body_visual_graph import _convolve
+          rng=np.random.default_rng(7)
+          for h,w,taps,repeats in ((540,960,31,3),(1080,1920,63,3)):
+              pixels=rng.random((h,w,4),dtype=np.float32)
+              weights=[1/taps]*taps
+              metrics={}
+              outputs={}
+              for engine in ("numpy","scipy"):
+                  samples=[]
+                  for _ in range(repeats):
+                      start=time.perf_counter()
+                      outputs[engine]=_convolve(
+                          pixels,(weights,weights),"transparent",backend=engine)
+                      samples.append(time.perf_counter()-start)
+                  metrics[engine+"_seconds_median"]=round(statistics.median(samples),6)
+              metrics["max_absolute_pixel_delta"]=float(np.max(
+                  np.abs(outputs["numpy"]-outputs["scipy"])))
+              metrics.update({"source":"exact-head GitHub Actions Ubuntu runner",
+                              "image_shape":[h,w,4],"kernel":taps,
+                              "python":platform.python_version(),
+                              "numpy":np.__version__,"scipy":scipy.__version__,
+                              "not_an_artistic_quality_or_all_machine_benchmark":True})
+              print("ZX7_NATIVE_REUSE_MEASURED "+json.dumps(metrics,sort_keys=True))
+              del pixels,outputs
+          PY
+
   source-and-native-project:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

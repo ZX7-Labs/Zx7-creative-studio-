@@ -16,6 +16,7 @@ editor = ["mcp==2.3.0", "jsonschema>=4.26,<5"]
 research = ["mcp==2.3.0", "jsonschema>=4.26,<5"]
 vfx_exr = ["OpenEXR>=3.3,<4", "numpy>=1.26,<3"]
 vfx_tracking = ["opencv-python-headless>=4.10,<5", "numpy>=1.26,<3", "Pillow>=10,<13"]
+visual_acceleration = ["scipy>=1.13,<2", "numpy>=1.26,<3"]
 
 [project.scripts]
 zx7-body = "studio_next.body_service:main"
