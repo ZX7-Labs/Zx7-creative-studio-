@@ -38,6 +38,10 @@ jobs:
             libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
             libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
           python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Check model and native control source before invoking a costly real model
+        run: |
+          python -m compileall -q studio_next scripts/run_native_model_trial.py
+          git diff --check
       - name: Fail fast on authoritative asset import reconciliation and project-read contracts
         run: |
           python -m unittest -q \
