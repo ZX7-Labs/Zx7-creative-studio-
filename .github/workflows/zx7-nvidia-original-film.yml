@@ -1,0 +1,85 @@
+name: "ZX7 NVIDIA — Original AI-Authored Film with Sound and Physical Proof"
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/nvidia_creative_film.py"
+      - "scripts/nvidia_film_request.py"
+      - "scripts/test_nvidia_creative_film.py"
+      - "research/nvidia-film-request.json"
+      - ".github/workflows/zx7-nvidia-original-film.yml"
+  push:
+    branches: [main]
+    paths:
+      - "research/nvidia-film-request.json"
+permissions:
+  contents: read
+concurrency:
+  group: zx7-nvidia-original-film-one-shot
+  cancel-in-progress: false
+
+jobs:
+  offline-original-physical-compositor:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install physical renderer contract only, no cloud access
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-urw-base35 fonts-dejavu-core fontconfig
+          python -m pip install --no-cache-dir '.[production]'
+      - name: Prove exact original Film IR and independently decoded audio/video
+        run: |
+          python -m scripts.nvidia_film_request research/nvidia-film-request.json
+          python -m unittest scripts.test_nvidia_creative_film -v
+  real-original-model-art-to-audiovisual-mp4:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Read exact source without checkout credentials or user assets
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify explicit original no-stock request before cloud or install
+        run: python -m scripts.nvidia_film_request research/nvidia-film-request.json
+      - name: Install audited local CPU drawing, sound synthesis and actual decoders
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-urw-base35 fonts-dejavu-core fontconfig
+          python -m pip install --no-cache-dir '.[production]'
+      - name: Test actual original-asset and sound renderer using clearly labeled test-only fixture
+        run: |
+          python -m unittest scripts.test_nvidia_creative_film -v
+          python -m compileall -q studio_next motion_studio scripts/nvidia_creative_film.py
+      - name: Let authenticated remote model choose all art, copy, motion, timing and sounds
+        shell: bash
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NVIDIA_API_KEY:-}" ]; then
+            echo "Missing operator Actions secret. No cloud request, no film claim."
+            exit 2
+          fi
+          python -u -m scripts.nvidia_creative_film \
+            --out "$RUNNER_TEMP/zx7-original-model-film"
+      - name: Preserve actual encoded movie, authored IR and physical no-preset proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-nvidia-real-original-film-${{ github.sha }}
+          path: ${{ runner.temp }}/zx7-original-model-film/
+          if-no-files-found: warn
+          retention-days: 14
