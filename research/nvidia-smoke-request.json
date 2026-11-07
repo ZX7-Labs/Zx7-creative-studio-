@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "kind": "nvidia-no-media-protocol-smoke",
+  "model_variant": "nemotron-super-vl",
+  "media_upload": false,
+  "max_tokens": 128,
+  "request_id": "20261107-nvidia-initial-protocol-check"
+}
