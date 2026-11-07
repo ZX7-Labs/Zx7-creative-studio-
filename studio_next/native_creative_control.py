@@ -2076,72 +2076,6 @@ class NativeCreativeControl:
                               "audio_sent_to_model_for_next_decision": bool(audio),
                               "audio_semantically_heard": False,
                               "human_or_artistic_quality_approved": False})
-                # The pinned native Electron/editor tests prove a successful
-                # source-placement ACK can be followed by get_project AND
-                # get_timeline both reporting the prior empty state. A
-                # larger real Qwen run (#42327595943) then repeated the
-                # placement and failed. Reconcile using trusted read-only
-                # observations *before* the next costly model decision.
-                # This does NOT choose/edit video or claim artistic success.
-                if requires_first_picture_readback:
-                    self._first_picture_write_unreconciled = True
-                    timeline_read_args = {"includeClips": True, "limit": 1000}
-                    if (self.host_tool_access.get("get_project") == "read" and
-                            self.host_tool_access.get("get_timeline") == "read" and
-                            "get_project" in validators and
-                            "get_timeline" in validators and
-                            validators["get_project"].is_valid({}) and
-                            validators["get_timeline"].is_valid(timeline_read_args)):
-                        # A newly created native clip converged after several
-                        # get_project polls in the physically pinned editor.
-                        # Bound both attempts and delay; never retry the WRITE.
-                        for check_index in range(6):
-                            if check_index:
-                                await asyncio.sleep(.25)
-                            try:
-                                project_reply = await self.session.call_tool(
-                                    "get_project", {})
-                                timeline_reply = await self.session.call_tool(
-                                    "get_timeline", timeline_read_args)
-                                if (_native_mcp_error_status(project_reply) or
-                                        _native_mcp_error_status(timeline_reply)):
-                                    break
-                                project_texts, project_images, project_audio = (
-                                    _native_content(project_reply))
-                                timeline_texts, timeline_images, timeline_audio = (
-                                    _native_content(timeline_reply))
-                                if (project_images or project_audio or
-                                        timeline_images or timeline_audio):
-                                    break
-                                project_count = _native_project_current_clip_count_from_text(
-                                    project_texts)
-                                observed_picture = _native_timeline_picture_presence_from_text(
-                                    timeline_texts)
-                            except (Exception, ValueError):
-                                break
-                            if project_count is not None and project_count > 0 and (
-                                    observed_picture == "present"):
-                                self._first_picture_write_unreconciled = False
-                                self._last_native_timeline_picture_state = "present"
-                                self._host_timeline_observation_attempted = True
-                                self._append({
-                                    "kind": "host_native_timeline_picture_observation",
-                                    "turn": turn, "picture_state": "present",
-                                    "observed_text_sha256": hashlib.sha256(
-                                        _wire(timeline_texts).encode()).hexdigest(),
-                                    "host_attested_read_only": True,
-                                    "no_native_edit_dispatched": True})
-                                break
-                    if self._first_picture_write_unreconciled:
-                        # Failure to converge is UNKNOWN state; the prior
-                        # mutation may have happened. Model gets a bounded
-                        # diagnostic and cannot blindly repeat placement.
-                        self._last_native_timeline_picture_state = "unknown"
-                        self._host_timeline_observation_attempted = False
-                        self._post_write_state_warning = {
-                            "first_picture_write_readback_unconfirmed": True,
-                            "must_inspect_native_timeline": True,
-                            "no_automatic_write_retry": True}
                 if native_name in self._host_once_after_ack and self.catalog_mode == "indexed":
                     # A one-time host operation has already been acknowledged.
                     # Its old search result is no longer an actionable frontier;
@@ -2276,6 +2210,72 @@ class NativeCreativeControl:
                                 "claimed_project_success_unconfirmed": True,
                                 "no_model_selected_mutation": True,
                                 "no_automatic_write_retry": True})
+                # The pinned native Electron/editor tests prove a successful
+                # source-placement ACK can be followed by get_project AND
+                # get_timeline both reporting the prior empty state. A
+                # larger real Qwen run (#42327595943) then repeated the
+                # placement and failed. Reconcile using trusted read-only
+                # observations *before* the next costly model decision.
+                # This does NOT choose/edit video or claim artistic success.
+                if requires_first_picture_readback:
+                    self._first_picture_write_unreconciled = True
+                    timeline_read_args = {"includeClips": True, "limit": 1000}
+                    if (self.host_tool_access.get("get_project") == "read" and
+                            self.host_tool_access.get("get_timeline") == "read" and
+                            "get_project" in validators and
+                            "get_timeline" in validators and
+                            validators["get_project"].is_valid({}) and
+                            validators["get_timeline"].is_valid(timeline_read_args)):
+                        # A newly created native clip converged after several
+                        # get_project polls in the physically pinned editor.
+                        # Bound both attempts and delay; never retry the WRITE.
+                        for check_index in range(6):
+                            if check_index:
+                                await asyncio.sleep(.25)
+                            try:
+                                project_reply = await self.session.call_tool(
+                                    "get_project", {})
+                                timeline_reply = await self.session.call_tool(
+                                    "get_timeline", timeline_read_args)
+                                if (_native_mcp_error_status(project_reply) or
+                                        _native_mcp_error_status(timeline_reply)):
+                                    break
+                                project_texts, project_images, project_audio = (
+                                    _native_content(project_reply))
+                                timeline_texts, timeline_images, timeline_audio = (
+                                    _native_content(timeline_reply))
+                                if (project_images or project_audio or
+                                        timeline_images or timeline_audio):
+                                    break
+                                project_count = _native_project_current_clip_count_from_text(
+                                    project_texts)
+                                observed_picture = _native_timeline_picture_presence_from_text(
+                                    timeline_texts)
+                            except Exception:
+                                break
+                            if project_count is not None and project_count > 0 and (
+                                    observed_picture == "present"):
+                                self._first_picture_write_unreconciled = False
+                                self._last_native_timeline_picture_state = "present"
+                                self._host_timeline_observation_attempted = True
+                                self._append({
+                                    "kind": "host_native_timeline_picture_observation",
+                                    "turn": turn, "picture_state": "present",
+                                    "observed_text_sha256": hashlib.sha256(
+                                        _wire(timeline_texts).encode()).hexdigest(),
+                                    "host_attested_read_only": True,
+                                    "no_native_edit_dispatched": True})
+                                break
+                    if self._first_picture_write_unreconciled:
+                        # Failure to converge is UNKNOWN state; the prior
+                        # mutation may have happened. Model gets a bounded
+                        # diagnostic and cannot blindly repeat placement.
+                        self._last_native_timeline_picture_state = "unknown"
+                        self._host_timeline_observation_attempted = False
+                        self._post_write_state_warning = {
+                            "first_picture_write_readback_unconfirmed": True,
+                            "must_inspect_native_timeline": True,
+                            "no_automatic_write_retry": True}
             return {
                 "status": outcome, "events": self.events.copy(),
                 "measured_model_wall_ms_total": round(self._model_wall_ms_total, 3),
