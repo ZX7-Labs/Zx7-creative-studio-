@@ -89,6 +89,41 @@ class GatewayMcpSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(gateway.host_budget_evidence()["reserved_calls"],1)
         self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_live_model_trial_entry_uses_same_admitted_gateway_contract(self):
+        # This covers the ACTUAL entrypoint factory now used by the local
+        # model trial. Scripted protocol only; no neural model or artwork.
+        from scripts.run_native_model_trial import admit_local_native_model_session
+        source = LocalMcpSource()
+        grants = {"read_native": "read", "write_native": "write"}
+        with self.assertRaisesRegex(ValueError, "bounded positive integer"):
+            await admit_local_native_model_session(
+                source, grants, max_model_turns=True)
+        with self.assertRaisesRegex(ValueError, "bounded positive integer"):
+            await admit_local_native_model_session(
+                source, grants, max_model_turns=0)
+        admitted, gateway = await admit_local_native_model_session(
+            source, grants, max_model_turns=1)
+        visible = await admitted.list_tools()
+        self.assertEqual({item.name for item in visible.tools},
+                         {"read_native", "write_native"})
+        await admitted.call_tool("read_native", {"value":3})
+        await admitted.call_tool("write_native", {"value":7})
+        with self.assertRaisesRegex(CapabilityExecutionError,
+                                    "host_session_write_budget_exhausted"):
+            await admitted.call_tool("write_native", {"value":8})
+        with self.assertRaisesRegex(CapabilityExecutionError,
+                                    "not granted"):
+            await admitted.call_tool("forbidden_native", {"value":9})
+        self.assertEqual(source.calls, [
+            ("read_native", {"value":3}),
+            ("write_native", {"value":7})])
+        evidence = gateway.host_budget_evidence()
+        self.assertEqual(evidence["limit_calls"], 12)
+        self.assertEqual(evidence["limit_writes"], 1)
+        self.assertEqual(evidence["reserved_calls"], 2)
+        self.assertEqual(evidence["reserved_writes"], 1)
+        self.assertTrue(evidence["does_not_measure_tokens_cost_or_native_commit"])
+
     async def test_ungranted_tool_never_reaches_real_source(self):
         source=LocalMcpSource()
         gateway=await self._connect(source)
