@@ -75,8 +75,8 @@ def native_decision_model(args):
         from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
         model_type = NvidiaCreativeModel
         if args.structured_actions:
-            from studio_next.nvidia_tool_model import NvidiaToolCreativeModel
-            model_type = NvidiaToolCreativeModel
+            from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel
+            model_type = NvidiaNativeToolCreativeModel
         model = model_type(
             NvidiaModelSettings(model_id=args.model_id,
                                 timeout_seconds=args.model_timeout),
@@ -191,7 +191,7 @@ async def main(args):
         "model_id_reported": outcome["actual_model_id_reported"],
         "selected_provider": args.provider,
         "model_action_transport": (
-            "nvidia_forced_function_call" if args.provider == "nvidia" and
+            "nvidia_host_native_typed_function_calls" if args.provider == "nvidia" and
             args.structured_actions else
             "local_current_host_json_schema" if args.provider == "local" and
             args.structured_actions else "free_form_json"),

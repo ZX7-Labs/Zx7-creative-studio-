@@ -65,6 +65,8 @@ jobs:
       - name: Run offline strict credential and real synthetic fixture admission tests
         run: |
           python -m unittest studio_next.test_nvidia_model \
+            studio_next.test_nvidia_tool_model \
+            studio_next.test_nvidia_native_tool_model \
             scripts.test_nvidia_smoke_request \
             scripts.test_run_nvidia_native_trial -v
       - name: Verify owner-reviewed synthetic-only cloud native evaluation request
