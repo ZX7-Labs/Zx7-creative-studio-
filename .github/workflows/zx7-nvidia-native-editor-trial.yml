@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - "research/nvidia-native-trial-request.json"
+  # Pull requests only validate the reviewed request. They never execute a
+  # cloud neural trial, upload frames or access the NVIDIA credential.
+  pull_request:
+    branches: [main]
+    paths:
+      - "research/nvidia-native-trial-request.json"
+      - ".github/workflows/zx7-nvidia-native-editor-trial.yml"
 
 permissions:
   contents: read
@@ -14,6 +21,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  request-admission-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Read exact request source without access to provider credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify unchanged model identity, approved synthetic-only image consent and hard 40-turn cap
+        run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
+
   real-model-native-editor-and-export:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
