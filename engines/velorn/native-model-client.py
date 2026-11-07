@@ -75,12 +75,15 @@ def native_decision_model(args):
         from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
         model_type = NvidiaCreativeModel
         if args.structured_actions:
-            from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel
+            from studio_next.nvidia_native_tool_model import (
+                NvidiaNativeToolCreativeModel, NATIVE_DIRECT_TOOL_SYSTEM,
+            )
             model_type = NvidiaNativeToolCreativeModel
         model = model_type(
             NvidiaModelSettings(model_id=args.model_id,
                                 timeout_seconds=args.model_timeout),
-            system_prompt=NATIVE_CREATIVE_SYSTEM,
+            system_prompt=(NATIVE_DIRECT_TOOL_SYSTEM if args.structured_actions
+                           else NATIVE_CREATIVE_SYSTEM),
             allow_image_upload=args.allow_cloud_image_upload)
         model.verify_host_credentials()
         return model

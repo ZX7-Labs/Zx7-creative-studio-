@@ -82,10 +82,12 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
 
     def __init__(self, settings=None, *, system_prompt=None,
                  allow_image_upload=False):
-        # The native direct tool protocol replaces (does not contradict)
-        # legacy JSON-action instructions.
+        # The caller must explicitly choose the direct-tool system prompt;
+        # do not silently discard trusted caller-owned creative instructions.
+        if not isinstance(system_prompt, str) or not system_prompt.strip():
+            raise NvidiaConfigurationError("Direct native tool system prompt required")
         super().__init__(
-            settings, system_prompt=NATIVE_DIRECT_TOOL_SYSTEM,
+            settings, system_prompt=system_prompt,
             allow_image_upload=allow_image_upload)
 
     def _messages(self, context, images):
@@ -112,8 +114,9 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             "selectable_native_tools" if compact else "actual_granted_native_tools")
         contracts = context.get("host_native_tool_contracts")
         if (not isinstance(granted, list) or not isinstance(contracts, list)
-                or len(contracts) > 48 or len(granted) != len(set(granted))
-                or any(type(n) is not str or not n for n in granted)):
+                or len(contracts) > 48 or
+                any(type(n) is not str or not n for n in granted) or
+                len(granted) != len(set(granted))):
             raise NvidiaConfigurationError("Host native tool contracts untrusted")
         allowed_native = set(granted)
         functions = []
@@ -172,7 +175,13 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                 "description": "Finish only after host-certified required evidence exists.",
                 "parameters": _meta_parameters("finish"),
             }})
-        if not functions or len(json.dumps(functions, ensure_ascii=False).encode()) > 128_000:
+        try:
+            encoded_size = len(json.dumps(functions, ensure_ascii=False,
+                                          allow_nan=False).encode("utf-8"))
+        except (ValueError, TypeError, RecursionError):
+            raise NvidiaConfigurationError(
+                "Host native function schema cannot be serialized") from None
+        if not functions or encoded_size > 128_000:
             raise NvidiaConfigurationError("Host native function catalog is too large")
         return functions, mapping
 
