@@ -1659,8 +1659,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                             input_schema={"type": "object", "properties": {
                                 "path": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
         ]
-        grants = {item.name: ("write" if item.name == "import_asset_from_path"
-                             else "read") for item in session.tools}
+        grants = {item.name: ("write" if item.name in (
+            "import_asset_from_path", "update_text_clip") else "read")
+            for item in session.tools}
         effects = {"import_asset_from_path": ["project_assets_available"]}
         requirements = {"import_asset_from_path": ["project_open"]}
         # A model that does not elect to import receives information, NOT a
@@ -1708,6 +1709,31 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["native_editing_capability_complete"])
         self.assertTrue(audit_native_journal(
             result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
+        # Missing or contradictory inventory must never be interpreted as
+        # positive or zero imported assets.
+        class UnknownInventorySession(EmptyProjectSession):
+            async def call_tool(self, name, arguments):
+                if name != "get_project":
+                    raise AssertionError("Unknown inventory must not dispatch edits")
+                self.calls.append((name, arguments))
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps({
+                        "mcp": {"hasProject": True},
+                        "project": {"id": "unknown-inventory"},
+                    }))])
+        unknown = UnknownInventorySession()
+        unknown.tools = list(session.tools)
+        uncertain_model = ScriptedModel([
+            decision("finish", summary="No host evidence of imported assets"),
+        ])
+        await NativeCreativeControl(
+            unknown, uncertain_model, max_turns=1, catalog_mode="indexed",
+            host_tool_access=grants, host_preconditions=requirements,
+            host_possible_effects=effects).run("Inspect real editor state")
+        self.assertIsNone(uncertain_model.observed[0][
+            "host_observed_machine_affordances"])
+        self.assertEqual(unknown.calls, [("get_project", {})])
 
     async def test_native_marker_write_reobserves_empty_project_before_model_selected_import(self):
         """Real 26-turn failure: unrelated marker writes must not erase
