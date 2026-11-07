@@ -75,7 +75,7 @@ are future acceptance gates, not available functionality.
 ## Real API smoke with GitHub Actions
 
 The repository also includes
-[`ZX7 NVIDIA API — Manual Credentialed No-Media Smoke`](../.github/workflows/zx7-nvidia-cloud-smoke.yml).
+[`ZX7 NVIDIA API — Explicit Credentialed No-Media Smoke`](../.github/workflows/zx7-nvidia-cloud-smoke.yml).
 It runs on manual dispatch, or on an explicit `main`-branch change to
 [`research/nvidia-smoke-request.json`](../research/nvidia-smoke-request.json).
 The reviewed request is strictly limited to one selected catalog model, a
