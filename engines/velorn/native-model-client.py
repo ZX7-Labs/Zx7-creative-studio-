@@ -29,6 +29,13 @@ from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
 
 
+def native_editor_child_environment(environ=None):
+    """Never disclose a cloud provider credential to native subprocesses."""
+    child = dict(os.environ if environ is None else environ)
+    child.pop("NVIDIA_API_KEY", None)
+    return child
+
+
 async def main(args):
     for path in (args.source, args.config, args.brief_file):
         if not path.exists():
@@ -105,10 +112,8 @@ async def main(args):
     # NVIDIA_API_KEY must stay solely in the trusted Python Brain process.
     # The native editor, Electron children, FFmpeg, and arbitrary editor plugins
     # must never inherit a hosted-provider credential even for synthetic trials.
-    editor_env = dict(os.environ)
-    editor_env.pop("NVIDIA_API_KEY", None)
     conn = StdioServerParameters(command="node", args=params, cwd=ROOT,
-                                 env=editor_env)
+                                 env=native_editor_child_environment())
     async with stdio_client(conn) as (read, write):
         async with ClientSession(read, write, read_timeout_seconds=120) as session:
             await session.initialize()
