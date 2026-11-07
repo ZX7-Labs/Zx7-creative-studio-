@@ -144,6 +144,7 @@ def verify_saved_native_trial(workspace: Path):
         raise ValueError("Native trial requires exactly one saved active project")
     project_file = candidates[0]
     if (project_file.is_symlink() or
+            not project_file.resolve().is_relative_to(root.resolve()) or
             not project_file.is_file() or
             not 0 < project_file.stat().st_size <= 16 * 1024 * 1024):
         raise ValueError("Native saved project is missing, redirected or oversized")
@@ -279,11 +280,28 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
             check=True, timeout=90, env=_no_cloud_credentials())
         media.append({"path": str(path), "sha256": _sha256(path),
                       "bytes": path.stat().st_size})
-    saved_native = verify_saved_native_trial(workspace)
-    if len({entry["sha256"] for entry in media}) < 2:
-        raise RuntimeError("No independently different decoded native video revisions")
+    # Preserve forensic evidence even when final native state fails acceptance.
+    # Never let an empty timeline disappear behind an early RuntimeError.
+    try:
+        saved_native = {
+            **verify_saved_native_trial(workspace),
+            "native_saved_project_verified": True,
+        }
+    except ValueError as exc:
+        saved_native = {
+            "native_saved_project_verified": False,
+            "native_project_rejection": str(exc)[:256],
+        }
+    except OSError as exc:
+        # Raw OS messages can include sensitive workspace paths.
+        saved_native = {
+            "native_saved_project_verified": False,
+            "native_project_rejection_type": type(exc).__name__,
+        }
+    export_variants = len({entry["sha256"] for entry in media})
     evaluated = {
         **saved_native,
+        "different_decoded_export_count": export_variants,
         "status": summary.get("status"),
         "host_evidence_satisfied": summary.get("evaluation_evidence_satisfied") is True,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
@@ -298,7 +316,9 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     print(json.dumps(evaluated, ensure_ascii=False))
     if (summary.get("status") != "model_finished_unverified" or
             summary.get("evaluation_evidence_satisfied") is not True or
-            len(media) < 2):
+            len(media) < 2 or
+            export_variants < 2 or
+            saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
     return evaluated
 
