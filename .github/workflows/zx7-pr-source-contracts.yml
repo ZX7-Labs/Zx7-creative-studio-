@@ -70,7 +70,7 @@ jobs:
       - name: Prove independent Linux model-process peak RSS evidence fails closed
         run: python -m unittest studio_next.test_native_model_resource_evidence -v
       - name: Reject ambiguous local model responses before native editing
-        run: python -m unittest studio_next.test_provider studio_next.test_nvidia_model scripts.test_nvidia_smoke_request studio_next.test_native_action_schema -v
+        run: python -m unittest studio_next.test_provider studio_next.test_nvidia_model scripts.test_nvidia_smoke_request scripts.test_run_nvidia_native_trial studio_next.test_native_action_schema -v
       - name: Native editor transport, BODY grants and unchanged native schemas
         run: python -m unittest studio_next.test_body_editor_client studio_next.test_body_editor_catalog studio_next.test_body_editor_policy studio_next.test_body_editor_mcp studio_next.test_body_editor_split_guard studio_next.test_body_editor_extract_guard studio_next.test_body_editor_export studio_next.test_body_editor_frame studio_next.test_body_editor_audio studio_next.test_body_editor_audio_timeline studio_next.test_native_creative_control studio_next.test_native_audio_model_input studio_next.test_native_creative_audit studio_next.test_delivery_audit -v
       - name: Local editor adapter path and tool policy
