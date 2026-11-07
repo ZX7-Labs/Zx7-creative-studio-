@@ -1468,15 +1468,19 @@ class NativeCreativeControl:
                     raise
                 if new_export_sha is not None:
                     self._verified_exports.add(new_export_sha)
-                # Source-backed state hint: the first live model wrongly
-                # claimed an open project despite the REAL editor returning
-                # project=null, hasProject=false twice. Preserve only facts
-                # corroborated by both fields in the native read response.
-                # Any other successful native operation may change project
-                # state, so do not carry an old presence assertion forward.
-                self._project_presence = (
-                    _native_project_presence_from_text(texts)
-                    if native_name == "get_project" else "unknown")
+                # The actual get_project read establishes current presence;
+                # an explicit HOST-GRANTED read-only tool cannot change it.
+                # The previous implementation discarded project_open even
+                # after get_assets/get_timeline, leaving an AI unable to place
+                # a source it just inspected. Only a WRITE (or any ungranted/
+                # unclassified call) invalidates the prior project snapshot.
+                # The bounded post-write get_project read below must then
+                # re-establish truth before the next model-selected edit.
+                if native_name == "get_project":
+                    self._project_presence = _native_project_presence_from_text(texts)
+                elif (self.host_tool_access is None or
+                      self.host_tool_access.get(native_name) != "read"):
+                    self._project_presence = "unknown"
                 if native_name == "get_project" and self._project_presence != "unknown":
                     # A newer independent native inspection supersedes the
                     # post-write inconsistency; preserve the historical

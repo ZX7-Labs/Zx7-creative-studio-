@@ -1647,6 +1647,67 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                          [e["kind"] for e in result["events"]])
 
 
+    async def test_host_granted_asset_read_preserves_observed_project_for_model_edit(self):
+        """Read-only asset inspection cannot erase an actual project fact.
+
+        The model still independently chooses search, asset read and timeline
+        edit; only a fresh get_project read may assert physical project presence.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class NativeStateSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools += [
+                    SimpleNamespace(name="get_project", description="Current project",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_assets", description="Read imported source assets",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="add_asset_to_timeline",
+                                    description="Place actual source on timeline",
+                                    input_schema={"type": "object", "properties": {
+                                        "assetId": {"type": "string"}}}),
+                ]
+
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                if name == "get_project":
+                    out = {"project": {"id": "existing"}, "mcp": {"hasProject": True}}
+                elif name == "get_assets":
+                    out = {"count": 1, "assets": [{"id": "real-source-id"}]}
+                else:
+                    out = {"success": True, "result": {"previewOnly": False}}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(out))])
+
+        session = NativeStateSession()
+        grants = {x.name: ("write" if x.name in (
+            "add_asset_to_timeline", "update_text_clip") else "read")
+            for x in session.tools}
+        model = ScriptedModel([
+            decision("search", query="get assets"),
+            decision("invoke", tool="get_assets", inputs={}),
+            decision("search", query="add asset to timeline"),
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetId": "real-source-id"}),
+            decision("finish", summary="Protocol-only fixture"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, host_tool_access=grants, catalog_mode="indexed",
+            max_turns=5,
+            host_preconditions={"add_asset_to_timeline": ["project_open"]}).run(
+                "Choose source content for a real native timeline")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual([name for name, _ in session.calls],
+                         ["get_project", "get_assets", "add_asset_to_timeline", "get_project"])
+        self.assertEqual(model.observed[2][
+            "native_project_presence_from_last_inspection"], "present")
+        self.assertEqual(model.observed[3][
+            "native_project_presence_from_last_inspection"], "present")
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+
     async def test_successful_import_rechecks_project_before_following_ai_timeline_edit(self):
         """Real host reads, not the import ACK, establish the next edit's state.
 
