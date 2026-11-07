@@ -94,11 +94,20 @@ class NvidiaCreativeModel(LocalCreativeModel):
         super().__init__(settings or NvidiaModelSettings(), system_prompt=system_prompt)
         self.allow_image_upload = allow_image_upload
 
-    def _open_request(self, payload):
+    @staticmethod
+    def _credential():
         key = os.environ.get("NVIDIA_API_KEY", "")
         if not isinstance(key, str) or not _KEY_FORMAT.fullmatch(key):
             raise NvidiaConfigurationError(
                 "Set a valid NVIDIA_API_KEY in the trusted operator environment")
+        return key
+
+    def verify_host_credentials(self):
+        """Fail early at operator startup without making a remote request."""
+        self._credential()
+
+    def _open_request(self, payload):
+        key = self._credential()
         if payload.get("model") != self.settings.model_id or payload.get("stream") is not False:
             raise NvidiaConfigurationError("Model identity and streaming are host-controlled")
         # NVIDIA's published Qwen endpoint documents chat fields but not a
