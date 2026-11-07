@@ -10,6 +10,8 @@ from studio_next.capability_gateway import CapabilityExecutionError, CapabilityG
 from studio_next.capability_fabric import CapabilityContractError
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
+from studio_next.native_creative_control import NativeCreativeControl
+from studio_next.test_native_creative_control import ScriptedModel, decision
 
 
 class LocalMcpSource:
@@ -64,6 +66,28 @@ class GatewayMcpSessionTests(unittest.IsolatedAsyncioTestCase):
                          ["read_native","write_native"])
         self.assertEqual(gateway.host_budget_evidence()["reserved_calls"],2)
         self.assertEqual(gateway.host_budget_evidence()["reserved_writes"],1)
+
+    async def test_existing_creative_controller_routes_model_selected_write_through_gateway(self):
+        # Scripted model is a protocol fixture, not a real creative Brain.
+        # The exact NativeCreativeControl used by the real Qwen trial consumes
+        # the source-neutral MCP adapter without another tool runner.
+        source=LocalMcpSource()
+        budget=CapabilitySessionBudget(max_calls=1,max_writes=1)
+        gateway=await self._connect(source,budget)
+        proxy=CapabilityGatewayMcpSession(gateway,"graphics")
+        model=ScriptedModel([
+            decision("invoke",tool="write_native",inputs={"value":7}),
+            decision("finish",summary="Protocol test; no native art was created"),
+        ])
+        result=await NativeCreativeControl(
+            proxy,model,max_turns=2,
+            host_tool_access={"read_native":"read","write_native":"write"}).run(
+                "Use a native engine, with no prescribed creative steps")
+        self.assertEqual(result["status"],"model_finished_unverified")
+        self.assertEqual(source.calls,[("write_native",{"value":7})])
+        self.assertEqual(gateway.host_budget_evidence()["reserved_writes"],1)
+        self.assertEqual(gateway.host_budget_evidence()["reserved_calls"],1)
+        self.assertFalse(result["native_editing_capability_complete"])
 
     async def test_ungranted_tool_never_reaches_real_source(self):
         source=LocalMcpSource()
