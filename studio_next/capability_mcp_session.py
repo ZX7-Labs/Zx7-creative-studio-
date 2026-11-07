@@ -7,6 +7,7 @@ The wrapper cannot attest actual native state or artistic quality.
 """
 from __future__ import annotations
 
+import copy
 from types import SimpleNamespace
 
 from .capability_fabric import (
@@ -87,7 +88,12 @@ class CapabilityGatewayMcpSession:
                         "requires", "may_enable")):
                     raise CapabilityExecutionError(
                         "Native tool metadata changed; host must refresh discovery")
-                allowed.append(tool)
+                # Expose the admitted, bounded host summary and a fresh
+                # schema copy, never a plugin object's arbitrary attributes
+                # or changed long description masquerading as host authority.
+                allowed.append(SimpleNamespace(
+                    name=name, description=current["description"],
+                    input_schema=copy.deepcopy(current["input_schema"])))
         return SimpleNamespace(tools=allowed, nextCursor=None)
 
     async def call_tool(self, name, arguments):
