@@ -109,6 +109,11 @@ class NvidiaCreativeModel(LocalCreativeModel):
         if fmt != {"type": "json_object"}:
             raise NvidiaConfigurationError(
                 "This NVIDIA endpoint does not guarantee structured-output schemas")
+        # The dataclass is frozen, but its sampling dict can be mutated by
+        # trusted Python callers. Never let that mutate request identity or
+        # model-visible messages after the host's original validation.
+        if set(self.settings.sampling) - _NVIDIA_PARAMS:
+            raise NvidiaConfigurationError("NVIDIA sampling changed after host admission")
         remote = dict(payload)
         del remote["response_format"]
         remote["max_tokens"] = self.settings.max_tokens
