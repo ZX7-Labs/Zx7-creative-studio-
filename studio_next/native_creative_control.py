@@ -1359,6 +1359,28 @@ class NativeCreativeControl:
                             "host_requires_new_capability_query"] = True
                     self._selectable_tools = [
                         match["tool"] for match in self._last_search_result["matches"]]
+                    # A small model's unrelated next search must not erase
+                    # trusted prerequisite affordances. The prior real 2B
+                    # camera trial observed assets_present=False and a
+                    # host-attested import candidate, but repeatedly searched
+                    # for placing nonexistent assets instead. Keep currently
+                    # feasible source-neutral prerequisite tools visible
+                    # alongside model-selected search matches. The host never
+                    # invokes, chooses media, or supplies artistic parameters.
+                    preserved=[]
+                    for candidate in self._host_frontier_tools:
+                        if (candidate not in self.tools or
+                                self._host_write_already_acknowledged(candidate)):
+                            continue
+                        if candidate not in self._selectable_tools:
+                            if len(self._selectable_tools)>=8:
+                                self._selectable_tools.pop()
+                            self._selectable_tools.append(candidate)
+                        preserved.append(candidate)
+                    if preserved:
+                        self._last_search_result[
+                            "host_machine_prerequisite_candidates_still_selectable"
+                        ]=preserved[:8]
                     # When broad terms tie, the retrieval layer refuses to
                     # grant executable matches. But making the real examples
                     # uninspectable trapped the actual 2B model for seven
