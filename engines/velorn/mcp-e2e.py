@@ -149,7 +149,22 @@ async def exercise(options):
         }, sort_keys=True), flush=True)
         assert (await session.call_tool("queue_prompt_generation_batch", {})).is_error
         assert (await session.call_tool("create_project", {"name": "Bad", "width": "wrong"})).is_error
-        created = await call(session, "create_project", {"name": "MCP native edit", "width": 320, "height": 180, "fps": 24, "previewOnly": False})
+        # One independently granted gateway now performs the existing real
+        # editor create operation. This proves the positive native WRITE path,
+        # not merely a denied request or a synthetic test session.
+        enabled_budget = CapabilitySessionBudget(max_calls=2, max_writes=1)
+        enabled_gateway = CapabilityGateway(
+            {"editor": (session, tools)}, session_budget=enabled_budget)
+        await enabled_gateway.refresh()
+        enabled_session = CapabilityGatewayMcpSession(enabled_gateway, "editor")
+        created = await call(enabled_session, "create_project", {
+            "name": "MCP native edit", "width": 320,
+            "height": 180, "fps": 24, "previewOnly": False})
+        enabled_trace = enabled_gateway.evidence()
+        assert (len(enabled_trace) == 1 and
+                enabled_trace[0]["operation_id"] == "editor/create_project" and
+                enabled_trace[0]["state"] == "host_reported_success_unverified")
+        assert enabled_gateway.host_budget_evidence()["reserved_writes"] == 1
         # Measure the real gap between an application ACK and independently
         # observable native project state. The existing test uses 20s
         # bounded read-only convergence; one immediate read (as in the real
@@ -160,6 +175,18 @@ async def exercise(options):
         state = await wait(
             session, lambda state: (state.get("project") or {}).get("name") == "MCP native edit",
             read_observations=observed_reads)
+        # A native application ACK alone is not a durable project: the
+        # original readback loop above independently confirmed project state.
+        assert (state["project"]["name"] == "MCP native edit" and
+                state.get("mcp", {}).get("hasProject") is True)
+        print("ACTUAL_NATIVE_EDITOR_GATEWAY_WRITE " + json.dumps({
+            "native_project_created_through_shared_gateway": True,
+            "one_host_admitted_native_write": True,
+            "native_application_acknowledged": True,
+            "actual_project_readback_converged": True,
+            "no_model_or_artistic_quality_claim": True,
+            "native_write_auto_retried": False,
+        }, sort_keys=True), flush=True)
         print("ACTUAL_NATIVE_PROJECT_READ_CONVERGENCE " + json.dumps({
             "source": "pinned complete Velorn Electron via real MCP session",
             "application_success_acknowledged": True,
@@ -815,6 +842,7 @@ async def exercise(options):
         "physicalNativeSingleClipReadConvergencePassed": True,
         "physicalNativeSingleClipExportContractPassed": True,
         "physicalInstalledHostGatewayAdmissionPassed": True,
+        "physicalInstalledHostGatewayWriteAndReadbackPassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
