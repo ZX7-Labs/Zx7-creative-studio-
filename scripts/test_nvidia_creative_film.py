@@ -113,6 +113,19 @@ class OriginalModelFilmTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 validate_artistic_control(ir)
 
+    def test_zero_scale_can_never_be_silently_substituted(self):
+        original=_renderer_contract_only()
+        for scale_case in ("layer", "keyframe"):
+            data=json.loads(json.dumps(original))
+            layer=data["shots"][0]["layers"][0]
+            if scale_case=="layer":
+                layer["scale"]=0
+            else:
+                layer["animate"]["scale"]=[[0,0],[2.0,1]]
+            with self.subTest(case=scale_case), self.assertRaisesRegex(
+                    ValueError,"scale must be finite/in range"):
+                validate_artistic_control(data)
+
     def test_existing_studio_physically_renders_and_decodes_test_only_ir(self):
         from motion_studio.render import render
         from studio_next.silent_audio import make_silent_timing
