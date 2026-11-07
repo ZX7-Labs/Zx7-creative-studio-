@@ -1647,6 +1647,140 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                          [e["kind"] for e in result["events"]])
 
 
+    async def test_successful_import_rechecks_project_before_following_ai_timeline_edit(self):
+        """Real host reads, not the import ACK, establish the next edit's state.
+
+        Regression: an import requiring project_open used to reset the
+        controller to unknown with no further read, blocking a valid next edit.
+        Every edit is still selected by the supplied model, not the host.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class ExistingProjectSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools += [
+                    SimpleNamespace(name="get_project",
+                        description="Read actual open native project",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="import_asset_from_path",
+                        description="Import owner-authorized camera footage",
+                        input_schema={"type": "object", "properties": {
+                            "path": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
+                    SimpleNamespace(name="add_asset_to_timeline",
+                        description="Place already-imported project asset",
+                        input_schema={"type": "object", "properties": {
+                            "assetId": {"type": "string"}, "previewOnly": {"type": "boolean"}}}),
+                ]
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    content = {"project": {"id": "native-project"},
+                               "mcp": {"hasProject": True}}
+                else:
+                    content = {"success": True, "result": {"previewOnly": False}}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(content))])
+
+        session = ExistingProjectSession()
+        grants = {x.name: ("write" if x.name in (
+            "import_asset_from_path", "add_asset_to_timeline",
+            "update_text_clip") else "read") for x in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path",
+                     inputs={"path": "/authorized/camera.mp4", "previewOnly": False}),
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetId": "asset-from-real-editor", "previewOnly": False}),
+            decision("finish", summary="Native decisions are only a fixture"),
+        ])
+        outcome = await NativeCreativeControl(
+            session, model, max_turns=3, host_tool_access=grants,
+            host_preconditions={
+                "import_asset_from_path": ["project_open"],
+                "add_asset_to_timeline": ["project_open"],
+            }).run("Edit a real project from source footage")
+        self.assertEqual(outcome["status"], "model_finished_unverified")
+        self.assertEqual([name for name, _ in session.calls], [
+            "get_project", "import_asset_from_path", "get_project",
+            "add_asset_to_timeline", "get_project"])
+        self.assertEqual(model.observed[1][
+            "native_project_presence_from_last_inspection"], "present")
+        self.assertEqual(model.observed[2][
+            "native_project_presence_from_last_inspection"], "present")
+        observations = [e for e in outcome["events"]
+                        if e["kind"] == "host_project_post_write_observation"]
+        self.assertEqual([e["triggered_by_native_tool"] for e in observations],
+                         ["import_asset_from_path", "add_asset_to_timeline"])
+        self.assertTrue(all(e["project_presence"] == "present" for e in observations))
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+
+    async def test_post_import_contradictory_host_read_blocks_next_edit(self):
+        """Write ACK plus uncertain READ must never enable a guessed edit."""
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class ChangedProjectSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools += [
+                    SimpleNamespace(name="get_project", description="Read project",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="import_asset_from_path", description="Import media",
+                                    input_schema={"type": "object", "properties": {
+                                        "path": {"type": "string"}}}),
+                    SimpleNamespace(name="add_asset_to_timeline", description="Place media",
+                                    input_schema={"type": "object", "properties": {
+                                        "assetId": {"type": "string"}}}),
+                ]
+                self.reads = 0
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    self.reads += 1
+                    content = ({"project": {"id": "original"},
+                                "mcp": {"hasProject": True}}
+                               if self.reads == 1 else
+                               {"project": None, "mcp": {"hasProject": True}})
+                else:
+                    content = {"success": True, "result": {"previewOnly": False}}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(content))])
+
+        session = ChangedProjectSession()
+        grants = {x.name: ("write" if x.name in (
+            "import_asset_from_path", "add_asset_to_timeline") else "read")
+            for x in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path",
+                     inputs={"path": "/authorized/source.mp4"}),
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetId": "unverified-asset"}),
+            decision("finish", summary="Not verified"),
+        ])
+        outcome = await NativeCreativeControl(
+            session, model, max_turns=3, host_tool_access=grants,
+            host_preconditions={
+                "import_asset_from_path": ["project_open"],
+                "add_asset_to_timeline": ["project_open"],
+            }).run("No uncertain native writes")
+        self.assertEqual([name for name, _ in session.calls],
+                         ["get_project", "import_asset_from_path", "get_project"])
+        self.assertEqual(model.observed[1][
+            "native_project_presence_from_last_inspection"], "unknown")
+        self.assertTrue(model.observed[1][
+            "last_host_project_write_reconciliation"]["project_state_unknown"])
+        rejected = [e for e in outcome["events"]
+                    if e["kind"] == "model_action_rejected"]
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0]["validation_keyword"], "host_precondition")
+        self.assertEqual(rejected[0]["schema_location"], "project_open")
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+
     async def test_wrong_order_import_is_rejected_without_stateful_editor_rpc(self):
         from studio_next.native_creative_audit import audit_native_journal
         session = FakeSession()

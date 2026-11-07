@@ -1519,15 +1519,24 @@ class NativeCreativeControl:
                     self._selectable_tools = []
                     self._inspectable_tied_candidates = []
                     self._last_search_result = None
-                # A successful project-opening write may precede the editor's
-                # asynchronous project snapshot. Source-evidence from the real
-                # CPU trial showed one actual create ACK followed immediately
-                # by get_project reporting 'absent'. Recheck at most ONCE,
-                # using only the host-authorized native READ. Neither read may
-                # create a project, mutate a timeline or invent success.
+                # An acknowledged native write invalidates our last project
+                # snapshot. Previously only project-creating writes caused a
+                # fresh host read. This left project_open UNKNOWN immediately
+                # after a successful asset import, so the next model-selected
+                # timeline edit was refused by the trusted prerequisite gate.
+                # Re-observe after any host-authorized WRITE which either
+                # establishes OR requires project_open. A native ACK alone
+                # never proves that the editor remains on the same project.
+                # Reuse the bounded, independently journaled read-only
+                # reconciliation; never retry the model-selected WRITE.
                 effects = self._host_possible_effects.get(native_name, ())
-                if (isinstance(effects, (list, tuple)) and
-                        "project_open" in effects and
+                prerequisites = self._host_preconditions.get(native_name, ())
+                reobserve_project = (
+                    (isinstance(effects, (list, tuple)) and
+                     "project_open" in effects) or
+                    (isinstance(prerequisites, (list, tuple)) and
+                     "project_open" in prerequisites))
+                if (reobserve_project and
                         self.host_tool_access is not None and
                         self.host_tool_access.get("get_project") == "read" and
                         "get_project" in validators and
