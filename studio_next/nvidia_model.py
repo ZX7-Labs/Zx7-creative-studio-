@@ -14,7 +14,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from .providers import LocalCreativeModel, _CREATIVE_SYSTEM
+from .providers import LocalCreativeModel, LocalModelOutputError, _CREATIVE_SYSTEM
 
 
 _NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com"
@@ -132,10 +132,25 @@ class NvidiaCreativeModel(LocalCreativeModel):
         except (URLError, OSError, ssl.SSLError) as exc:
             raise NvidiaTransportError("NVIDIA inference connection failed") from None
 
+    def _invoke(self, role, context, *, images=(), audio=()):
+        try:
+            return super()._invoke(role, context, images=images, audio=audio)
+        except (NvidiaConfigurationError, NvidiaTransportError, LocalModelOutputError):
+            raise
+        except (ValueError, TypeError, KeyError, IndexError, UnicodeError):
+            # Remote envelopes and parser exceptions may contain provider-
+            # supplied strings. Never surface them into public build logs.
+            raise NvidiaTransportError("NVIDIA response or request envelope is invalid") from None
+
     def decide_with_images(self, context, images):
         if not self.allow_image_upload:
             raise NvidiaConfigurationError(
                 "Cloud image upload disabled; host must explicitly authorize media egress")
+        if len(images) > 4 or sum(
+                len(item[1]) for item in images
+                if isinstance(item, tuple) and len(item) == 2 and
+                isinstance(item[1], bytes)) > 4 * 1024 * 1024:
+            raise NvidiaConfigurationError("Cloud image batch exceeds host egress budget")
         return super().decide_with_images(context, images)
 
     def decide_with_audio(self, context, audio):
