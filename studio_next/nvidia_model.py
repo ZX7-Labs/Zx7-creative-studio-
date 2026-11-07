@@ -40,7 +40,7 @@ class _NoRedirect(HTTPRedirectHandler):
 class NvidiaModelSettings:
     provider_id: str = "nvidia"
     base_url: str = _NVIDIA_ENDPOINT
-    model_id: str = "qwen/qwen3.5-122b-a10b"
+    model_id: str = "nvidia/nemotron-3.5-super-vl-120b-a12b"
     timeout_seconds: int = 180
     max_response_bytes: int = 1_000_000
     max_tokens: int = 2048
@@ -140,4 +140,4 @@ class NvidiaCreativeModel(LocalCreativeModel):
 
     def decide_with_audio(self, context, audio):
         raise NvidiaConfigurationError(
-            "NVIDIA Qwen endpoint has no verified original-WAV audio contract")
+            "NVIDIA selected endpoint has no verified original-WAV audio contract")
