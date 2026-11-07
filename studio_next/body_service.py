@@ -863,6 +863,7 @@ def main():
             from .nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
             model = NvidiaCreativeModel(NvidiaModelSettings(model_id=a.creative_model),
                   system_prompt=SESSION_SYSTEM,allow_image_upload=a.allow_cloud_image_upload)
+            model.verify_host_credentials()
         else:
             from .providers import LocalCreativeModel,LocalModelSettings
             model=LocalCreativeModel(LocalModelSettings(base_url=a.creative_api,
