@@ -153,6 +153,76 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertIn("--fresh-trial-project", command)
             self.assertEqual(command[command.index("--max-turns") + 1], "40")
 
+
+    def test_saved_native_trial_requires_active_real_source_clip(self):
+        """Only a structural acceptance fixture, not model or video proof."""
+        import hashlib
+        import shutil
+        from scripts.run_nvidia_native_trial import verify_saved_native_trial
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            staging = workspace / "staging"
+            staging.mkdir()
+            source = staging / "original-neutral-gradient.mp4"
+            source.write_bytes(b"unit test only; separately decoded physical video")
+            sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            (workspace / "source-ledger.json").write_text(json.dumps([
+                {"path": str(source), "sha256": sha}]))
+            project_root = workspace / "projects" / "sample"
+            copied = project_root / "assets" / "video" / source.name
+            copied.parent.mkdir(parents=True)
+            shutil.copyfile(source, copied)
+            asset = {"id": "asset-1", "type": "video",
+                     "path": "assets/video/" + source.name,
+                     "settings": {"sourcePath": str(source)}}
+            clip = {"id": "clip-1", "trackId": "video-1",
+                    "assetId": "asset-1", "duration": 3.0}
+            timeline = {"id": "timeline-1", "tracks": [
+                {"id": "video-1", "type": "video"}], "clips": [clip]}
+            project = {"currentTimelineId": "timeline-1",
+                       "timelines": [timeline], "assets": [asset]}
+            saved = project_root / "project.comfystudio"
+            def write_project(value):
+                saved.write_text(json.dumps(value), encoding="utf-8")
+            write_project(project)
+            result = verify_saved_native_trial(workspace)
+            self.assertEqual(result["verified_source_backed_video_clips"], 1)
+            self.assertEqual(result["saved_active_clip_count"], 1)
+            self.assertFalse(result["artistic_quality_approved"])
+            self.assertEqual(result["native_project_sha256"], hashlib.sha256(
+                saved.read_bytes()).hexdigest())
+
+            for change in (
+                {"timelines": [{**timeline, "clips": []}]},
+                {"currentTimelineId": "nonexistent"},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "assetId": "unknown"}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "duration": 0}]}]},
+                {"assets": [{**asset, "type": "image"}]},
+                {"assets": [{**asset, "settings": {
+                    "sourcePath": "/not-the-original.mp4"}}]},
+            ):
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    write_project({**project, **change})
+                    verify_saved_native_trial(workspace)
+            write_project(project)
+            copied.write_bytes(b"substituted bytes")
+            with self.assertRaisesRegex(ValueError, "differ"):
+                verify_saved_native_trial(workspace)
+            shutil.copyfile(source, copied)
+            (project_root / "assets" / "video" / "other.mp4").write_bytes(
+                b"outsider")
+            bad = {**project, "assets": [
+                {**asset, "path": "../sample-not-valid.mp4"}]}
+            write_project(bad)
+            with self.assertRaises((ValueError, FileNotFoundError)):
+                verify_saved_native_trial(workspace)
+            write_project(project)
+            saved.write_text('{"timelines":[],"timelines":[]}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                verify_saved_native_trial(workspace)
+
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "not-created"

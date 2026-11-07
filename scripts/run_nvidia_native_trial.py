@@ -119,6 +119,111 @@ def prepare_trial(workspace: Path, *, source: Path):
     return roots, cfg
 
 
+
+def verify_saved_native_trial(workspace: Path):
+    """Independent structural proof: the CURRENT saved native timeline uses
+    a physically intact copied original video clip. This is NOT a creative
+    quality score and cannot replace export decode/visual inspection.
+    """
+    workspace = Path(workspace).resolve()
+    ledger_path = workspace / "source-ledger.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    if (type(ledger) is not list or len(ledger) != 1 or
+            type(ledger[0]) is not dict or
+            type(ledger[0].get("path")) is not str or
+            type(ledger[0].get("sha256")) is not str):
+        raise ValueError("Missing unique owner-original source ledger")
+    original = Path(ledger[0]["path"]).resolve(strict=True)
+    if (not original.is_file() or
+            original != (workspace / "staging" / original.name).resolve() or
+            _sha256(original) != ledger[0]["sha256"]):
+        raise ValueError("Original staged video differs from owner SHA ledger")
+    root = workspace / "projects"
+    candidates = list(root.glob("*/project.comfystudio"))
+    if len(candidates) != 1:
+        raise ValueError("Native trial requires exactly one saved active project")
+    project_file = candidates[0]
+    if (project_file.is_symlink() or
+            not project_file.is_file() or
+            not 0 < project_file.stat().st_size <= 16 * 1024 * 1024):
+        raise ValueError("Native saved project is missing, redirected or oversized")
+    def reject_duplicates(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("Ambiguous duplicate native project JSON field")
+            obj[key] = value
+        return obj
+    def reject_nonfinite(value):
+        raise ValueError("Nonfinite native project JSON")
+    native = json.loads(
+        project_file.read_text(encoding="utf-8"),
+        object_pairs_hook=reject_duplicates, parse_constant=reject_nonfinite)
+    if type(native) is not dict:
+        raise ValueError("Invalid native saved project")
+    timelines = native.get("timelines")
+    active_id = native.get("currentTimelineId")
+    if (type(timelines) is not list or not timelines or
+            type(active_id) is not str or not active_id or
+            sum(type(t) is dict and t.get("id") == active_id
+                for t in timelines) != 1):
+        raise ValueError("No single saved active native timeline")
+    active = next(t for t in timelines if t.get("id") == active_id)
+    clips, tracks, assets = (active.get("clips"), active.get("tracks"),
+                            native.get("assets"))
+    if (type(clips) is not list or not clips or
+            type(tracks) is not list or type(assets) is not list):
+        raise ValueError("Native saved active timeline has no editable clips")
+    video_tracks = {t["id"] for t in tracks if
+                    type(t) is dict and type(t.get("id")) is str and
+                    t.get("type") == "video"}
+    valid_assets = {}
+    for asset in assets:
+        if type(asset) is not dict:
+            raise ValueError("Malformed native project asset")
+        aid = asset.get("id")
+        if type(aid) is not str or not aid or aid in valid_assets:
+            raise ValueError("Ambiguous native project asset identities")
+        valid_assets[aid] = asset
+    real_original_clips = 0
+    for clip in clips:
+        if type(clip) is not dict:
+            raise ValueError("Malformed native project clip")
+        if (clip.get("trackId") not in video_tracks or
+                type(clip.get("assetId")) is not str):
+            continue
+        asset = valid_assets.get(clip["assetId"])
+        if not asset or asset.get("type") != "video":
+            continue
+        metadata = asset.get("settings")
+        if (type(metadata) is not dict or
+                metadata.get("sourcePath") != str(original)):
+            continue
+        relative = asset.get("path")
+        if (type(relative) is not str or not relative or
+                Path(relative).is_absolute()):
+            raise ValueError("Untrusted native source copy location")
+        project_dir = project_file.parent.resolve(strict=True)
+        copied = (project_dir / relative).resolve(strict=True)
+        if (not copied.is_relative_to(project_dir) or
+                not copied.is_file() or _sha256(copied) != ledger[0]["sha256"]):
+            raise ValueError("Native original source bytes differ from ledger")
+        duration = clip.get("duration")
+        if (type(duration) not in (int, float) or
+                not 0 < duration <= 6):
+            raise ValueError("Invalid placed original video duration")
+        real_original_clips += 1
+    if not real_original_clips:
+        raise ValueError("No physically source-backed video clip on saved active timeline")
+    return {
+        "native_project_sha256": _sha256(project_file),
+        "active_native_timeline_id": active_id,
+        "saved_active_clip_count": len(clips),
+        "verified_source_backed_video_clips": real_original_clips,
+        "artistic_quality_approved": False,
+    }
+
+
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):
     if model_id != _ALLOWED_MODEL:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
@@ -174,7 +279,11 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
             check=True, timeout=90, env=_no_cloud_credentials())
         media.append({"path": str(path), "sha256": _sha256(path),
                       "bytes": path.stat().st_size})
+    saved_native = verify_saved_native_trial(workspace)
+    if len({entry["sha256"] for entry in media}) < 2:
+        raise RuntimeError("No independently different decoded native video revisions")
     evaluated = {
+        **saved_native,
         "status": summary.get("status"),
         "host_evidence_satisfied": summary.get("evaluation_evidence_satisfied") is True,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
