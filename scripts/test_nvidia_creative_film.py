@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 
 from scripts.nvidia_creative_film import (
-    FilmProofError, physical_proof, validate_artistic_control,
+    FilmProofError, physical_proof, validate_artistic_control, normalize_exact_artist_colors,
 )
 from scripts.nvidia_film_request import validate_request
 from scripts.nvidia_smoke_request import SmokeRequestError
@@ -125,6 +125,29 @@ class OriginalModelFilmTests(unittest.TestCase):
             with self.subTest(case=scale_case), self.assertRaisesRegex(
                     ValueError,"scale must be finite/in range"):
                 validate_artistic_control(data)
+
+    def test_semantically_identical_color_notation_preserves_ai_art(self):
+        original=_renderer_contract_only()
+        shape=original["assets"][0]["artwork"]["items"][0]
+        shape["fill"]="white"
+        original["project"]["background"]="#123"
+        equivalent, changes=normalize_exact_artist_colors(original)
+        self.assertEqual(shape["fill"],"white")
+        self.assertEqual(original["project"]["background"],"#123")
+        self.assertEqual(equivalent["assets"][0]["artwork"]["items"][0]["fill"],"#FFFFFF")
+        self.assertEqual(equivalent["project"]["background"],"#112233")
+        self.assertEqual(len(changes),2)
+        self.assertTrue(all(x["artistic_choice_changed"] is False for x in changes))
+        compiled=validate_artistic_control(equivalent)
+        self.assertEqual(compiled["assets"]["probe_typography"]["items"][0]["fill"],"#FFFFFF")
+
+    def test_unsupported_gradient_never_becomes_some_hardcoded_color(self):
+        original=_renderer_contract_only()
+        original["assets"][0]["artwork"]["items"][0]["fill"]="linear-gradient(red,blue)"
+        equivalent,changes=normalize_exact_artist_colors(original)
+        self.assertFalse(changes)
+        with self.assertRaisesRegex(ValueError, "fill needs"):
+            validate_artistic_control(equivalent)
 
     def test_existing_studio_physically_renders_and_decodes_test_only_ir(self):
         from motion_studio.render import render

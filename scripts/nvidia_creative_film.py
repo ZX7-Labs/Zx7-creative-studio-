@@ -8,13 +8,17 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from copy import deepcopy
 import json
+import re
 import math
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import time
+
+from PIL import ImageColor
 
 from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
 from studio_next.motion_bridge import compile_motion_project
@@ -54,7 +58,7 @@ Drawables may be:
  {type:'text',text:'your original title/copy',at:[x,y],size:number,
  fill:'#RRGGBB',font:'sans'|'bold'|'serif'|'mono',
  align?:'left'|'center'|'right'}.
-Choose YOUR geometry, colours, type hierarchy and words. Coordinates are
+Every SVG-like colour is yours to choose: fill, stroke and background. Use #RRGGBB or #RRGGBBAA hex where possible. Standard CSS named colours and shorthand hex retain exactly your chosen colour after lossless notation translation. Do not supply gradient strings, URL paints or CSS variables. Choose YOUR geometry, colours, type hierarchy and words. Coordinates are
 local to the asset size; canvas centres are relative to project width/height.
 shots: 2..4 distinct model-authored scenes, total 5..16 seconds. Each:
  {id:'unique_safe_id',purpose:'dramatic scene purpose',duration_seconds:number 1..6,
@@ -103,6 +107,54 @@ class FilmProofError(ValueError):
 def _sha(path):
     with Path(path).open("rb") as reader:
         return hashlib.file_digest(reader, "sha256").hexdigest()
+
+
+_HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?\Z")
+
+
+def normalize_exact_artist_colors(ir):
+    """Translate equivalent CSS color notation, never choose a new color."""
+    if not isinstance(ir, dict):
+        return ir, []
+    clean = deepcopy(ir)
+    changes = []
+
+    def normalize(parent, key, owner):
+        if not isinstance(parent, dict) or key not in parent:
+            return
+        raw = parent[key]
+        if not isinstance(raw, str) or len(raw) > 96:
+            return
+        if _HEX_COLOR.fullmatch(raw):
+            return
+        try:
+            if raw.casefold() in ("none", "transparent"):
+                rgba = (0, 0, 0, 0)
+            else:
+                rgba = ImageColor.getcolor(raw, "RGBA")
+        except ValueError:
+            return
+        if len(rgba) != 4 or any(type(v) is not int or not 0 <= v <= 255
+                                 for v in rgba):
+            return
+        normalized = "#" + "".join(f"{v:02X}" for v in rgba[:3])
+        if rgba[3] != 255:
+            normalized += f"{rgba[3]:02X}"
+        if owner == "project" and rgba[3] < 255:
+            return  # Transparent full backgrounds cannot be faithfully composited.
+        parent[key] = normalized
+        changes.append({"source": owner, "field": key,
+                        "model_selected_color": raw,
+                        "renderer_equivalent": normalized,
+                        "artistic_choice_changed": False})
+
+    normalize(clean.get("project"), "background", "project")
+    for idx, item in enumerate(clean.get("assets", [])):
+        if isinstance(item, dict) and isinstance(item.get("artwork"), dict):
+            for pos, shape in enumerate(item["artwork"].get("items", [])):
+                for key in ("fill", "stroke"):
+                    normalize(shape, key, f"assets[{idx}].items[{pos}]")
+    return clean, changes
 
 
 def validate_artistic_control(ir):
@@ -179,7 +231,8 @@ def author_film(model, out):
         try:
             proposal=model.decide(context)
             previous=proposal
-            project=validate_artistic_control(proposal)
+            executable, equivalent_colors = normalize_exact_artist_colors(proposal)
+            project=validate_artistic_control(executable)
         except (ValueError,TypeError,KeyError) as error:
             # Technical validator feedback never selects a visual or sound for AI.
             kind=type(error).__name__
@@ -187,10 +240,17 @@ def author_film(model, out):
                      else "Invalid Film IR contract: "+kind)
             attempts.append({"round":turn,"accepted":False,"validator":kind,
                              "problem":message})
+            # Synthetic-only trial: preserve valid non-approved original model
+            # proposals for root-cause audit; no private user media or API keys.
+            if isinstance(previous, dict):
+                raw = json.dumps(previous, ensure_ascii=False, allow_nan=False)
+                if len(raw.encode("utf-8")) <= 512_000:
+                    (out/f"unaccepted-model-draft-{turn}.json").write_text(
+                        raw+"\n", encoding="utf-8")
             context={"owner":OWNER,"technical_contract":SYSTEM,
                      "previous_draft":previous,
                      "validator_feedback":message,
-                     "instruction":"Repair the EXACT listed invalid numeric parameter(s) in your own original IR. Do not repeat an invalid scale=0. Scale and scale keyframes must be between 0.01 and 30. Preserve your original artistic intent, decisions and sound. Return the complete corrected Film IR."}
+                     "instruction":"Correct the EXACT reported renderer ABI field/type/value, preserving your actual original art and sound. Layer scale and keyframe scale >=0.01 and <=30. Shape fill/stroke and background must be actual opaque/transparent colours (#RRGGBB or #RRGGBBAA); unsupported CSS gradients can only be expressed by new model-authored drawable shapes, never by a fictional CSS paint string. Keep the same original artistic purpose. Recheck all real native constraints in the provided technical contract and return one COMPLETE corrected Film IR JSON."}
             continue
         attempts.append({"round":turn,"accepted":True,
                          "elapsed_seconds":round(time.monotonic()-started,3),
@@ -199,6 +259,8 @@ def author_film(model, out):
             json.dumps(proposal,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
         (out/"compiled-render-project.json").write_text(
             json.dumps(project,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+        (out/"renderer-color-notation-receipts.json").write_text(
+            json.dumps(equivalent_colors,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
         (out/"decision-attempts.json").write_text(
             json.dumps(attempts,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
         return proposal,project,attempts
