@@ -125,7 +125,7 @@ class NvidiaProviderContractTest(unittest.TestCase):
                 "--creative-provider", "nvidia", "--creative-model",
                 "nvidia/nemotron-3.5-super-vl-120b-a12b"]
         with patch.dict(os.environ, {"ZX7_BODY_API_TOKEN": "P" * 48,
-                                     "NVIDIA_API_KEY": ""}), patch(
+                                     "NVIDIA_API_KEY": "nvapi-" + "T" * 32}), patch(
                 "studio_next.body_service.start_local_body_service", side_effect=start), patch(
                 "sys.argv", args):
             body_service.main()
@@ -133,6 +133,20 @@ class NvidiaProviderContractTest(unittest.TestCase):
         self.assertIsInstance(chosen[0], NvidiaCreativeModel)
         self.assertEqual(chosen[0].settings.provider_id, "nvidia")
         self.assertFalse(chosen[0].allow_image_upload)
+
+    def test_host_startup_credential_preflight_is_no_network(self):
+        from studio_next import body_service
+        args = ["zx7-body", "--workspace-root", "/tmp/zx7-nvidia-contract",
+                "--creative-provider", "nvidia", "--creative-model",
+                "nvidia/nemotron-3.5-super-vl-120b-a12b"]
+        with patch.dict(os.environ, {"ZX7_BODY_API_TOKEN": "P" * 48,
+                                     "NVIDIA_API_KEY": ""}), patch("sys.argv", args), patch(
+                "studio_next.body_service.start_local_body_service") as start, patch(
+                "studio_next.nvidia_model.build_opener") as opener:
+            with self.assertRaisesRegex(NvidiaConfigurationError, "NVIDIA_API_KEY"):
+                body_service.main()
+            start.assert_not_called()
+            opener.assert_not_called()
 
     def test_post_validation_mutation_cannot_replace_model_context(self):
         model = NvidiaCreativeModel()
