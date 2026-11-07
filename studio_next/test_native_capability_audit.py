@@ -44,7 +44,7 @@ class NativeCapabilityCoverageTests(unittest.TestCase):
         cases = [
             ([tool("get_project")], {"invented": "write"}),
             ([tool("get_project"), tool("get_project")], {"get_project": "read"}),
-            ([tool("get_project", {"broken": False})],
+            ([tool("get_project", {"broken": None})],
              {"get_project": "read"}),
             ([{"name": "get_project", "inputSchema": {"type": "array"}}],
              {"get_project": "read"}),

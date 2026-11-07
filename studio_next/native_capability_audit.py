@@ -37,6 +37,11 @@ def audit_native_coverage(advertised, grants):
                 not isinstance(schema, dict) or schema.get("type") != "object" or
                 not isinstance(schema.get("properties", {}), dict)):
             raise ValueError("Native tool identity or input schema is invalid")
+        # JSON Schema boolean properties are valid; None/string schemas
+        # are not. Preserve source-declared free-form nested native objects.
+        if any(not isinstance(value, (dict, bool))
+               for value in schema.get("properties", {}).values()):
+            raise ValueError("Native parameter property has an invalid schema")
         installed.add(name)
         properties[name] = len(schema.get("properties", {}))
     unknown = set(grants) - installed
