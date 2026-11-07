@@ -120,6 +120,20 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             factory(SimpleNamespace(**{**common, "base_url": "https://other.invalid"},
                                     structured_actions=True))
 
+    def test_local_indexed_and_full_grammar_modes_both_use_live_host_context(self):
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        factory = runpy.run_path(str(script), run_name="native_local_route_test")[
+            "native_decision_model"]
+        common = dict(provider="local", base_url="http://127.0.0.1:8080",
+                      model_id="test", model_timeout=15,
+                      allow_cloud_image_upload=False)
+        structured = factory(SimpleNamespace(**common, structured_actions=True))
+        legacy = factory(SimpleNamespace(**common, structured_actions=False))
+        self.assertEqual(type(structured).__name__, "LocalNativeStructuredCreativeModel")
+        self.assertEqual(type(legacy).__name__, "LocalCreativeModel")
+        self.assertNotIn("response_format", structured.settings.sampling)
+
     def test_native_trial_actually_requests_structured_actions(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "trial"

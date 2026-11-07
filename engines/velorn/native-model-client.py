@@ -89,7 +89,13 @@ def native_decision_model(args):
         raise ValueError("Unrecognized creative model provider")
     if args.allow_cloud_image_upload:
         raise ValueError("Cloud-media consent requires --provider nvidia")
-    return LocalCreativeModel(
+    local_type = LocalCreativeModel
+    if args.structured_actions:
+        from studio_next.local_native_structured_model import (
+            LocalNativeStructuredCreativeModel,
+        )
+        local_type = LocalNativeStructuredCreativeModel
+    return local_type(
         LocalModelSettings(base_url=args.base_url, model_id=args.model_id,
                            timeout_seconds=args.model_timeout),
         system_prompt=NATIVE_CREATIVE_SYSTEM)
@@ -168,11 +174,6 @@ async def main(args):
                 {"editor": (session, host_grants)}, session_budget=budget)
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
-            if args.structured_actions and args.provider == "local":
-                discovered = (await admitted.list_tools()).tools
-                model.settings.sampling['response_format'] = {
-                    'type': 'json_schema', 'json_schema': {'name': 'native_editor_action',
-                        'strict': True, 'schema': native_action_schema([tool.name for tool in discovered])}}
             preconditions, machine_effects = trial_machine_contracts(
                 host_grants, fresh=fresh)
             outcome = await NativeCreativeControl(
@@ -193,7 +194,7 @@ async def main(args):
         "model_action_transport": (
             "nvidia_forced_function_call" if args.provider == "nvidia" and
             args.structured_actions else
-            "local_json_schema" if args.provider == "local" and
+            "local_current_host_json_schema" if args.provider == "local" and
             args.structured_actions else "free_form_json"),
         "required_evaluation_evidence": list(required),
         "evaluation_evidence_satisfied": bool(required) and outcome["status"] == "model_finished_unverified",
