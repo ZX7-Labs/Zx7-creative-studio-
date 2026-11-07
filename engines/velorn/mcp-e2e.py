@@ -100,9 +100,71 @@ async def exercise(options):
         for tool in discovered:
             if tool.name in native:
                 assert tool.input_schema == native[tool.name]["inputSchema"]
+        # The universal host admission gateway must actually work against
+        # this installed native Electron editor, not merely a fake tool
+        # listing or a separate BODY operation. All operations exposed here
+        # are from the ORIGINAL host grants, not model-generated permissions.
+        from studio_next.capability_gateway import (
+            CapabilityExecutionError, CapabilityGateway)
+        from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+        from studio_next.capability_session_budget import CapabilitySessionBudget
+        host_budget = CapabilitySessionBudget(max_calls=2, max_writes=0)
+        host_gateway = CapabilityGateway(
+            {"editor": (session, tools)}, session_budget=host_budget)
+        await host_gateway.refresh()
+        host_session = CapabilityGatewayMcpSession(host_gateway, "editor")
+        admitted = await host_session.list_tools()
+        assert {item.name for item in admitted.tools} == set(tools)
+        first_read = await host_session.call_tool("get_project", {})
+        assert first_read.is_error is False
+        # An authenticated creative Brain cannot make a single native
+        # write when the host grants zero write reservations. This must
+        # refuse BEFORE the Electron writer is ever dispatched.
+        refused = False
+        try:
+            await host_session.call_tool("create_project", {
+                "name": "MUST NOT BE CREATED", "width": 320,
+                "height": 180, "fps": 24, "previewOnly": False})
+        except CapabilityExecutionError as exc:
+            refused = (str(exc) == "host_session_write_budget_exhausted")
+        assert refused, "Host failed to refuse a budget-forbidden native write"
+        budget_state = host_gateway.host_budget_evidence()
+        assert budget_state["reserved_calls"] == 1
+        assert budget_state["reserved_writes"] == 0
+        trace = host_gateway.evidence()
+        assert len(trace) == 1 and trace[0]["operation_id"] == "editor/get_project"
+        no_project = await call(session, "get_project")
+        assert (not no_project.get("mcp", {}).get("hasProject")
+                and no_project.get("project") is None), (
+            "Forbidden gateway-native write unexpectedly affected editor state")
+        print("ACTUAL_NATIVE_EDITOR_GATEWAY_BUDGET " + json.dumps({
+            "pinned_electron_mcp_source": True,
+            "complete_host_granted_tool_catalog_exposed": True,
+            "actual_read_routed_through_host_gateway": True,
+            "native_write_refused_before_dispatch": True,
+            "zero_native_write_budget_reservations": True,
+            "no_new_native_project_created": True,
+            "creative_neural_or_artistic_proof": False,
+            "provider_tokens_or_cost_measured": False,
+        }, sort_keys=True), flush=True)
         assert (await session.call_tool("queue_prompt_generation_batch", {})).is_error
         assert (await session.call_tool("create_project", {"name": "Bad", "width": "wrong"})).is_error
-        created = await call(session, "create_project", {"name": "MCP native edit", "width": 320, "height": 180, "fps": 24, "previewOnly": False})
+        # One independently granted gateway now performs the existing real
+        # editor create operation. This proves the positive native WRITE path,
+        # not merely a denied request or a synthetic test session.
+        enabled_budget = CapabilitySessionBudget(max_calls=2, max_writes=1)
+        enabled_gateway = CapabilityGateway(
+            {"editor": (session, tools)}, session_budget=enabled_budget)
+        await enabled_gateway.refresh()
+        enabled_session = CapabilityGatewayMcpSession(enabled_gateway, "editor")
+        created = await call(enabled_session, "create_project", {
+            "name": "MCP native edit", "width": 320,
+            "height": 180, "fps": 24, "previewOnly": False})
+        enabled_trace = enabled_gateway.evidence()
+        assert (len(enabled_trace) == 1 and
+                enabled_trace[0]["operation_id"] == "editor/create_project" and
+                enabled_trace[0]["state"] == "host_reported_success_unverified")
+        assert enabled_gateway.host_budget_evidence()["reserved_writes"] == 1
         # Measure the real gap between an application ACK and independently
         # observable native project state. The existing test uses 20s
         # bounded read-only convergence; one immediate read (as in the real
@@ -113,6 +175,18 @@ async def exercise(options):
         state = await wait(
             session, lambda state: (state.get("project") or {}).get("name") == "MCP native edit",
             read_observations=observed_reads)
+        # A native application ACK alone is not a durable project: the
+        # original readback loop above independently confirmed project state.
+        assert (state["project"]["name"] == "MCP native edit" and
+                state.get("mcp", {}).get("hasProject") is True)
+        print("ACTUAL_NATIVE_EDITOR_GATEWAY_WRITE " + json.dumps({
+            "native_project_created_through_shared_gateway": True,
+            "one_host_admitted_native_write": True,
+            "native_application_acknowledged": True,
+            "actual_project_readback_converged": True,
+            "no_model_or_artistic_quality_claim": True,
+            "native_write_auto_retried": False,
+        }, sort_keys=True), flush=True)
         print("ACTUAL_NATIVE_PROJECT_READ_CONVERGENCE " + json.dumps({
             "source": "pinned complete Velorn Electron via real MCP session",
             "application_success_acknowledged": True,
@@ -767,6 +841,8 @@ async def exercise(options):
         "physicalNativeBatchSelectorDiscriminationPassed": True,
         "physicalNativeSingleClipReadConvergencePassed": True,
         "physicalNativeSingleClipExportContractPassed": True,
+        "physicalInstalledHostGatewayAdmissionPassed": True,
+        "physicalInstalledHostGatewayWriteAndReadbackPassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
