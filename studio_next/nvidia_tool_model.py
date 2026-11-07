@@ -146,9 +146,44 @@ class NvidiaToolCreativeModel(NvidiaCreativeModel):
             if (not isinstance(fn, dict) or fn.get("name") != _TOOL_NAME or
                     not isinstance(fn.get("arguments"), str)):
                 raise LocalModelOutputError("unexpected_native_function")
-            decision = _model_json(fn["arguments"])
-            if not isinstance(decision, dict) or set(decision) != {
-                    "action", "arguments", "reason"}:
+            try:
+                decision = _model_json(fn["arguments"])
+            except ValueError as exc:
+                raise LocalModelOutputError(
+                    "duplicate_json_field"
+                    if str(exc).startswith("Duplicate local model JSON field: ")
+                    else "invalid_json") from None
+            if (not isinstance(decision, dict) or set(decision) != {
+                    "action", "arguments", "reason"} or
+                    decision.get("action") not in {
+                    "search", "discover", "describe", "invoke", "finish"} or
+                    not isinstance(decision.get("arguments"), dict) or
+                    not isinstance(decision.get("reason"), str) or
+                    not decision["reason"].strip()):
+                raise LocalModelOutputError("invalid_native_function_arguments")
+            action, arguments = decision["action"], decision["arguments"]
+            # Protocol-only checks; artistic and native tool schema checks
+            # remain exclusively with the host-owned controller.
+            valid_args = (
+                (action == "search" and set(arguments) in (
+                    {"query"}, {"query", "limit"}) and
+                 isinstance(arguments.get("query"), str) and
+                 bool(arguments["query"].strip()) and
+                 len(arguments["query"].encode("utf-8")) <= 160 and
+                 ("limit" not in arguments or
+                  (type(arguments["limit"]) is int and
+                   1 <= arguments["limit"] <= 8))) or
+                (action == "discover" and not arguments) or
+                (action == "describe" and set(arguments) == {"tool"} and
+                 isinstance(arguments["tool"], str) and bool(arguments["tool"])) or
+                (action == "invoke" and set(arguments) == {"tool", "inputs"} and
+                 isinstance(arguments["tool"], str) and bool(arguments["tool"]) and
+                 isinstance(arguments["inputs"], dict)) or
+                (action == "finish" and set(arguments) == {"summary"} and
+                 isinstance(arguments["summary"], str) and
+                 bool(arguments["summary"].strip()))
+            )
+            if not valid_args:
                 raise LocalModelOutputError("invalid_native_function_arguments")
             # Never execute here. The BODY controller owns the entire native
             # grammar, schema, rights and granted-source admission.
