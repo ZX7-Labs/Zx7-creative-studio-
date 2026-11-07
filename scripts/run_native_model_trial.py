@@ -25,6 +25,29 @@ from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CR
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.native_action_schema import native_action_schema
+from studio_next.capability_gateway import CapabilityGateway
+from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+from studio_next.capability_session_budget import CapabilitySessionBudget
+
+
+async def admit_local_native_model_session(native_session, host_grants, *,
+                                           max_model_turns: int):
+    """Admit a model through one connected, trusted, budgeted BODY source.
+
+    Calls and writes are actual gateway *reservations*. They do not represent
+    LLM token accounting, paid costs or independently verified native edits.
+    The model cannot choose the host grants or the gateway itself.
+    """
+    if (type(max_model_turns) is not int or
+            not 1 <= max_model_turns <= 1000):
+        raise ValueError("Trial model turn budget must be a bounded positive integer")
+    budget = CapabilitySessionBudget(
+        max_calls=max_model_turns * 12, max_writes=max_model_turns)
+    gateway = CapabilityGateway(
+        {"editor": (native_session, host_grants)}, session_budget=budget)
+    await gateway.refresh()
+    admitted = CapabilityGatewayMcpSession(gateway, "editor")
+    return admitted, gateway
 
 
 def sha(path):
@@ -254,7 +277,19 @@ async def trial(args, lock, artifacts, command):
         async with stdio_client(StdioServerParameters(command='node', args=params, cwd=ROOT), errlog=log) as (read, write):
             async with ClientSession(read, write, read_timeout_seconds=180) as session:
                 await session.initialize()
-                outcome = await asyncio.wait_for(NativeCreativeControl(session, model, max_turns=48,
+                # Model-originated READs, WRITE proposals and the controller's
+                # mandatory readback observations all traverse ONE host-owned
+                # grant/ABI authority. Preserve the editor's original native
+                # schemas; the model never receives an unmediated MCP session.
+                # This is a bounded CPU *trial* admission budget, not an LLM
+                # token/price measurement or a 24-hour production quota.
+                max_model_turns = 48
+                admitted_model_session, gateway = (
+                    await admit_local_native_model_session(
+                        session, host, max_model_turns=max_model_turns))
+                try:
+                    outcome = await asyncio.wait_for(NativeCreativeControl(
+                    admitted_model_session, model, max_turns=max_model_turns,
                     receipt_path=artifacts / 'native-journal.jsonl',
                     host_tool_access=host, catalog_mode="indexed",
                     host_preconditions={
@@ -283,6 +318,11 @@ async def trial(args, lock, artifacts, command):
                     required_evidence=completion_evidence,
                     host_content_revision_tools=host_content_revision_tools).run(brief),
                     timeout=2400)
+                finally:
+                    # Admitted calls are not evidence of real native commits;
+                    # write bounded model-neutral accounting even on failure.
+                    (artifacts / "host-native-admission.json").write_text(
+                        json.dumps(gateway.host_budget_evidence(), indent=2))
     audit = audit_native_journal(
         read_native_journal(artifacts / 'native-journal.jsonl'),
         host_tool_access=host, expected_required_evidence=completion_evidence,

@@ -15,15 +15,8 @@ on:
     paths:
       - ".github/workflows/zx7-live-native-model.yml"
       - "engines/velorn/local-model-trial-4b.candidate.json"
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/zx7-live-native-model.yml"
-      - "scripts/run_native_model_trial.py"
-      - "engines/velorn/local-model-trial.lock.json"
-      - "studio_next/native_action_schema.py"
-      - "studio_next/native_creative_control.py"
-      - "studio_next/providers.py"
+  # 55-minute downloaded CPU neural trials require explicit workflow_dispatch.
+  # Ordinary source commits use cheap source/native contracts instead.
 permissions:
   contents: read
 concurrency:

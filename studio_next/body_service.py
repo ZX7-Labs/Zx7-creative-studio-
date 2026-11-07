@@ -842,17 +842,32 @@ def main():
     p.add_argument("--port",type=int,default=8765)
     p.add_argument("--workers",type=int,default=1)
     p.add_argument("--creative-api",default="http://127.0.0.1:8085")
-    p.add_argument("--creative-model",help="Installed local model ID; enables ordinary brief sessions")
+    p.add_argument("--creative-provider",choices=("local", "nvidia"),default="local",
+                   help="Explicitly choose local inference or NVIDIA BYOK (never automatic)")
+    p.add_argument("--creative-model",help="Explicit installed/local or NVIDIA catalog model ID")
+    p.add_argument("--allow-cloud-image-upload",action="store_true",
+                   help="Explicit host consent to upload original frames to selected NVIDIA model")
     a=p.parse_args()
     secret=os.getenv("ZX7_BODY_API_TOKEN")
     if not secret or len(secret)<32:
         raise SystemExit("Set a unique 32+ character ZX7_BODY_API_TOKEN in host environment")
     model=None
+    if a.creative_provider == "nvidia" and (
+            not a.creative_model or a.creative_api != "http://127.0.0.1:8085"):
+        raise SystemExit("NVIDIA requires --creative-model and uses its fixed audited HTTPS endpoint")
+    if a.allow_cloud_image_upload and a.creative_provider != "nvidia":
+        raise SystemExit("Cloud image permission is valid only for an explicit NVIDIA provider")
     if a.creative_model:
-        from .providers import LocalCreativeModel,LocalModelSettings
         from .body_creative_session import SESSION_SYSTEM
-        model=LocalCreativeModel(LocalModelSettings(base_url=a.creative_api,
-            model_id=a.creative_model,max_response_bytes=262144),system_prompt=SESSION_SYSTEM)
+        if a.creative_provider == "nvidia":
+            from .nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
+            model = NvidiaCreativeModel(NvidiaModelSettings(model_id=a.creative_model),
+                  system_prompt=SESSION_SYSTEM,allow_image_upload=a.allow_cloud_image_upload)
+            model.verify_host_credentials()
+        else:
+            from .providers import LocalCreativeModel,LocalModelSettings
+            model=LocalCreativeModel(LocalModelSettings(base_url=a.creative_api,
+                model_id=a.creative_model,max_response_bytes=262144),system_prompt=SESSION_SYSTEM)
     start_local_body_service(a.workspace_root,secret=secret,
                              port=a.port,workers=a.workers,creative_model=model)
 

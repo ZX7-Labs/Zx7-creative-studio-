@@ -110,6 +110,13 @@ class LocalCreativeModel:
         # tokenizer. An absent count is unknown; never represent it as zero.
         self.last_call_usage = None
 
+    def _open_request(self, payload):
+        """Default strictly-local transport; cloud adapters override explicitly."""
+        data=json.dumps(payload,ensure_ascii=False).encode("utf-8")
+        req=Request(self.settings.base_url.rstrip("/")+"/v1/chat/completions",
+                    data=data,headers={"Content-Type":"application/json"},method="POST")
+        return urlopen(req,timeout=self.settings.timeout_seconds)
+
     def _invoke(self,role,context,*,images=(),audio=()):
         self.last_call_usage = None
         user_content=json.dumps(context,ensure_ascii=False,allow_nan=False)
@@ -179,10 +186,7 @@ class LocalCreativeModel:
                              {"role":"user","content":user_content}],
                  "response_format":{"type":"json_object"}}
         payload.update(self.settings.sampling)
-        data=json.dumps(payload,ensure_ascii=False).encode("utf-8")
-        req=Request(self.settings.base_url.rstrip("/")+"/v1/chat/completions",
-                    data=data,headers={"Content-Type":"application/json"},method="POST")
-        with urlopen(req,timeout=self.settings.timeout_seconds) as resp:
+        with self._open_request(payload) as resp:
             raw=resp.read(self.settings.max_response_bytes+1)
         if len(raw)>self.settings.max_response_bytes:
             raise ValueError("Local model response exceeds safe size limit")

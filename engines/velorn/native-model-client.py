@@ -23,6 +23,9 @@ if str(ROOT) not in sys.path:
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.native_action_schema import native_action_schema
+from studio_next.capability_gateway import CapabilityGateway
+from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+from studio_next.capability_session_budget import CapabilitySessionBudget
 
 
 async def main(args):
@@ -44,30 +47,65 @@ async def main(args):
         params.append("--software-gpu")
     if args.no_sandbox:
         raise ValueError("Do not disable Chromium sandbox in live-model creative sessions")
-    model = LocalCreativeModel(
-        LocalModelSettings(base_url=args.base_url, model_id=args.model_id,
-                           timeout_seconds=args.model_timeout),
-        system_prompt=NATIVE_CREATIVE_SYSTEM)
+    if args.provider == "nvidia":
+        if args.structured_actions:
+            raise ValueError("NVIDIA Qwen API does not document strict response_format JSON schemas")
+        if args.base_url != "http://127.0.0.1:8080":
+            raise ValueError("NVIDIA endpoint is fixed, not overridden by --base-url")
+        from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
+        model = NvidiaCreativeModel(
+            NvidiaModelSettings(model_id=args.model_id,timeout_seconds=args.model_timeout),
+            system_prompt=NATIVE_CREATIVE_SYSTEM,
+            allow_image_upload=args.allow_cloud_image_upload)
+        model.verify_host_credentials()
+    else:
+        if args.allow_cloud_image_upload:
+            raise ValueError("Cloud-media consent requires --provider nvidia")
+        model = LocalCreativeModel(
+            LocalModelSettings(base_url=args.base_url, model_id=args.model_id,
+                               timeout_seconds=args.model_timeout),
+            system_prompt=NATIVE_CREATIVE_SYSTEM)
+    configuration = json.loads(args.config.read_text(encoding="utf-8"))
+    host_grants = configuration.get("allowed_tools")
+    if not isinstance(host_grants, dict) or not host_grants:
+        raise ValueError("Native editor requires explicit host-controlled tool grants")
+    host_grants = dict(host_grants)
+    host_grants.update({name: "read" for name in (
+        "zx7_verify_native_export", "zx7_observe_verified_export_frame",
+        "zx7_observe_verified_export_samples", "zx7_observe_verified_export_audio",
+        "zx7_observe_verified_export_audio_timeline")})
     brief = args.brief_file.read_text(encoding="utf-8")
     conn = StdioServerParameters(command="node", args=params, cwd=ROOT)
     async with stdio_client(conn) as (read, write):
         async with ClientSession(read, write, read_timeout_seconds=120) as session:
             await session.initialize()
+            # One host-owned gateway mediates both the neural tool proposals
+            # and controller readbacks; the raw MCP connection is never passed
+            # into NativeCreativeControl. Local and NVIDIA are interchangeable.
+            budget = CapabilitySessionBudget(
+                max_calls=args.max_turns * 12, max_writes=args.max_turns)
+            gateway = CapabilityGateway(
+                {"editor": (session, host_grants)}, session_budget=budget)
+            await gateway.refresh()
+            admitted = CapabilityGatewayMcpSession(gateway, "editor")
             if args.structured_actions:
-                discovered = (await session.list_tools()).tools
+                discovered = (await admitted.list_tools()).tools
                 model.settings.sampling['response_format'] = {
                     'type': 'json_schema', 'json_schema': {'name': 'native_editor_action',
                         'strict': True, 'schema': native_action_schema([tool.name for tool in discovered])}}
             outcome = await NativeCreativeControl(
-                session, model, max_turns=args.max_turns,
+                admitted, model, max_turns=args.max_turns,
+                host_tool_access=host_grants,
                 receipt_path=args.receipt).run(brief)
     print(json.dumps({
         "status": outcome["status"],
-        "local_model_id_reported": outcome["actual_model_id_reported"],
+        "model_id_reported": outcome["actual_model_id_reported"],
+        "selected_provider": args.provider,
         "events": len(outcome["events"]),
         "measured_model_wall_ms_total": outcome["measured_model_wall_ms_total"],
         "measured_native_mcp_wall_ms_total": outcome["measured_native_mcp_wall_ms_total"],
         "token_usage_independently_verified": False,
+        "cloud_media_upload_permitted_by_host": args.allow_cloud_image_upload,
         "receipt": str(args.receipt),
         "native_editing_capability_complete": False,
         "artistic_quality_independently_approved": False,
@@ -84,7 +122,10 @@ if __name__ == "__main__":
     p.add_argument("--brief-file", type=Path, required=True)
     p.add_argument("--receipt", type=Path, required=True,
                    help="New local private 0600 receipt, never overwritten/replayed")
+    p.add_argument("--provider", choices=("local", "nvidia"), default="local")
     p.add_argument("--model-id", type=str, required=True)
+    p.add_argument("--allow-cloud-image-upload", action="store_true",
+                   help="Explicitly consent to sending private observed frames to NVIDIA")
     p.add_argument("--base-url", default="http://127.0.0.1:8080")
     p.add_argument("--model-timeout", type=int, default=480)
     p.add_argument("--max-turns", type=int, default=32)
