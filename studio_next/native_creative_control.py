@@ -578,6 +578,9 @@ class NativeCreativeControl:
         # set of actual host grants. A model must explicitly describe
         # one candidate before it can submit a write. No automatic pick.
         self._inspectable_tied_candidates: list[str] = []
+        # Current-turn host-attested machine possibilities, never remembered
+        # as successful writes or allowed to grant uninstalled native tools.
+        self._host_frontier_tools: list[str] = []
         self.host_tool_access = dict(host_tool_access) if host_tool_access is not None else None
         self.session = session
         self.model = model
@@ -757,12 +760,14 @@ class NativeCreativeControl:
                     or args["tool"] not in self.tools or
                     (self.catalog_mode == "indexed" and
                      args["tool"] not in self._selectable_tools and
-                     args["tool"] not in self._inspectable_tied_candidates)):
+                     args["tool"] not in self._inspectable_tied_candidates and
+                     args["tool"] not in self._host_frontier_tools)):
                 raise NativeCreativeControlError("Model requested an ungranted or unsearched native tool")
         elif (set(args) != {"tool", "inputs"} or not isinstance(args["tool"], str)
                 or args["tool"] not in self.tools or not isinstance(args["inputs"], dict) or
                 (self.catalog_mode == "indexed" and
                  args["tool"] not in self._selectable_tools and
+                 args["tool"] not in self._host_frontier_tools and
                  not self._host_write_already_acknowledged(args["tool"]))):
             raise NativeCreativeControlError(
                 "Model requested ungranted, unsearched tool or invalid inputs")
@@ -983,10 +988,48 @@ class NativeCreativeControl:
                                   "host_observed_value": False,
                                   "no_native_dispatch": True})
             for turn in range(self.max_turns):
+                # Real Qwen trial #42420526258: 17 searches, an empty
+                # host-confirmed project, no source import, then a rejected
+                # duplicate of a clip that did not exist. A *machine*
+                # affordance must remain visible even if the model searches
+                # for unrelated artistic operations. This is NOT an edit plan.
+                self._host_frontier_tools = []
+                host_frontier = None
+                if self._capabilities is not None:
+                    trusted_facts = {}
+                    if self._project_presence in ("present", "absent"):
+                        trusted_facts["project_open"] = self._project_presence == "present"
+                    project_assets = self._trusted_project_asset_count()
+                    if project_assets is not None:
+                        trusted_facts["project_assets_available"] = project_assets > 0
+                    if False in trusted_facts.values():
+                        possible = self._capabilities.affordance_frontier(
+                            trusted_facts=trusted_facts, namespace="native", limit=4)
+                        options = []
+                        for option in possible["matches"]:
+                            native_name = self._capabilities.resolve(
+                                option["id"], revision=self._capabilities.revision)[
+                                    "native_name"]
+                            if (native_name in self.tools and
+                                    self.host_tool_access is not None and
+                                    native_name in self.host_tool_access and
+                                    not self._host_write_already_acknowledged(native_name)):
+                                options.append({**option, "tool": native_name})
+                                self._host_frontier_tools.append(native_name)
+                        if options:
+                            host_frontier = {
+                                "matches": options,
+                                "observed_missing_machine_facts": sorted(
+                                    key for key, value in trusted_facts.items() if not value),
+                                "facts_from_current_host_reads_only": True,
+                                "possibilities_not_creative_instructions": True,
+                            }
+                visible_selectable = list(dict.fromkeys(
+                    self._host_frontier_tools + self._selectable_tools))[:8]
                 indexed_actions = ["search"]
-                if self._selectable_tools or self._inspectable_tied_candidates:
+                if visible_selectable or self._inspectable_tied_candidates:
                     indexed_actions.append("describe")
-                if self._selectable_tools:
+                if visible_selectable:
                     indexed_actions.append("invoke")
                 context = {
                     "creative_brief": brief,
@@ -1001,10 +1044,11 @@ class NativeCreativeControl:
                     "actual_granted_native_tools": (
                         [] if self.catalog_mode == "indexed" else list(self.tools)),
                     "compact_tool_catalog": self.catalog_mode == "indexed",
-                    "selectable_native_tools": list(self._selectable_tools),
+                    "selectable_native_tools": visible_selectable,
                     "inspectable_native_tools": list(self._inspectable_tied_candidates),
+                    "host_observed_machine_affordances": host_frontier,
                     "host_selected_native_input_hints": (
-                        _selected_native_input_hints(self._selectable_tools, self.tools)
+                        _selected_native_input_hints(visible_selectable, self.tools)
                         if self.catalog_mode == "indexed" else []),
                     # After an acknowledged one-shot machine operation,
                     # reveal a compact term vocabulary grounded only in other
@@ -1088,7 +1132,7 @@ class NativeCreativeControl:
                 # never from model text, a canned manifest or another agent.
                 # The ordinary local structured-JSON backend is unchanged.
                 if getattr(self.model, "requires_native_function_contracts", False):
-                    visible_names = (list(self._selectable_tools)
+                    visible_names = (visible_selectable
                                      if self.catalog_mode == "indexed"
                                      else list(self.tools))
                     specs = []
