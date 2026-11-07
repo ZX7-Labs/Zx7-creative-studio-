@@ -64,6 +64,36 @@ A single atomic counter spans engines connected through the same budgeted Capabi
 
 Critical scope: this is an IN-PROCESS ADMISSION LIMIT on the configured gateway, NOT a token usage meter, dollar budget, production success metric, blanket guard for every legacy call path or durable 24-hour spending control. Process restart can instantiate a fresh budget. Real autonomous agents require durable cross-process accounting that includes model usage and real external provider costs before claiming cost control.
 
+## Existing creative Brain → universal gateway adapter (opt-in)
+
+`CapabilityGatewayMcpSession(gateway, namespace)` preserves the minimal MCP
+`list_tools` / `call_tool` interface already consumed by the native creative
+controller. This permits independent local and remote Brains to operate
+an installed, explicitly granted engine through the **same**
+`CapabilityGateway` admission rules. The proxy is a view over an already
+refreshed host gateway, NOT a new creative tool runner.
+
+- It exposes canonical bounded tool descriptions and the precise admitted
+  schema; a plugin cannot expand a Brain's rights by modifying a README,
+  model prompt, or the live catalog after a session is admitted.
+- Actual invocations re-check the current grant, source schema, host gate,
+  shared budget and trusted source lock before reaching the native engine.
+- If the host has enabled the SQLite durable-attempt ledger, the proxy
+  requires a trusted `host_request_id_allocator` callback; the model cannot
+  author request identities or retry admitted uncertain writes.
+- The original native MCP success/error object returns unchanged, so the
+  existing controller still has to validate application ACK and readback.
+  A budget receipt never claims an actual clip, verified render, source
+  permission, or artistic grade.
+
+**Integration status:** The adapter can be used by a trusted caller, but
+this PR does not secretly replace the real camera trial's raw session.
+That wiring needs its own physical pinned-editor + real-model comparison
+after current neural write/readback reconciliation passes. Other legacy
+workers not using the proxy still bypass this gateway budget; account for
+them in further integration work. Process restarts still reset in-memory
+budget counters, and external model token usage is not enforced here.
+
 ## Work sequence by risk removed
 
 1. Prove cross-source budgets and no-dispatch on exhaustion using video, motion, graphics, documents and concurrent independent sources. Kill if any native call can pass an exhausted host budget; preserve prior editor workflows.
