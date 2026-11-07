@@ -131,6 +131,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         "--model-id", model_id,
         "--allow-cloud-image-upload",
         "--indexed-catalog",
+        "--structured-actions",
         "--fresh-trial-project",
         "--evaluation-evidence", "reviewed-revision",
         "--max-turns", "40",

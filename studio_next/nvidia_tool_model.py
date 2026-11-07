@@ -7,6 +7,7 @@ only installed, host-granted editor tools. This adapter has no dispatch power.
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 from typing import Any
@@ -104,8 +105,30 @@ class NvidiaToolCreativeModel(NvidiaCreativeModel):
             {"role": "user", "content": content},
         ]
 
+    @staticmethod
+    def _host_action_parameters(context):
+        """Give the provider only current host-attested action choices.
+
+        This is a grammar hint, not a grant. The BODY controller still
+        validates current tool identities, schemas and permissions.
+        """
+        if not isinstance(context, dict):
+            raise NvidiaConfigurationError("Native tool context must be an object")
+        params = copy.deepcopy(_PARAMS)
+        allowed = context.get("available_actions")
+        if allowed is not None:
+            known = set(_PARAMS["properties"]["action"]["enum"])
+            if (not isinstance(allowed, list) or not allowed or
+                    len(allowed) > len(known) or
+                    any(type(name) is not str or name not in known
+                        for name in allowed) or len(set(allowed)) != len(allowed)):
+                raise NvidiaConfigurationError("Host action vocabulary is invalid")
+            params["properties"]["action"]["enum"] = allowed.copy()
+        return params
+
     def _call_as_tool(self, context, *, images=()):
         self.last_call_usage = None
+        host_params = self._host_action_parameters(context)
         payload = {
             "model": self.settings.model_id,
             "stream": False,
@@ -114,7 +137,7 @@ class NvidiaToolCreativeModel(NvidiaCreativeModel):
             "tools": [{"type": "function", "function": {
                 "name": _TOOL_NAME,
                 "description": "Select EXACTLY ONE host-admitted creative editor action.",
-                "parameters": _PARAMS,
+                "parameters": host_params,
             }}],
             "tool_choice": {"type": "function", "function": {"name": _TOOL_NAME}},
             "parallel_tool_calls": False,
@@ -162,6 +185,8 @@ class NvidiaToolCreativeModel(NvidiaCreativeModel):
                     not decision["reason"].strip()):
                 raise LocalModelOutputError("invalid_native_function_arguments")
             action, arguments = decision["action"], decision["arguments"]
+            if action not in host_params["properties"]["action"]["enum"]:
+                raise LocalModelOutputError("invalid_native_function_arguments")
             # Protocol-only checks; artistic and native tool schema checks
             # remain exclusively with the host-owned controller.
             valid_args = (

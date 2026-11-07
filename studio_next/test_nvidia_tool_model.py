@@ -60,6 +60,28 @@ class NvidiaHostFunctionToolTests(unittest.TestCase):
         self.assertNotIn("response_format", body)
         self.assertNotIn("nvapi-", request.data.decode())
 
+    def test_host_action_grammar_refuses_forbidden_function_result(self):
+        captured = []
+        class Opener:
+            def open(self, request, timeout):
+                captured.append(json.loads(request.data))
+                return _mock_response(json.dumps({
+                    "action": "finish",
+                    "arguments": {"summary": "Premature"},
+                    "reason": "Attempt unauthorized finish"}))
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "C" * 32}), patch(
+                "studio_next.nvidia_model.build_opener", return_value=Opener()):
+            model = NvidiaToolCreativeModel(system_prompt="Follow live host actions")
+            with self.assertRaisesRegex(LocalModelOutputError,
+                                        "invalid_native_function_arguments"):
+                model.decide({"available_actions": ["search"]})
+        self.assertEqual(captured[0]["tools"][0]["function"]["parameters"]
+                         ["properties"]["action"]["enum"], ["search"])
+        for actions in ([], ["search", "search"], ["ungranted_write"], "search"):
+            with self.subTest(actions=actions):
+                with self.assertRaises(NvidiaConfigurationError):
+                    model.decide({"available_actions": actions})
+
     def test_no_cloud_key_refuses_before_transport(self):
         with patch.dict(os.environ, {"NVIDIA_API_KEY": ""}), patch(
                 "studio_next.nvidia_model.build_opener") as opener:

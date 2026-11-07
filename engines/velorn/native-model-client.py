@@ -64,6 +64,37 @@ def trial_machine_contracts(grants, *, fresh):
             {"create_project": ["project_open"]})
 
 
+def native_decision_model(args):
+    """Choose a configured model transport; the model cannot dispatch native calls.
+
+    Hosted NVIDIA function calling is opt-in until a real provider protocol
+    check succeeds. BODY continues to validate every actual editor operation.
+    """
+    if args.provider == "nvidia":
+        if args.base_url != "http://127.0.0.1:8080":
+            raise ValueError("NVIDIA endpoint is fixed, not overridden by --base-url")
+        from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
+        model_type = NvidiaCreativeModel
+        if args.structured_actions:
+            from studio_next.nvidia_tool_model import NvidiaToolCreativeModel
+            model_type = NvidiaToolCreativeModel
+        model = model_type(
+            NvidiaModelSettings(model_id=args.model_id,
+                                timeout_seconds=args.model_timeout),
+            system_prompt=NATIVE_CREATIVE_SYSTEM,
+            allow_image_upload=args.allow_cloud_image_upload)
+        model.verify_host_credentials()
+        return model
+    if args.provider != "local":
+        raise ValueError("Unrecognized creative model provider")
+    if args.allow_cloud_image_upload:
+        raise ValueError("Cloud-media consent requires --provider nvidia")
+    return LocalCreativeModel(
+        LocalModelSettings(base_url=args.base_url, model_id=args.model_id,
+                           timeout_seconds=args.model_timeout),
+        system_prompt=NATIVE_CREATIVE_SYSTEM)
+
+
 async def main(args):
     for path in (args.source, args.config, args.brief_file):
         if not path.exists():
@@ -83,24 +114,7 @@ async def main(args):
         params.append("--software-gpu")
     if args.no_sandbox:
         raise ValueError("Do not disable Chromium sandbox in live-model creative sessions")
-    if args.provider == "nvidia":
-        if args.structured_actions:
-            raise ValueError("NVIDIA Qwen API does not document strict response_format JSON schemas")
-        if args.base_url != "http://127.0.0.1:8080":
-            raise ValueError("NVIDIA endpoint is fixed, not overridden by --base-url")
-        from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
-        model = NvidiaCreativeModel(
-            NvidiaModelSettings(model_id=args.model_id,timeout_seconds=args.model_timeout),
-            system_prompt=NATIVE_CREATIVE_SYSTEM,
-            allow_image_upload=args.allow_cloud_image_upload)
-        model.verify_host_credentials()
-    else:
-        if args.allow_cloud_image_upload:
-            raise ValueError("Cloud-media consent requires --provider nvidia")
-        model = LocalCreativeModel(
-            LocalModelSettings(base_url=args.base_url, model_id=args.model_id,
-                               timeout_seconds=args.model_timeout),
-            system_prompt=NATIVE_CREATIVE_SYSTEM)
+    model = native_decision_model(args)
     configuration = json.loads(args.config.read_text(encoding="utf-8"))
     host_grants = configuration.get("allowed_tools")
     if not isinstance(host_grants, dict) or not host_grants:
@@ -154,7 +168,7 @@ async def main(args):
                 {"editor": (session, host_grants)}, session_budget=budget)
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
-            if args.structured_actions:
+            if args.structured_actions and args.provider == "local":
                 discovered = (await admitted.list_tools()).tools
                 model.settings.sampling['response_format'] = {
                     'type': 'json_schema', 'json_schema': {'name': 'native_editor_action',
@@ -176,6 +190,11 @@ async def main(args):
         "status": outcome["status"],
         "model_id_reported": outcome["actual_model_id_reported"],
         "selected_provider": args.provider,
+        "model_action_transport": (
+            "nvidia_forced_function_call" if args.provider == "nvidia" and
+            args.structured_actions else
+            "local_json_schema" if args.provider == "local" and
+            args.structured_actions else "free_form_json"),
         "required_evaluation_evidence": list(required),
         "evaluation_evidence_satisfied": bool(required) and outcome["status"] == "model_finished_unverified",
         "model_selected_write_receipts": sum(
@@ -221,7 +240,7 @@ if __name__ == "__main__":
                    choices=("none", "export", "reviewed-revision"), default="none",
                    help="Host-required physical proof before the model can finish")
     p.add_argument("--structured-actions", action="store_true",
-                   help="Use native action JSON Schema on a backend supporting structured decoding")
+                   help="Use local JSON Schema or opt-in NVIDIA forced function calling (host validates every native action)")
     p.add_argument("--xvfb-binary")
     p.add_argument("--xvfb-lib-dir")
     p.add_argument("--display")

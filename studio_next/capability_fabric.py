@@ -28,11 +28,15 @@ def _wire(item):
                       allow_nan=False)
 
 
-def _tokens(value):
-    # CamelCase and dot, slash, dash, underscore boundaries. This is small,
-    # deterministic local retrieval, not a claim of semantic intelligence.
+def _ordered_tokens(value):
+    # Keep native operation word order. Broad matching still fails closed
+    # on ambiguous tool names rather than selecting a write by alphabet.
     value = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
-    return set(re.findall(r"[^\W_]+", value.casefold(), re.UNICODE))
+    return tuple(re.findall(r"[^\W_]+", value.casefold(), re.UNICODE))
+
+
+def _tokens(value):
+    return set(_ordered_tokens(value))
 
 
 
@@ -330,6 +334,7 @@ class CapabilityFabric:
         exact_ids = ((exact,) if exact in self._records
                      else self._exact_native_names.get(exact, ()))
         terms = _tokens(query)
+        ordered_query = _ordered_tokens(query)
         # Even a source-declared punctuation-only tool ID can be explicitly
         # retrieved; free-form punctuation with no exact match still fails.
         if not terms and not exact_ids:
@@ -352,6 +357,16 @@ class CapabilityFabric:
                 covered = len(name_hits | desc_hits)
                 score = (100 * (covered == len(terms)) + 10 * covered +
                          5 * len(name_hits) + len(desc_hits))
+                # An exact named operation phrase outranks longer siblings.
+                # This ranks only actual granted APIs; it never executes one.
+                native_order = _ordered_tokens(record["native_name"])
+                if len(ordered_query) > 1 and native_order == ordered_query:
+                    score += 60
+                elif len(ordered_query) > 1 and any(
+                        native_order[offset:offset + len(ordered_query)] ==
+                        ordered_query for offset in range(
+                            len(native_order) - len(ordered_query) + 1)):
+                    score += 16
                 scored.append((-score, ident, record))
         scored.sort(key=lambda x: (x[0], x[1]))
         # A tiny specialist must not treat arbitrary alphabetical tie-breaks
