@@ -108,7 +108,7 @@ async def exercise(options):
             CapabilityExecutionError, CapabilityGateway)
         from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
         from studio_next.capability_session_budget import CapabilitySessionBudget
-        host_budget = CapabilitySessionBudget(max_calls=1, max_writes=0)
+        host_budget = CapabilitySessionBudget(max_calls=2, max_writes=0)
         host_gateway = CapabilityGateway(
             {"editor": (session, tools)}, session_budget=host_budget)
         await host_gateway.refresh()
