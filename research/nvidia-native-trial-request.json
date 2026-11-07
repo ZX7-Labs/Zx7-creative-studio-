@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "kind": "nvidia-synthetic-native-editor-visual-revision",
+  "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "synthetic_only": true,
+  "cloud_synthetic_frames_allowed": true,
+  "max_turns": 40,
+  "request_id": "20261107-nemotron-real-native-editor-proof"
+}
