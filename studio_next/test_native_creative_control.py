@@ -2922,7 +2922,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         from studio_next.native_creative_audit import audit_native_journal
         with tempfile.TemporaryDirectory() as root:
             effects = fresh_trial_project_open_effects(root)
-            self.assertEqual(effects, {"create_project": ["project_open"]})
+            self.assertEqual(effects, {
+                "create_project": ["project_open"],
+                "import_asset_from_path": ["project_assets_available"],
+                "add_asset_to_timeline": ["timeline_clips_available"],
+                "add_assets_to_timeline": ["timeline_clips_available"],
+            })
+            self.assertNotIn("open_project", effects)
             session = FakeSession()
             session.tools += [
                 SimpleNamespace(name="get_project", description="Read project state",
