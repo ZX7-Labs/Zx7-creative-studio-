@@ -22,8 +22,11 @@ on:
     paths:
       - ".github/workflows/zx7-live-native-model.yml"
       - "engines/velorn/local-model-trial-4b.candidate.json"
-  # Other commits use cheap source/native tests. A main-branch request change
-  # or an explicit manual dispatch is the only way to run 55-minute CPU inference.
+      - "research/local-native-trial-request.json"
+  # Ordinary PRs stay cheap. The optional local-neural run requires a
+  # same-repository PR with an independently changed, strict versioned
+  # synthetic-only request. Fork PRs cannot execute the heavyweight job.
+  # No hosted inference, secrets, user media or paid runner is used.
 permissions:
   contents: read
 concurrency:
@@ -61,14 +64,53 @@ jobs:
                   "--n-gpu-layers") + 1] == "0"
           print("Both source-pinned, bounded local CPU candidate contracts are present")
           PY
+  pr-local-model-opt-in:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      requested: ${{ steps.request.outputs.requested }}
+    steps:
+      - name: Check out exact trusted PR head to inspect request only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require changed explicit local synthetic-only request
+        id: request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet "$BASE_SHA" HEAD -- research/local-native-trial-request.json; then
+            echo "requested=false" >> "$GITHUB_OUTPUT"
+            echo "No opted-in local neural evaluation in this PR"
+          else
+            python -m unittest scripts.test_local_native_trial_request -v
+            python -m scripts.local_native_trial_request research/local-native-trial-request.json
+            echo "requested=true" >> "$GITHUB_OUTPUT"
+          fi
+
   actual-local-model-and-native-editor:
-    if: github.event_name != 'pull_request'
+    needs: [pr-local-model-opt-in]
+    if: >-
+      always() && (
+        github.event_name != 'pull_request' ||
+        (needs.pr-local-model-opt-in.result == 'success' &&
+         needs.pr-local-model-opt-in.outputs.requested == 'true')
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
       - name: Check out exact BODY and complete pinned editor source
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           submodules: recursive
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -86,7 +128,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest scripts.test_local_native_trial_request -v
-          if [ "$RUN_EVENT" = push ]; then
+          if [ "$RUN_EVENT" = push ] || [ "$RUN_EVENT" = pull_request ]; then
             variant="$(python -m scripts.local_native_trial_request research/local-native-trial-request.json)"
           elif [ "$RUN_EVENT" = workflow_dispatch ]; then
             variant="$MANUAL_VARIANT"

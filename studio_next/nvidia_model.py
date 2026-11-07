@@ -20,7 +20,8 @@ from .providers import LocalCreativeModel, LocalModelOutputError, _CREATIVE_SYST
 _NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com"
 _KEY_FORMAT = re.compile(r"nvapi-[A-Za-z0-9_-]{20,512}\Z")
 _MODEL_FORMAT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
-_NVIDIA_PARAMS = frozenset({"temperature", "top_p", "seed", "chat_template_kwargs"})
+_NVIDIA_PARAMS = frozenset({"temperature", "top_p", "seed", "chat_template_kwargs",
+                            "reasoning_effort"})
 
 
 class NvidiaConfigurationError(ValueError):
@@ -56,7 +57,7 @@ class NvidiaModelSettings:
         for value, low, high in (
             (self.timeout_seconds, 1, 600),
             (self.max_response_bytes, 1024, 2_000_000),
-            (self.max_tokens, 1, 4096),
+            (self.max_tokens, 1, 8192),
         ):
             if type(value) is not int or not low <= value <= high:
                 raise NvidiaConfigurationError("NVIDIA inference requires bounded host limits")
@@ -72,11 +73,38 @@ class NvidiaModelSettings:
         if "seed" in self.sampling and (type(self.sampling["seed"]) is not int or
                                       not -(2**63) <= self.sampling["seed"] < 2**63):
             raise NvidiaConfigurationError("Invalid NVIDIA sampling seed")
-        if "chat_template_kwargs" in self.sampling and (
-                not isinstance(self.sampling["chat_template_kwargs"], dict) or
-                set(self.sampling["chat_template_kwargs"]) != {"enable_thinking"} or
-                type(self.sampling["chat_template_kwargs"]["enable_thinking"]) is not bool):
-            raise NvidiaConfigurationError("Only explicit NVIDIA thinking-mode configuration is allowed")
+        if "chat_template_kwargs" in self.sampling:
+            self._verify_thinking_kwargs(self.sampling["chat_template_kwargs"])
+        if "reasoning_effort" in self.sampling:
+            self._verify_reasoning_effort(self.sampling["reasoning_effort"])
+            if "chat_template_kwargs" in self.sampling:
+                raise NvidiaConfigurationError("Conflicting NVIDIA reasoning controls")
+
+    @staticmethod
+    def _verify_thinking_kwargs(kwargs):
+        # NVIDIA Nemotron 3.5 Super VL's published model card explicitly
+        # supports enable_thinking=True and medium_effort=True. Reasoning and
+        # function output share the completion budget; no invented generic
+        # provider settings are admitted here.
+        if (type(kwargs) is not dict or
+                not {"enable_thinking"} <= set(kwargs) <=
+                {"enable_thinking", "medium_effort"} or
+                type(kwargs["enable_thinking"]) is not bool or
+                ("medium_effort" in kwargs and
+                 (kwargs["enable_thinking"] is not True or
+                  type(kwargs["medium_effort"]) is not bool or
+                  kwargs["medium_effort"] is not True))):
+            raise NvidiaConfigurationError(
+                "Only explicitly supported NVIDIA reasoning configuration is allowed")
+
+
+    @staticmethod
+    def _verify_reasoning_effort(value):
+        # Hosted /v1/chat/completions contract: none, low, high only.
+        # Self-hosted NIM may offer other template knobs; do not send them
+        # from the hosted transport without published API support.
+        if type(value) is not str or value not in ("none", "low", "high"):
+            raise NvidiaConfigurationError("Unsupported hosted NVIDIA reasoning_effort")
 
 
 class NvidiaCreativeModel(LocalCreativeModel):
@@ -123,11 +151,21 @@ class NvidiaCreativeModel(LocalCreativeModel):
         # model-visible messages after the host's original validation.
         if set(self.settings.sampling) - _NVIDIA_PARAMS:
             raise NvidiaConfigurationError("NVIDIA sampling changed after host admission")
+        # Revalidate mutable nested sampling at the actual egress boundary.
+        self.settings.__post_init__()
         remote = dict(payload)
         del remote["response_format"]
         remote["max_tokens"] = self.settings.max_tokens
-        remote["chat_template_kwargs"] = self.settings.sampling.get(
-            "chat_template_kwargs", {"enable_thinking": False})
+        if "reasoning_effort" in self.settings.sampling:
+            if "chat_template_kwargs" in remote:
+                raise NvidiaConfigurationError("Conflicting NVIDIA reasoning fields")
+            remote["reasoning_effort"] = self.settings.sampling["reasoning_effort"]
+        else:
+            if "reasoning_effort" in remote:
+                raise NvidiaConfigurationError("Conflicting NVIDIA reasoning fields")
+            thinking_kwargs = self.settings.sampling.get(
+                "chat_template_kwargs", {"enable_thinking": False})
+            remote["chat_template_kwargs"] = dict(thinking_kwargs)
         data = json.dumps(remote, ensure_ascii=False, allow_nan=False).encode("utf-8")
         request = Request(_NVIDIA_ENDPOINT + "/v1/chat/completions", data=data,
                           headers={"Authorization": "Bearer " + key,

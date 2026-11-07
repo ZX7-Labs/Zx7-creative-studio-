@@ -28,6 +28,12 @@ _MAX_ACTION_BYTES = 262_144
 _MAX_RESULT_TEXT = 64_000
 _MAX_IMAGE_BYTES = 4 * 1024 * 1024
 _MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024
+# Model context retains complete, bounded native READ receipts across different
+# read operations. Prior reads are always invalidated by an acknowledged write.
+_MAX_READ_SNAPSHOT_BYTES = 12_000
+_MAX_READ_SNAPSHOT_TOTAL_BYTES = 48_000
+_MAX_READ_SNAPSHOTS = 6
+_MAX_LAST_ACK_RECEIPT_BYTES = 16_000
 _MAX_AUDIO_BYTES = 128 * 1024
 _VERIFIED_FRAME_TOOLS = frozenset({
     "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples"})
@@ -552,6 +558,10 @@ class NativeCreativeControl:
         self._last_images: list[tuple[str, bytes]] = []
         self._last_hashes: list[str] = []
         self._last_native_texts: list[str] = []
+        # Context continuity is not an editor cache or state attestation.
+        # Actual native schema, project IDs, and writes remain authoritative.
+        self._native_read_snapshots: dict[str, dict] = {}
+        self._last_acknowledged_native_write: dict | None = None
         # Ground project presence only in actual native get_project results,
         # never in model text, metadata discovery, or an earlier session.
         self._project_presence = "unknown"
@@ -567,6 +577,58 @@ class NativeCreativeControl:
         self._native_mcp_wall_ms_total = 0.0
         self._started = False
         self._receipt = None
+
+    def _remember_native_read(self, name, inputs, texts, *, origin):
+        """Keep *complete* successful READ receipts available across tool turns.
+
+        In real model trials, get_assets was immediately overwritten by
+        get_timeline/get_project and the model never retained the imported asset
+        identity. This is a bounded in-memory read-view, not an executable
+        operation, a persisted secret, a new permission or a creative plan.
+        Treat it as a point-in-time observation; host writes re-check current
+        schemas and project identity through the existing BODY gateway.
+        """
+        if (self.host_tool_access is None or
+                self.host_tool_access.get(name) != "read"):
+            return
+        if origin not in ("model_selected", "bootstrap", "host_reconciliation"):
+            raise NativeCreativeControlError("Unrecognized native read provenance")
+        item = {"tool": name, "inputs": copy.deepcopy(inputs),
+                "source": origin, "result_texts": list(texts),
+                "native_read_only_by_host_grant": True,
+                "not_a_live_editor_state_lock": True}
+        # A partial truncated JSON document would misrepresent real native
+        # state. Oversized observations stay available as last_native_result,
+        # but are not retained as falsely complete cross-turn snapshots.
+        if len(_wire(item).encode("utf-8")) > _MAX_READ_SNAPSHOT_BYTES:
+            self._native_read_snapshots.pop(name, None)
+            return
+        self._native_read_snapshots.pop(name, None)
+        self._native_read_snapshots[name] = item
+        while (len(self._native_read_snapshots) > _MAX_READ_SNAPSHOTS or
+               len(_wire(list(self._native_read_snapshots.values())).encode(
+                   "utf-8")) > _MAX_READ_SNAPSHOT_TOTAL_BYTES):
+            self._native_read_snapshots.pop(next(iter(self._native_read_snapshots)))
+
+    def _remember_native_write_ack(self, name, texts):
+        """Preserve the exact model-selected application receipt after
+        automatic get_project reconciliation replaces last_native_result.
+        Neither application ACK nor this memory proves the film is complete.
+        """
+        item = {"tool": name, "native_application_acknowledged": True,
+                "result_texts": list(texts),
+                "not_independently_verified_native_edit": True}
+        if len(_wire(item).encode("utf-8")) > _MAX_LAST_ACK_RECEIPT_BYTES:
+            item = {"tool": name, "native_application_acknowledged": True,
+                    "receipt_omitted_due_to_size": True,
+                    "result_sha256": [hashlib.sha256(x.encode()).hexdigest()
+                                     for x in texts],
+                    "not_independently_verified_native_edit": True}
+        # The write is confirmed only AFTER validation. Previous READ views
+        # could now refer to a different document/version, even when the
+        # create/import API acknowledged successfully.
+        self._native_read_snapshots.clear()
+        self._last_acknowledged_native_write = item
 
     def _missing_completion_evidence(self):
         """Use only accepted native results and current-edit export custody.
@@ -842,6 +904,8 @@ class NativeCreativeControl:
                         else:
                             self._last_native_texts = texts
                             self._project_presence = _native_project_presence_from_text(texts)
+                            self._remember_native_read("get_project", {}, texts,
+                                                       origin="bootstrap")
                             self._append({"kind": "host_project_bootstrap_observation",
                                           "tool": "get_project", "host_attested_read_only": True,
                                           "text_sha256": [hashlib.sha256(x.encode()).hexdigest()
@@ -913,6 +977,11 @@ class NativeCreativeControl:
                     "turn": turn,
                     "latest_events": _model_event_window(self.events),
                     "last_native_result_texts": self._last_native_texts,
+                    # Retain both the last model-selected accepted write and
+                    # simultaneous source reads. Host-only get_project checks
+                    # MUST NOT erase a native import receipt/asset identity.
+                    "last_acknowledged_native_write": self._last_acknowledged_native_write,
+                    "native_read_snapshot_cache": list(self._native_read_snapshots.values()),
                     "native_project_presence_from_last_inspection": self._project_presence,
                     # A successful write and a lagging native READ are a
                     # contradiction, never permission to create again.
@@ -1558,6 +1627,12 @@ class NativeCreativeControl:
                 self._last_native_texts = texts
                 self._last_images, self._last_hashes = images, hashes
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
+                if (self.host_tool_access is not None and
+                        self.host_tool_access.get(native_name) == "write"):
+                    self._remember_native_write_ack(native_name, texts)
+                elif not images and not audio:
+                    self._remember_native_read(native_name, args["inputs"], texts,
+                                               origin="model_selected")
                 self._append({"kind": "native_tool_result", "turn": turn,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
@@ -1697,6 +1772,8 @@ class NativeCreativeControl:
                         observation = _native_project_presence_from_text(state_texts)
                         self._project_presence = observation
                         self._last_native_texts = state_texts
+                        self._remember_native_read("get_project", {}, state_texts,
+                                                   origin="host_reconciliation")
                         self._append({"kind": "host_project_post_write_observation",
                                       "tool": "get_project",
                                       "triggered_by_native_tool": native_name,

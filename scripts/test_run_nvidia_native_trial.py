@@ -115,6 +115,15 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             legacy = factory(SimpleNamespace(**common, structured_actions=False))
         self.assertEqual(type(structured).__name__, "NvidiaNativeToolCreativeModel")
         self.assertEqual(type(legacy).__name__, "NvidiaCreativeModel")
+        # Hosted API reasoning contract; self-hosted template knobs excluded.
+        self.assertEqual(structured.settings.sampling["reasoning_effort"], "low")
+        self.assertNotIn("chat_template_kwargs", structured.settings.sampling)
+        self.assertEqual(structured.settings.sampling["temperature"], 1.0)
+        self.assertEqual(structured.settings.sampling["top_p"], 0.95)
+        self.assertEqual(structured.settings.max_tokens, 8192)
+        self.assertEqual(legacy.settings.sampling["chat_template_kwargs"],
+                         {"enable_thinking": False})
+        self.assertEqual(legacy.settings.max_tokens, 2048)
         self.assertEqual(check.call_count, 2)
         with self.assertRaisesRegex(ValueError, "fixed"):
             factory(SimpleNamespace(**{**common, "base_url": "https://other.invalid"},
@@ -152,6 +161,123 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertNotIn("--indexed-catalog", command)
             self.assertIn("--fresh-trial-project", command)
             self.assertEqual(command[command.index("--max-turns") + 1], "40")
+
+    def test_saved_native_trial_requires_active_real_source_clip(self):
+        """Only a structural acceptance fixture, not model or video proof."""
+        import hashlib
+        import shutil
+        from scripts.run_nvidia_native_trial import verify_saved_native_trial
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            staging = workspace / "staging"
+            staging.mkdir()
+            source = staging / "original-neutral-gradient.mp4"
+            source.write_bytes(b"unit test only; separately decoded physical video")
+            sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            (workspace / "source-ledger.json").write_text(json.dumps([
+                {"path": str(source), "sha256": sha}]))
+            project_root = workspace / "projects" / "sample"
+            copied = project_root / "assets" / "video" / source.name
+            copied.parent.mkdir(parents=True)
+            shutil.copyfile(source, copied)
+            asset = {"id": "asset-1", "type": "video",
+                     "path": "assets/video/" + source.name,
+                     "settings": {"sourcePath": str(source)}}
+            clip = {"id": "clip-1", "trackId": "video-1",
+                    "assetId": "asset-1", "duration": 3.0}
+            timeline = {"id": "timeline-1", "tracks": [
+                {"id": "video-1", "type": "video"}], "clips": [clip]}
+            project = {"currentTimelineId": "timeline-1",
+                       "timelines": [timeline], "assets": [asset]}
+            saved = project_root / "project.comfystudio"
+            def write_project(value):
+                saved.write_text(json.dumps(value), encoding="utf-8")
+            write_project(project)
+            result = verify_saved_native_trial(workspace)
+            self.assertEqual(result["verified_source_backed_video_clips"], 1)
+            self.assertEqual(result["saved_active_clip_count"], 1)
+            self.assertFalse(result["artistic_quality_approved"])
+            self.assertEqual(result["native_project_sha256"], hashlib.sha256(
+                saved.read_bytes()).hexdigest())
+
+            for change in (
+                {"timelines": [{**timeline, "clips": []}]},
+                {"currentTimelineId": "nonexistent"},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "assetId": "unknown"}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "duration": 0}]}]},
+                {"assets": [{**asset, "type": "image"}]},
+                {"assets": [{**asset, "settings": {
+                    "sourcePath": "/not-the-original.mp4"}}]},
+            ):
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    write_project({**project, **change})
+                    verify_saved_native_trial(workspace)
+            write_project(project)
+            copied.write_bytes(b"substituted bytes")
+            with self.assertRaisesRegex(ValueError, "differ"):
+                verify_saved_native_trial(workspace)
+            shutil.copyfile(source, copied)
+            (project_root / "assets" / "video" / "other.mp4").write_bytes(
+                b"outsider")
+            bad = {**project, "assets": [
+                {**asset, "path": "../sample-not-valid.mp4"}]}
+            write_project(bad)
+            with self.assertRaises((ValueError, FileNotFoundError)):
+                verify_saved_native_trial(workspace)
+            write_project(project)
+            saved.write_text('{"timelines":[],"timelines":[]}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                verify_saved_native_trial(workspace)
+
+
+    def test_native_export_revision_requires_changed_decoded_picture_not_new_container(self):
+        """Actual FFmpeg decoder, not a mocked model or a filename assertion."""
+        import hashlib
+        import shutil
+        from scripts.run_nvidia_native_trial import decoded_video_frames_sha256
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("Physical native-video framehash requires installed FFmpeg")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def make(color, title, filename):
+                destination = root / filename
+                subprocess.run(
+                    ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+                     "-f", "lavfi", "-i",
+                     f"color=c={color}:s=64x36:r=24:d=0.5",
+                     "-metadata", f"title={title}",
+                     "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                     "-y", str(destination)],
+                    check=True, timeout=30)
+                return destination
+            original = make("blue", "original", "original.mp4")
+            rewrapped = make("blue", "different metadata", "rewrapped.mp4")
+            revised = make("red", "revision", "revised.mp4")
+            # A pure retiming edit is a valid editorial revision even when
+            # EVERY RGB frame is pixel-identical to the original.
+            retimed = root / "retimed.mp4"
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+                 "-f", "lavfi", "-i",
+                 "color=c=blue:s=64x36:r=24:d=0.5",
+                 "-vf", "setpts=2*PTS", "-fps_mode", "passthrough",
+                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                 "-y", str(retimed)], check=True, timeout=30)
+            self.assertNotEqual(
+                hashlib.sha256(original.read_bytes()).digest(),
+                hashlib.sha256(rewrapped.read_bytes()).digest())
+            first = decoded_video_frames_sha256(original)
+            self.assertEqual(first, decoded_video_frames_sha256(rewrapped))
+            self.assertNotEqual(first, decoded_video_frames_sha256(revised))
+            changed_timing = decoded_video_frames_sha256(retimed)
+            self.assertEqual([row[2] for row in first],
+                             [row[2] for row in changed_timing])
+            self.assertNotEqual(first, changed_timing)
+            self.assertEqual(len(first), 12)
+            with self.assertRaises((subprocess.CalledProcessError, ValueError)):
+                decoded_video_frames_sha256(root / "missing.mp4")
 
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:

@@ -6,6 +6,7 @@ all creative edits; the harness never sends a predetermined edit operation.
 from __future__ import annotations
 
 import argparse
+from fractions import Fraction
 import hashlib
 import json
 import os
@@ -119,6 +120,168 @@ def prepare_trial(workspace: Path, *, source: Path):
     return roots, cfg
 
 
+
+def verify_saved_native_trial(workspace: Path):
+    """Independent structural proof: the CURRENT saved native timeline uses
+    a physically intact copied original video clip. This is NOT a creative
+    quality score and cannot replace export decode/visual inspection.
+    """
+    workspace = Path(workspace).resolve()
+    ledger_path = workspace / "source-ledger.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    if (type(ledger) is not list or len(ledger) != 1 or
+            type(ledger[0]) is not dict or
+            type(ledger[0].get("path")) is not str or
+            type(ledger[0].get("sha256")) is not str):
+        raise ValueError("Missing unique owner-original source ledger")
+    original = Path(ledger[0]["path"]).resolve(strict=True)
+    if (not original.is_file() or
+            original != (workspace / "staging" / original.name).resolve() or
+            _sha256(original) != ledger[0]["sha256"]):
+        raise ValueError("Original staged video differs from owner SHA ledger")
+    root = workspace / "projects"
+    candidates = list(root.glob("*/project.comfystudio"))
+    if len(candidates) != 1:
+        raise ValueError("Native trial requires exactly one saved active project")
+    project_file = candidates[0]
+    if (project_file.is_symlink() or
+            not project_file.resolve().is_relative_to(root.resolve()) or
+            not project_file.is_file() or
+            not 0 < project_file.stat().st_size <= 16 * 1024 * 1024):
+        raise ValueError("Native saved project is missing, redirected or oversized")
+    def reject_duplicates(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("Ambiguous duplicate native project JSON field")
+            obj[key] = value
+        return obj
+    def reject_nonfinite(value):
+        raise ValueError("Nonfinite native project JSON")
+    native = json.loads(
+        project_file.read_text(encoding="utf-8"),
+        object_pairs_hook=reject_duplicates, parse_constant=reject_nonfinite)
+    if type(native) is not dict:
+        raise ValueError("Invalid native saved project")
+    timelines = native.get("timelines")
+    active_id = native.get("currentTimelineId")
+    if (type(timelines) is not list or not timelines or
+            type(active_id) is not str or not active_id or
+            sum(type(t) is dict and t.get("id") == active_id
+                for t in timelines) != 1):
+        raise ValueError("No single saved active native timeline")
+    active = next(t for t in timelines if t.get("id") == active_id)
+    clips, tracks, assets = (active.get("clips"), active.get("tracks"),
+                            native.get("assets"))
+    if (type(clips) is not list or not clips or
+            type(tracks) is not list or type(assets) is not list):
+        raise ValueError("Native saved active timeline has no editable clips")
+    video_tracks = {t["id"] for t in tracks if
+                    type(t) is dict and type(t.get("id")) is str and
+                    t.get("type") == "video"}
+    valid_assets = {}
+    for asset in assets:
+        if type(asset) is not dict:
+            raise ValueError("Malformed native project asset")
+        aid = asset.get("id")
+        if type(aid) is not str or not aid or aid in valid_assets:
+            raise ValueError("Ambiguous native project asset identities")
+        valid_assets[aid] = asset
+    real_original_clips = 0
+    for clip in clips:
+        if type(clip) is not dict:
+            raise ValueError("Malformed native project clip")
+        if (clip.get("trackId") not in video_tracks or
+                type(clip.get("assetId")) is not str):
+            continue
+        asset = valid_assets.get(clip["assetId"])
+        if not asset or asset.get("type") != "video":
+            continue
+        metadata = asset.get("settings")
+        if (type(metadata) is not dict or
+                metadata.get("sourcePath") != str(original)):
+            continue
+        relative = asset.get("path")
+        if (type(relative) is not str or not relative or
+                Path(relative).is_absolute()):
+            raise ValueError("Untrusted native source copy location")
+        project_dir = project_file.parent.resolve(strict=True)
+        copied = (project_dir / relative).resolve(strict=True)
+        if (not copied.is_relative_to(project_dir) or
+                not copied.is_file() or _sha256(copied) != ledger[0]["sha256"]):
+            raise ValueError("Native original source bytes differ from ledger")
+        duration = clip.get("duration")
+        if (type(duration) not in (int, float) or
+                not 0 < duration <= 6):
+            raise ValueError("Invalid placed original video duration")
+        real_original_clips += 1
+    if not real_original_clips:
+        raise ValueError("No physically source-backed video clip on saved active timeline")
+    return {
+        "native_project_sha256": _sha256(project_file),
+        "active_native_timeline_id": active_id,
+        "saved_active_clip_count": len(clips),
+        "verified_source_backed_video_clips": real_original_clips,
+        "artistic_quality_approved": False,
+    }
+
+def decoded_video_frames_sha256(path: Path):
+    """Hash exact-time presented decoded RGB frames, not container metadata.
+
+    Genuine native retiming changes physical presentation even when RGB frames
+    are identical. Different MP4 metadata/codec bytes with identical physical
+    picture and timing must not impersonate a model-selected revision.
+    Human artistic approval is a separate judgment.
+    """
+    result = subprocess.run(
+        ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+         "-i", str(path), "-map", "0:v:0",
+         "-vf", "format=rgb24", "-fps_mode", "passthrough",
+         "-f", "framehash", "-hash", "SHA256", "-"],
+        check=True, capture_output=True, text=True, timeout=90,
+        env=_no_cloud_credentials())
+    if len(result.stdout.encode("utf-8")) > 128_000:
+        raise ValueError("Native video frame evidence exceeds safe output budget")
+    # Preserve actual presentation time as exact rational seconds. Two
+    # frame-identical edits with different timing ARE genuinely different
+    # videos; an MP4 container timescale rewrite is NOT.
+    timebases = [line.split(":", 1)[1].strip()
+                 for line in result.stdout.splitlines()
+                 if line.startswith("#tb 0:")]
+    if len(timebases) != 1:
+        raise ValueError("Missing unique native video decoder timebase")
+    try:
+        timebase = Fraction(timebases[0])
+    except (ValueError, ZeroDivisionError):
+        raise ValueError("Malformed native video timebase") from None
+    if timebase <= 0:
+        raise ValueError("Native video timebase must be positive")
+    presentations = []
+    for line in result.stdout.splitlines():
+        if line.startswith("#"):
+            continue
+        fields = [part.strip() for part in line.split(",")]
+        if (len(fields) != 6 or fields[0] != "0" or
+                len(fields[5]) != 64 or
+                any(char not in "0123456789abcdef" for char in fields[5]) or
+                not fields[4].isdigit() or int(fields[4]) <= 0):
+            raise ValueError("Malformed native decoded-frame SHA256 receipt")
+        try:
+            pts = int(fields[2])
+            duration = int(fields[3])
+        except ValueError:
+            raise ValueError("Malformed native frame presentation time") from None
+        if duration <= 0:
+            raise ValueError("Native output has nonpositive frame duration")
+        presentations.append((
+            str(pts * timebase), str(duration * timebase), fields[5]))
+        if len(presentations) > 240:
+            raise ValueError("Synthetic trial exceeds bounded decoded video frames")
+    if not presentations:
+        raise ValueError("Native output contains no decoded video frames")
+    return tuple(presentations)
+
+
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):
     if model_id != _ALLOWED_MODEL:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
@@ -168,13 +331,42 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         raise RuntimeError("Real native client has no final structured status") from None
     mp4s = sorted(roots["outputs"].rglob("*.mp4"))
     media = []
+    decoded_frame_sequences = []
     for path in mp4s:
         subprocess.run(
             ["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"],
             check=True, timeout=90, env=_no_cloud_credentials())
+        decoded_frame_sequences.append(decoded_video_frames_sha256(path))
         media.append({"path": str(path), "sha256": _sha256(path),
-                      "bytes": path.stat().st_size})
+                      "bytes": path.stat().st_size,
+                      "decoded_video_frames": len(decoded_frame_sequences[-1]),
+                      "decoded_rgb_frame_sequence_sha256": hashlib.sha256(
+                          json.dumps(decoded_frame_sequences[-1],
+                                     separators=(",", ":")).encode()).hexdigest()})
+    # Preserve forensic evidence even when final native state fails acceptance.
+    # Never let an empty timeline disappear behind an early RuntimeError.
+    try:
+        saved_native = {
+            **verify_saved_native_trial(workspace),
+            "native_saved_project_verified": True,
+        }
+    except ValueError as exc:
+        saved_native = {
+            "native_saved_project_verified": False,
+            "native_project_rejection": str(exc)[:256],
+        }
+    except OSError as exc:
+        # Raw OS messages can include sensitive workspace paths.
+        saved_native = {
+            "native_saved_project_verified": False,
+            "native_project_rejection_type": type(exc).__name__,
+        }
+    export_variants = len({entry["sha256"] for entry in media})
+    independently_different_picture_exports = len(set(decoded_frame_sequences))
     evaluated = {
+        **saved_native,
+        "different_decoded_export_count": export_variants,
+        "different_decoded_picture_sequence_count": independently_different_picture_exports,
         "status": summary.get("status"),
         "host_evidence_satisfied": summary.get("evaluation_evidence_satisfied") is True,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
@@ -189,7 +381,10 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     print(json.dumps(evaluated, ensure_ascii=False))
     if (summary.get("status") != "model_finished_unverified" or
             summary.get("evaluation_evidence_satisfied") is not True or
-            len(media) < 2):
+            len(media) < 2 or
+            export_variants < 2 or
+            independently_different_picture_exports < 2 or
+            saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
     return evaluated
 
