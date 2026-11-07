@@ -2280,9 +2280,12 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             audit_native_journal(forged, host_tool_access=grants)
 
     async def test_tied_inspection_reaches_actual_recorded_model_output_grammar(self):
-        """Exercise production context -> constrained output, not just _decision."""
+        """Exercise the production per-turn grammar against controller actions."""
         import jsonschema
         from scripts.run_native_model_trial import RecordedModel
+        from studio_next.local_native_structured_model import (
+            LocalNativeStructuredCreativeModel,
+        )
 
         class StructuredBackend(ScriptedModel):
             def __init__(self, actions):
@@ -2293,7 +2296,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
 
             def decide(self, context):
                 chosen = super().decide(context)
-                grammar = self.settings.sampling["response_format"]["json_schema"]["schema"]
+                # Real CPU trial now uses the same per-turn host grammar as
+                # the production local model client, not mutated settings.
+                grammar = LocalNativeStructuredCreativeModel._current_host_schema(context)
                 validator = jsonschema.Draft202012Validator(grammar)
                 validator.validate(chosen)
                 if context["turn"] == 1:
