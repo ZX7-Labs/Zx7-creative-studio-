@@ -1,6 +1,8 @@
-name: ZX7 Source-Compatible Qwen Camera Native Trial
-# Exact-source rerun: verify latest physical native asset IDs and project-read
-# reconciliation with genuine local Qwen, no pre-authored creative edit steps.
+name: ZX7 Qwen4B Source-Compatible Original Camera Native Trial
+# Real source-equivalent 4B comparison after the pinned 2B trial 42154781482
+# repeatedly proposed asset placement with zero imported native assets.
+# Reuses the same real-camera source, exact editor and acceptance gate; the
+# model changes, but no tool action or creative storyboard is scripted.
 # Prior current-source run 42149908182 reached real import/readback but failed
 # after model-selected add_assets_to_timeline. This rerun checks actual nested
 # source-ID admission and preserves only privacy-bounded native error categories.
@@ -118,7 +120,7 @@ jobs:
       - name: Execute genuine local Qwen vision + complete native editor on original camera
         run: |
           python -u scripts/run_native_model_trial.py \
-            --model-lock "$GITHUB_WORKSPACE/engines/velorn/local-model-trial.lock.json" \
+            --model-lock "$GITHUB_WORKSPACE/engines/velorn/local-model-trial-4b.candidate.json" \
             --source "$GITHUB_WORKSPACE/third_party/velorn" \
             --runtime "$RUNNER_TEMP/zx7-native-camera-model-runtime" \
             --artifacts "$GITHUB_WORKSPACE/output/native-camera-pilot" \
@@ -134,7 +136,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zx7-corrected-native-camera-evidence-${{ github.sha }}
+          name: zx7-original-camera-qwen4b-evidence-${{ github.sha }}
           path: |
             output/native-camera-pilot/evidence.json
             output/native-camera-pilot/journal-audit.json
