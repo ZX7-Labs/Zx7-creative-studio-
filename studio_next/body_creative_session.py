@@ -76,8 +76,12 @@ class CreativeSessions:
 
     def _model_identity(self):
         settings=getattr(self.model,"settings",None)
+        provider=getattr(settings,"provider_id","local")
+        endpoint=getattr(settings,"base_url",None)
         return {"model_id":getattr(settings,"model_id",None),
-                "local_endpoint":getattr(settings,"base_url",None),
+                "provider_id":provider,
+                "local_endpoint":endpoint if provider=="local" else None,
+                "remote_endpoint":endpoint if provider=="nvidia" else None,
                 "adapter":type(self.model).__module__+"."+type(self.model).__qualname__,
                 "system_prompt_sha256":hashlib.sha256(
                     getattr(self.model,"system_prompt",SESSION_SYSTEM).encode()).hexdigest(),
