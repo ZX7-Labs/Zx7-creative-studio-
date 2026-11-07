@@ -30,6 +30,26 @@ from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
 
 
+async def admit_local_native_model_session(native_session, host_grants, *,
+                                           max_model_turns: int):
+    """Admit a model through one connected, trusted, budgeted BODY source.
+
+    Calls and writes are actual gateway *reservations*. They do not represent
+    LLM token accounting, paid costs or independently verified native edits.
+    The model cannot choose the host grants or the gateway itself.
+    """
+    if (type(max_model_turns) is not int or
+            not 1 <= max_model_turns <= 1000):
+        raise ValueError("Trial model turn budget must be a bounded positive integer")
+    budget = CapabilitySessionBudget(
+        max_calls=max_model_turns * 12, max_writes=max_model_turns)
+    gateway = CapabilityGateway(
+        {"editor": (native_session, host_grants)}, session_budget=budget)
+    await gateway.refresh()
+    admitted = CapabilityGatewayMcpSession(gateway, "editor")
+    return admitted, gateway
+
+
 def sha(path):
     digest = hashlib.sha256()
     with Path(path).open('rb') as source:
@@ -264,14 +284,9 @@ async def trial(args, lock, artifacts, command):
                 # This is a bounded CPU *trial* admission budget, not an LLM
                 # token/price measurement or a 24-hour production quota.
                 max_model_turns = 48
-                gateway = CapabilityGateway(
-                    {"editor": (session, host)},
-                    session_budget=CapabilitySessionBudget(
-                        max_calls=max_model_turns * 12,
-                        max_writes=max_model_turns))
-                await gateway.refresh()
-                admitted_model_session = CapabilityGatewayMcpSession(
-                    gateway, "editor")
+                admitted_model_session, gateway = (
+                    await admit_local_native_model_session(
+                        session, host, max_model_turns=max_model_turns))
                 try:
                     outcome = await asyncio.wait_for(NativeCreativeControl(
                     admitted_model_session, model, max_turns=max_model_turns,
