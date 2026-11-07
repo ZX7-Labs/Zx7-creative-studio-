@@ -76,6 +76,70 @@ class FakeSession:
 
 
 class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
+    async def test_mcp_status_must_be_unambiguous_before_any_model_state_claim(self):
+        from studio_next.native_creative_control import _native_mcp_error_status
+        for status in (
+            SimpleNamespace(content=[]),
+            SimpleNamespace(is_error=0, content=[]),
+            SimpleNamespace(is_error=False, isError=True, content=[]),
+            {"isError": "false", "content": []},
+        ):
+            with self.subTest(status=str(status)), self.assertRaisesRegex(
+                    NativeCreativeControlError, "boolean status"):
+                _native_mcp_error_status(status)
+        self.assertFalse(_native_mcp_error_status(
+            {"isError": False, "content": []}))
+        self.assertTrue(_native_mcp_error_status(
+            SimpleNamespace(is_error=True, content=[])))
+
+    async def test_unverifiable_native_status_cannot_turn_echoed_text_into_accepted_write(self):
+        responses=(
+            SimpleNamespace(content=[SimpleNamespace(
+                type="text", text='{"success":true}')]),
+            SimpleNamespace(is_error=False, isError=True,
+                content=[SimpleNamespace(type="text",text='{"success":true}')]),
+            SimpleNamespace(is_error=1,
+                content=[SimpleNamespace(type="text",text='{"success":true}')]),
+        )
+        for reply in responses:
+            with self.subTest(reply=str(reply)):
+                session=FakeSession()
+                session.custom_response=reply
+                model=ScriptedModel([decision("invoke",tool="update_text_clip",
+                               inputs={"clipId":"owner-original","text":"Changed"})])
+                controller=NativeCreativeControl(session,model,max_turns=1,
+                    host_tool_access={"update_text_clip":"write"})
+                with self.assertRaisesRegex(
+                        NativeCreativeControlError, "boolean status"):
+                    await controller.run("Original artistic edit")
+                self.assertEqual(len(session.calls),1)
+                self.assertEqual(
+                    len([e for e in controller.events if
+                         e["kind"]=="native_tool_uncertain_outcome"]),1)
+                warning=next(e for e in controller.events if
+                             e["kind"]=="native_tool_uncertain_outcome")
+                self.assertTrue(warning["must_reconcile_native_state"])
+                self.assertTrue(warning["native_status_unverifiable"])
+                self.assertTrue(warning["no_automatic_retry"])
+                self.assertNotIn("owner-original",str(controller.events))
+                self.assertFalse(any(e["kind"]=="native_tool_result"
+                                     for e in controller.events))
+
+    async def test_unverifiable_native_read_cannot_mint_project_observation(self):
+        session=FakeSession()
+        session.custom_response=SimpleNamespace(content=[
+            SimpleNamespace(type="text",text='{"success":true}')])
+        controller=NativeCreativeControl(session,
+            ScriptedModel([decision("invoke",tool="get_timeline", inputs={})]),
+            max_turns=1,host_tool_access={"get_timeline":"read"})
+        with self.assertRaisesRegex(NativeCreativeControlError, "boolean status"):
+            await controller.run("Inspect real timeline")
+        warning=next(e for e in controller.events if
+                     e["kind"]=="native_tool_uncertain_outcome")
+        self.assertFalse(warning["must_reconcile_native_state"])
+        self.assertFalse(any(e["kind"]=="native_tool_result"
+                             for e in controller.events))
+
     async def test_private_native_write_failure_has_only_bounded_heuristic_category(self):
         from studio_next.native_creative_control import _bounded_native_error_category
         from studio_next.native_creative_audit import audit_native_journal
