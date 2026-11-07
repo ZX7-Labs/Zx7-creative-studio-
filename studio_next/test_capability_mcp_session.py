@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from studio_next.body_capability_adapter import connect_installed_zx7_body
-from studio_next.capability_attempts import CapabilityAttemptStore
+from studio_next.capability_attempts import CapabilityAttemptStore, CapabilityAttemptError
 from studio_next.capability_gateway import CapabilityExecutionError, CapabilityGateway
 from studio_next.capability_fabric import CapabilityContractError
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
@@ -135,7 +135,8 @@ class GatewayMcpSessionTests(unittest.IsolatedAsyncioTestCase):
                 "owner-issued-native-request-001")["state"],
                 "host_reported_success_unverified")
             # A duplicate host ID cannot cause a second native write.
-            with self.assertRaises((CapabilityExecutionError, CapabilityContractError)):
+            with self.assertRaisesRegex(
+                    CapabilityAttemptError, "already admitted"):
                 await session.call_tool("write_native",{"value":4})
             self.assertEqual(len(source.calls),1)
 
