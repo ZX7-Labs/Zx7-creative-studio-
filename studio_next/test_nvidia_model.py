@@ -83,7 +83,7 @@ class NvidiaProviderContractTest(unittest.TestCase):
         with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Z" * 32}):
             model = NvidiaCreativeModel()
             with self.assertRaisesRegex(NvidiaConfigurationError, "Cloud image upload disabled"):
-                model.decide_with_images({}, [("image/png", b"\\x89PNG\\r\\n\\x1a\\n")])
+                model.decide_with_images({}, [("image/png", b"\x89PNG\r\n\x1a\n")])
             with self.assertRaisesRegex(NvidiaConfigurationError, "no verified original-WAV"):
                 model.decide_with_audio({}, [])
 
