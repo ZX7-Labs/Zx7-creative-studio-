@@ -206,7 +206,11 @@ def fresh_trial_project_open_effects(projects_root):
     # nonempty project asset inventory AFTER the project actually opens.
     # The presence of staged media alone cannot establish that fact.
     return {"create_project": ["project_open"],
-            "import_asset_from_path": ["project_assets_available"]}
+            "import_asset_from_path": ["project_assets_available"],
+            # These operations MAY populate an actual timeline, but a new
+            # content clip is not a saved/visible original-footage proof.
+            "add_asset_to_timeline": ["timeline_clips_available"],
+            "add_assets_to_timeline": ["timeline_clips_available"]}
 
 
 async def trial(args, lock, artifacts, command):
@@ -306,7 +310,10 @@ async def trial(args, lock, artifacts, command):
                         # with no native timeline must not be dispatched;
                         # fail preflight and let the model re-inspect reality.
                         "replace_clip_with_asset": [
-                            "project_open", "project_assets_available"],
+                            "project_open", "project_assets_available",
+                            "timeline_clips_available"],
+                        "duplicate_clip": [
+                            "project_open", "timeline_clips_available"],
                         "add_text_clip": ["project_open"],
                         "save_project": ["project_open"],
                         "export_timeline": ["project_open"],
