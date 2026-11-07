@@ -75,6 +75,31 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertEqual(child, {"PATH": "/usr/bin", "OTHER_SETTING": "keep"})
         self.assertIn("NVIDIA_API_KEY", given)
 
+    def test_native_contract_excludes_ungranted_tool_prerequisites(self):
+        import runpy
+        from studio_next.capability_fabric import CapabilityFabric
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        method = runpy.run_path(str(script), run_name="native_contract_test")[
+            "trial_machine_contracts"]
+        granted = {
+            "create_project": "write", "import_asset_from_path": "write",
+            "add_text_clip": "write", "save_project": "write",
+        }
+        requires, effects = method(granted, fresh=True)
+        self.assertEqual(
+            set(requires), {"import_asset_from_path", "add_text_clip", "save_project"})
+        self.assertEqual(effects, {"create_project": ["project_open"]})
+        self.assertNotIn("add_asset_to_timeline", requires)
+        tools = [{"name": name, "description": "", "inputSchema": {
+            "type": "object", "properties": {}}} for name in granted]
+        fabric = CapabilityFabric({
+            "native": (tools, granted, requires, effects)})
+        self.assertEqual(fabric.count, len(granted))
+        with self.assertRaisesRegex(ValueError, "authorized project creator"):
+            method({"save_project": "write"}, fresh=True)
+        self.assertEqual(method({}, fresh=False), ({}, {}))
+
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "not-created"
