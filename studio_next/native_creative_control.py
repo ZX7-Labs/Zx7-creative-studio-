@@ -465,6 +465,35 @@ def _native_project_presence_from_text(texts):
     return "unknown"
 
 
+def _native_project_asset_count_from_text(texts):
+    """Read only consistent host-reported assets already imported into project.
+
+    Staged media in a user's brief is NOT an imported native project asset.
+    Missing, contradictory, negative or bool-valued counts mean unknown.
+    """
+    if len(texts) != 1:
+        return None
+    try:
+        receipt = _strict_receipt(texts, "native project asset observation")
+    except NativeCreativeControlError:
+        return None
+    if (type(receipt) is not dict or
+            type(receipt.get("mcp")) is not dict or
+            receipt["mcp"].get("hasProject") is not True or
+            type(receipt.get("project")) is not dict):
+        return None
+    values = []
+    for container in (receipt, receipt["project"]):
+        if "assetCount" in container:
+            count = container["assetCount"]
+            if type(count) is not int or count < 0:
+                return None
+            values.append(count)
+    if not values or len(set(values)) != 1:
+        return None
+    return values[0]
+
+
 class NativeCreativeControl:
     """Single in-process driver of an already host-authorized official MCP session.
 
@@ -540,6 +569,7 @@ class NativeCreativeControl:
             raise NativeCreativeControlError(
                 "Machine contracts require an explicit trusted host grant map")
         self._capabilities = None
+        self._machine_contracts = None
         self._last_search_result = None
         self._previous_search_signature = None
         self._identical_search_repetitions = 0
@@ -609,6 +639,17 @@ class NativeCreativeControl:
                len(_wire(list(self._native_read_snapshots.values())).encode(
                    "utf-8")) > _MAX_READ_SNAPSHOT_TOTAL_BYTES):
             self._native_read_snapshots.pop(next(iter(self._native_read_snapshots)))
+
+    def _trusted_project_asset_count(self):
+        # Only a host-authorized successful native get_project read can mint
+        # this fact. Each acknowledged native WRITE clears the old snapshot.
+        snapshot = self._native_read_snapshots.get("get_project")
+        if (self.host_tool_access is None or
+                self.host_tool_access.get("get_project") != "read" or
+                not snapshot or
+                snapshot.get("native_read_only_by_host_grant") is not True):
+            return None
+        return _native_project_asset_count_from_text(snapshot["result_texts"])
 
     def _remember_native_write_ack(self, name, texts):
         """Preserve the exact model-selected application receipt after
@@ -805,11 +846,18 @@ class NativeCreativeControl:
             if missing_write or missing_export or missing_frame:
                 raise NativeCreativeControlError(
                     "Host requires completion evidence unsupported by granted native tools")
-        if self.catalog_mode == "indexed":
+        if (self.host_tool_access is not None and
+                (self.catalog_mode == "indexed" or
+                 self._host_preconditions or self._host_possible_effects)):
             from .capability_fabric import CapabilityFabric
-            self._capabilities = CapabilityFabric(
+            # Safety prerequisites must apply to BOTH full-tool NVIDIA and
+            # indexed-tool local models. Previously the full catalog silently
+            # skipped all host machine preflight checks.
+            self._machine_contracts = CapabilityFabric(
                 {"native": (available, self.host_tool_access,
                             self._host_preconditions, self._host_possible_effects)})
+            if self.catalog_mode == "indexed":
+                self._capabilities = self._machine_contracts
         tool_hints = _native_tool_hints(available) if self.catalog_mode == "full" else []
         show_tool_hints = self.catalog_mode == "full"
         # Same local-only schema family as the MCP host: preflight avoids
@@ -1008,6 +1056,8 @@ class NativeCreativeControl:
                     # NOT a completed film. IDs remain model-observed only.
                     "host_verified_execution_progress": {
                         "project_presence": self._project_presence,
+                        "project_asset_count_from_native_read":
+                            self._trusted_project_asset_count(),
                         "acknowledged_native_writes": sum(
                             e.get("kind") == "native_tool_result" and
                             e.get("host_application_write_acknowledged") is True
@@ -1349,14 +1399,17 @@ class NativeCreativeControl:
                                       list(invalid.schema_path)[:16])[:512],
                                   "no_native_dispatch": True})
                     continue
-                if (self._capabilities is not None and
+                if (self._machine_contracts is not None and
                         native_name in self._host_preconditions):
                     known_facts = {}
                     if self._project_presence in ("present", "absent"):
                         known_facts["project_open"] = self._project_presence == "present"
-                    readiness = self._capabilities.check_prerequisites(
+                    project_assets = self._trusted_project_asset_count()
+                    if project_assets is not None:
+                        known_facts["project_assets_available"] = project_assets > 0
+                    readiness = self._machine_contracts.check_prerequisites(
                         "native/" + native_name,
-                        revision=self._capabilities.revision,
+                        revision=self._machine_contracts.revision,
                         trusted_facts=known_facts)
                     if not readiness["admissible"]:
                         # No RPC happened. Allow an independent model choice
