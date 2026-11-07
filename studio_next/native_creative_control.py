@@ -134,9 +134,27 @@ def _field(value: Any, name: str, default=None):
     return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
 
 
+def _native_mcp_error_status(result):
+    """Require real, consistent MCP boolean status before trusting native facts.
+
+    An omitted or contradictory is_error/isError is UNKNOWN, never success.
+    This also applies to internal read-only project and inventory sensing.
+    """
+    missing = object()
+    present = [status for status in (
+        _field(result, "is_error", missing),
+        _field(result, "isError", missing))
+        if status is not missing]
+    if (not present or any(type(status) is not bool for status in present)
+            or len(set(present)) != 1):
+        raise NativeCreativeControlError(
+            "Native MCP response has missing or contradictory boolean status")
+    return present[0]
+
+
 def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], list[tuple[str, bytes]]]:
     """Unpack genuine bounded data without trusting a model-produced label."""
-    if _field(result, "is_error", _field(result, "isError", False)):
+    if _native_mcp_error_status(result):
         return [], [], []
     blocks = _field(result, "content", ())
     if not isinstance(blocks, (list, tuple)):
@@ -890,8 +908,7 @@ class NativeCreativeControl:
                                   "tool": "get_project", "host_attested_read_only": True,
                                   "error_type": type(exc).__name__})
                 else:
-                    if _field(native_bootstrap, "is_error",
-                              _field(native_bootstrap, "isError", False)):
+                    if _native_mcp_error_status(native_bootstrap):
                         digest, oversized = _bounded_error_digest(native_bootstrap)
                         self._append({"kind": "host_project_bootstrap_error",
                                       "tool": "get_project", "host_attested_read_only": True,
@@ -974,8 +991,7 @@ class NativeCreativeControl:
                                               "read_attempt": read_attempt,
                                               "no_native_edit_dispatched": True})
                                 break
-                            if _field(response, "is_error",
-                                      _field(response, "isError", False)):
+                            if _native_mcp_error_status(response):
                                 self._last_real_asset_inventory = None
                                 self._append({"kind": "native_asset_inventory_unknown",
                                               "turn": turn, "tool": "get_assets",
@@ -1038,8 +1054,7 @@ class NativeCreativeControl:
                                           "turn": turn, "error_type": type(exc).__name__,
                                           "no_native_edit_dispatched": True})
                         else:
-                            if not _field(response, "is_error",
-                                          _field(response, "isError", False)):
+                            if not _native_mcp_error_status(response):
                                 try:
                                     timeline_texts, timeline_images, timeline_audio = (
                                         _native_content(response))
@@ -1513,7 +1528,7 @@ class NativeCreativeControl:
                                       "no_native_edit_dispatched": True})
                         raise NativeCreativeControlError(
                             "Unable to establish current native source inventory") from exc
-                    if _field(response, "is_error", _field(response, "isError", False)):
+                    if _native_mcp_error_status(response):
                         self._append({"kind": "native_asset_inventory_unknown",
                                       "turn": turn, "tool": "get_assets",
                                       "native_read_failed": True,
@@ -1582,8 +1597,7 @@ class NativeCreativeControl:
                                       "turn": turn, "error_type": type(exc).__name__,
                                       "no_native_edit_dispatched": True})
                     else:
-                        if not _field(timeline_reply, "is_error",
-                                      _field(timeline_reply, "isError", False)):
+                        if not _native_mcp_error_status(timeline_reply):
                             try:
                                 raw_texts, raw_images, raw_audio = _native_content(timeline_reply)
                                 if raw_images or raw_audio:
@@ -1660,7 +1674,22 @@ class NativeCreativeControl:
                     raise
                 native_ms = round((time.monotonic_ns() - call_started) / 1_000_000, 3)
                 self._native_mcp_wall_ms_total += native_ms
-                if _field(result, "is_error", _field(result, "isError", False)):
+                # A missing/contradictory status is an unresolved native
+                # write outcome, not a successful read or applied mutation.
+                # Record one privacy-safe receipt and never replay the RPC.
+                try:
+                    native_failed = _native_mcp_error_status(result)
+                except NativeCreativeControlError:
+                    self._append({"kind": "native_tool_uncertain_outcome",
+                                  "turn": turn, "tool": native_name,
+                                  "measured_native_mcp_wall_ms": native_ms,
+                                  "native_status_unverifiable": True,
+                                  "must_reconcile_native_state": (
+                                      self.host_tool_access is None or
+                                      self.host_tool_access.get(native_name) != "read"),
+                                  "no_automatic_retry": True})
+                    raise
+                if native_failed:
                     digest, out_of_budget = _bounded_error_digest(result)
                     if (self.host_tool_access is not None and
                             self.host_tool_access[native_name] == "read"):
@@ -2026,8 +2055,7 @@ class NativeCreativeControl:
                                           "no_model_selected_mutation": True,
                                           "error_type": type(exc).__name__})
                             break
-                        if _field(refreshed, "is_error",
-                                  _field(refreshed, "isError", False)):
+                        if _native_mcp_error_status(refreshed):
                             digest, oversized = _bounded_error_digest(refreshed)
                             self._project_presence = "unknown"
                             self._post_write_state_warning = {
