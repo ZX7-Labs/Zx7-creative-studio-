@@ -556,6 +556,41 @@
       "failure": "The actual native get_project reported an open project, 0 imported assets, and 0 current timeline clips. The model spent 17 turns on capability searches, created one project and twice wrote timeline markers instead of importing either provided original source. Marker writes invalidated the controller's current native project snapshot without automatic reread. Model then called duplicate_clip with clipId raw-gradient-0 even though that source filename was not an existing native clip ID, yielding a terminal native reported error. Saved editable project contains an empty active timeline; no MP4 or real frame was produced.",
       "source_review": "Downloaded actual GitHub Actions artifact ZIP. Independently checked the ZIP SHA256 and inspected original inference-transcript.jsonl, native-journal.jsonl, journal-audit.json, evidence.json and saved project.comfystudio. Artifact source was synthetic-only, no hosted model API or owner private media.",
       "next_falsification": "PR #236 proposes host-observed machine capability frontiers, read-after-all-acknowledged-writes and empty native timeline preflight for duplicate/replace. Verify exact-head unit/CI then a new actual model/editor trial before claiming improved neural behavior. If still unsuccessful with authoritative tool and state contracts, benchmark stronger pinned local brain instead of scripting editing decisions."
+    },
+    {
+      "body_commit": "e6a1e2080df40136a7827e3ecb954d9d5bc447e3",
+      "workflow_run": 42425197126,
+      "artifact_id": 13595547283,
+      "artifact_zip_sha256": "571abebc037ab39e538b5751cfc92a686ac02d53509179ecd3a15a481e66cd0c",
+      "model": "unsloth/Qwen3.5-2B-GGUF",
+      "quantization": "Q4_K_M",
+      "cpu_only": true,
+      "synthetic_only": true,
+      "actual_inference_turns": 10,
+      "model_selected_actions": {
+        "search": 2,
+        "describe": 4,
+        "invoke": 4
+      },
+      "acknowledged_native_writes": 2,
+      "acknowledged_project_creates": 1,
+      "acknowledged_timeline_marker_writes": 1,
+      "attempted_native_marker_preview_without_confirmed_no_write": 1,
+      "acknowledged_source_imports": 0,
+      "saved_native_project_files": 1,
+      "native_project_timeline_clips": 0,
+      "native_project_timeline_markers": 3,
+      "verified_exports": 0,
+      "physically_observed_frames": 0,
+      "model_server_process_peak_rss_bytes": 3225518080,
+      "model_memory_scope": "Exact llama-server /proc VmHWM; excludes editor, OS, whole-runner memory",
+      "model_status": "native_error_requires_state_reconciliation",
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "native_video_field_complete": false,
+      "failure": "After a model-selected project preview and real create_project, the native project remained empty (0 assets, 0 clips). The new host-observed import_asset_from_path capability was exposed in the actual model context, but the 2B model selected add_timeline_markers instead. Its first native marker write was acknowledged and persisted as three markers, with zero footage. On turn nine it submitted add_timeline_markers with previewOnly:true, even though pinned upstream handleAddTimelineMarkers directly mutates the timeline without honoring previewOnly. The controller correctly refused to certify the ambiguous application response, ending with native_tool_uncertain_outcome. The saved project only proves three prior committed markers; it does not establish whether the last preview-intended marker request mutated transient state.",
+      "next_falsification": "Host policy in stacked PR #236 now refuses preview-intended add/remove marker operations before native RPC unless the model explicitly selects previewOnly:false. Exact code + tests passed Ubuntu CI 161 tests in GitHub run #42427374467. Assess stronger pinned 4B open-weight brain with identical isolated synthetic native editor acceptance; 2B has repeatedly ignored actual imported-source prerequisites.",
+      "evidence_source": "Downloaded complete actual Actions artifact ZIP and checked its SHA256 in isolated working directory. Inspected inference-transcript.jsonl, native-journal.jsonl, evidence.json, journal-audit.json, actual saved project.comfystudio and autosaves; no private owner media, remote inference or creative-quality claim."
     }
   ]
 }
