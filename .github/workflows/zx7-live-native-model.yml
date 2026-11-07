@@ -10,13 +10,20 @@ on:
         options:
           - qwen3.5-2b
           - qwen3.5-4b
+  # A run requires changing one explicitly reviewed, versioned request
+  # on main. Unlike ordinary PR CI this downloads source-pinned CPU weights,
+  # so routine commits never launch neural evaluation.
+  push:
+    branches: [main]
+    paths:
+      - "research/local-native-trial-request.json"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/zx7-live-native-model.yml"
       - "engines/velorn/local-model-trial-4b.candidate.json"
-  # 55-minute downloaded CPU neural trials require explicit workflow_dispatch.
-  # Ordinary source commits use cheap source/native contracts instead.
+  # Other commits use cheap source/native tests. A main-branch request change
+  # or an explicit manual dispatch is the only way to run 55-minute CPU inference.
 permissions:
   contents: read
 concurrency:
@@ -70,6 +77,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - name: Check explicit, bounded LOCAL synthetic evaluation admission
+        id: admission
+        shell: bash
+        env:
+          RUN_EVENT: ${{ github.event_name }}
+          MANUAL_VARIANT: ${{ inputs.model_variant }}
+        run: |
+          set -euo pipefail
+          python -m unittest scripts.test_local_native_trial_request -v
+          if [ "$RUN_EVENT" = push ]; then
+            variant="$(python -m scripts.local_native_trial_request research/local-native-trial-request.json)"
+          elif [ "$RUN_EVENT" = workflow_dispatch ]; then
+            variant="$MANUAL_VARIANT"
+          else
+            echo "No local neural run for this event" >&2
+            exit 2
+          fi
+          case "$variant" in
+            qwen3.5-2b|qwen3.5-4b) ;;
+            *) echo "Invalid pinned local model choice" >&2; exit 2 ;;
+          esac
+          echo "MODEL_VARIANT=$variant" >> "$GITHUB_ENV"
+          echo "model_variant=$variant" >> "$GITHUB_OUTPUT"
       - name: Install native display, codecs and declared local protocol dependencies
         run: |
           sudo apt-get update -qq
@@ -100,8 +130,6 @@ jobs:
           sudo chmod 4755 "$helper"
           test "$(stat -c '%u:%a' "$helper")" = "0:4755"
       - name: Run identified CPU model with real native editor and source-bound observations
-        env:
-          MODEL_VARIANT: ${{ inputs.model_variant || 'qwen3.5-2b' }}
         run: |
           # Exact source-pinned model choices only; no arbitrary user-supplied
           # paths, shell code, hosted inference, or unverifiable weights.
@@ -126,7 +154,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zx7-live-native-model-${{ inputs.model_variant || 'qwen3.5-2b' }}-${{ github.sha }}
+          name: zx7-live-native-model-${{ steps.admission.outputs.model_variant }}-${{ github.sha }}
           path: output/live-native-model/
           if-no-files-found: warn
           retention-days: 14
