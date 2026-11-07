@@ -23,6 +23,7 @@ class SciPyNativeReuseTests(unittest.TestCase):
         rng=np.random.default_rng(2217)
         for shape in ((1,1,4),(1,7,4),(7,1,4),(13,17,4),(47,37,4)):
             rgba=rng.random(shape,dtype=np.float32)
+            unchanged=rgba.copy()
             # An asymmetric and signed kernel catches accidental correlation
             # instead of actual convolution; arbitrary kernels are artist data.
             for kernels in (([1],[1]),([1,2,1],[1,2,1]),
@@ -38,8 +39,7 @@ class SciPyNativeReuseTests(unittest.TestCase):
                         np.testing.assert_allclose(
                             accelerated,baseline,atol=3e-6,rtol=2e-6)
                         np.testing.assert_array_equal(
-                            rgba,rng.random(shape,dtype=np.float32)
-                            if False else rgba)  # no in-place mutation
+                            rgba,unchanged)  # no in-place native mutation
 
     def test_project_remains_native_and_native_scipy_is_explicit_only(self):
         import numpy as np
