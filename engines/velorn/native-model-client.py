@@ -74,6 +74,32 @@ async def main(args):
         "zx7_verify_native_export", "zx7_observe_verified_export_frame",
         "zx7_observe_verified_export_samples", "zx7_observe_verified_export_audio",
         "zx7_observe_verified_export_audio_timeline")})
+    evidence_profiles = {
+        "none": (),
+        "export": ("native_write_acknowledged", "physical_export_verified"),
+        "reviewed-revision": (
+            "native_write_acknowledged", "physical_export_verified",
+            "verified_export_frame_observed",
+            "post_observation_native_write_acknowledged"),
+    }
+    required = evidence_profiles[args.evaluation_evidence]
+    fresh = bool(args.fresh_trial_project)
+    if fresh:
+        project_root = Path(configuration["projects_root"])
+        if not project_root.is_dir() or any(project_root.iterdir()):
+            raise ValueError("Fresh neural trial requires an actual empty project root")
+        if host_grants.get("create_project") != "write":
+            raise ValueError("Fresh neural trial requires host-authorized create_project")
+    revision_roles = (
+        "add_asset_to_timeline", "add_assets_to_timeline",
+        "add_text_clip", "update_text_clip", "add_shape_clip",
+        "update_shape_clip", "set_clip_style", "set_clip_mask",
+        "move_clips", "trim_clips", "delete_clips",
+    )
+    host_revisions = tuple(
+        name for name in revision_roles if host_grants.get(name) == "write")
+    if args.evaluation_evidence == "reviewed-revision" and not args.allow_cloud_image_upload:
+        raise ValueError("Observed cloud trial requires explicit synthetic image upload permission")
     brief = args.brief_file.read_text(encoding="utf-8")
     conn = StdioServerParameters(command="node", args=params, cwd=ROOT)
     async with stdio_client(conn) as (read, write):
@@ -96,11 +122,35 @@ async def main(args):
             outcome = await NativeCreativeControl(
                 admitted, model, max_turns=args.max_turns,
                 host_tool_access=host_grants,
+                catalog_mode=("indexed" if args.indexed_catalog else "full"),
+                host_preconditions=({
+                    "import_asset_from_path": ["project_open"],
+                    "add_asset_to_timeline": ["project_open"],
+                    "add_assets_to_timeline": ["project_open"],
+                    "add_text_clip": ["project_open"],
+                    "save_project": ["project_open"],
+                    "export_timeline": ["project_open"],
+                } if fresh else {}),
+                host_possible_effects=(
+                    {"create_project": ["project_open"]} if fresh else {}),
+                host_once_after_acknowledged_write=(
+                    ("create_project",) if fresh else ()),
+                required_evidence=required,
+                host_content_revision_tools=host_revisions,
                 receipt_path=args.receipt).run(brief)
     print(json.dumps({
         "status": outcome["status"],
         "model_id_reported": outcome["actual_model_id_reported"],
         "selected_provider": args.provider,
+        "required_evaluation_evidence": list(required),
+        "evaluation_evidence_satisfied": bool(required) and outcome["status"] == "model_finished_unverified",
+        "model_selected_write_receipts": sum(
+            event.get("kind") == "native_tool_result" and
+            event.get("host_application_write_acknowledged") is True
+            for event in outcome["events"]),
+        "independently_verified_export_receipts": sum(
+            bool(event.get("independently_verified_export_sha256"))
+            for event in outcome["events"]),
         "events": len(outcome["events"]),
         "measured_model_wall_ms_total": outcome["measured_model_wall_ms_total"],
         "measured_native_mcp_wall_ms_total": outcome["measured_native_mcp_wall_ms_total"],
@@ -129,6 +179,13 @@ if __name__ == "__main__":
     p.add_argument("--base-url", default="http://127.0.0.1:8080")
     p.add_argument("--model-timeout", type=int, default=480)
     p.add_argument("--max-turns", type=int, default=32)
+    p.add_argument("--indexed-catalog", action="store_true",
+                   help="Use true host-granted compact capability search rather than the full prompt")
+    p.add_argument("--fresh-trial-project", action="store_true",
+                   help="Require an empty isolated root and prevent repeated project creation")
+    p.add_argument("--evaluation-evidence",
+                   choices=("none", "export", "reviewed-revision"), default="none",
+                   help="Host-required physical proof before the model can finish")
     p.add_argument("--structured-actions", action="store_true",
                    help="Use native action JSON Schema on a backend supporting structured decoding")
     p.add_argument("--xvfb-binary")
