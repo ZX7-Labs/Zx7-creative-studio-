@@ -539,6 +539,7 @@ class NativeCreativeControl:
                  host_preconditions: dict | None = None,
                  host_possible_effects: dict | None = None,
                  host_once_after_acknowledged_write: tuple[str, ...] = (),
+                 host_requires_explicit_commit_for: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
                  host_content_revision_tools: tuple[str, ...] = ()):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
@@ -592,6 +593,20 @@ class NativeCreativeControl:
         # Trial-only single-project policy. A general creative session may
         # intentionally create multiple projects; never silently impose this.
         self._host_once_after_ack = frozenset(host_once_after_acknowledged_write)
+        if (not isinstance(host_requires_explicit_commit_for, (tuple, list)) or
+                len(set(host_requires_explicit_commit_for)) !=
+                len(host_requires_explicit_commit_for) or
+                any(not isinstance(name, str) or not name or
+                    host_tool_access is None or host_tool_access.get(name) != "write"
+                    for name in host_requires_explicit_commit_for)):
+            raise NativeCreativeControlError(
+                "Explicit native commit policy requires distinct trusted write grants")
+        # When source inspection shows a handler ignores its advertised
+        # previewOnly flag, silently treating a preview intent as a write
+        # would violate the operator's approval. Require the model itself
+        # to supply previewOnly:false before ANY actual native RPC.
+        self._host_requires_explicit_commit = frozenset(
+            host_requires_explicit_commit_for)
         if (not isinstance(self._host_preconditions, dict) or
                 not isinstance(self._host_possible_effects, dict)):
             raise NativeCreativeControlError("Trusted machine contracts must be objects")
@@ -1461,6 +1476,26 @@ class NativeCreativeControl:
                                   "validation_keyword": "host_single_write",
                                   "schema_location": "",
                                   "no_native_dispatch": True})
+                    continue
+                if (native_name in self._host_requires_explicit_commit and
+                        args["inputs"].get("previewOnly") is not False):
+                    self._last_preflight_feedback = {
+                        "tool": native_name,
+                        "validation_keyword": "host_explicit_commit_required",
+                        "native_field": "previewOnly",
+                        "must_explicitly_select_boolean_false_for_native_mutation": True,
+                        "native_preview_control_not_independently_verified": True,
+                        "no_native_dispatch": True,
+                    }
+                    self._append({
+                        "kind": "model_action_rejected", "turn": turn, **timing,
+                        "tool": native_name,
+                        "inputs_sha256": hashlib.sha256(
+                            _wire(args["inputs"]).encode()).hexdigest(),
+                        "validation_keyword": "host_explicit_commit_required",
+                        "schema_location": "previewOnly",
+                        "no_native_dispatch": True,
+                    })
                     continue
                 invalid = next(validators[native_name].iter_errors(args["inputs"]), None)
                 if invalid is not None:
