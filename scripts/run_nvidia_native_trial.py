@@ -6,6 +6,7 @@ all creative edits; the harness never sends a predetermined edit operation.
 from __future__ import annotations
 
 import argparse
+from fractions import Fraction
 import hashlib
 import json
 import os
@@ -225,38 +226,60 @@ def verify_saved_native_trial(workspace: Path):
     }
 
 def decoded_video_frames_sha256(path: Path):
-    """Hash decoded RGB frames, not compressed MP4 bytes or container metadata.
+    """Hash exact-time presented decoded RGB frames, not container metadata.
 
-    This deliberately compares the physical visible frame sequence. Rewrapping
-    the same footage or changing export metadata cannot impersonate an
-    independently visible model-selected creative revision. Human artistic
-    approval is a separate judgment.
+    Genuine native retiming changes physical presentation even when RGB frames
+    are identical. Different MP4 metadata/codec bytes with identical physical
+    picture and timing must not impersonate a model-selected revision.
+    Human artistic approval is a separate judgment.
     """
     result = subprocess.run(
         ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
          "-i", str(path), "-map", "0:v:0",
-         "-vf", "format=rgb24",
+         "-vf", "format=rgb24", "-fps_mode", "passthrough",
          "-f", "framehash", "-hash", "SHA256", "-"],
         check=True, capture_output=True, text=True, timeout=90,
         env=_no_cloud_credentials())
     if len(result.stdout.encode("utf-8")) > 128_000:
         raise ValueError("Native video frame evidence exceeds safe output budget")
-    hashes = []
+    # Preserve actual presentation time as exact rational seconds. Two
+    # frame-identical edits with different timing ARE genuinely different
+    # videos; an MP4 container timescale rewrite is NOT.
+    timebases = [line.split(":", 1)[1].strip()
+                 for line in result.stdout.splitlines()
+                 if line.startswith("#tb 0:")]
+    if len(timebases) != 1:
+        raise ValueError("Missing unique native video decoder timebase")
+    try:
+        timebase = Fraction(timebases[0])
+    except (ValueError, ZeroDivisionError):
+        raise ValueError("Malformed native video timebase") from None
+    if timebase <= 0:
+        raise ValueError("Native video timebase must be positive")
+    presentations = []
     for line in result.stdout.splitlines():
         if line.startswith("#"):
             continue
         fields = [part.strip() for part in line.split(",")]
         if (len(fields) != 6 or fields[0] != "0" or
-                not fields[5] or len(fields[5]) != 64 or
+                len(fields[5]) != 64 or
                 any(char not in "0123456789abcdef" for char in fields[5]) or
                 not fields[4].isdigit() or int(fields[4]) <= 0):
             raise ValueError("Malformed native decoded-frame SHA256 receipt")
-        hashes.append(fields[5])
-        if len(hashes) > 240:
+        try:
+            pts = int(fields[2])
+            duration = int(fields[3])
+        except ValueError:
+            raise ValueError("Malformed native frame presentation time") from None
+        if duration <= 0:
+            raise ValueError("Native output has nonpositive frame duration")
+        presentations.append((
+            str(pts * timebase), str(duration * timebase), fields[5]))
+        if len(presentations) > 240:
             raise ValueError("Synthetic trial exceeds bounded decoded video frames")
-    if not hashes:
+    if not presentations:
         raise ValueError("Native output contains no decoded video frames")
-    return tuple(hashes)
+    return tuple(presentations)
 
 
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):

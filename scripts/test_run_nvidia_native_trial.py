@@ -255,12 +255,26 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             original = make("blue", "original", "original.mp4")
             rewrapped = make("blue", "different metadata", "rewrapped.mp4")
             revised = make("red", "revision", "revised.mp4")
+            # A pure retiming edit is a valid editorial revision even when
+            # EVERY RGB frame is pixel-identical to the original.
+            retimed = root / "retimed.mp4"
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+                 "-f", "lavfi", "-i",
+                 "color=c=blue:s=64x36:r=24:d=0.5",
+                 "-vf", "setpts=2*PTS", "-fps_mode", "passthrough",
+                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                 "-y", str(retimed)], check=True, timeout=30)
             self.assertNotEqual(
                 hashlib.sha256(original.read_bytes()).digest(),
                 hashlib.sha256(rewrapped.read_bytes()).digest())
             first = decoded_video_frames_sha256(original)
             self.assertEqual(first, decoded_video_frames_sha256(rewrapped))
             self.assertNotEqual(first, decoded_video_frames_sha256(revised))
+            changed_timing = decoded_video_frames_sha256(retimed)
+            self.assertEqual([row[2] for row in first],
+                             [row[2] for row in changed_timing])
+            self.assertNotEqual(first, changed_timing)
             self.assertEqual(len(first), 12)
             with self.assertRaises((subprocess.CalledProcessError, ValueError)):
                 decoded_video_frames_sha256(root / "missing.mp4")
