@@ -523,6 +523,39 @@
       "failure": "The host's initial machine-affordance frontier offered both create_project and open_project as project_open-enabling actions although the isolated trial's projects root was brand-new and empty. The model proposed invalid create_project inputs, described its schema, then independently selected open_project with the projects root path, which contained no project.comfystudio. The actual editor returned a terminal native reported error; no editor write had succeeded.",
       "next_experiment": "On a demonstrably fresh empty native projects root, attest only create_project as an initial project_open possibility while retaining normal open_project host grant for appropriate saved projects (PR117). Separately test model's safe two-stage tie candidate selection (PR115). No synthetic fallback model or fabricated export is permitted.",
       "evidence_source": "Verified actual GitHub run #41164696179 failure, inspected complete downloaded artifact ZIP evidence.json, inference-transcript.jsonl, native-journal.jsonl and archive inventory; Actions artifact SHA256 is GitHub's reported digest. No physical native project or MP4 file was present."
+    },
+    {
+      "body_commit": "6593ecde04173e4613cf0fd449c57f584f1fd8cd",
+      "workflow_run": 42420526258,
+      "artifact_id": 13594511640,
+      "artifact_zip_sha256": "f8d02fef4cddcb29fbe1dfc78582e344ca369f1b59ecced8c2a7fb7bdd08607e",
+      "model": "unsloth/Qwen3.5-2B-GGUF",
+      "quantization": "Q4_K_M",
+      "cpu_only": true,
+      "synthetic_only": true,
+      "actual_inference_turns": 26,
+      "model_selected_actions": {
+        "search": 17,
+        "describe": 4,
+        "invoke": 4,
+        "invalid_model_output": 1
+      },
+      "actual_native_writes_acknowledged": 3,
+      "acknowledged_project_creates": 1,
+      "acknowledged_timeline_marker_operations": 2,
+      "acknowledged_source_imports": 0,
+      "native_project_timeline_clips": 0,
+      "verified_exports": 0,
+      "physically_observed_frames": 0,
+      "model_server_process_peak_rss_bytes": 4164206592,
+      "model_memory_scope": "Actual Linux /proc VmHWM of model server only; native Electron, OS and other processes excluded.",
+      "model_status": "native_error_requires_state_reconciliation",
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "native_video_field_complete": false,
+      "failure": "The actual native get_project reported an open project, 0 imported assets, and 0 current timeline clips. The model spent 17 turns on capability searches, created one project and twice wrote timeline markers instead of importing either provided original source. Marker writes invalidated the controller's current native project snapshot without automatic reread. Model then called duplicate_clip with clipId raw-gradient-0 even though that source filename was not an existing native clip ID, yielding a terminal native reported error. Saved editable project contains an empty active timeline; no MP4 or real frame was produced.",
+      "source_review": "Downloaded actual GitHub Actions artifact ZIP. Independently checked the ZIP SHA256 and inspected original inference-transcript.jsonl, native-journal.jsonl, journal-audit.json, evidence.json and saved project.comfystudio. Artifact source was synthetic-only, no hosted model API or owner private media.",
+      "next_falsification": "PR #236 proposes host-observed machine capability frontiers, read-after-all-acknowledged-writes and empty native timeline preflight for duplicate/replace. Verify exact-head unit/CI then a new actual model/editor trial before claiming improved neural behavior. If still unsuccessful with authoritative tool and state contracts, benchmark stronger pinned local brain instead of scripting editing decisions."
     }
   ]
 }
