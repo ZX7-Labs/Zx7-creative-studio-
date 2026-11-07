@@ -547,6 +547,75 @@ async def exercise(options):
             "native_saved_after_single_source_placement": True,
             "artistic_quality_approved": False,
         }, sort_keys=True), flush=True)
+        # Distinguish the real 4B trial's export failure from model arguments:
+        # exercise the pinned native read/preflight/preview/apply ABI with only
+        # ONE real source-linked video clip on the active native timeline.
+        # The source/video parameters below are technical test fixtures,
+        # never a creative plan given to the model.
+        single_output = outputs / "mcp-single-clip-export.mp4"
+        single_export = {
+            "outputPath": str(single_output), "target": "h264_project",
+            "resolution": "custom", "width": 320, "height": 180, "fps": 24,
+            "range": "custom", "startSeconds": 0, "endSeconds": 2,
+            "includeAudio": False,
+        }
+        # Read-only readiness has no outputPath in its pinned native schema.
+        # Keep destination selection exclusively in preview/apply export calls;
+        # the strict host bridge must reject undeclared parameters.
+        readiness_args = {key: value for key, value in single_export.items()
+                          if key != "outputPath"}
+        readiness = await call(session, "check_export_readiness", readiness_args)
+        assert readiness["ready"] is True and readiness["blockers"] == [], readiness
+        assert readiness["counts"]["exportableVisualClipCount"] == 1, readiness
+        preview = await call(session, "export_timeline", {
+            **single_export, "previewOnly": True})
+        assert preview.get("previewOnly") is True, preview
+        assert preview.get("readiness", {}).get("ready") is True, preview
+        assert not single_output.exists(), "Native preview unexpectedly exported a file"
+        applied = await call(session, "export_timeline", {
+            **single_export, "previewOnly": False})
+        assert applied.get("success") is True, "Native export worker did not acknowledge start"
+        # A worker ACK is not a delivery. Wait for complete independent
+        # decode of the NEW output, not an old successful worker log.
+        single_deadline = time.monotonic() + 90
+        single_probe = None
+        while time.monotonic() < single_deadline:
+            if single_output.is_file() and single_output.stat().st_size > 0:
+                try:
+                    candidate = json.loads(run([ffprobe, "-v", "error",
+                        "-count_frames", "-show_streams", "-of", "json",
+                        str(single_output)]))
+                    picture = next(stream for stream in candidate["streams"]
+                        if stream["codec_type"] == "video")
+                    if (picture["codec_name"] == "h264"
+                            and picture["width"] == 320
+                            and picture["height"] == 180
+                            and picture["r_frame_rate"] == "24/1"
+                            and int(picture["nb_read_frames"]) == 48):
+                        run([ffmpeg, "-v", "error", "-xerror", "-i",
+                             str(single_output), "-f", "null", "-"])
+                        single_probe = candidate
+                        break
+                except (subprocess.CalledProcessError, ValueError, KeyError,
+                        StopIteration):
+                    # Partial in-flight output is not accepted as a result.
+                    pass
+            await asyncio.sleep(.25)
+        assert single_probe is not None, (
+            "Independent single-clip native export did not decode and converge")
+        assert digest(original) == original_hash, "Native export modified source"
+        print("ACTUAL_NATIVE_SINGLE_CLIP_EXPORT_CONTRACT " + json.dumps({
+            "technical_native_fixture_not_neural": True,
+            "single_source_linked_video_clip": True,
+            "readiness_checked_and_unblocked": True,
+            "preview_nonmutating": True,
+            "native_worker_start_acknowledged": True,
+            "export_mp4_independently_decoded": True,
+            "decoded_video_frames": 48,
+            "original_source_sha_unchanged": True,
+            "prior_qwen_failure_cause_proven": False,
+            "neural_or_artistic_completion_proven": False,
+        }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
     audio = next(stream for stream in probe["streams"] if stream["codec_type"] == "audio")
@@ -576,6 +645,7 @@ async def exercise(options):
         "physicalNativeBatchProjectRestartPersistencePassed": True,
         "physicalNativeBatchSelectorDiscriminationPassed": True,
         "physicalNativeSingleClipReadConvergencePassed": True,
+        "physicalNativeSingleClipExportContractPassed": True,
         "neuralModelEvaluated": False, "artisticQualityApproved": False,
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
