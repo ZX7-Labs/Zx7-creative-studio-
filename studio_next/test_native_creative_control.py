@@ -2843,6 +2843,9 @@ class HostNativeFunctionContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_only_live_granted_schemas_exposed_to_opted_in_model(self):
         session = FakeSession()
+        # The physical gateway requires an EXACT tool/host grant set.
+        # Do not weaken it just to make an adapter test pass.
+        session.tools = session.tools[:2]
         class NativeFunctionAwareStub(ScriptedModel):
             requires_native_function_contracts = True
         grants = {"get_timeline": "read", "update_text_clip": "write"}
