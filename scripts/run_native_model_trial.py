@@ -324,6 +324,13 @@ async def trial(args, lock, artifacts, command):
                     # continuity or create an unrelated empty project. Other
                     # creative sessions are not globally subject to this rule.
                     host_once_after_acknowledged_write=("create_project",),
+                    # Pinned Velorn b3c02adb advertises previewOnly for
+                    # marker edits, but its add/remove handlers ignore it.
+                    # A preview-intended call could therefore MUTATE a native
+                    # timeline. Require an explicit model-authored False
+                    # before the editor receives either operation.
+                    host_requires_explicit_commit_for=(
+                        "add_timeline_markers", "remove_timeline_markers"),
                     # Technical owner acceptance facts, NOT an editing plan.
                     # Failed model claims cannot end the trial before actual
                     # native activity, source-verified export and visual sensing.
