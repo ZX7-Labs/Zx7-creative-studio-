@@ -1,0 +1,126 @@
+name: ZX7 BODY — Real Original-Camera Native Export Discrimination
+# Real source+engine+decode proof; not a neural editing or creative-quality trial.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - engines/velorn/mcp-e2e.py
+      - .github/workflows/zx7-original-camera-native-export.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-camera-export-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  independently-decoded-original-camera:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the complete pinned editor source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install actual native display, video decoders and MCP dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg xvfb xauth x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Acquire exactly the previously SHA-attested genuine camera source
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.parse, urllib.request
+          root=pathlib.Path(os.environ["RUNNER_TEMP"])/"zx7-attested-camera"
+          root.mkdir(mode=0o700)
+          name="Royal_Sovereign_Lighthouse_drone_visit.webm"
+          expected="52d9b05bec542094c5bada760bad18af2fdbec03374488db65ae0f45ef96184f"
+          api="https://commons.wikimedia.org/w/api.php?"+urllib.parse.urlencode({
+            "action":"query", "format":"json", "titles":"File:"+name.replace("_"," "),
+            "prop":"imageinfo", "iiprop":"url|size|mime|extmetadata",
+            "iiextmetadatafilter":"LicenseShortName|Artist|UsageTerms"})
+          headers={"User-Agent":"ZX7CreativeStudio/0.1 (https://github.com/ZX7-Labs/Zx7-creative-studio-)"}
+          with urllib.request.urlopen(urllib.request.Request(api,headers=headers),timeout=35) as request:
+            metadata=json.load(request)
+          info=next(iter(metadata["query"]["pages"].values()))["imageinfo"][0]
+          source_license=(info.get("extmetadata") or {}).get("LicenseShortName",{}).get("value")
+          if source_license not in ("CC0", "CC0 1.0"):
+            raise ValueError("Original source no longer reports CC0")
+          md5=hashlib.md5(name.encode()).hexdigest()
+          url=("https://upload.wikimedia.org/wikipedia/commons/transcoded/"
+               +md5[0]+"/"+md5[:2]+"/"+name+"/"+name+".720p.vp9.webm")
+          source=root/"camera_take_01.webm"
+          total=0
+          digest=hashlib.sha256()
+          with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=60) as stream, source.open("xb") as out:
+            while data:=stream.read(1024*1024):
+              total+=len(data)
+              if total>200_000_000:
+                raise ValueError("Camera exceeds bounded experimental source budget")
+              digest.update(data)
+              out.write(data)
+          if digest.hexdigest()!=expected:
+            raise ValueError("Camera bytes changed; do not substitute another source")
+          probe=json.loads(subprocess.run(["ffprobe","-v","error","-show_entries",
+            "format=duration:stream=codec_type,width,height","-of","json",str(source)],
+            capture_output=True,text=True,check=True,timeout=60).stdout)
+          duration=float(probe["format"]["duration"])
+          if not 30<=duration<=1200 or not any(
+            item.get("codec_type")=="video" for item in probe["streams"]):
+            raise ValueError("Camera video source malformed or duration unsafe")
+          subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-nostdin",
+            "-xerror","-i",str(source),"-map","0:v:0","-f","null","-"],
+            capture_output=True,check=True,timeout=420)
+          print("ORIGINAL_CAMERA_SOURCE_CUSTODY "+json.dumps({
+            "sha256":expected,"bytes":total,"source_duration_seconds":duration,
+            "source_reports_cc0":True,"independent_legal_clearance":False,
+            "original_full_video_decoded":True},sort_keys=True),flush=True)
+          PY
+      - name: Verify pinned upstream editor source remains untouched
+        run: |
+          test "$(id -u)" -ne 0
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+          python -m compileall -q engines/velorn/mcp-e2e.py
+      - name: Build real complete Velorn/Electron application
+        working-directory: third_party/velorn
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          test -s dist/index.html
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(stat -c '%u:%a' "$helper")" = "0:4755"
+      - name: Prove original camera native import, edit, readiness, MP4 and full video decode
+        run: |
+          python -u engines/velorn/mcp-e2e.py \
+            --source "$GITHUB_WORKSPACE/third_party/velorn" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:95 \
+            --camera-video "$RUNNER_TEMP/zx7-attested-camera/camera_take_01.webm" \
+            --camera-sha256 52d9b05bec542094c5bada760bad18af2fdbec03374488db65ae0f45ef96184f
+      - name: Diagnose editor startup without hiding an actual failure
+        if: failure()
+        run: |
+          for log in /tmp/zx7-editor-mcp-*/state/session-*/launcher.log; do
+            if test -f "$log"; then
+              tail -n 100 "$log"
+            fi
+          done
+      - name: Confirm third-party editor source was not changed
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --

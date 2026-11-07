@@ -616,6 +616,127 @@ async def exercise(options):
             "prior_qwen_failure_cause_proven": False,
             "neural_or_artistic_completion_proven": False,
         }, sort_keys=True), flush=True)
+        # The successful one-clip proof above uses a technical synthetic
+        # source. The previous genuine Qwen4B camera failed during export.
+        # Independently discriminate the original camera's actual VP9/WebM
+        # decoder + pinned editor export without paying for another model turn.
+        # This is NOT an artist-selected edit or a neural acceptance test.
+        if options.camera_video is not None:
+            import re
+            if (not options.camera_video.is_file() or
+                    not isinstance(options.camera_sha256, str) or
+                    re.fullmatch(r"[0-9a-f]{64}", options.camera_sha256) is None):
+                raise ValueError("Independent camera bytes and pinned SHA are required")
+            if digest(options.camera_video) != options.camera_sha256:
+                raise AssertionError("Source camera SHA mismatch before native import")
+            camera_staged = staging / "original-camera.webm"
+            assert not camera_staged.exists()
+            shutil.copyfile(options.camera_video, camera_staged)
+            assert digest(camera_staged) == options.camera_sha256
+            before_camera = await call(session, "get_assets", {"limit": 1000})
+            before_camera_ids = {asset.get("id") for asset in before_camera["assets"]
+                                 if isinstance(asset, dict)}
+            camera_created = await call(session, "create_timeline", {
+                "name": "Independent real camera export control",
+                "width": 320, "height": 180, "fps": 24,
+                "switchToTimeline": True, "previewOnly": False})
+            assert camera_created.get("success") is True
+            await wait(session, lambda state:
+                (state.get("currentTimeline") or {}).get("name")
+                == "Independent real camera export control"
+                and (state.get("currentTimeline") or {}).get("clipCount") == 0)
+            assert (await call(session, "get_timeline", {
+                "includeClips": True}))["clips"] == []
+            await call(session, "import_asset_from_path", {
+                "path": str(camera_staged), "previewOnly": False})
+            await wait(session, lambda state:
+                state.get("assetCount") == len(before_camera_ids) + 1)
+            inventory = await call(session, "get_assets", {"limit": 1000})
+            added = [asset for asset in inventory["assets"]
+                     if isinstance(asset, dict)
+                     and asset.get("id") not in before_camera_ids]
+            assert (len(added) == 1 and added[0].get("type") == "video"
+                    and isinstance(added[0].get("id"), str)), (
+                "Original camera import did not create exactly one native video ID")
+            native_camera_id = added[0]["id"]
+            native_place = await call(session, "add_asset_to_timeline", {
+                "assetId": native_camera_id, "startSeconds": 0,
+                "includeAudio": False, "previewOnly": False})
+            assert native_place.get("success") is True
+            await wait(session, lambda state:
+                (state.get("currentTimeline") or {}).get("clipCount") == 1)
+            clip_state = await call(session, "get_timeline", {"includeClips": True})
+            assert len(clip_state["clips"]) == 1
+            assert clip_state["clips"][0].get("assetId") == native_camera_id
+            await call(session, "save_project", {"previewOnly": False})
+            stored_camera = json.loads(native_path.read_text())
+            stored_assets = [asset for asset in stored_camera["assets"]
+                             if asset.get("id") == native_camera_id]
+            assert len(stored_assets) == 1
+            source_inside_project = project / stored_assets[0]["path"]
+            assert digest(source_inside_project) == options.camera_sha256
+            camera_export = outputs / "original-camera-native-export.mp4"
+            camera_settings = {
+                "target": "h264_project", "resolution": "custom",
+                "width": 320, "height": 180, "fps": 24,
+                "range": "custom", "startSeconds": 0, "endSeconds": 2,
+                "includeAudio": False,
+            }
+            ready = await call(session, "check_export_readiness", camera_settings)
+            assert ready["ready"] is True and ready["blockers"] == [], ready
+            assert ready["counts"]["exportableVisualClipCount"] == 1, ready
+            preview = await call(session, "export_timeline", {
+                **camera_settings, "outputPath": str(camera_export),
+                "previewOnly": True})
+            assert preview.get("previewOnly") is True
+            assert not camera_export.exists()
+            accepted = await call(session, "export_timeline", {
+                **camera_settings, "outputPath": str(camera_export),
+                "previewOnly": False})
+            assert accepted.get("success") is True
+            # Do not mistake asynchronous worker ACK for an accepted film.
+            camera_deadline = time.monotonic() + 120
+            decoded_camera_frames = None
+            while time.monotonic() < camera_deadline:
+                if camera_export.is_file() and camera_export.stat().st_size > 0:
+                    try:
+                        record = json.loads(run([ffprobe, "-v", "error",
+                            "-count_frames", "-show_streams", "-of", "json",
+                            str(camera_export)]))
+                        picture = next(item for item in record["streams"]
+                                       if item.get("codec_type") == "video")
+                        if (picture.get("codec_name") == "h264"
+                                and picture.get("width") == 320
+                                and picture.get("height") == 180
+                                and picture.get("r_frame_rate") == "24/1"
+                                and int(picture.get("nb_read_frames", 0)) == 48):
+                            run([ffmpeg, "-v", "error", "-xerror", "-i",
+                                 str(camera_export), "-map", "0:v:0",
+                                 "-f", "null", "-"])
+                            decoded_camera_frames = 48
+                            break
+                    except (subprocess.CalledProcessError, ValueError,
+                            KeyError, StopIteration, TypeError):
+                        # A partially encoded file cannot satisfy the gate.
+                        pass
+                await asyncio.sleep(.25)
+            assert decoded_camera_frames == 48, (
+                "Original camera native export did not fully decode")
+            assert digest(options.camera_video) == options.camera_sha256
+            assert digest(camera_staged) == options.camera_sha256
+            assert digest(source_inside_project) == options.camera_sha256
+            print("ACTUAL_ORIGINAL_CAMERA_NATIVE_EXPORT " + json.dumps({
+                "source": "independently_sha_attested_original_camera_webm",
+                "camera_sha256": options.camera_sha256,
+                "native_project_placed_exactly_one_camera_clip": True,
+                "readiness_unblocked": True,
+                "preview_nonmutating": True,
+                "native_worker_start_acknowledged": True,
+                "independently_decoded_h264_frame_count": decoded_camera_frames,
+                "full_original_source_unchanged": True,
+                "model_inference_or_artist_quality_demonstrated": False,
+                "previous_model_export_error_attributed": False,
+            }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
     audio = next(stream for stream in probe["streams"] if stream["codec_type"] == "audio")
@@ -655,6 +776,8 @@ async def exercise(options):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--camera-video", type=Path)
+    parser.add_argument("--camera-sha256")
     for name in ("xvfb-binary", "xvfb-lib-dir", "display"):
         parser.add_argument("--" + name)
     parser.add_argument("--no-sandbox", action="store_true")
