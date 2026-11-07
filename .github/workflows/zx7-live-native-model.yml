@@ -14,7 +14,7 @@ on:
   # on main. Unlike ordinary PR CI this downloads source-pinned CPU weights,
   # so routine commits never launch neural evaluation.
   push:
-    branches: [main]
+    branches: [main, experiment/qwen35-4b-native-eval-20261108]
     paths:
       - "research/local-native-trial-request.json"
   pull_request:
