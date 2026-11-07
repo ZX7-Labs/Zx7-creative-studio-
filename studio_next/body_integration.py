@@ -1062,16 +1062,25 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Local style documents and package presence; actual TTS loading remains independently required",
         "read",True,["voice_assets"],inspect_voices)
     if editor_client is not None:
+        # Native applications expose arbitrarily rich nested schemas. The
+        # ordinary lightweight BODY registry intentionally checks only its
+        # own top-level fields. Enforce the *full* native schema at this
+        # boundary: unknown nested keys cannot reach a live document.
+        import copy
+        from .body_editor_mcp import native_admission_validator
+
         native={tool["name"]:tool for tool in editor_client.list_tools()}
         if set(editor_client.allowed_tools)-set(native):
             raise ValueError("Host-granted native editor tool is absent from discovery")
         for name,access in editor_client.allowed_tools.items():
             tool=native[name]
-            # Keep the native schema intact: BODY's minimal validator must not
-            # flatten or reinterpret the editor's richer JSON Schema dialect.
+            native_schema=copy.deepcopy(tool["inputSchema"])
+            validator=native_admission_validator(native_schema)
+            # Keep exported native schema intact. Admission is stricter only
+            # about invented top-level keys that the engine did not declare.
             schema={"type":"object","additionalProperties":False,
                     "required":["arguments"],
-                    "properties":{"arguments":tool["inputSchema"]}}
+                    "properties":{"arguments":native_schema}}
             spec=ToolSpec("body.editor."+name,"native video editor",
                 tool.get("description") or name,access,
                 license="native editor license; Velorn GPL-3.0-only",
@@ -1079,15 +1088,26 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
                 operation_schema=schema,
                 limitations=("Host-granted native operation; not a verified media delivery receipt.",
                              "Stateful writes are not automatically retried or cached."))
-            catalog.register(spec,
-                lambda inputs,n=name,a=access:editor_client.call(
-                    n,inputs["arguments"],
+            def native_call(inputs, *, n=name,a=access,original=copy.deepcopy(tool),
+                            validate=validator):
+                proposed=inputs["arguments"]
+                invalid=next(validate.iter_errors(proposed),None)
+                if invalid is not None:
+                    raise ValueError("Invalid native model parameters ("+
+                                     str(invalid.validator)[:40]+")")
+                # A hot-reloaded native editor ABI must never get a write
+                # under an old contract. Recheck the exact selected tool and
+                # host grant immediately before native dispatch.
+                live={item["name"]:item for item in editor_client.list_tools()}
+                if (live.get(n)!=original or editor_client.allowed_tools.get(n)!=a):
+                    raise RuntimeError("Native editor capability changed; rediscover host tools")
+                return editor_client.call(
+                    n,proposed,
                     # Source introspection is an internal safety prerequisite,
                     # not an additional tool that a model may grant itself.
-                    # Other write tools keep their existing exact access.
                     allowed_access=(frozenset({a,"read"}) if n=="split_clip"
-                                    else frozenset({a}))),
-                idempotent=False)
+                                    else frozenset({a})))
+            catalog.register(spec,native_call,idempotent=False)
     for spec,runner,idempotent,version,operational,materials in discover_enabled_body_plugins():
         if not operational:
             from dataclasses import replace

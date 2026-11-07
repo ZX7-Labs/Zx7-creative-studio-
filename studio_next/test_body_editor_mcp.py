@@ -140,6 +140,45 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((await session.call_tool("get_project", {})).is_error)
         await self.with_session(check)
 
+    async def test_upstream_undeclared_native_parameters_never_reach_stateful_editor(self):
+        import copy
+        self.tools=copy.deepcopy(TOOLS)
+        self.tools[1]["inputSchema"].pop("additionalProperties")
+        async def check(session):
+            advertised=[tool for tool in (await session.list_tools()).tools
+                        if tool.name=="update_text_clip"][0].input_schema
+            self.assertNotIn("additionalProperties",advertised)
+            forbidden=await session.call_tool("update_text_clip",{
+                "clipId":"real", "fakePermission":"write"})
+            self.assertTrue(forbidden.is_error)
+            self.assertFalse(any(row["method"]=="tools/call" for row in self.requests))
+            permitted=await session.call_tool("update_text_clip",{
+                "clipId":"real","text":None})
+            self.assertFalse(permitted.is_error)
+            self.assertEqual(sum(row["method"]=="tools/call" for row in self.requests),1)
+        await self.with_session(check)
+
+    async def test_nested_original_artistic_schema_not_accidentally_sealed(self):
+        import copy
+        self.tools=copy.deepcopy(TOOLS)
+        self.tools[1]["inputSchema"]={
+            "type":"object",
+            "required":["clipId","visual"],
+            "properties":{
+                "clipId":{"type":"string"},
+                "visual":{"type":"object","properties":{
+                    "layer":{"type":"string"}}},
+            },
+        }
+        async def check(session):
+            allowed=await session.call_tool("update_text_clip",{
+                "clipId":"real",
+                "visual":{"layer":"title","original_artist_shader_parameters":{
+                    "contrast":0.77,"custom":[1,2,3]}}})
+            self.assertFalse(allowed.is_error)
+            self.assertEqual(sum(row["method"]=="tools/call" for row in self.requests),1)
+        await self.with_session(check)
+
     async def test_native_tool_error_is_preserved_and_session_remains_usable(self):
         async def check(session):
             self.native_fail = True

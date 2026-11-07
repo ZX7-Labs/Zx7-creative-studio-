@@ -532,8 +532,10 @@ class LocalBodyCoordinator:
                     if model is not None else None)
         with self._connect() as db:
             trace_evidence=read_recent_host_events(db,limit=32)
+        live_catalog=body_catalog(self.projects)
         return universal_diagnostics(
-            operation_records=body_catalog(self.projects).discover(),
+            operation_records=live_catalog.discover(),
+            execution_admission=live_catalog.execution_admission(),
             job_records=[{"status": status, "count": count}
                          for status, count in job_rows],
             session_records=sessions,

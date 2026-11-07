@@ -53,9 +53,14 @@ class BodyAffordanceSurface:
         if len({r["id"] for r in rows})!=len(rows):
             raise ValueError("Duplicate physical tool identity")
         revisions=self.catalog.committed_tool_revisions()
-        runnable=self.catalog.executable_ids()
+        # An installed native editor with no immutable source adapter or
+        # committed graph revision is still a real engine, but NOT an
+        # executable film DAG node. Never silently present it as ready.
+        admission=self.catalog.execution_admission()
+        runnable={identity for identity,detail in admission.items()
+                  if detail["can_attempt_durable_graph"]}
         retry=self.catalog.trusted_idempotent_ids()
-        return sorted(rows,key=lambda r:r["id"]),revisions,runnable,retry
+        return sorted(rows,key=lambda r:r["id"]),revisions,runnable,retry,admission
 
     def discover(self, *, capability=None, allowed_access=frozenset({"read"}),
                  include_unavailable=False, limit=12, cursor=None):
@@ -67,7 +72,7 @@ class BodyAffordanceSurface:
         if type(include_unavailable) is not bool or (
                 type(limit) is not int or not 1<=limit<=40):
             raise ValueError("Bounded discovery and status policy required")
-        rows,revisions,runnable,retry=self._actual()
+        rows,revisions,runnable,retry,admission=self._actual()
         indexed=[]
         for row in rows:
             if row["id"] in self._excluded:continue
@@ -75,10 +80,14 @@ class BodyAffordanceSurface:
             if row["access"] not in permitted:continue
             if capability is not None and row["capability"]!=capability:continue
             if not installed and not include_unavailable:continue
+            status=("ready_to_preflight" if installed else
+                    "needs_setup" if row["status"]!="installed" else
+                    "requires_execution_adapter")
             indexed.append({
                 "tool_id":row["id"],"capability":row["capability"],
                 "access":row["access"],
-                "status":"ready_to_preflight" if installed else "needs_setup",
+                "status":status,
+                "execution_blockers":admission[row["id"]]["blocked_by"],
                 "required_inputs":list(row["schema"].get("required",[])),
                 "source_review_required":True,
                 "safe_to_retry":installed and row["id"] in retry,
@@ -106,14 +115,18 @@ class BodyAffordanceSurface:
             raise ValueError("Exact named tool identity required")
         if tool_id in self._excluded:
             raise PermissionError("Model-facing BODY tool has no current source-rights custody")
-        rows,revisions,runnable,retry=self._actual()
+        rows,revisions,runnable,retry,admission=self._actual()
         for row in rows:
             if row["id"]!=tool_id:continue
             if row["access"] not in permitted:
                 raise PermissionError("Tool access not granted by trusted owner policy")
             live=row["status"]=="installed" and tool_id in runnable
+            status=("ready_to_preflight" if live else
+                    "needs_setup" if row["status"]!="installed" else
+                    "requires_execution_adapter")
             return {"schema":1,"tool_id":tool_id,
-                    "status":"ready_to_preflight" if live else "needs_setup",
+                    "status":status,
+                    "execution_blockers":admission[tool_id]["blocked_by"],
                     "input_schema":row["schema"] if live else None,
                     "document_contracts":document_contracts(tool_id),
                     "capability":row["capability"],"access":row["access"],

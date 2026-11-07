@@ -73,6 +73,98 @@ def trace():
 
 
 class NativeCreativeAuditTests(unittest.TestCase):
+    def test_forged_first_event_cannot_hide_missing_session_identity(self):
+        # A positional journal parser must never skip an unrecognized first
+        # event, even if all later steps satisfy their own local contracts.
+        for forged in (
+            {"kind": "model_action_rejected", "tool": "update_text_clip",
+             "inputs_sha256": A, "validation_keyword": "type",
+             "no_native_dispatch": True},
+            {"kind": "discovered", "tools": ["update_text_clip"]},
+            {"kind": "native_tool_result", "tool": "update_text_clip",
+             "host_application_write_acknowledged": True},
+            {"kind": "unrecognized_first_event"},
+        ):
+            with self.subTest(forged=forged):
+                events = trace()
+                events[0] = {"sequence": 0, **forged}
+                with self.assertRaisesRegex(NativeJournalError, "session identity"):
+                    audit_native_journal(events,host_tool_access=HOST)
+
+    def test_host_timeline_picture_guard_is_read_evidence_not_a_native_edit(self):
+        before = audit_native_journal(trace(), host_tool_access=HOST)
+        variants = [
+            {"kind": "host_native_timeline_picture_observation", "turn": 0,
+             "picture_state": "absent", "host_attested_read_only": True,
+             "no_native_edit_dispatched": True},
+            {"kind": "host_native_timeline_picture_observation", "turn": 0,
+             "picture_state": "present", "host_attested_read_only": True,
+             "no_native_edit_dispatched": True,
+             "observed_text_sha256": A},
+            {"kind": "host_native_timeline_read_unknown", "turn": 0,
+             "error_type": "TimeoutError", "no_native_edit_dispatched": True},
+        ]
+        for observed in variants:
+            with self.subTest(observation=observed):
+                events = trace()
+                events.insert(3, {"sequence": 3, **observed})
+                for idx, event in enumerate(events):
+                    event["sequence"] = idx
+                audited = audit_native_journal(events, host_tool_access=HOST)
+                self.assertTrue(audited["journal_chain_structurally_valid"])
+                self.assertEqual(audited["recorded_native_write_result_count"],
+                                 before["recorded_native_write_result_count"])
+                self.assertEqual(audited["export_digests_independently_reported_by_native_host"],
+                                 before["export_digests_independently_reported_by_native_host"])
+                self.assertFalse(audited["human_or_artistic_quality_approved"])
+                with self.assertRaises(NativeJournalError):
+                    audit_native_journal(events, host_tool_access={
+                        **HOST, "get_timeline": "write"})
+
+    def test_host_timeline_guard_denies_forged_picture_and_read_errors(self):
+        picture = {
+            "kind": "host_native_timeline_picture_observation", "turn": 0,
+            "picture_state": "absent", "host_attested_read_only": True,
+            "no_native_edit_dispatched": True,
+        }
+        forged = [
+            {**picture, "turn": -1},
+            {**picture, "turn": True},
+            {**picture, "picture_state": "cut_is_artistically_amazing"},
+            {**picture, "picture_state": "present"},
+            {**picture, "host_attested_read_only": False},
+            {**picture, "no_native_edit_dispatched": False},
+            {**picture, "observed_text_sha256": "invalid"},
+            {**picture, "secret_source_path": "/home/private"},
+            {"kind": "host_native_timeline_read_unknown", "turn": 1,
+             "error_type": "private source path", "no_native_edit_dispatched": True},
+            {"kind": "host_native_timeline_read_unknown", "turn": 1,
+             "error_type": "OSError", "no_native_edit_dispatched": False},
+            {"kind": "host_native_timeline_read_unknown", "turn": 1,
+             "error_type": "OSError", "no_native_edit_dispatched": True,
+             "fabricated_certified_output": True},
+        ]
+        for event in forged:
+            with self.subTest(event=event):
+                events = trace()
+                events.insert(3, {"sequence": 3, **event})
+                for idx, record in enumerate(events):
+                    record["sequence"] = idx
+                with self.assertRaises(NativeJournalError):
+                    audit_native_journal(events, host_tool_access=HOST)
+
+    def test_every_emitted_native_kind_has_a_reviewed_auditor_case(self):
+        import re
+        from pathlib import Path
+        root=Path(__file__).resolve().parent
+        emitted=(root/"native_creative_control.py").read_text(encoding="utf-8")
+        verified=(root/"native_creative_audit.py").read_text(encoding="utf-8")
+        kinds=set(re.findall(r'"kind"\s*:\s*"([a-z][a-z0-9_]+)"',emitted))
+        self.assertTrue(kinds)
+        auditor_literals=set(re.findall(r'"([a-z][a-z0-9_]+)"',verified))
+        self.assertEqual(kinds-auditor_literals,set(),
+                         "New controller event needs explicit independent auditor validation")
+
     def test_real_read_only_native_asset_receipts_cannot_forge_media_proof(self):
         events = trace()
         inventory = {"sequence": 1, "kind":"host_native_asset_inventory",

@@ -124,7 +124,7 @@ def _safe_host_memory(host_capacity):
 def universal_diagnostics(*, operation_records, job_records, session_records,
                           host_capacity, model_configured, model_id=None,
                           paired_trials=(), trace_evidence=None, model_audition=None,
-                          job_stage_evidence=()):
+                          job_stage_evidence=(), execution_admission=None):
     """Bounded authenticated dashboard snapshot from actual host runtime state.
 
     Registry claims prove *discovery/installation*, not tool execution;
@@ -244,6 +244,43 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
     for family in catalog:
         family["operations_needing_setup"].sort()
 
+    # Installed tools are not synonymous with safely admissible production
+    # graph operations. A stateful native editor needs another execution lane.
+    admitted = None
+    if execution_admission is not None:
+        if not isinstance(execution_admission, dict):
+            raise DiagnosticEvidenceError("Host execution contract snapshot invalid")
+        if set(execution_admission) != {row["id"] for row in tools}:
+            raise DiagnosticEvidenceError("Execution admission differs from live registry")
+        admitted = 0
+        for row in tools:
+            contract=execution_admission[row["id"]]
+            if (not isinstance(contract,dict)
+                    or contract.get("catalog_id")!=row["id"]
+                    or contract.get("capability")!=row["capability"]
+                    or any(type(contract.get(flag)) is not bool for flag in (
+                        "can_attempt_durable_graph","native_runner_registered",
+                        "trusted_material_adapter","committed_execution_revision",
+                        "actually_executed_and_verified",
+                        "model_creative_quality_assessed"))):
+                raise DiagnosticEvidenceError("Malformed host source execution contract")
+            if contract["actually_executed_and_verified"] or contract["model_creative_quality_assessed"]:
+                raise DiagnosticEvidenceError("Tool registration cannot certify creativity or output")
+            ready=(row["status"]=="installed"
+                   and contract["native_runner_registered"]
+                   and contract["trusted_material_adapter"]
+                   and contract["committed_execution_revision"])
+            if ready!=contract["can_attempt_durable_graph"]:
+                raise DiagnosticEvidenceError("Contradictory host execution admission")
+            if ready:
+                admitted+=1
+            elif row["status"]=="installed":
+                per_capability[row["capability"]].setdefault(
+                    "requires_another_execution_lane",[]).append(row["id"])
+        for family in catalog:
+            family["requires_another_execution_lane"]=sorted(
+                family.get("requires_another_execution_lane",[]))
+
     job_states = Counter()
     for row in jobs:
         status = row.get("status")
@@ -297,6 +334,15 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
             "state": "unmeasured",
             "evidence": "no_paired_host_verified_model_body_trials",
             "next_check": "Run same-source verified BODY control and model candidate trials",
+        })
+    if admitted is not None and all_installed>admitted:
+        diagnostics.append({
+            "layer":"capability",
+            "code":"installed_not_admissible_to_durable_graph",
+            "state":"requires_other_execution_lane",
+            "evidence":"registered_runner_revision_and_trusted_material_callbacks",
+            "observed_count":all_installed-admitted,
+            "next_check":"Use an independently authorized native session or implement verified graph adapters",
         })
     if setup_count:
         diagnostics.append({
@@ -364,6 +410,10 @@ def universal_diagnostics(*, operation_records, job_records, session_records,
         },
         "body": {
             "installed_operations": all_installed,
+            "durable_graph_admission_candidates": admitted,
+            "installed_requiring_another_execution_lane": (
+                all_installed-admitted if admitted is not None else None),
+            "candidate_is_not_verified_execution": True,
             "registered_operations_needing_setup": setup_count,
             "capability_families": len(catalog),
             "capabilities": catalog,

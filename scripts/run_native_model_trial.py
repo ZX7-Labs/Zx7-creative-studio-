@@ -178,6 +178,71 @@ class RecordedModel:
         return self.infer(context, images)
 
 
+async def preflight_real_editor_inventory_contract(
+        session, host_grants, *, require_absent_project=False):
+    """Read native tool result BEFORE costly model inference, never mutate art.
+
+    An installed schema for get_assets does not establish that BODY understands
+    the actual RESULT shape. The first real Qwen camera pilot wasted several
+    minutes because an invented response envelope only failed after project
+    creation. This bounded read-only probe fails early on the pinned engine's
+    real source contract and reveals no names, source paths or original bytes.
+    """
+    from studio_next.native_creative_control import (
+        _native_content, _native_project_presence_from_text, _field)
+    from studio_next.native_asset_identity import inventory_from_native_text
+    if not isinstance(host_grants,dict) or host_grants.get("get_assets")!="read":
+        raise ValueError("Native asset preflight requires trusted read-only grant")
+    if require_absent_project:
+        if host_grants.get("get_project")!="read":
+            raise ValueError("Fresh editor lifecycle probe requires project read grant")
+        project=await session.call_tool("get_project",{})
+        if _field(project,"is_error",_field(project,"isError",False)):
+            raise ValueError("Fresh project lifecycle read reported error")
+        project_texts, project_images, project_audio=_native_content(project)
+        if project_images or project_audio:
+            raise ValueError("Project lifecycle probe returned unbound media")
+        state=_native_project_presence_from_text(project_texts)
+        if state!="absent":
+            raise ValueError("Expected empty isolated editor but project state is not absent")
+        # A pinned native editor may refuse get_assets until a project is
+        # OPEN. This is not a successful source inventory conformance check.
+        # The controller will call get_assets only after the native editor
+        # independently acknowledges creation AND get_project sees present.
+        return {
+            "schema":1, "source":"pinned_native_get_project_live_read",
+            "read_only":True, "no_native_write_attempted":True,
+            "native_project_observed_absent":True,
+            "native_asset_contract_proved":False,
+            "inventory_probe_deferred_until_native_project_exists":True,
+            "original_source_rights_not_established":True,
+            "source_response_sha256":hashlib.sha256(
+                json.dumps(project_texts,sort_keys=True,ensure_ascii=True).encode()).hexdigest(),
+            "observed_asset_count":None,
+            "any_media_physically_imported_by_this_probe":False,
+        }
+    result=await session.call_tool("get_assets",{})
+    if _field(result,"is_error",_field(result,"isError",False)):
+        raise ValueError("Native asset read-only contract probe reported error")
+    texts,images,audio=_native_content(result)
+    if images or audio:
+        raise ValueError("Native asset metadata probe cannot return visual/audio content")
+    snapshot=inventory_from_native_text(texts)
+    return {
+        "schema":1,
+        "source":"pinned_native_get_assets_live_read",
+        "read_only":True,
+        "no_native_write_attempted":True,
+        "original_source_rights_not_established":True,
+        "source_response_sha256":hashlib.sha256(
+            json.dumps(texts,sort_keys=True,ensure_ascii=True).encode()).hexdigest(),
+        "observed_asset_count":snapshot["total"],
+        "native_asset_contract_proved":True,
+        "bounded_inventory_complete":snapshot["complete"],
+        "any_media_physically_imported_by_this_probe":False,
+    }
+
+
 def fresh_trial_project_open_effects(projects_root):
     """Host-attested possibilities for a NEW empty native-editor trial.
 
@@ -282,6 +347,15 @@ async def trial(args, lock, artifacts, command):
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
     host = dict(config['allowed_tools'])
+    # These source-defined possible physical effects describe host MACHINE
+    # affordances, never editing style or a predetermined model action order.
+    # A read-only source inspection must still establish each achieved fact.
+    for tool_name,physical_fact in (
+        ("import_asset_from_path","assets_present"),
+        ("add_asset_to_timeline","timeline_picture_present"),
+        ("add_assets_to_timeline","timeline_picture_present")):
+        if host.get(tool_name)=="write":
+            initial_project_effects[tool_name]=[physical_fact]
     host.update({name: 'read' for name in ('zx7_verify_native_export',
         'zx7_observe_verified_export_frame', 'zx7_observe_verified_export_samples',
         'zx7_observe_verified_export_audio', 'zx7_observe_verified_export_audio_timeline')})
@@ -305,6 +379,18 @@ async def trial(args, lock, artifacts, command):
         async with stdio_client(StdioServerParameters(command='node', args=params, cwd=ROOT), errlog=log) as (read, write):
             async with ClientSession(read, write, read_timeout_seconds=180) as session:
                 await session.initialize()
+                # The engine's exact read-result protocol must be checked
+                # before consuming CPU model turns or mutating any project.
+                preflight=await preflight_real_editor_inventory_contract(
+                    session,host,require_absent_project=True)
+                if preflight.get("native_asset_contract_proved") is True:
+                    print("Native asset inventory contract physically verified:",
+                          preflight["observed_asset_count"],
+                          "assets; zero tool writes",flush=True)
+                else:
+                    print("Native empty-project lifecycle verified; get_assets",
+                          "deferred until the real project is opened;",
+                          "asset contract NOT YET PROVED; zero tool writes",flush=True)
                 outcome = await asyncio.wait_for(NativeCreativeControl(session, model, max_turns=48,
                     receipt_path=artifacts / 'native-journal.jsonl',
                     host_tool_access=host, catalog_mode="indexed",

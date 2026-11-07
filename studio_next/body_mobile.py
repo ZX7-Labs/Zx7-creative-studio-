@@ -97,6 +97,10 @@ async function diagnostics(){
     : 'Local tool-use audition: '+(tested.status||'unmeasured')
       +'. Tool choice is not an artistic score.');
  root.append(diagnosticCard('Installed operations',body.installed_operations??'Unknown'),
+   diagnosticCard('Graph-admissible operations',
+      body.durable_graph_admission_candidates??'Unmeasured'),
+   diagnosticCard('Requires another execution lane',
+      body.installed_requiring_another_execution_lane??'Unmeasured'),
    diagnosticCard('Capability families',body.capability_families??'Unknown'),
    diagnosticCard('Local model',brain.configured?
        'Configured · '+(brain.capability_assessment||'unmeasured'):'Not configured'),
@@ -135,10 +139,14 @@ async function diagnostics(){
      }
    }
  }
- const families=(body.capabilities||[]).filter(x=>x.needs_setup_operations);
+ const families=(body.capabilities||[]).filter(x=>
+     x.needs_setup_operations||(x.requires_another_execution_lane||[]).length);
  for(const family of families.slice(0,8)){
     const item=node('div',family.name+': '+family.needs_setup_operations
-       +' operations need setup — '+(family.operations_needing_setup||[]).join(', '));
+       +' operations need setup — '+(family.operations_needing_setup||[]).join(', ')
+       +'; '+(family.requires_another_execution_lane||[]).length
+       +' installed operations require another execution lane — '
+       +(family.requires_another_execution_lane||[]).join(', '));
     item.className='entry';issues.append(item);
  }
 }

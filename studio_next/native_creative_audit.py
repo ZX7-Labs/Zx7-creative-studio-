@@ -192,8 +192,6 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             if i != 0 or not _sha(event.get("brief_sha256")):
                 raise NativeJournalError("Duplicate or unbound creative session")
             continue
-        if i == 0:
-            continue
         if kind in ("host_project_bootstrap_observation", "host_project_bootstrap_error"):
             if (i != 1 or pending is not None or
                     event.get("tool") != "get_project" or
@@ -355,6 +353,77 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         for tool in tools) or len(set(tools)) != len(tools)):
                 raise NativeJournalError("Untrusted or fabricated initial machine affordance")
             continue
+        if kind == "host_machine_frontier":
+            # Machine-state navigation is a host-scoped metadata option, never
+            # a model-selected tool, native write or creative achievement.
+            # Every suggested operation must exist in the exact host grant
+            # set; no executable authority can be added by journal text.
+            names=event.get("result_tool_names")
+            false_facts=event.get("false_host_facts")
+            valid_false_facts={"project_open", "assets_present",
+                               "timeline_picture_present"}
+            # No creative/aesthetic assertion may be smuggled into a machine
+            # fact. A future native sensor MUST add its own independently
+            # reviewed journal witness, never just a model-visible string.
+            if (not isinstance(false_facts,list) or
+                    any(fact not in valid_false_facts for fact in false_facts)):
+                raise NativeJournalError(
+                    "Unknown or creative claim masquerading as physical machine state")
+            # Only host-owned READS AFTER THE MOST RECENT ACKNOWLEDGED WRITE
+            # can justify current-state affordances. Old source inventories
+            # and timelines become stale as soon as the native project changes.
+            previous=events[:i]
+            last_write=max((index for index,source in enumerate(previous)
+                            if source.get("kind")=="native_tool_result" and
+                            host_tool_access.get(source.get("tool"))=="write"),
+                           default=-1)
+            fresh=previous[last_write+1:]
+            for fact in false_facts:
+                if fact=="assets_present":
+                    witnessed=any(
+                        prior.get("kind")=="host_native_asset_inventory" and
+                        prior.get("actual_imported_asset_total")==0 and
+                        prior.get("host_attested_read_only") is True
+                        for prior in fresh)
+                elif fact=="timeline_picture_present":
+                    witnessed=any(
+                        prior.get("kind")=="host_native_timeline_picture_observation" and
+                        prior.get("picture_state")=="absent" and
+                        _sha(prior.get("observed_text_sha256")) and
+                        prior.get("host_attested_read_only") is True
+                        for prior in fresh)
+                else:
+                    witnessed=any(
+                        (prior.get("kind") in (
+                            "host_project_bootstrap_observation",
+                            "host_project_post_write_observation") and
+                         prior.get("project_presence")=="absent" and
+                         prior.get("host_attested_read_only") is True) or
+                        (prior.get("kind")=="native_tool_result" and
+                         prior.get("tool")=="get_project" and
+                         host_tool_access.get("get_project")=="read")
+                        for prior in fresh)
+                if not witnessed:
+                    raise NativeJournalError(
+                        "Machine-state choice has no fresh native READ witness")
+            if (pending is not None or type(event.get("turn")) is not int
+                    or event["turn"]<0 or
+                    not _sha(event.get("catalog_revision")) or
+                    not _sha(event.get("host_known_facts_sha256")) or
+                    event.get("host_sensing_only_no_artistic_choice") is not True or
+                    event.get("no_native_dispatch") is not True or
+                    not isinstance(false_facts,list) or
+                    not 1<=len(false_facts)<=16 or
+                    false_facts!=sorted(set(false_facts)) or
+                    any(not isinstance(x,str) or not re.fullmatch(
+                        r"[a-z][a-z0-9_]{1,100}",x) for x in false_facts) or
+                    not isinstance(names,list) or not 1<=len(names)<=8 or
+                    len(names)!=len(set(names)) or
+                    any(not isinstance(x,str) or x not in host_tool_access
+                        for x in names)):
+                raise NativeJournalError(
+                    "Host physical-state navigator invented tool or state evidence")
+            continue
         if kind == "capability_searched":
             tools = event.get("result_tool_names")
             inspected = event.get("inspectable_candidate_tool_names", [])
@@ -413,6 +482,41 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if sum(signals) != 1:
                     raise NativeJournalError(
                         "Native source read failure has no specific physical witness")
+            continue
+        if kind in ("host_native_timeline_read_unknown",
+                    "host_native_timeline_picture_observation"):
+            # An export guard observed the native timeline through the
+            # host-granted get_timeline READ. It did NOT dispatch the model's
+            # proposed export, create a clip, certify output or approve art.
+            # Never let this receipt increment native write or film proofs.
+            if (pending is not None or
+                    host_tool_access.get("get_timeline") != "read" or
+                    type(event.get("turn")) is not int or event["turn"] < 0 or
+                    event.get("no_native_edit_dispatched") is not True):
+                raise NativeJournalError(
+                    "Native picture prerequisite has no authorized host read")
+            if kind == "host_native_timeline_read_unknown":
+                if (set(event) != {"sequence", "kind", "turn", "error_type",
+                                   "no_native_edit_dispatched"} or
+                        not isinstance(event.get("error_type"), str) or
+                        re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}",
+                                     event["error_type"]) is None):
+                    raise NativeJournalError(
+                        "Native picture read failure cannot invent project state")
+            else:
+                state = event.get("picture_state")
+                digest = event.get("observed_text_sha256")
+                allowed = {"sequence", "kind", "turn", "picture_state",
+                           "host_attested_read_only", "no_native_edit_dispatched"}
+                if digest is not None:
+                    allowed.add("observed_text_sha256")
+                if (set(event) != allowed or
+                        state not in ("unknown", "absent", "present") or
+                        event.get("host_attested_read_only") is not True or
+                        (digest is not None and not _sha(digest)) or
+                        (state == "present" and digest is None)):
+                    raise NativeJournalError(
+                        "Native picture state claim lacks bounded read evidence")
             continue
         if kind == "model_action_rejected":
             # Input-schema preflight rejected a model proposal BEFORE any RPC.
@@ -541,6 +645,19 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if tool == _AUDIO and audio_sha is None:
                     raise NativeJournalError("Native WAV is absent")
             else:
+                if kind == "native_observation_rejected":
+                    allowed = {"sequence", "kind", "turn", "tool",
+                               "error_type", "error_sha256",
+                               "measured_native_mcp_wall_ms",
+                               "must_reconcile_native_state"}
+                    elapsed = event.get("measured_native_mcp_wall_ms")
+                    if (set(event) != allowed or
+                            event.get("error_type") != "NativeCreativeControlError" or
+                            not _sha(event.get("error_sha256")) or
+                            type(elapsed) not in (int, float) or
+                            not math.isfinite(elapsed) or elapsed < 0):
+                        raise NativeJournalError(
+                            "Untrusted native observation error or leaked raw source")
                 if access == "write" and kind == "native_observation_rejected":
                     # A rejected result might follow a completed write; cannot
                     # assume it was rolled back. Always terminate.
