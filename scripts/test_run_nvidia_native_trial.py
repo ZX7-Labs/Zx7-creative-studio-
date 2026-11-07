@@ -75,6 +75,32 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertEqual(child, {"PATH": "/usr/bin", "OTHER_SETTING": "keep"})
         self.assertIn("NVIDIA_API_KEY", given)
 
+    def test_project_preconditions_never_reference_ungranted_tools(self):
+        from types import SimpleNamespace
+        from studio_next.capability_fabric import CapabilityFabric
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        native_client = runpy.run_path(str(script), run_name="native_client_contract")
+        grants = {
+            "create_project": "write",
+            "get_project": "read",
+            "add_asset_to_timeline": "write",
+            "import_asset_from_path": "write",
+            "save_project": "write",
+            "export_timeline": "write",
+        }
+        prerequisites = native_client["fresh_trial_prerequisites"](grants)
+        self.assertEqual(set(prerequisites), {
+            "add_asset_to_timeline", "import_asset_from_path",
+            "save_project", "export_timeline"})
+        self.assertNotIn("add_assets_to_timeline", prerequisites)
+        self.assertNotIn("get_project", prerequisites)
+        tools = [SimpleNamespace(name=name, input_schema={"type": "object"},
+                                 description="Native tool") for name in grants]
+        catalog = CapabilityFabric({"native": (
+            tools, grants, prerequisites, {"create_project": ["project_open"]})})
+        self.assertTrue(catalog.revision)
+
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "not-created"
