@@ -57,6 +57,7 @@ async def main(args):
             NvidiaModelSettings(model_id=args.model_id,timeout_seconds=args.model_timeout),
             system_prompt=NATIVE_CREATIVE_SYSTEM,
             allow_image_upload=args.allow_cloud_image_upload)
+        model.verify_host_credentials()
     else:
         if args.allow_cloud_image_upload:
             raise ValueError("Cloud-media consent requires --provider nvidia")
