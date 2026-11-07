@@ -36,6 +36,21 @@ def native_editor_child_environment(environ=None):
     return child
 
 
+def fresh_trial_prerequisites(host_grants):
+    """Constrain trial machine facts to WRITE tools the host actually granted.
+
+    An ungranted native tool cannot acquire an effective prerequisite,
+    and this filter must not expand permissions or choose a creative edit.
+    """
+    requiring_project = (
+        "import_asset_from_path", "add_asset_to_timeline",
+        "add_assets_to_timeline", "add_text_clip",
+        "save_project", "export_timeline",
+    )
+    return {name: ["project_open"] for name in requiring_project
+            if host_grants.get(name) == "write"}
+
+
 async def main(args):
     for path in (args.source, args.config, args.brief_file):
         if not path.exists():
@@ -135,14 +150,8 @@ async def main(args):
                 admitted, model, max_turns=args.max_turns,
                 host_tool_access=host_grants,
                 catalog_mode=("indexed" if args.indexed_catalog else "full"),
-                host_preconditions=({
-                    "import_asset_from_path": ["project_open"],
-                    "add_asset_to_timeline": ["project_open"],
-                    "add_assets_to_timeline": ["project_open"],
-                    "add_text_clip": ["project_open"],
-                    "save_project": ["project_open"],
-                    "export_timeline": ["project_open"],
-                } if fresh else {}),
+                host_preconditions=(
+                    fresh_trial_prerequisites(host_grants) if fresh else {}),
                 host_possible_effects=(
                     {"create_project": ["project_open"]} if fresh else {}),
                 host_once_after_acknowledged_write=(
