@@ -202,7 +202,11 @@ def fresh_trial_project_open_effects(projects_root):
     root = Path(projects_root)
     if not root.is_dir() or any(root.iterdir()):
         raise ValueError("Native trial requires a new empty project directory")
-    return {"create_project": ["project_open"]}
+    # Import is a real installed native operation that may establish a
+    # nonempty project asset inventory AFTER the project actually opens.
+    # The presence of staged media alone cannot establish that fact.
+    return {"create_project": ["project_open"],
+            "import_asset_from_path": ["project_assets_available"]}
 
 
 async def trial(args, lock, artifacts, command):
