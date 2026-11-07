@@ -18,8 +18,8 @@ from .providers import LocalCreativeModel, _CREATIVE_SYSTEM
 
 
 _NVIDIA_ENDPOINT = "https://integrate.api.nvidia.com"
-_KEY_FORMAT = re.compile(r"nvapi-[A-Za-z0-9_-]{20,512}\\Z")
-_MODEL_FORMAT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*\\Z")
+_KEY_FORMAT = re.compile(r"nvapi-[A-Za-z0-9_-]{20,512}\Z")
+_MODEL_FORMAT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
 _NVIDIA_PARAMS = frozenset({"temperature", "top_p", "seed", "chat_template_kwargs"})
 
 
