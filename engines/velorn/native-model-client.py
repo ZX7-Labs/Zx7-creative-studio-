@@ -23,7 +23,6 @@ if str(ROOT) not in sys.path:
 
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
-from studio_next.native_action_schema import native_action_schema
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget

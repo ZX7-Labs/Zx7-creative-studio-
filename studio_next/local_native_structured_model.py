@@ -27,8 +27,8 @@ class LocalNativeStructuredCreativeModel(LocalCreativeModel):
         compact = context.get("compact_tool_catalog")
         actions = context.get("available_actions")
         if (type(compact) is not bool or not isinstance(actions, list) or
-                not actions or len(set(actions)) != len(actions) or
-                any(not isinstance(action, str) for action in actions)):
+                not actions or any(type(action) is not str for action in actions) or
+                len(set(actions)) != len(actions)):
             raise ValueError("Trusted native action list is missing or ambiguous")
         if compact:
             selected = context.get("selectable_native_tools")
