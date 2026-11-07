@@ -465,6 +465,36 @@ def _native_project_presence_from_text(texts):
     return "unknown"
 
 
+def _native_timeline_clip_count_from_text(texts):
+    """Count only actual active-timeline clips from a coherent host receipt.
+
+    A staged filename, marker, or guessed clipId is not a native timeline
+    object. No count is inferred when the active timeline identity or its
+    integer count is missing, malformed, or inconsistent.
+    """
+    if len(texts) != 1:
+        return None
+    try:
+        receipt = _strict_receipt(texts, "native timeline observation")
+    except NativeCreativeControlError:
+        return None
+    if (type(receipt) is not dict or
+            type(receipt.get("mcp")) is not dict or
+            receipt["mcp"].get("hasProject") is not True or
+            type(receipt.get("project")) is not dict or
+            type(receipt.get("currentTimeline")) is not dict):
+        return None
+    project, timeline = receipt["project"], receipt["currentTimeline"]
+    count = timeline.get("clipCount")
+    if (type(project.get("currentTimelineId")) is not str or
+            not project["currentTimelineId"] or
+            type(timeline.get("id")) is not str or
+            timeline["id"] != project["currentTimelineId"] or
+            type(count) is not int or count < 0):
+        return None
+    return count
+
+
 def _native_project_asset_count_from_text(texts):
     """Read only consistent host-reported assets already imported into project.
 
@@ -642,6 +672,15 @@ class NativeCreativeControl:
                len(_wire(list(self._native_read_snapshots.values())).encode(
                    "utf-8")) > _MAX_READ_SNAPSHOT_TOTAL_BYTES):
             self._native_read_snapshots.pop(next(iter(self._native_read_snapshots)))
+
+    def _trusted_project_clip_count(self):
+        snapshot = self._native_read_snapshots.get("get_project")
+        if (self.host_tool_access is None or
+                self.host_tool_access.get("get_project") != "read" or
+                not snapshot or
+                snapshot.get("native_read_only_by_host_grant") is not True):
+            return None
+        return _native_timeline_clip_count_from_text(snapshot["result_texts"])
 
     def _trusted_project_asset_count(self):
         # Only a host-authorized successful native get_project read can mint
@@ -1002,6 +1041,9 @@ class NativeCreativeControl:
                     project_assets = self._trusted_project_asset_count()
                     if project_assets is not None:
                         trusted_facts["project_assets_available"] = project_assets > 0
+                    project_clips = self._trusted_project_clip_count()
+                    if project_clips is not None:
+                        trusted_facts["timeline_clips_available"] = project_clips > 0
                     if False in trusted_facts.values():
                         possible = self._capabilities.affordance_frontier(
                             trusted_facts=trusted_facts, namespace="native", limit=4)
@@ -1102,6 +1144,8 @@ class NativeCreativeControl:
                         "project_presence": self._project_presence,
                         "project_asset_count_from_native_read":
                             self._trusted_project_asset_count(),
+                        "active_timeline_clip_count_from_native_read":
+                            self._trusted_project_clip_count(),
                         "acknowledged_native_writes": sum(
                             e.get("kind") == "native_tool_result" and
                             e.get("host_application_write_acknowledged") is True
@@ -1451,6 +1495,9 @@ class NativeCreativeControl:
                     project_assets = self._trusted_project_asset_count()
                     if project_assets is not None:
                         known_facts["project_assets_available"] = project_assets > 0
+                    project_clips = self._trusted_project_clip_count()
+                    if project_clips is not None:
+                        known_facts["timeline_clips_available"] = project_clips > 0
                     readiness = self._machine_contracts.check_prerequisites(
                         "native/" + native_name,
                         revision=self._machine_contracts.revision,
