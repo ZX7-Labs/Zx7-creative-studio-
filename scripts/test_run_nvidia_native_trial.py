@@ -115,6 +115,15 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             legacy = factory(SimpleNamespace(**common, structured_actions=False))
         self.assertEqual(type(structured).__name__, "NvidiaNativeToolCreativeModel")
         self.assertEqual(type(legacy).__name__, "NvidiaCreativeModel")
+        # Exact NVIDIA model-card reasoning policy, not an alternate editor.
+        self.assertEqual(structured.settings.sampling["chat_template_kwargs"],
+                         {"enable_thinking": True, "medium_effort": True})
+        self.assertEqual(structured.settings.sampling["temperature"], 1.0)
+        self.assertEqual(structured.settings.sampling["top_p"], 0.95)
+        self.assertEqual(structured.settings.max_tokens, 8192)
+        self.assertEqual(legacy.settings.sampling["chat_template_kwargs"],
+                         {"enable_thinking": False})
+        self.assertEqual(legacy.settings.max_tokens, 2048)
         self.assertEqual(check.call_count, 2)
         with self.assertRaisesRegex(ValueError, "fixed"):
             factory(SimpleNamespace(**{**common, "base_url": "https://other.invalid"},

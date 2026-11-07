@@ -40,6 +40,35 @@ class NvidiaProviderContractTest(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(NvidiaConfigurationError):
                 NvidiaModelSettings(**changes)
 
+    def test_published_nvidia_reasoning_config_is_explicit_and_bounded(self):
+        config = NvidiaModelSettings(
+            max_tokens=8192, sampling={
+                "temperature": 1.0, "top_p": 0.95,
+                "chat_template_kwargs": {
+                    "enable_thinking": True, "medium_effort": True}})
+        self.assertEqual(config.max_tokens, 8192)
+        for bad in (
+            {"enable_thinking": "true"},
+            {"enable_thinking": False, "medium_effort": True},
+            {"enable_thinking": True, "medium_effort": False},
+            {"enable_thinking": True, "medium_effort": "true"},
+            {"enable_thinking": True, "unknown_effort": True},
+            {"medium_effort": True},
+        ):
+            with self.subTest(kwargs=bad), self.assertRaises(NvidiaConfigurationError):
+                NvidiaModelSettings(sampling={"chat_template_kwargs": bad})
+        with self.assertRaises(NvidiaConfigurationError):
+            NvidiaModelSettings(max_tokens=8193)
+        # A frozen dataclass does not freeze a nested dictionary. Mutation
+        # after validation must fail before ANY credentialed provider egress.
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "A"*32}):
+            config.sampling["chat_template_kwargs"]["invented"] = True
+            with self.assertRaises(NvidiaConfigurationError):
+                NvidiaCreativeModel(config)._open_request({
+                    "model": config.model_id, "stream": False,
+                    "response_format": {"type": "json_object"}})
+
     def test_no_key_no_network_and_no_key_in_settings(self):
         class Never:
             def open(self, *args, **kwargs):

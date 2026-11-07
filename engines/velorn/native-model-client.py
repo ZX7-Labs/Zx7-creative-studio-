@@ -79,9 +79,28 @@ def native_decision_model(args):
                 NvidiaNativeToolCreativeModel, NATIVE_DIRECT_TOOL_SYSTEM,
             )
             model_type = NvidiaNativeToolCreativeModel
-        model = model_type(
+        # Provider transport policy, NOT a second BODY/agent path.
+        # NVIDIA's pinned Nemotron 3.5 VL is a REASONING tool model. The
+        # initial live editor trials unintentionally DISABLED its reasoning,
+        # capped output at 2048 and produced repeated imports and no clips.
+        # The official card recommends temperature 1/top_p .95; medium
+        # thinking uses fewer tokens while retaining explicit reasoning.
+        # Keep legacy smoke/older transport settings and local model intact.
+        nvidia_settings = (
+            NvidiaModelSettings(
+                model_id=args.model_id, timeout_seconds=args.model_timeout,
+                max_tokens=8192,
+                sampling={
+                    "temperature": 1.0, "top_p": 0.95,
+                    "chat_template_kwargs": {
+                        "enable_thinking": True, "medium_effort": True,
+                    },
+                })
+            if args.structured_actions else
             NvidiaModelSettings(model_id=args.model_id,
-                                timeout_seconds=args.model_timeout),
+                                timeout_seconds=args.model_timeout))
+        model = model_type(
+            nvidia_settings,
             system_prompt=(NATIVE_DIRECT_TOOL_SYSTEM if args.structured_actions
                            else NATIVE_CREATIVE_SYSTEM),
             allow_image_upload=args.allow_cloud_image_upload)
