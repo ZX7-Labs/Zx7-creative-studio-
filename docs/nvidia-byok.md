@@ -72,6 +72,27 @@ permissions and filesystem roots are still granted by the trusted editor
 host, not by the model. Production pricing/usage caps and first-run setup
 are future acceptance gates, not available functionality.
 
+## Real API smoke with GitHub Actions
+
+The repository also includes
+[`ZX7 NVIDIA API — Manual Credentialed No-Media Smoke`](../.github/workflows/zx7-nvidia-cloud-smoke.yml).
+It runs only on **manual dispatch**, never on a code push, pull request or
+app installation. It requires a secret named `NVIDIA_API_KEY` added via the
+repository's **Settings → Secrets and variables → Actions → New repository
+secret**. Do not put the credential in workflow inputs or commit it.
+
+After this workflow is available on the repository default branch, go to
+**Actions → ZX7 NVIDIA API — Manual Credentialed No-Media Smoke →
+Run workflow** and select the catalog model. The test sends only a synthetic
+JSON protocol challenge and reports bounded result metadata, not the key,
+response text or private media. The Qwen route may be unavailable if its
+deprecated free endpoint cannot serve the operator account.
+
+The development/chat execution environment may have no outgoing network or
+DNS. Source-level contract tests can pass there, but **they are not a live API
+trial**. No NVIDIA account connectivity, key validity or usage availability
+is claimed until an actual successful smoke receipt exists.
+
 ## What is verified
 
 Offline tests mock the HTTPS request boundary, token handling, status errors,
