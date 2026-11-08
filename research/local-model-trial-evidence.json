@@ -668,6 +668,52 @@
       "failure": "The 2B model directly created a native project and then submitted import_asset_from_path for a real staged video using a conflicting relative sourcePath alias and asSequence:true. Native Velorn returned isError, the controller halted without replaying a possibly mutating operation; zero source imports, clips, renders or inspected frames. The exact error text was not retained in the privacy-safe evidence journal; do not assert its exact root cause solely from parameters.",
       "next_falsification": "Use stronger 4B local model and provenance-correct source/preview protocols. Do not automatically replay failed native imports.",
       "evidence_source": "Downloaded and SHA256-checked Actions ZIP. Inspected inference-transcript.jsonl, native-journal.jsonl, evidence.json, journal-audit.json and saved actual .comfystudio; no private user footage or hosted model inference."
+    },
+    {
+      "body_commit": "e386426858a3a776969b464cc3dcf8f365f3ccfb",
+      "workflow_run": 42432262621,
+      "artifact_id": 13598981395,
+      "artifact_zip_sha256": "2d36e8d166cae334457c3bf96e6f80fb006ee0a360dc2cab3ce59a8908c3487a",
+      "model": "unsloth/Qwen3.5-4B-GGUF",
+      "quantization": "Q4_K_M",
+      "cpu_only": true,
+      "synthetic_only": true,
+      "actual_inference_turns": 7,
+      "successful_neural_decisions": 6,
+      "terminal_model_decision_error": "TimeoutError",
+      "model_selected_actions": {
+        "invoke": 4,
+        "describe": 1,
+        "search": 1,
+        "failed": 1
+      },
+      "acknowledged_native_writes": 3,
+      "acknowledged_project_creates": 1,
+      "acknowledged_source_imports": 1,
+      "acknowledged_native_timeline_content_edits": 1,
+      "real_saved_project_asset_count": 1,
+      "real_saved_project_clip_count": 1,
+      "physically_decodable_saved_video_source": true,
+      "verified_exports": 0,
+      "physically_observed_export_frames": 0,
+      "server_reported_prompt_tokens_by_successful_turn": [
+        2595,
+        3796,
+        4655,
+        4833,
+        4979,
+        5841
+      ],
+      "model_wall_seconds_last_failed_turn": 300.11952621399996,
+      "model_server_process_peak_rss_bytes": 6493921280,
+      "model_memory_scope": "Exact llama-server /proc PID VmHWM; not overall editor/OS/cgroup peak",
+      "model_status": "model_decision_failed",
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "native_video_field_complete": false,
+      "failure": "The first Qwen3.5-4B/native run to pass source import and actual timeline placement. Real model created project, imported an original synthetic H.264 video into Velorn, model-previewed add_assets_to_timeline without mutation and then explicitly committed the batch placement. The saved editable .comfystudio contained one enabled four-second video clip referencing a real project asset on visible unlocked Video Feed track. The seventh model decision exceeded the existing 300s per-request limit: model-server logs independently show 5,678 prompt tokens processed in 258.51s, then response generation started but was aborted at 300s. Model could not proceed to an actual export, physical frame observation, or independent revision. CPU-only free-runner latency, repeated prompt reprocessing and poor KV-prefix continuity are now the primary measured bottleneck, not failure to import or place native video.",
+      "next_falsification": "Reorder otherwise identical host-current local prompt fields to preserve a reusable static prefix for llama.cpp; do not remove schemas, editorial evidence or model-selected actions. Exact HEAD regression passes 211 Python and 3 actual native Electron tests in GitHub #42434963443. Reevaluate end-to-end with a faster stronger preexisting NVIDIA Nemotron 3.5 Super VL 120B agent under synthetic-only cloud consent; the original CPU 4B would need a significantly larger time budget to finish 48 decisions.",
+      "evidence_source": "Downloaded actual GitHub Actions artifact ZIP, verified its SHA256 and inspected full inference-transcript.jsonl, native-journal.jsonl, evidence.json, saved Velorn project.comfystudio, video source bytes and original llama-server timing logs. No manual timeline editing, no owner private media or remote hosted inference in this run."
     }
   ]
 }
