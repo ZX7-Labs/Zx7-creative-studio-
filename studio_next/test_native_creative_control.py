@@ -2745,6 +2745,138 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["events"][-1]["kind"],
                              "native_tool_uncertain_outcome")
 
+    async def test_source_pinned_default_clip_edit_previews_do_not_mutate(self):
+        """NVIDIA 120B #42436416760 safely reached actual export,
+        physical frame inspection and revision, but the native default
+        move_clips preview triggered a false uncertain-write terminal.
+        These are source-pinned protocol fixtures, not neural creativity.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        plans = {
+            "move_clips": {
+                "moveCount": 1, "resolveOverlaps": False,
+                "moves": [{"clip": {"id": "actual-clip-1"},
+                           "targetTrack": {"id": "video-1"},
+                           "startSeconds": 1.25,
+                           "previousTrackId": "video-1",
+                           "previousStartSeconds": 0.0}]},
+            "trim_clips": {
+                "trimCount": 1,
+                "trims": [{"clip": {"id": "actual-clip-1"},
+                           "before": {"duration": 4},
+                           "updates": {"duration": 2.5}}]},
+            "delete_clips": {
+                "deleteCount": 1, "ripple": False, "filter": None,
+                "missingClipIds": [],
+                "clips": [{"id": "actual-clip-1"}]},
+        }
+        messages = {
+            "move_clips": "Clip move plan only. No timeline change was made.",
+            "trim_clips": "Clip trim plan only. No timeline change was made.",
+            "delete_clips": "Clip delete plan only. No timeline change was made.",
+        }
+
+        class NativeClipPreviewSession(FakeSession):
+            def __init__(self, tamper=None):
+                super().__init__()
+                self.tamper = tamper
+                self.tools.extend(SimpleNamespace(
+                    name=name, description="Source-pinned clip edit",
+                    input_schema={"type": "object", "properties": {
+                        "clipId": {"type": "string"},
+                        "durationSeconds": {"type": "number"},
+                        "startSeconds": {"type": "number"},
+                        "previewOnly": {"type": "boolean"}}})
+                    for name in plans)
+
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                if name not in plans:
+                    raise AssertionError("Unexpected native model action")
+                if inputs.get("previewOnly") is False:
+                    if name != "move_clips":
+                        raise AssertionError("Only one explicit mutation allowed")
+                    receipt = {"success": True, "action": name,
+                               "plan": plans[name],
+                               "result": {"movedCount": 1}}
+                else:
+                    receipt = {
+                        "previewOnly": True,
+                        "action": name,
+                        "message": messages[name],
+                        "plan": plans[name],
+                        "suggestedApplyCall": {
+                            "tool": name,
+                            "arguments": {**inputs, "previewOnly": False}}}
+                    if self.tamper:
+                        receipt = self.tamper(receipt)
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(receipt))])
+
+        session = NativeClipPreviewSession()
+        grants = {t.name: ("write" if t.name in (*plans, "update_text_clip")
+                           else "read") for t in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="move_clips",
+                     inputs={"clipId": "actual-clip-1",
+                             "startSeconds": 1.25}),
+            decision("invoke", tool="trim_clips",
+                     inputs={"clipId": "actual-clip-1",
+                             "durationSeconds": 2.5, "previewOnly": True}),
+            decision("invoke", tool="delete_clips",
+                     inputs={"clipId": "actual-clip-1"}),
+            decision("invoke", tool="move_clips",
+                     inputs={"clipId": "actual-clip-1",
+                             "startSeconds": 1.25, "previewOnly": False}),
+            decision("finish", summary="One explicit commit after three previews"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=5, host_tool_access=grants,
+            host_verified_top_level_preview_tools=tuple(plans)).run(
+                "Review the actual editable timeline before independently editing")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual([t for t, _ in session.calls], [
+            "move_clips", "trim_clips", "delete_clips", "move_clips"])
+        self.assertEqual(sum(e["kind"] == "native_tool_preview"
+                             for e in result["events"]), 3)
+        self.assertEqual(sum(e["kind"] == "native_tool_result" and
+                             e.get("host_application_write_acknowledged") is True
+                             for e in result["events"]), 1)
+        self.assertEqual(model.observed[3][
+            "last_native_preview_feedback"]["tool"], "delete_clips")
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)[
+                "journal_chain_structurally_valid"])
+
+        bad_receipts = (
+            lambda r: {**r, "success": True},
+            lambda r: {**r, "plan": {**r["plan"], "moveCount": 2}},
+            lambda r: {**r, "plan": {**r["plan"],
+                                  "moves": [{"clip": {"id": "actual-clip-1"}}]}},
+            lambda r: {**r, "suggestedApplyCall": {
+                "tool": r["action"], "arguments": {"previewOnly": True}}},
+            lambda r: {**r, "plan": {**r["plan"], "invented": True}},
+        )
+        for tamper in bad_receipts:
+            with self.subTest(tamper=tamper):
+                fake = NativeClipPreviewSession(tamper)
+                denial = await NativeCreativeControl(
+                    fake, ScriptedModel([
+                        decision("invoke", tool="move_clips",
+                                 inputs={"clipId": "actual-clip-1"})]),
+                    max_turns=1, host_tool_access=grants,
+                    host_verified_top_level_preview_tools=tuple(plans)).run(
+                    "Observe model-selected native clip movement")
+                self.assertEqual(denial["status"],
+                                 "native_error_requires_state_reconciliation")
+                self.assertEqual(denial["events"][-1]["kind"],
+                                 "native_tool_uncertain_outcome")
+                self.assertEqual(len(fake.calls), 1)
+                self.assertTrue(audit_native_journal(
+                    denial["events"], host_tool_access=grants)[
+                        "journal_chain_structurally_valid"])
+
     async def test_real_empty_timeline_rejects_duplicate_before_stateful_native_rpc(self):
         """Physical Qwen failure #42420526258: source filename is not
         an existing editable clip id. A false host precondition is not
