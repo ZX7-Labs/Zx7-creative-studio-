@@ -84,6 +84,17 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             schema = copy.deepcopy(schema)
             schema["required"] = list(dict.fromkeys(
                 [*existing_required, "outputPath"]))
+            # The upstream source describes this field as optional because
+            # Velorn itself can default to its renders directory. BODY cannot
+            # allow that implicit path: it needs an explicit scoped, new
+            # destination to preserve source custody and avoid overwrites.
+            # Never put a private workspace path into a static tool schema.
+            schema["properties"]["outputPath"]["description"] = (
+                "REQUIRED by the trusted BODY host: choose a new absolute "
+                "output file path inside the authorized projects/outputs "
+                "workspace, never an existing destination. The owner's "
+                "creative brief supplies the actual permitted root.")
+            schema["properties"]["outputPath"]["minLength"] = 1
         _local_schema_references(schema)
         validator = jsonschema.validators.validator_for(schema)
         validator.check_schema(schema)
