@@ -591,6 +591,7 @@ class NativeCreativeControl:
                  host_possible_effects: dict | None = None,
                  host_once_after_acknowledged_write: tuple[str, ...] = (),
                  host_verified_top_level_preview_tools: tuple[str, ...] = (),
+                 host_verified_timeline_preview_tools: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
                  host_content_revision_tools: tuple[str, ...] = ()):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
@@ -658,6 +659,19 @@ class NativeCreativeControl:
         # Never infer preview safety from model text or arbitrary tools.
         self._host_verified_top_level_previews = frozenset(
             host_verified_top_level_preview_tools)
+        if (not isinstance(host_verified_timeline_preview_tools, (tuple, list)) or
+                any(name != "inspect_timeline_frame" or
+                    host_tool_access is None or host_tool_access.get(name) != "read"
+                    for name in host_verified_timeline_preview_tools) or
+                len(set(host_verified_timeline_preview_tools)) !=
+                len(host_verified_timeline_preview_tools) or
+                (host_verified_timeline_preview_tools and (
+                    host_tool_access is None or
+                    host_tool_access.get("get_project") != "read"))):
+            raise NativeCreativeControlError(
+                "Source-verified timeline JPEG preview requires exact host read grants")
+        self._host_verified_timeline_previews = frozenset(
+            host_verified_timeline_preview_tools)
         if (not isinstance(self._host_preconditions, dict) or
                 not isinstance(self._host_possible_effects, dict)):
             raise NativeCreativeControlError("Trusted machine contracts must be objects")
@@ -686,6 +700,7 @@ class NativeCreativeControl:
         self.tools: dict[str, Any] = {}
         self._last_images: list[tuple[str, bytes]] = []
         self._last_hashes: list[str] = []
+        self._last_image_provenance: str | None = None
         self._last_native_texts: list[str] = []
         # Context continuity is not an editor cache or state attestation.
         # Actual native schema, project IDs, and writes remain authoritative.
