@@ -2,7 +2,7 @@ name: "ZX7 NVIDIA — Genuine Native Editor Creative Revision Trial"
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, experiment/nemotron35vl-jpeg-source-20261108]
     paths:
       - "research/nvidia-native-trial-request.json"
   # Pull requests only validate the reviewed request. They never execute a
@@ -34,7 +34,7 @@ jobs:
         run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
 
   real-model-native-editor-and-export:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/experiment/nemotron35vl-jpeg-source-20261108'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
