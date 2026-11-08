@@ -78,3 +78,53 @@ test('Native marker commit crosses renderer boundary only when model selects app
   assert.equal(applied[0].action, 'add_timeline_markers')
   assert.equal(applied[0].payload.markers.length, 1)
 })
+
+test('Pinned Electron MCP asset placement default preview is read-only and returns explicit apply call', async () => {
+  const { server, applied } = nativeSession()
+  server.updateSnapshot({
+    app: { name: 'Velorn' },
+    project: { id: 'source-pinned-native-fixture' },
+    currentTimeline: {
+      id: 'actual-timeline',
+      fps: 24,
+      duration: 10,
+      playheadPosition: 0,
+      clips: [],
+      tracks: [{ id: 'video-1', type: 'video', name: 'Video 1', locked: false }],
+      markers: [],
+    },
+    assets: [
+      { id: 'native-asset-1', name: 'owned-neutral.mp4', type: 'video',
+        duration: 4, width: 640, height: 360, hasAudio: false },
+    ],
+    timelines: [],
+  })
+  const requests = [
+    ['add_asset_to_timeline', { assetId: 'native-asset-1', startSeconds: 0 }],
+    ['add_assets_to_timeline', { assetIds: ['native-asset-1'],
+                                  layout: 'sequential', startSeconds: 0 }],
+  ]
+  for (const [tool, args] of requests) {
+    const receipt = nativeText(await server.callTool(tool, args))
+    assert.equal(receipt.previewOnly, true)
+    assert.equal(receipt.action, tool)
+    assert.equal(typeof receipt.message, 'string')
+    assert.equal(receipt.plan?.action, tool)
+    assert.equal(receipt.plan?.previewOnly, true)
+    assert.equal(receipt.suggestedApplyCall?.tool, tool)
+    assert.equal(receipt.suggestedApplyCall?.arguments?.previewOnly, false)
+    assert.equal('success' in receipt, false)
+    assert.equal('result' in receipt, false)
+    assert.deepEqual(applied, [], tool + ': default preview MUST NOT call renderer')
+  }
+  // The test explicitly selects the editor's own suggestedApplyCall;
+  // production creative choice belongs only to the real model.
+  const preview = nativeText(await server.callTool(
+    'add_asset_to_timeline', { assetId: 'native-asset-1', previewOnly: true }))
+  const result = nativeText(await server.callTool(
+    preview.suggestedApplyCall.tool, preview.suggestedApplyCall.arguments))
+  assert.equal(result.success, true)
+  assert.equal(result.action, 'add_asset_to_timeline')
+  assert.equal(applied.length, 1)
+  assert.equal(applied[0].action, 'add_asset_to_timeline')
+})
