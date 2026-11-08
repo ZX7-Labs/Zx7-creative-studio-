@@ -1710,10 +1710,18 @@ class NativeCreativeControl:
                     break
                 try:
                     texts, images, audio = _native_content(result)
-                    # Only the host-owned decoder observers may introduce new
-                    # source-bound image/audio. Native tools and model-authored
-                    # text cannot impersonate independently verified sensors.
-                    if images and native_name not in _VERIFIED_FRAME_TOOLS:
+                    # Export-frame sensors remain the ONLY way to verify an
+                    # exported MP4. Pinned Electron inspectTimelineFrame is a
+                    # separate host-granted READ that may return a real JPEG
+                    # from the editable timeline, not a decoded export.
+                    live_timeline_image = (
+                        bool(images) and
+                        native_name in self._host_verified_timeline_previews and
+                        self.host_tool_access is not None and
+                        self.host_tool_access.get(native_name) == "read" and
+                        args["inputs"].get("includeImage") is not False)
+                    if (images and native_name not in _VERIFIED_FRAME_TOOLS
+                            and not live_timeline_image):
                         raise NativeCreativeControlError("Untrusted tool supplied image evidence")
                     if audio and native_name not in _VERIFIED_AUDIO_TOOLS:
                         raise NativeCreativeControlError("Untrusted tool supplied audio evidence")
@@ -1914,7 +1922,11 @@ class NativeCreativeControl:
                         # Only the native application's explicit success ACK
                         # clears the pending preview. No host-selected edit.
                         self._last_native_preview_feedback = None
-                    hashes = _source_bound_images(texts, images)
+                    hashes = (
+                        _source_bound_live_timeline_preview(
+                            texts, images, self._trusted_project_active_timeline_id())
+                        if live_timeline_image else
+                        _source_bound_images(texts, images))
                     audio_evidence = _source_bound_audio(texts, audio)
                     new_export_sha = None
                     observed_export_sha = None
@@ -1924,7 +1936,7 @@ class NativeCreativeControl:
                                 p.get("native_export_sha256")):
                             raise NativeCreativeControlError("Native export has no independent physical decoder proof")
                         new_export_sha = p["native_export_sha256"]
-                    elif images:
+                    elif images and not live_timeline_image:
                         p = _strict_receipt(texts, "verified native video")
                         if not _digest(p.get("export_sha256")):
                             raise NativeCreativeControlError("Native frame lacks source identity")
@@ -1968,6 +1980,10 @@ class NativeCreativeControl:
                     self._post_write_state_warning = None
                 self._last_native_texts = texts
                 self._last_images, self._last_hashes = images, hashes
+                self._last_image_provenance = (
+                    "live_editable_timeline_preview_not_verified_export"
+                    if live_timeline_image else (
+                        "independently_verified_export_frame" if images else None))
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
                 # Capture only a genuinely observed pre-write native count.
                 # Pinned Electron may acknowledge an import before its async
@@ -2005,6 +2021,8 @@ class NativeCreativeControl:
                                   self.host_tool_access.get(native_name) == "write"
                                   else None),
                               "image_sha256": hashes,
+                              "native_timeline_preview_unverified_export": (
+                                  True if live_timeline_image else None),
                               "audio_sha256": audio_evidence["wav_sha256"] if audio_evidence else None,
                               "independently_verified_export_sha256": new_export_sha,
                               "observed_export_sha256": observed_export_sha,
