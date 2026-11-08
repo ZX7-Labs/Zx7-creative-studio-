@@ -16,6 +16,11 @@ _PINNED_MARKER_PREVIEWS = (
     "add_timeline_markers", "remove_timeline_markers",
     "set_timeline_marker_properties",
 )
+# Pinned electron/mcpServer.js addAsset(s)ToTimeline returns a read-only
+# preview by default, before performAction, with a model-selectable apply call.
+_PINNED_ASSET_PLACEMENT_PREVIEWS = (
+    "add_asset_to_timeline", "add_assets_to_timeline",
+)
 
 
 def pinned_electron_marker_previews(source: Path, grants: dict) -> tuple[str, ...]:
@@ -49,3 +54,21 @@ def pinned_electron_marker_previews(source: Path, grants: dict) -> tuple[str, ..
         return ()
     return tuple(name for name in _PINNED_MARKER_PREVIEWS
                  if grants.get(name) == "write")
+
+
+def pinned_electron_asset_placement_previews(
+        source: Path, grants: dict) -> tuple[str, ...]:
+    """Source-verified default-read-only preview of native asset placement.
+
+    Reuse exactly the same attested clean Electron MCP source gate as marker
+    previews, without giving the model an ungranted creative capability.
+    """
+    allowed = {**grants}
+    # Reuse the authoritative source/clean-tree check; adding only grant keys
+    # for installed marker operations is not a native tool authorization.
+    attested = pinned_electron_marker_previews(
+        source, {**allowed, "add_timeline_markers": "write"})
+    if "add_timeline_markers" not in attested:
+        return ()
+    return tuple(name for name in _PINNED_ASSET_PLACEMENT_PREVIEWS
+                 if allowed.get(name) == "write")
