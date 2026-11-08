@@ -624,7 +624,20 @@
       "native_video_field_complete": false,
       "failure": "4B real model successfully created the native project and imported source video twice into project assets (two actual video files verified inside saved project). Immediate get_project after first import still reported assetCount:0 despite the acknowledged import; next add_assets_to_timeline was rejected by machine precondition. After another import, the model selected add_asset_to_timeline without previewOnly:false. The pinned Electron MCP correctly returned a safe default preview plan; the ZX7 controller incorrectly classified this top-level read-only plan as an uncertain native write and ended the trial. There are no native clips or exported decoded frames. This run predates the source-verified asset-placement preview parser and bounded import asset-read convergence fixes.",
       "next_falsification": "Verify source-attested default placement previews in actual pinned Electron MCP, adjust trusted model/controller to continue after preview without auto-apply, poll read-only actual asset state with bounded post-import delay; run real 4B again on corrected isolated branch.",
-      "evidence_source": "Independently downloaded actual GitHub Actions artifact ZIP, calculated SHA256, inspected inference-transcript.jsonl, native-journal.jsonl, evidence.json, journal-audit.json and actual saved project.comfystudio/media files; model weight/projector SHA256 verified by original run."
+      "evidence_source": "Independently downloaded actual GitHub Actions artifact ZIP, calculated SHA256, inspected inference-transcript.jsonl, native-journal.jsonl, evidence.json, journal-audit.json and actual saved project.comfystudio/media files; model weight/projector SHA256 verified by original run. Local independent FFprobe identified both project copies as same original H.264 640x360 24fps 96-frame MP4 with SHA256 082a..., and FFmpeg decoded the first frame successfully from each; this is source-import evidence only, not timeline or film delivery.",
+      "unique_original_source_files_imported": 1,
+      "imported_video_sha256": "082aeb7dc55e51cd07b44785e0d8d6d9131d5e2d7a0d4b9d5219293b3354e64d",
+      "physical_video_decode": {
+        "decoder": "ffprobe + ffmpeg",
+        "native_project_copies": 2,
+        "identical_source_sha256": true,
+        "codec": "h264",
+        "width": 640,
+        "height": 360,
+        "fps": 24,
+        "frames_per_copy": 96,
+        "first_frame_decode_succeeded": true
+      }
     },
     {
       "body_commit": "30b64fc162640df6941fa6e9b2e010976dadcac6",
