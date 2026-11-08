@@ -92,6 +92,50 @@
       "failure": "The real 120B model created an editable project from original source, added text/image composition, saved and physically exported a valid H264 1920x1080 24fps six-second MP4 with 144 decodable frames. The host independent zx7_verify_native_export acknowledged the exact MP4 SHA, and the model received a physically decoded export PNG via zx7_observe_verified_export_frame. It then selected add_shape_clip as a real post-observation content revision, with an application success ACK. After reading and visually inspecting its revised native timeline, it selected move_clips; actual pinned Electron MCP moveClips defaults previewOnly to true and correctly returned a no-write plan before performAction, but the ZX7 controller only accepted marker/asset placement flat previews. It incorrectly classified the safe move plan as uncertain application state and stopped without a second export. Saved active project contains one enabled source-backed original video clip (2s-3s), one text clip (0s-2s) and one shape clip (3s-6s). The initial film is NOT independently judged professional creative quality: independent frame review shows a black title frame and prolonged dark shot in the source-bounded sample. No fabricated second MP4, no automatic retry after uncertain write.",
       "fix_verified_or_pending": "Source-pinned read-only default move/trim/delete plan recognition and model-selected explicit commit continuation is under independent CI; technical acceptance requires second verified physically different exported film.",
       "evidence_source": "Downloaded actual GitHub Actions artifact; independently computed ZIP SHA256, inspected source-bound native journal, saved genuine project, copied source ledger and native-evaluation.json. Export MP4 independently hashed and FFmpeg decoded; FFprobe verified 144 H264 video frames 1920x1080 24fps, 6s. Sample frames at 0.5s, 1.5s, 2.5s, 4.5s, 5.5s visually inspected. The exact 31 actual model-selected tool turns and all nine app ACK events inspected. No real owner media passed to hosted provider."
+    },
+    {
+      "workflow_run": 42443385990,
+      "request_commit": "0082b0177389f15f4dccf191a22c5368dba6c923",
+      "artifact_id": 13602323435,
+      "artifact_zip_sha256": "1785fd5279d859d9eb043853aa8174d2c237d32d11a988d145e7d1ae21aff632",
+      "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "model_transport": "Actual authenticated NVIDIA API with forced single provider-native host-granted functions",
+      "synthetic_only": true,
+      "original_private_owner_media_sent": false,
+      "real_model_selected_native_operations": 13,
+      "native_write_acknowledgments": 4,
+      "native_read_inspections": [
+        "get_project",
+        "get_timeline",
+        "inspect_timeline_frame",
+        "check_export_readiness"
+      ],
+      "native_preview_without_edit": [
+        "create_project",
+        "add_asset_to_timeline"
+      ],
+      "real_saved_project": {
+        "sha256": "aa968b5a3ca39329c9031cb102f91f07bf6db163a654789ab5b006096ba90556",
+        "source_sha256": "e20a6c62d9c715470e8aee137dd72bc75cd0580cc068ca6d521846ebded98ef1",
+        "active_timeline_video_clips": 2,
+        "active_timeline_text_clips": 1,
+        "source_backed_original_video_clips": 2,
+        "source_backed_media_is_byte_identical_to_staged_original": true
+      },
+      "verified_export_count": 0,
+      "physically_observed_export_frames": 0,
+      "second_distinct_export_verified": false,
+      "model_status": "native_error_requires_state_reconciliation",
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "failure_kind": "host_required_export_output_path_absent_from_native_model_schema",
+      "actual_rejected_tool": "export_timeline",
+      "actual_error_receipt_sha256": "70a88caab9cf7c87119b61355a5a0cfd79f889b3422c8176b41cf0a6be4c4723",
+      "identified_error_text": "Native export requires an explicit new outputPath",
+      "source_hash_match_verified": true,
+      "failure": "The model autonomously created an editable project, imported an original synthetic video, committed actual native placements (2 original video clips and one text clip), inspected the live timeline frame, and checked export readiness. It then selected export_timeline without outputPath. Real source-backed EditorPathPolicy.requires new explicit outputPath to keep exports inside authorized roots without overwriting files. The pinned Electron MCP schema advertises outputPath as OPTIONAL, so the model's provider-native function grammar allowed this mismatch. The exact recorded error digest matches SHA256 of the bounded host-policy string list [\"Native export requires an explicit new outputPath\"]. This host policy rejects before calling the native HTTP editor. The generic controller, lacking that specific prior proof, conservatively treated the write error as uncertain and terminated. There is no exported MP4, no decoded export frame, and no verified revision.",
+      "actual_root_fix": "Compose original native tool schema with the trusted EditorPathPolicy at the MCP source boundary: require outputPath, preserve all native fields, supply bounded host-derived description of safe new absolute output path, refuse schema mismatch at setup. This strict JSON Schema reaches the NVIDIA provider-native tool definition; BODY independently rejects omitted path before any editor RPC. No output path or creative edit is selected by host. Reject existing destination and path escape through existing policy.",
+      "evidence_source": "Downloaded actual Actions artifact ZIP, verified SHA256, inspected 35 native journal events and saved .comfystudio and original source copy; independently compared exact ERROR digest to _bounded_error_digest([policy error text]) using SHA256. Pinned upstream Electron schema source independently confirms optional outputPath, while trusted BODY EditorPathPolicy enforces it. No private owner footage, raw provider key, or model-generated fallback."
     }
   ]
 }
