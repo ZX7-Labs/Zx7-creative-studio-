@@ -594,11 +594,11 @@ class NativeCreativeControl:
         # intentionally create multiple projects; never silently impose this.
         self._host_once_after_ack = frozenset(host_once_after_acknowledged_write)
         if (not isinstance(host_requires_explicit_commit_for, (tuple, list)) or
-                len(set(host_requires_explicit_commit_for)) !=
-                len(host_requires_explicit_commit_for) or
                 any(not isinstance(name, str) or not name or
                     host_tool_access is None or host_tool_access.get(name) != "write"
-                    for name in host_requires_explicit_commit_for)):
+                    for name in host_requires_explicit_commit_for) or
+                len(set(host_requires_explicit_commit_for)) !=
+                len(host_requires_explicit_commit_for)):
             raise NativeCreativeControlError(
                 "Explicit native commit policy requires distinct trusted write grants")
         # When source inspection shows a handler ignores its advertised
@@ -945,6 +945,20 @@ class NativeCreativeControl:
             cls = jsonschema.validators.validator_for(admission)
             cls.check_schema(admission)
             validators[native_name] = cls(admission)
+        # A trusted explicit-commit policy must match the *currently
+        # installed native interface*. Fail before calling the model if
+        # the editor release removed or changed the risky preview field.
+        for name in self._host_requires_explicit_commit:
+            if name not in validators:
+                raise NativeCreativeControlError(
+                    "Native explicit-commit policy references absent tool")
+            properties = validators[name].schema.get("properties")
+            preview_field = (properties.get("previewOnly")
+                             if isinstance(properties, dict) else None)
+            if (not isinstance(preview_field, dict) or
+                    preview_field.get("type") != "boolean"):
+                raise NativeCreativeControlError(
+                    "Native explicit-commit policy requires a boolean previewOnly field")
         if self.receipt_path is not None:
             if not self.receipt_path.parent.is_dir():
                 raise NativeCreativeControlError("Receipt directory must already exist")
