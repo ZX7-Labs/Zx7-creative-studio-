@@ -763,6 +763,15 @@ class NativeCreativeControl:
             return None
         return _native_timeline_clip_count_from_text(snapshot["result_texts"])
 
+    def _trusted_project_active_timeline_id(self):
+        snapshot = self._native_read_snapshots.get("get_project")
+        if (self.host_tool_access is None or
+                self.host_tool_access.get("get_project") != "read" or
+                not snapshot or
+                snapshot.get("native_read_only_by_host_grant") is not True):
+            return None
+        return _native_active_timeline_id_from_text(snapshot["result_texts"])
+
     def _trusted_project_asset_count(self):
         # Only a host-authorized successful native get_project read can mint
         # this fact. Each acknowledged native WRITE clears the old snapshot.
@@ -901,9 +910,11 @@ class NativeCreativeControl:
         context = copy.deepcopy(context)
         pictures = self._last_images
         hashes = self._last_hashes
+        image_provenance = self._last_image_provenance
         audio = self._last_audio
         audio_evidence = self._last_audio_evidence
         self._last_images, self._last_hashes = [], []
+        self._last_image_provenance = None
         self._last_audio, self._last_audio_evidence = [], None
         if pictures and audio:
             raise NativeCreativeControlError("Cross-modal evaluation requires a separately audited backend")
@@ -917,6 +928,7 @@ class NativeCreativeControl:
                 raise NativeCreativeControlError(
                     "Native visual evidence requires an image-capable actual model")
             context["observed_picture_sha256"] = hashes
+            context["native_picture_origin"] = image_provenance
             return await asyncio.to_thread(self.model.decide_with_images, context, pictures)
         return await asyncio.to_thread(self.model.decide, context)
 
