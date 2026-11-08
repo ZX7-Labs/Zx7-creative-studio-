@@ -483,7 +483,9 @@ def _model_event_window(events):
             # Preserve modality and physical export/source identity, never
             # recreate raw media or author an unsupported quality conclusion.
             for field in ("observed_export_sha256", "independently_verified_export_sha256",
-                          "image_sha256", "audio_sha256", "must_reconcile_native_state",
+                          "image_sha256", "audio_sha256",
+                          "native_timeline_preview_unverified_export",
+                          "must_reconcile_native_state",
                           "host_attested_read_only", "no_successful_native_observation",
                           "error_text_exceeded_evidence_budget"):
                 if event.get(field) is not None:
