@@ -126,6 +126,40 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             method(source, {"add_timeline_markers": "unknown-access"})
 
+    def test_pinned_timeline_jpeg_requires_exact_clean_source_and_two_read_grants(self):
+        """An actual native timeline JPEG is not a physical-export
+        verifier. Only the audited pinned Electron MCP entrypoint and
+        actual read grants may enable this separate model observation.
+        """
+        from studio_next.native_editor_source_pin import (
+            pinned_electron_timeline_frame_previews)
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        pin = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+
+        def clean_source(argv, **kwargs):
+            if "rev-parse" in argv:
+                return subprocess.CompletedProcess(argv, 0, pin + "\n", "")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        grants = {"inspect_timeline_frame": "read", "get_project": "read"}
+        with patch("subprocess.run", side_effect=clean_source):
+            self.assertEqual(pinned_electron_timeline_frame_previews(source, grants),
+                             ("inspect_timeline_frame",))
+            self.assertEqual(pinned_electron_timeline_frame_previews(
+                source, {"inspect_timeline_frame": "read"}), ())
+            self.assertEqual(pinned_electron_timeline_frame_previews(
+                source, {"inspect_timeline_frame": "write",
+                         "get_project": "read"}), ())
+        def modified_source(argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 0 if "rev-parse" in argv else 1,
+                pin + "\n" if "rev-parse" in argv else "", "")
+        with patch("subprocess.run", side_effect=modified_source):
+            self.assertEqual(pinned_electron_timeline_frame_previews(source, grants), ())
+        with self.assertRaises(ValueError):
+            pinned_electron_timeline_frame_previews(
+                source, {"inspect_timeline_frame": "promoted-to-write"})
+
     def test_native_contract_excludes_ungranted_tool_prerequisites(self):
         import runpy
         from studio_next.capability_fabric import CapabilityFabric
