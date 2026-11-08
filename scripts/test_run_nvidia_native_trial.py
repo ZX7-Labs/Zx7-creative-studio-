@@ -324,6 +324,13 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 {"timelines": [{**timeline, "clips": [
                     {**clip, "duration": 0}]}]},
                 {"assets": [{**asset, "type": "image"}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "enabled": False}]}]},
+                {"timelines": [{**timeline, "tracks": [
+                    {"id": "video-1", "type": "video", "visible": False}]}]},
+                {"timelines": [{**timeline, "tracks": [
+                    {"id": "video-1", "type": "video"},
+                    {"id": "video-1", "type": "audio"}]}]},
                 {"assets": [{**asset, "settings": {
                     "sourcePath": "/not-the-original.mp4"}}]},
             ):
