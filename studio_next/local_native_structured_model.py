@@ -67,11 +67,44 @@ class LocalNativeStructuredCreativeModel(LocalCreativeModel):
         }
         return super()._open_request(bounded)
 
+    @staticmethod
+    def _stable_native_context(context):
+        """Reorder, never omit, real host facts for local llama.cpp KV reuse.
+
+        Actual Qwen3.5-4B/native run #42432262621 reached an editable video
+        clip but timed out when a ~5.7k-token turn reprocessed its changing
+        prompt. The llama-server log measured low common-prefix reuse.
+        Place stable SOURCE-OWNED facts (including full schema-derived input
+        hints) before volatile event/search/readback records. Preserve every
+        key, value, and complete original ordering among the remainder.
+        This selects no creative tool and is independent of the model variant.
+        """
+        if type(context) is not dict:
+            raise ValueError("Local native context must be an object")
+        stable = (
+            "creative_brief",
+            "required_completion_evidence",
+            "completion_does_not_certify_artistic_quality",
+            "audio_semantically_reviewed",
+            "compact_tool_catalog",
+            "actual_granted_native_tools",
+            "capability_overview",
+            "host_selected_native_input_hints",
+            "host_observed_machine_affordances",
+            "selectable_native_tools",
+        )
+        return {
+            **{key: context[key] for key in stable if key in context},
+            **{key: value for key, value in context.items() if key not in stable},
+        }
+
     def _choose(self, context, *, images=(), audio=()):
         schema = self._current_host_schema(context)
         token = self._active_schema.set(schema)
         try:
-            return self._invoke(self.system_prompt, context, images=images, audio=audio)
+            return self._invoke(
+                self.system_prompt, self._stable_native_context(context),
+                images=images, audio=audio)
         finally:
             self._active_schema.reset(token)
 
