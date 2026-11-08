@@ -2281,105 +2281,99 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(invalid=invalid):
                 self.assertIsNone(_native_timeline_clip_count_from_text(invalid))
 
-    async def test_pinned_native_marker_preview_cannot_mutate_without_explicit_model_commit(self):
-        """Actual physical run #42425197126 ended on an unconfirmed
-        previewOnly:true marker write. Pinned Velorn handlers ignore this
-        advertised option, so forbid all preview-intended marker RPCs.
-        Only an independently chosen explicit False may reach the editor.
+    async def test_pinned_electron_mcp_markers_preview_without_native_write_ack(self):
+        """Source-verified pinned electron/mcpServer.js methods intercept
+        previewOnly:true BEFORE performAction and return a flat receipt.
+        The model, not the host, must independently elect any later commit.
         """
         from studio_next.native_creative_audit import audit_native_journal
 
-        class StrictNativeMarkers(FakeSession):
+        marker_tools = ("add_timeline_markers", "remove_timeline_markers",
+                        "set_timeline_marker_properties")
+
+        class SourceVerifiedMarkerSession(FakeSession):
             def __init__(self):
                 super().__init__()
                 self.tools += [
                     SimpleNamespace(name="get_project",
-                                    description="Actual native project state",
-                                    input_schema={"type": "object", "properties": {}}),
-                    SimpleNamespace(name="add_timeline_markers",
-                                    description="Mutating timeline marker editor",
+                                    description="Inspect actual native project",
+                                    input_schema={"type": "object", "properties": {}})]
+                self.tools += [
+                    SimpleNamespace(name=tool, description="Source-pinned marker tool",
                                     input_schema={"type": "object", "properties": {
+                                        "previewOnly": {"type": "boolean"},
                                         "markers": {"type": "array"},
-                                        "previewOnly": {"type": "boolean"}}}),
-                    SimpleNamespace(name="remove_timeline_markers",
-                                    description="Remove native timeline markers",
-                                    input_schema={"type": "object", "properties": {
                                         "all": {"type": "boolean"},
-                                        "previewOnly": {"type": "boolean"}}}),
-                ]
+                                        "label": {"type": "string"}}})
+                    for tool in marker_tools]
 
             async def call_tool(self, name, inputs):
                 self.calls.append((name, inputs))
                 if name == "get_project":
-                    payload = {"mcp": {"hasProject": True},
-                               "project": {"id": "native-current"}}
-                elif name == "add_timeline_markers":
-                    if inputs.get("previewOnly") is not False:
-                        raise AssertionError("Preview-intent marker write reached editor")
-                    payload = {"success": True, "result": {
-                        "previewOnly": False, "markerCount": len(inputs["markers"])}}
+                    result = {"mcp": {"hasProject": True},
+                              "project": {"id": "real-native-project"}}
+                elif name in marker_tools and inputs.get("previewOnly") is True:
+                    # Actual pinned Electron MCP reply, NOT renderer mcpActions.js:
+                    # no success/action/result fields are present on preview.
+                    result = {"previewOnly": True, "markerCount": 1,
+                              "markers": [{"id": "marker-physical-1",
+                                           "time": 2.0, "label": "Review"}]}
+                elif name == "add_timeline_markers" and inputs.get("previewOnly") is False:
+                    result = {"success": True, "action": name,
+                              "markerCount": 1, "result": {"markerCount": 1}}
                 else:
-                    raise AssertionError("No destructive removal expected")
+                    raise AssertionError("No other model-selected mutation allowed")
                 return SimpleNamespace(is_error=False, content=[
-                    SimpleNamespace(type="text", text=json.dumps(payload))])
+                    SimpleNamespace(type="text", text=json.dumps(result))])
 
-        session = StrictNativeMarkers()
-        grants = {tool.name: (
-            "write" if tool.name in ("update_text_clip",
-                                    "add_timeline_markers",
-                                    "remove_timeline_markers") else "read")
-            for tool in session.tools}
-        model = ScriptedModel([
+        session = SourceVerifiedMarkerSession()
+        grants = {t.name: (
+            "write" if t.name in marker_tools or t.name == "update_text_clip"
+            else "read") for t in session.tools}
+        choices = [
             decision("invoke", tool="add_timeline_markers",
-                     inputs={"markers": [{"timeSeconds": 2}],
-                             "previewOnly": True}),
+                     inputs={"markers": [{"timeSeconds": 2}], "previewOnly": True}),
             decision("invoke", tool="remove_timeline_markers",
                      inputs={"all": True, "previewOnly": True}),
+            decision("invoke", tool="set_timeline_marker_properties",
+                     inputs={"label": "New label", "previewOnly": True}),
             decision("invoke", tool="add_timeline_markers",
-                     inputs={"markers": [{"timeSeconds": 2}]}),
-            decision("invoke", tool="add_timeline_markers",
-                     inputs={"markers": [{"timeSeconds": 2}],
-                             "previewOnly": False}),
-            decision("finish", summary="Only explicit native commit was accepted"),
-        ])
+                     inputs={"markers": [{"timeSeconds": 2}], "previewOnly": False}),
+            decision("finish", summary="Only one native write acknowledged"),
+        ]
+        model = ScriptedModel(choices)
         result = await NativeCreativeControl(
-            session, model, max_turns=5, host_tool_access=grants,
-            host_requires_explicit_commit_for=(
-                "add_timeline_markers", "remove_timeline_markers"),
-        ).run("Choose a real marker edit without accidental preview mutations")
-        self.assertEqual([name for name, _ in session.calls], [
-            "get_project", "add_timeline_markers", "get_project"])
-        rejected = [item for item in result["events"]
-                    if item["kind"] == "model_action_rejected"]
-        self.assertEqual(len(rejected), 3)
-        self.assertTrue(all(item["validation_keyword"] ==
-                            "host_explicit_commit_required" and
-                            item["no_native_dispatch"] is True
-                            for item in rejected))
-        self.assertEqual([item["tool"] for item in rejected],
-                         ["add_timeline_markers", "remove_timeline_markers",
-                          "add_timeline_markers"])
-        self.assertEqual(model.observed[1]["last_rejected_native_action_feedback"][
-            "native_field"], "previewOnly")
+            session, model, max_turns=len(choices), host_tool_access=grants,
+            host_verified_top_level_preview_tools=marker_tools).run(
+                "Inspect review markers before independently deciding to edit")
         self.assertEqual(result["status"], "model_finished_unverified")
-        self.assertEqual(sum(event.get("kind") == "native_tool_result" and
-                             event.get("tool") == "add_timeline_markers"
-                             for event in result["events"]), 1)
+        self.assertEqual([tool for tool, _ in session.calls], [
+            "get_project", *marker_tools, "add_timeline_markers", "get_project"])
+        self.assertEqual(sum(e["kind"] == "native_tool_preview"
+                             for e in result["events"]), 3)
+        self.assertEqual(sum(e["kind"] == "native_tool_result" and
+                             e.get("host_application_write_acknowledged") is True
+                             for e in result["events"]), 1)
+        self.assertTrue(all(e["no_accepted_write_evidence"] is True for e
+                            in result["events"] if e["kind"] == "native_tool_preview"))
+        self.assertEqual(model.observed[3]["last_native_preview_feedback"]["tool"],
+                         "set_timeline_marker_properties")
+        self.assertEqual(model.observed[4]["native_project_presence_from_last_inspection"],
+                         "present")
         self.assertTrue(audit_native_journal(
             result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
 
-        for invalid in (("add_timeline_markers", "add_timeline_markers"),
-                        ("unknown",), ("get_project",), ({"bad": "type"},)):
+        for invalid in (
+                ("add_timeline_markers", "add_timeline_markers"),
+                ("not_installed",), ("get_project",), ({"bad": "type"},)):
             with self.subTest(invalid=invalid), self.assertRaises(
                     NativeCreativeControlError):
-                NativeCreativeControl(session, ScriptedModel([]),
-                    host_tool_access=grants,
-                    host_requires_explicit_commit_for=invalid)
+                NativeCreativeControl(
+                    session, ScriptedModel([]), host_tool_access=grants,
+                    host_verified_top_level_preview_tools=invalid)
 
-        # A host cannot claim a preview hazard if the live editor never
-        # exposed that boolean field. It must inspect/reconfigure the actual
-        # source contract before the model receives any operation.
-        changed_schema = StrictNativeMarkers()
+        # The real preview contract must match the live tool's boolean schema.
+        changed_schema = SourceVerifiedMarkerSession()
         changed_schema.tools = [
             item if item.name != "remove_timeline_markers" else
             SimpleNamespace(name=item.name, description=item.description,
@@ -2391,10 +2385,66 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             await NativeCreativeControl(
                 changed_schema, ScriptedModel([]), max_turns=1,
                 host_tool_access=grants,
-                host_requires_explicit_commit_for=(
-                    "remove_timeline_markers",)).run(
-                    "Validate current installed editor schema")
+                host_verified_top_level_preview_tools=marker_tools).run(
+                    "Validate true native marker schema")
         self.assertEqual(changed_schema.calls, [])
+
+    async def test_untrusted_or_contradictory_flat_preview_does_not_certify_no_write(self):
+        """Only host-source-pinned marker previews with consistent count,
+        requested preview intent and no success/action/result are accepted.
+        Unknown application effects still require reconciliation.
+        """
+        class UncertainMarkerSession(FakeSession):
+            def __init__(self, response):
+                super().__init__()
+                self.response = response
+                self.tools.append(SimpleNamespace(
+                    name="add_timeline_markers", description="Actual marker writer",
+                    input_schema={"type": "object", "properties": {
+                        "previewOnly": {"type": "boolean"}}}))
+
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(self.response))])
+
+        valid_flat = {"previewOnly": True, "markerCount": 1,
+                      "markers": [{"id": "real-marker"}]}
+        scenarios = (
+            (valid_flat, {"previewOnly": True}, False),
+            (valid_flat, {"previewOnly": False}, True),
+            ({**valid_flat, "success": True}, {"previewOnly": True}, True),
+            ({**valid_flat, "action": "add_timeline_markers"},
+             {"previewOnly": True}, True),
+            ({**valid_flat, "markerCount": 2}, {"previewOnly": True}, True),
+            ({**valid_flat, "markers": []}, {"previewOnly": True}, True),
+            ({**valid_flat, "markerCount": True}, {"previewOnly": True}, True),
+            ({**valid_flat, "result": {}}, {"previewOnly": True}, True),
+        )
+        for receipt, inputs, authorized in scenarios:
+            with self.subTest(receipt=receipt, inputs=inputs, authorized=authorized):
+                session = UncertainMarkerSession(receipt)
+                grants = {x.name: ("write" if x.name in (
+                    "update_text_clip", "add_timeline_markers") else "read")
+                    for x in session.tools}
+                model = ScriptedModel([
+                    decision("invoke", tool="add_timeline_markers", inputs=inputs)])
+                result = await NativeCreativeControl(
+                    session, model, max_turns=1, host_tool_access=grants,
+                    host_verified_top_level_preview_tools=(
+                        "add_timeline_markers",) if authorized else (),
+                ).run("Observe real preview without assuming a native write")
+                self.assertEqual(len(session.calls), 1)
+                if authorized and inputs.get("previewOnly") is True and receipt == valid_flat:
+                    self.assertEqual(result["events"][-1]["kind"],
+                                     "native_tool_preview")
+                    self.assertEqual(result["status"], "turn_budget_exhausted")
+                else:
+                    self.assertEqual(result["status"],
+                                     "native_error_requires_state_reconciliation")
+                    self.assertEqual(result["events"][-1]["kind"],
+                                     "native_tool_uncertain_outcome")
+                self.assertFalse(result["native_editing_capability_complete"])
 
     async def test_real_empty_timeline_rejects_duplicate_before_stateful_native_rpc(self):
         """Physical Qwen failure #42420526258: source filename is not
