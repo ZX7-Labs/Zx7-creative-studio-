@@ -330,8 +330,8 @@ async def trial(args, lock, artifacts, command):
                     # previewOnly:true calls return a read-only top-level
                     # preview before a mutating performAction is reached.
                     host_verified_top_level_preview_tools=(
-                        pinned_electron_marker_previews(source, host) +
-                        pinned_electron_asset_placement_previews(source, host)),
+                        pinned_electron_marker_previews(args.source, host) +
+                        pinned_electron_asset_placement_previews(args.source, host)),
                     # Technical owner acceptance facts, NOT an editing plan.
                     # Failed model claims cannot end the trial before actual
                     # native activity, source-verified export and visual sensing.
