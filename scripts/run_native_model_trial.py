@@ -22,7 +22,7 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
-from studio_next.native_editor_source_pin import (pinned_electron_marker_previews, pinned_electron_asset_placement_previews, pinned_electron_timeline_frame_previews)
+from studio_next.native_editor_source_pin import (pinned_electron_marker_previews, pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalModelSettings
 from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
@@ -331,7 +331,8 @@ async def trial(args, lock, artifacts, command):
                     # preview before a mutating performAction is reached.
                     host_verified_top_level_preview_tools=(
                         pinned_electron_marker_previews(args.source, host) +
-                        pinned_electron_asset_placement_previews(args.source, host)),
+                        pinned_electron_asset_placement_previews(args.source, host) +
+                        pinned_electron_clip_edit_previews(args.source, host)),
                     # Technical owner acceptance facts, NOT an editing plan.
                     # Failed model claims cannot end the trial before actual
                     # native activity, source-verified export and visual sensing.
