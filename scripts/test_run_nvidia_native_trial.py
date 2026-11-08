@@ -77,6 +77,55 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertEqual(child, {"PATH": "/usr/bin", "OTHER_SETTING": "keep"})
         self.assertIn("NVIDIA_API_KEY", given)
 
+    def test_pinned_real_electron_preview_attestation_requires_clean_exact_source(self):
+        """No agent route may claim read-only marker semantics from a random
+        editor checkout. Only the exact pinned clean Electron MCP source
+        grants the strict top-level preview protocol to eligible tools.
+        """
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        method = runpy.run_path(str(script), run_name="native_marker_contract_test")[
+            "pinned_electron_marker_previews"]
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        grants = {
+            "add_timeline_markers": "write",
+            "remove_timeline_markers": "read",
+            "set_timeline_marker_properties": "write",
+        }
+        pin = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+        witnessed = []
+
+        def git_response(argv, **options):
+            witnessed.append((argv, options))
+            if "rev-parse" in argv:
+                return subprocess.CompletedProcess(argv, 0, pin + "\n", "")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with patch("subprocess.run", side_effect=git_response):
+            self.assertEqual(method(source, grants), (
+                "add_timeline_markers", "set_timeline_marker_properties"))
+        self.assertEqual(len(witnessed), 2)
+        self.assertEqual(witnessed[1][0][-2:], ["--", "electron/mcpServer.js"])
+        self.assertTrue(all("NVIDIA_API_KEY" not in opts["env"]
+                            for _, opts in witnessed))
+
+        def bad_commit(argv, **_):
+            return subprocess.CompletedProcess(argv, 0, "different-revision\n", "")
+        with patch("subprocess.run", side_effect=bad_commit):
+            self.assertEqual(method(source, grants), ())
+
+        def edited_source(argv, **_):
+            return subprocess.CompletedProcess(
+                argv, 0 if "rev-parse" in argv else 1,
+                pin + "\n" if "rev-parse" in argv else "", "")
+        with patch("subprocess.run", side_effect=edited_source):
+            self.assertEqual(method(source, grants), ())
+
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(method(source, grants), ())
+        with self.assertRaises(ValueError):
+            method(source, {"add_timeline_markers": "unknown-access"})
+
     def test_native_contract_excludes_ungranted_tool_prerequisites(self):
         import runpy
         from studio_next.capability_fabric import CapabilityFabric
