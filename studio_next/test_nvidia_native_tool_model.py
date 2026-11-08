@@ -168,7 +168,7 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         """
         import base64
         import hashlib
-        jpeg = b"\\xff\\xd8\\xff\\xe0" + b"synthetic-renderer-JPEG" + b"\\xff\\xd9"
+        jpeg = b"\xff\xd8\xff\xe0" + b"synthetic-renderer-JPEG" + b"\xff\xd9"
         sha = hashlib.sha256(jpeg).hexdigest()
         ctx = {**_context(),
                "native_picture_origin":
