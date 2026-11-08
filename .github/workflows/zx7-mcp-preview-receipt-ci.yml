@@ -16,7 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          submodules: recursive
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify pinned upstream Electron MCP source and run real preview methods
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          node --test engines/velorn/native-marker-preview.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
