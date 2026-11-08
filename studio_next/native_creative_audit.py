@@ -541,7 +541,22 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     raise NativeJournalError("No physical export proof on successful verification")
                 if tool in _OBSERVERS and seen_sha is None:
                     raise NativeJournalError("Native A/V observation lacks export provenance")
-                if bool(event.get("image_sha256")) != (tool in _FRAME_OBSERVERS):
+                # A source-pinned native timeline JPEG is a legitimate
+                # read-only creative preview, NOT a physically decoded MP4.
+                # Never allow its hash to satisfy observed_export_sha256 or
+                # the stronger verified-export-frame completion evidence.
+                timeline_preview = event.get(
+                    "native_timeline_preview_unverified_export")
+                if timeline_preview is not None and (
+                        timeline_preview is not True or
+                        tool != "inspect_timeline_frame" or access != "read" or
+                        seen_sha is not None or new_sha is not None or
+                        len(event.get("image_sha256", [])) != 1 or
+                        event.get("audio_sha256") is not None):
+                    raise NativeJournalError(
+                        "Native timeline JPEG cannot masquerade as verified export")
+                if bool(event.get("image_sha256")) != (
+                        tool in _FRAME_OBSERVERS or timeline_preview is True):
                     raise NativeJournalError("Native visual evidence mismatches sensor identity")
                 audio_sha = event.get("audio_sha256")
                 if audio_sha is not None:
