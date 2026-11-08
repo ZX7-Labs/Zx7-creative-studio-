@@ -175,6 +175,29 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn(
                             "REQUIRED by the trusted BODY host",
                             presented["properties"]["outputPath"]["description"])
+                        # Exercise the exact provider-native function contract
+                        # used by the real NVIDIA 120B run without any cloud
+                        # inference, not a toy JSON Schema assertion alone.
+                        from studio_next.nvidia_native_tool_model import (
+                            NvidiaNativeToolCreativeModel)
+                        functions, mapping = (
+                            NvidiaNativeToolCreativeModel._tool_surface({
+                                "available_actions": ["invoke"],
+                                "compact_tool_catalog": False,
+                                "actual_granted_native_tools": [name],
+                                "host_native_tool_contracts": [{
+                                    "name": name,
+                                    "description": catalog[name].description,
+                                    "input_schema": presented}],
+                            }))
+                        self.assertEqual(len(functions), 1)
+                        self.assertEqual(mapping, {
+                            "zx7_native_" + name: ("invoke", name)})
+                        native_inputs = functions[0]["function"]["parameters"][
+                            "properties"]["inputs"]
+                        self.assertEqual(native_inputs["required"], ["outputPath"])
+                        self.assertEqual(
+                            native_inputs["properties"]["outputPath"]["minLength"], 1)
                         self.assertTrue((await session.call_tool(name, {})).is_error)
                         self.assertTrue((await session.call_tool(
                             name, {"outputPath": 42})).is_error)
