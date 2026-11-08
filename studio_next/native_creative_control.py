@@ -1880,6 +1880,16 @@ class NativeCreativeControl:
                 self._last_native_texts = texts
                 self._last_images, self._last_hashes = images, hashes
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
+                # Capture only a genuinely observed pre-write native count.
+                # Pinned Electron may acknowledge an import before its async
+                # project snapshot has published the new asset. An immediate
+                # read of 0 is stale after an import from a verified 0 baseline.
+                prior_import_asset_count = (
+                    self._trusted_project_asset_count()
+                    if native_name == "import_asset_from_path" and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(native_name) == "write"
+                    else None)
                 if (self.host_tool_access is not None and
                         self.host_tool_access.get(native_name) == "write"):
                     self._remember_native_write_ack(native_name, texts)
@@ -1941,16 +1951,23 @@ class NativeCreativeControl:
                         "get_project" in validators and
                         validators["get_project"].is_valid({})):
                     self._post_write_state_warning = None
-                    for read_attempt in (1, 2):
-                        if read_attempt == 2:
-                            # Physical pinned Velorn/Electron/MCP CI
-                            # #41160859730 observed a successful native
-                            # create ACK, an 11.86ms absent first snapshot,
-                            # and visibility only after 471.33ms / four reads.
-                            # A 200ms second read was empirically too early.
-                            # This bounded 1.5s grace is an engineering
-                            # budget, NOT a claimed upstream debounce or
-                            # maximum latency. Never retry a native WRITE.
+                    expected_import_asset_count = (
+                        prior_import_asset_count + 1
+                        if type(prior_import_asset_count) is int else None)
+                    # Import can be acknowledged while the app's published
+                    # snapshot still reports the PREVIOUS asset inventory.
+                    # Do not mistake that stale 0 for evidence that no
+                    # usable imported asset exists, or invent a positive count.
+                    # The budget is bounded read-only observation; never
+                    # retry the model's real native write.
+                    read_attempt_limit = (
+                        4 if expected_import_asset_count is not None else 2)
+                    for read_attempt in range(1, read_attempt_limit + 1):
+                        if read_attempt > 1:
+                            # Existing native create evidence needed >200ms.
+                            # Imported asset visibility was still stale on the
+                            # first read in real 4B run #42427570784.
+                            # This fixed small budget is not a latency SLA.
                             await asyncio.sleep(1.5)
                         try:
                             refreshed = await self.session.call_tool("get_project", {})
@@ -2045,6 +2062,35 @@ class NativeCreativeControl:
                                 "project_state_unknown": True,
                                 "must_inspect_native_project": True}
                             break
+                        if observation == "present" and (
+                                expected_import_asset_count is not None):
+                            actual_asset_count = _native_project_asset_count_from_text(
+                                state_texts)
+                            if (actual_asset_count is None or
+                                    actual_asset_count < expected_import_asset_count):
+                                # Keep the confirmed project presence but
+                                # discard a stale snapshot before the next
+                                # model turn. It cannot mint a false negative
+                                # asset precondition. Expose only bounded
+                                # current provenance and an explicit warning.
+                                self._native_read_snapshots.pop("get_project", None)
+                                self._post_write_state_warning = {
+                                    "read_only_reconciliation_incomplete": True,
+                                    "asset_inventory_not_yet_observed": True,
+                                    "must_inspect_native_project": True}
+                                self._append({
+                                    "kind": "host_project_post_write_asset_lag",
+                                    "triggered_by_native_tool": native_name,
+                                    "read_attempt": read_attempt,
+                                    "expected_minimum_asset_count":
+                                        expected_import_asset_count,
+                                    "observed_asset_count": actual_asset_count,
+                                    "host_attested_read_only": True,
+                                    "no_model_selected_mutation": True,
+                                    "no_automatic_write_retry": True})
+                                if read_attempt < read_attempt_limit:
+                                    continue
+                                break
                         if observation == "present":
                             break
                         if read_attempt == 2:
