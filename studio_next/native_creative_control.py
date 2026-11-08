@@ -212,6 +212,52 @@ def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], li
     return texts, images, audio
 
 
+def _native_active_timeline_id_from_text(texts):
+    """Require a coherent recent host-granted get_project timeline identity."""
+    if _native_timeline_clip_count_from_text(texts) is None:
+        return None
+    project = _strict_receipt(texts, "native active timeline")
+    return project["currentTimeline"]["id"]
+
+
+def _source_bound_live_timeline_preview(
+        texts: list[str], images: list[tuple[str, bytes]], active_id: str):
+    """Source-attested pinned Electron inspectTimelineFrame JPEG observation.
+
+    A real editable-timeline preview is useful for a model to judge its
+    pending artistic decisions, but it is not a decoded MP4 and MUST NEVER
+    satisfy verified export/frame evidence. The genuine pinned MCP method
+    returns single current-frame JSON metadata plus an original JPEG binary.
+    """
+    if (type(active_id) is not str or not active_id or
+            len(texts) != 1 or len(images) != 1 or
+            images[0][0] != "image/jpeg"):
+        raise NativeCreativeControlError(
+            "Native timeline preview lacks one source-attested JPEG and timeline")
+    receipt = _strict_receipt(texts, "native editable timeline preview")
+    timeline = receipt.get("timeline")
+    frame = receipt.get("frame")
+    capture = receipt.get("capture")
+    active_count = receipt.get("activeClipCount")
+    visual_count = receipt.get("visualClipCount")
+    if (type(timeline) is not dict or timeline.get("id") != active_id or
+            type(frame) is not dict or
+            type(frame.get("frame")) is not int or frame["frame"] < 0 or
+            type(frame.get("fps")) not in (int, float) or
+            not math.isfinite(frame["fps"]) or frame["fps"] <= 0 or
+            type(frame.get("timeSeconds")) not in (int, float) or
+            not math.isfinite(frame["timeSeconds"]) or
+            frame["timeSeconds"] < 0 or
+            type(capture) is not dict or capture.get("imageIncluded") is not True or
+            type(active_count) is not int or active_count < 0 or
+            type(visual_count) is not int or visual_count < 0 or
+            visual_count > active_count or
+            "export_sha256" in receipt):
+        raise NativeCreativeControlError(
+            "Native timeline JPEG metadata disagrees with observed project")
+    return [hashlib.sha256(images[0][1]).hexdigest()]
+
+
 def _source_bound_images(texts: list[str], images: list[tuple[str, bytes]]):
     if not images:
         return []
