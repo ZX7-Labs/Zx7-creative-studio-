@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import copy
 import json
 import hashlib
 import math
@@ -19,6 +20,7 @@ import sys
 from .body_editor_client import (
     EditorAccessError, EditorClientError, EditorToolError, _access_modes,
 )
+from .body_editor_policy import EditorPathPolicy
 
 
 def _local_schema_references(schema):
@@ -59,11 +61,35 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         if mode not in access:
             continue
         schema = native[name]["inputSchema"]
+        if (isinstance(getattr(client, "_policy", None), EditorPathPolicy) and
+                name in ("export_timeline", "export_fcpxml")):
+            # Pinned editor lists outputPath as optional, but BODY's actual
+            # host-owned filesystem policy REQUIRES an explicit new output.
+            # Real NVIDIA 120B run #42443385990 selected export_timeline
+            # without outputPath; the host correctly rejected it BEFORE
+            # native dispatch. Expose that SAME required field in the model
+            # grammar instead of allowing an inevitable, costly rejection.
+            # This tightens a known grant; it never supplies a path, chooses
+            # an export, or grants filesystem authority to the model.
+            if (type(schema) is not dict or
+                    type(schema.get("properties")) is not dict or
+                    type(schema["properties"].get("outputPath")) is not dict or
+                    schema["properties"]["outputPath"].get("type") != "string"):
+                raise ValueError(
+                    "Native export schema does not expose host-required outputPath")
+            existing_required = schema.get("required", [])
+            if (type(existing_required) is not list or
+                    any(type(field) is not str for field in existing_required)):
+                raise ValueError("Native export has invalid required-field schema")
+            schema = copy.deepcopy(schema)
+            schema["required"] = list(dict.fromkeys(
+                [*existing_required, "outputPath"]))
         _local_schema_references(schema)
         validator = jsonschema.validators.validator_for(schema)
         validator.check_schema(schema)
         validators[name] = validator(schema)
-        tools[name] = types.Tool.model_validate(native[name])
+        tools[name] = types.Tool.model_validate({
+            **native[name], "inputSchema": schema})
     verified_export_name = "zx7_verify_native_export"
     observed_frame_name = "zx7_observe_verified_export_frame"
     observed_samples_name = "zx7_observe_verified_export_samples"
