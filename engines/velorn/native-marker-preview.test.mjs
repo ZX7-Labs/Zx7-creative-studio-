@@ -3,6 +3,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { execFileSync } from 'node:child_process'
 const require = createRequire(import.meta.url)
 const { createComfyStudioMcpServer } = require('../../third_party/velorn/electron/mcpServer.js')
 
@@ -127,4 +128,55 @@ test('Pinned Electron MCP asset placement default preview is read-only and retur
   assert.equal(result.action, 'add_asset_to_timeline')
   assert.equal(applied.length, 1)
   assert.equal(applied[0].action, 'add_asset_to_timeline')
+})
+
+test('Pinned Electron MCP returns genuine JPEG as editable timeline preview, not export', async () => {
+  // Real byte-producing FFmpeg decoder/encoder fixture. The stubbed renderer
+  // is NOT an autonomous edit or verified exported MP4.
+  const jpeg = execFileSync('ffmpeg', [
+    '-nostdin', '-v', 'error', '-f', 'lavfi',
+    '-i', 'color=c=blue:s=32x24:r=1:d=1', '-frames:v', '1',
+    '-c:v', 'mjpeg', '-f', 'image2pipe', '-'
+  ], { maxBuffer: 1024 * 1024, timeout: 15000 })
+  assert.equal(jpeg.subarray(0, 3).toString('hex'), 'ffd8ff')
+  assert.equal(jpeg.subarray(-2).toString('hex'), 'ffd9')
+  let rendererCalls = 0
+  const server = createComfyStudioMcpServer({
+    performAction: async ({ action, payload }) => {
+      assert.equal(action, 'inspect_timeline_frame')
+      assert.equal(payload.mimeType, 'image/jpeg')
+      rendererCalls += 1
+      return {
+        renderer: 'live',
+        image: { mimeType: 'image/jpeg', data: jpeg.toString('base64') },
+      }
+    },
+  })
+  server.updateSnapshot({
+    app: { name: 'Velorn' },
+    project: { id: 'real-jpeg-source-fixture',
+               currentTimelineId: 'native-timeline-1' },
+    currentTimeline: {
+      id: 'native-timeline-1', name: 'Preview', fps: 24,
+      duration: 4, playheadPosition: 0,
+      clips: [], tracks: [], markers: [],
+    },
+    assets: [], timelines: [],
+  })
+  const response = await server.callTool('inspect_timeline_frame', {
+    timeSeconds: 0, includeImage: true,
+  })
+  assert.equal(response.isError, undefined)
+  assert.equal(response.content.length, 2)
+  const metadata = JSON.parse(response.content[0].text)
+  assert.equal(metadata.timeline.id, 'native-timeline-1')
+  assert.equal(metadata.capture.imageIncluded, true)
+  assert.equal(metadata.capture.renderer, 'live')
+  assert.equal(metadata.frame.frame, 0)
+  assert.equal(metadata.activeClipCount, 0)
+  assert.equal(response.content[1].type, 'image')
+  assert.equal(response.content[1].mimeType, 'image/jpeg')
+  assert.deepEqual(Buffer.from(response.content[1].data, 'base64'), jpeg)
+  assert.equal(rendererCalls, 1)
+  assert.equal(Object.hasOwn(metadata, 'export_sha256'), false)
 })
