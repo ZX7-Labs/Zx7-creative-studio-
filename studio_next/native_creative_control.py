@@ -220,6 +220,52 @@ def _native_active_timeline_id_from_text(texts):
     return project["currentTimeline"]["id"]
 
 
+def _pinned_source_clip_edit_plan_matches(name, plan):
+    """Exact source-pinned no-write clip edit plan, not a successful edit.
+
+    Model arguments never create this attestation. The installed original
+    Electron MCP creates the plan BEFORE the mutating renderer bridge.
+    The whitelisted operation and the returned per-clip count must agree.
+    """
+    specs = {
+        "move_clips": ({"moveCount", "resolveOverlaps", "moves"},
+                       "moveCount", "moves"),
+        "trim_clips": ({"trimCount", "trims"},
+                       "trimCount", "trims"),
+        "delete_clips": ({"deleteCount", "ripple", "filter",
+                          "missingClipIds", "clips"},
+                         "deleteCount", "clips"),
+    }
+    spec = specs.get(name)
+    if spec is None or type(plan) is not dict:
+        return False
+    keys, count_key, array_key = spec
+    count = plan.get(count_key)
+    entries = plan.get(array_key)
+    if (set(plan) != keys or type(count) is not int or
+            not 0 <= count <= 1000 or type(entries) is not list or
+            len(entries) != count or
+            any(type(entry) is not dict for entry in entries)):
+        return False
+    if name == "move_clips":
+        return (type(plan["resolveOverlaps"]) is bool and
+                all(type(entry.get("clip")) is dict and
+                    type(entry.get("targetTrack")) is dict and
+                    type(entry.get("startSeconds")) in (int, float) and
+                    math.isfinite(entry["startSeconds"]) and
+                    entry["startSeconds"] >= 0
+                    for entry in entries))
+    if name == "trim_clips":
+        return all(type(entry.get("clip")) is dict and
+                   type(entry.get("before")) is dict and
+                   type(entry.get("updates")) is dict and
+                   bool(entry["updates"]) for entry in entries)
+    return (type(plan["ripple"]) is bool and
+            (plan["filter"] is None or type(plan["filter"]) is str) and
+            type(plan["missingClipIds"]) is list and
+            all(type(item) is str for item in plan["missingClipIds"]))
+
+
 def _source_bound_live_timeline_preview(
         texts: list[str], images: list[tuple[str, bytes]], active_id: str):
     """Source-attested pinned Electron inspectTimelineFrame JPEG observation.
@@ -1812,6 +1858,12 @@ class NativeCreativeControl:
                                 "Asset placement plan only. No timeline change was made.",
                             "add_assets_to_timeline":
                                 "Batch asset placement plan only. No timeline change was made.",
+                            "move_clips":
+                                "Clip move plan only. No timeline change was made.",
+                            "trim_clips":
+                                "Clip trim plan only. No timeline change was made.",
+                            "delete_clips":
+                                "Clip delete plan only. No timeline change was made.",
                         }
                         placement_apply = (
                             host_response.get("suggestedApplyCall")
@@ -1829,8 +1881,13 @@ class NativeCreativeControl:
                             and host_response["message"] ==
                                 placement_preview_messages[native_name]
                             and type(host_response["plan"]) is dict
-                            and host_response["plan"].get("action") == native_name
-                            and host_response["plan"].get("previewOnly") is True
+                            and (
+                                (native_name in (
+                                    "add_asset_to_timeline", "add_assets_to_timeline")
+                                 and host_response["plan"].get("action") == native_name
+                                 and host_response["plan"].get("previewOnly") is True)
+                                or _pinned_source_clip_edit_plan_matches(
+                                    native_name, host_response["plan"]))
                             and type(placement_apply) is dict
                             and set(placement_apply) == {"tool", "arguments"}
                             and placement_apply["tool"] == native_name
