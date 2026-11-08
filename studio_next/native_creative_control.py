@@ -539,7 +539,7 @@ class NativeCreativeControl:
                  host_preconditions: dict | None = None,
                  host_possible_effects: dict | None = None,
                  host_once_after_acknowledged_write: tuple[str, ...] = (),
-                 host_requires_explicit_commit_for: tuple[str, ...] = (),
+                 host_verified_top_level_preview_tools: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
                  host_content_revision_tools: tuple[str, ...] = ()):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
@@ -593,20 +593,20 @@ class NativeCreativeControl:
         # Trial-only single-project policy. A general creative session may
         # intentionally create multiple projects; never silently impose this.
         self._host_once_after_ack = frozenset(host_once_after_acknowledged_write)
-        if (not isinstance(host_requires_explicit_commit_for, (tuple, list)) or
+        if (not isinstance(host_verified_top_level_preview_tools, (tuple, list)) or
                 any(not isinstance(name, str) or not name or
                     host_tool_access is None or host_tool_access.get(name) != "write"
-                    for name in host_requires_explicit_commit_for) or
-                len(set(host_requires_explicit_commit_for)) !=
-                len(host_requires_explicit_commit_for)):
+                    for name in host_verified_top_level_preview_tools) or
+                len(set(host_verified_top_level_preview_tools)) !=
+                len(host_verified_top_level_preview_tools)):
             raise NativeCreativeControlError(
-                "Explicit native commit policy requires distinct trusted write grants")
-        # When source inspection shows a handler ignores its advertised
-        # previewOnly flag, silently treating a preview intent as a write
-        # would violate the operator's approval. Require the model itself
-        # to supply previewOnly:false before ANY actual native RPC.
-        self._host_requires_explicit_commit = frozenset(
-            host_requires_explicit_commit_for)
+                "Source-verified preview tools require distinct trusted write grants")
+        # Pinned Electron MCP handles selected top-level previewOnly:true
+        # requests BEFORE dispatching its actual mutating renderer action.
+        # The renderer handler alone is not the public MCP entrypoint.
+        # Never infer preview safety from model text or arbitrary tools.
+        self._host_verified_top_level_previews = frozenset(
+            host_verified_top_level_preview_tools)
         if (not isinstance(self._host_preconditions, dict) or
                 not isinstance(self._host_possible_effects, dict)):
             raise NativeCreativeControlError("Trusted machine contracts must be objects")
@@ -945,20 +945,19 @@ class NativeCreativeControl:
             cls = jsonschema.validators.validator_for(admission)
             cls.check_schema(admission)
             validators[native_name] = cls(admission)
-        # A trusted explicit-commit policy must match the *currently
-        # installed native interface*. Fail before calling the model if
-        # the editor release removed or changed the risky preview field.
-        for name in self._host_requires_explicit_commit:
+        # Restrict any special preview parser to an exact host-installed
+        # native tool with an actual boolean previewOnly field.
+        for name in self._host_verified_top_level_previews:
             if name not in validators:
                 raise NativeCreativeControlError(
-                    "Native explicit-commit policy references absent tool")
+                    "Source-verified preview names an absent native tool")
             properties = validators[name].schema.get("properties")
             preview_field = (properties.get("previewOnly")
                              if isinstance(properties, dict) else None)
             if (not isinstance(preview_field, dict) or
                     preview_field.get("type") != "boolean"):
                 raise NativeCreativeControlError(
-                    "Native explicit-commit policy requires a boolean previewOnly field")
+                    "Source-verified preview requires native boolean previewOnly field")
         if self.receipt_path is not None:
             if not self.receipt_path.parent.is_dir():
                 raise NativeCreativeControlError("Receipt directory must already exist")
@@ -1491,26 +1490,6 @@ class NativeCreativeControl:
                                   "schema_location": "",
                                   "no_native_dispatch": True})
                     continue
-                if (native_name in self._host_requires_explicit_commit and
-                        args["inputs"].get("previewOnly") is not False):
-                    self._last_preflight_feedback = {
-                        "tool": native_name,
-                        "validation_keyword": "host_explicit_commit_required",
-                        "native_field": "previewOnly",
-                        "must_explicitly_select_boolean_false_for_native_mutation": True,
-                        "native_preview_control_not_independently_verified": True,
-                        "no_native_dispatch": True,
-                    }
-                    self._append({
-                        "kind": "model_action_rejected", "turn": turn, **timing,
-                        "tool": native_name,
-                        "inputs_sha256": hashlib.sha256(
-                            _wire(args["inputs"]).encode()).hexdigest(),
-                        "validation_keyword": "host_explicit_commit_required",
-                        "schema_location": "previewOnly",
-                        "no_native_dispatch": True,
-                    })
-                    continue
                 invalid = next(validators[native_name].iter_errors(args["inputs"]), None)
                 if invalid is not None:
                     schema = validators[native_name].schema
@@ -1676,8 +1655,28 @@ class NativeCreativeControl:
                         # (b) generic Velorn runRendererActionTool omits
                         #     success entirely on preview, but binds BOTH
                         #     wrapper and nested result to the native action.
+                        # (c) pinned Velorn Electron MCP marker methods
+                        # return {previewOnly:true,markerCount:N,markers:[...]}
+                        # directly without "action"/"result", before any
+                        # renderer mutation. This is a real read-only preview
+                        # ONLY when the model asked for preview and the host
+                        # explicitly attests this exact tool/reply contract.
                         # Never infer no-write from an uncorrelated single
                         # "previewOnly" flag or a contradictory success:true.
+                        top_level_preview = (
+                            native_name in self._host_verified_top_level_previews
+                            and args["inputs"].get("previewOnly") is True
+                            and isinstance(host_response, dict)
+                            and host_response.get("previewOnly") is True
+                            and "success" not in host_response
+                            and "result" not in host_response
+                            and "action" not in host_response
+                            and type(host_response.get("markerCount")) is int
+                            and 0 <= host_response["markerCount"] <= 1000
+                            and type(host_response.get("markers")) is list
+                            and len(host_response["markers"]) == host_response["markerCount"]
+                            and all(type(marker) is dict
+                                    for marker in host_response["markers"]))
                         wrapper_preview = (
                             isinstance(host_response, dict) and
                             host_response.get("previewOnly") is True and
@@ -1685,11 +1684,12 @@ class NativeCreativeControl:
                             isinstance(host_result, dict) and
                             host_result.get("action") == native_name)
                         acknowledged_preview = (
-                            preview is True and (
-                                (success is False and (
-                                    not isinstance(host_response, dict) or
-                                    host_response.get("previewOnly", True) is True
-                                )) or (success is None and wrapper_preview)))
+                            top_level_preview or (
+                                preview is True and (
+                                    (success is False and (
+                                        not isinstance(host_response, dict) or
+                                        host_response.get("previewOnly", True) is True
+                                    )) or (success is None and wrapper_preview))))
                         if success is False or acknowledged_preview:
                             if acknowledged_preview:
                                 # Actual pinned editor defaults to a preview
