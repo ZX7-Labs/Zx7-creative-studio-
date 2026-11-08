@@ -2435,15 +2435,14 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                         "add_timeline_markers",) if authorized else (),
                 ).run("Observe real preview without assuming a native write")
                 self.assertEqual(len(session.calls), 1)
-                if authorized and inputs.get("previewOnly") is True and receipt == valid_flat:
-                    self.assertEqual(result["events"][-1]["kind"],
-                                     "native_tool_preview")
-                    self.assertEqual(result["status"], "turn_budget_exhausted")
-                else:
-                    self.assertEqual(result["status"],
-                                     "native_error_requires_state_reconciliation")
-                    self.assertEqual(result["events"][-1]["kind"],
-                                     "native_tool_uncertain_outcome")
+                # All scenarios in this table intentionally violate either
+                # the exact receipt schema, model preview intent, or granted
+                # source policy. Python's True == 1 is NOT a valid JSON
+                # type equivalence: markerCount must be a real int.
+                self.assertEqual(result["status"],
+                                 "native_error_requires_state_reconciliation")
+                self.assertEqual(result["events"][-1]["kind"],
+                                 "native_tool_uncertain_outcome")
                 self.assertFalse(result["native_editing_capability_complete"])
 
     async def test_real_empty_timeline_rejects_duplicate_before_stateful_native_rpc(self):
