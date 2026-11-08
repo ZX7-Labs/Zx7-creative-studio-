@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "purpose": "Independent outcome records for bounded synthetic-only NVIDIA-hosted creative-model/native-editor evaluations; not human artistic approval.",
+  "trials": [
+    {
+      "workflow_run": 42435132392,
+      "request_commit": "21b2b67a0f8cd770a427dc4e75abdee72750234e",
+      "artifact_id": 13599835043,
+      "artifact_zip_sha256": "7e54cfd96223d3f019223b560847155fec0be740255c95694c52a870da78c170",
+      "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "model_transport": "actual NVIDIA-hosted authenticated, forced provider-native function calling",
+      "synthetic_only": true,
+      "original_private_owner_media_sent": false,
+      "acknowledged_editor_writes": [
+        "create_project",
+        "import_asset_from_path",
+        "create_timeline",
+        "add_asset_to_timeline"
+      ],
+      "selected_read_operations": [
+        "get_timeline",
+        "get_assets",
+        "inspect_timeline_frame",
+        "get_project"
+      ],
+      "model_selected_safe_previews": [
+        "add_asset_to_timeline"
+      ],
+      "actual_saved_active_timeline_video_clip_count": 1,
+      "active_saved_clip_enabled": true,
+      "active_saved_clip_track_visible": true,
+      "original_source_copied_sha256": "e20a6c62d9c715470e8aee137dd72bc75cd0580cc068ca6d521846ebded98ef1",
+      "project_source_matches_staged_original": true,
+      "physically_decoded_original_source": true,
+      "original_source_decode": {
+        "codec": "h264",
+        "width": 640,
+        "height": 360,
+        "fps": 24,
+        "frames": 96
+      },
+      "verified_export_count": 0,
+      "physically_observed_export_frames": 0,
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "failure_kind": "source_mime_contract_mismatch",
+      "exact_controller_error": "Only original bounded PNG evidence is accepted",
+      "root_cause": "The actual pinned Velorn electron/mcpServer.js inspectTimelineFrame returns image/jpeg data plus native editable-timeline metadata. The ZX7 model controller rejected JPEG and allowed only PNG from its physically verified export sensors, so a legitimate native preview never reached the real vision-capable NVIDIA model. This is a native preview, NOT a verified MP4 frame and must never count toward physical export evidence.",
+      "postmortem_fix": "Add explicit source-pinned host-read authorization for inspect_timeline_frame, bounded JPEG signature validation, native timeline identity/capture metadata checks, model-visible unverified-timeline provenance, and independently audited separation from verified export PNGs. Tests must pass on exact production code before another hosted inference.",
+      "evidence_source": "Actual GitHub Actions artifact ZIP downloaded and SHA256 checked; inspected native-journal.jsonl, captured exception, saved project.comfystudio, byte-identical source project asset and physically decoded H264 frame via FFmpeg. No invented neural actions or user private footage."
+    }
+  ]
+}
