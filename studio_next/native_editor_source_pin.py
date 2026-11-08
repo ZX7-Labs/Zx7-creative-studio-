@@ -81,3 +81,23 @@ def pinned_electron_asset_placement_previews(
         return ()
     return tuple(name for name in _PINNED_ASSET_PLACEMENT_PREVIEWS
                  if grants.get(name) == "write")
+
+
+def pinned_electron_timeline_frame_previews(
+        source: Path, grants: dict) -> tuple[str, ...]:
+    """Attest source-native JPEG preview reads, NEVER decoded export proof.
+
+    Pinned Electron MCP inspectTimelineFrame returns native timeline frame
+    metadata plus image/jpeg data. Its non-export image has no verified
+    export SHA256 and must not be mistaken for a physically decoded MP4.
+    Current actual editor source and both read-only grants are prerequisites.
+    """
+    if not _verified_editor_grants(grants):
+        raise ValueError("Pinned timeline preview needs trusted native source/grants")
+    if not isinstance(source, Path):
+        raise ValueError("Pinned timeline preview requires a source Path")
+    if (grants.get("inspect_timeline_frame") != "read" or
+            grants.get("get_project") != "read" or
+            not _source_matches_pinned_electron_mcp(source)):
+        return ()
+    return ("inspect_timeline_frame",)
