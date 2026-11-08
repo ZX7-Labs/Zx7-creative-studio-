@@ -126,6 +126,32 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             method(source, {"add_timeline_markers": "unknown-access"})
 
+    def test_pinned_clip_edit_previews_require_source_integrity_and_write_grant(self):
+        """Default native move/trim/delete preview plans do not grant
+        mutation authority to model text or unknown upstream editor builds.
+        """
+        from studio_next.native_editor_source_pin import (
+            pinned_electron_clip_edit_previews)
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        pin = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+        def clean(argv, **_):
+            return subprocess.CompletedProcess(
+                argv, 0, pin + "\n" if "rev-parse" in argv else "", "")
+        grants = {"move_clips": "write", "trim_clips": "write",
+                  "delete_clips": "read", "get_project": "read"}
+        with patch("subprocess.run", side_effect=clean):
+            self.assertEqual(pinned_electron_clip_edit_previews(
+                source, grants), ("move_clips", "trim_clips"))
+        with patch("subprocess.run", side_effect=lambda argv, **_: (
+                subprocess.CompletedProcess(
+                    argv, 0, "unknown-revision\n" if "rev-parse" in argv
+                    else "", ""))):
+            self.assertEqual(pinned_electron_clip_edit_previews(
+                source, grants), ())
+        with self.assertRaises(ValueError):
+            pinned_electron_clip_edit_previews(
+                source, {"move_clips": "execute-all"})
+
     def test_pinned_timeline_jpeg_requires_exact_clean_source_and_two_read_grants(self):
         """An actual native timeline JPEG is not a physical-export
         verifier. Only the audited pinned Electron MCP entrypoint and
