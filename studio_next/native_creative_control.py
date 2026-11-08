@@ -261,8 +261,10 @@ def _source_bound_live_timeline_preview(
 def _source_bound_images(texts: list[str], images: list[tuple[str, bytes]]):
     if not images:
         return []
-    if len(images) > 4 or len(texts) != 1:
-        raise NativeCreativeControlError("Native image output lacks a bounded single proof receipt")
+    if (len(images) > 4 or len(texts) != 1 or
+            any(mime != "image/png" for mime, _ in images)):
+        raise NativeCreativeControlError(
+            "Verified exported frame requires source-bound original PNG")
     receipt = _strict_receipt(texts, "Native image proof")
     if (not isinstance(receipt, dict) or
             not isinstance(receipt.get("export_sha256"), str) or
