@@ -1696,6 +1696,45 @@ class NativeCreativeControl:
                                 type(host_response["missingMarkerIds"]) is list and
                                 all(type(marker_id) is str for marker_id
                                     in host_response["missingMarkerIds"]))))
+                        # Pinned Electron MCP addAsset(s)ToTimeline intercepts
+                        # default preview (missing previewOnly or true) before
+                        # performAction. The response is a flat *plan*, not
+                        # generic runRendererActionTool nested output. Trial
+                        # #42427570784 correctly imported source but halted
+                        # because this safe default preview was misclassified
+                        # as a possible native mutation. Require the EXACT
+                        # source-verified plan/suggested-apply envelope, the
+                        # original model's non-commit intent, and an actual
+                        # model-selectable previewOnly:false apply command.
+                        placement_preview_messages = {
+                            "add_asset_to_timeline":
+                                "Asset placement plan only. No timeline change was made.",
+                            "add_assets_to_timeline":
+                                "Batch asset placement plan only. No timeline change was made.",
+                        }
+                        placement_apply = (
+                            host_response.get("suggestedApplyCall")
+                            if isinstance(host_response, dict) else None)
+                        placement_preview = (
+                            native_name in self._host_verified_top_level_previews
+                            and native_name in placement_preview_messages
+                            and args["inputs"].get("previewOnly") in (None, True)
+                            and isinstance(host_response, dict)
+                            and set(host_response) == {
+                                "previewOnly", "action", "message", "plan",
+                                "suggestedApplyCall"}
+                            and host_response["previewOnly"] is True
+                            and host_response["action"] == native_name
+                            and host_response["message"] ==
+                                placement_preview_messages[native_name]
+                            and type(host_response["plan"]) is dict
+                            and host_response["plan"].get("action") == native_name
+                            and host_response["plan"].get("previewOnly") is True
+                            and type(placement_apply) is dict
+                            and set(placement_apply) == {"tool", "arguments"}
+                            and placement_apply["tool"] == native_name
+                            and type(placement_apply["arguments"]) is dict
+                            and placement_apply["arguments"].get("previewOnly") is False)
                         wrapper_preview = (
                             isinstance(host_response, dict) and
                             host_response.get("previewOnly") is True and
@@ -1703,7 +1742,7 @@ class NativeCreativeControl:
                             isinstance(host_result, dict) and
                             host_result.get("action") == native_name)
                         acknowledged_preview = (
-                            top_level_preview or (
+                            top_level_preview or placement_preview or (
                                 preview is True and (
                                     (success is False and (
                                         not isinstance(host_response, dict) or
