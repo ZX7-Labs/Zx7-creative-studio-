@@ -91,7 +91,31 @@
       "failure_kind": "source_verified_clip_move_default_preview_unrecognized",
       "failure": "The real 120B model created an editable project from original source, added text/image composition, saved and physically exported a valid H264 1920x1080 24fps six-second MP4 with 144 decodable frames. The host independent zx7_verify_native_export acknowledged the exact MP4 SHA, and the model received a physically decoded export PNG via zx7_observe_verified_export_frame. It then selected add_shape_clip as a real post-observation content revision, with an application success ACK. After reading and visually inspecting its revised native timeline, it selected move_clips; actual pinned Electron MCP moveClips defaults previewOnly to true and correctly returned a no-write plan before performAction, but the ZX7 controller only accepted marker/asset placement flat previews. It incorrectly classified the safe move plan as uncertain application state and stopped without a second export. Saved active project contains one enabled source-backed original video clip (2s-3s), one text clip (0s-2s) and one shape clip (3s-6s). The initial film is NOT independently judged professional creative quality: independent frame review shows a black title frame and prolonged dark shot in the source-bounded sample. No fabricated second MP4, no automatic retry after uncertain write.",
       "fix_verified_or_pending": "Source-pinned read-only default move/trim/delete plan recognition and model-selected explicit commit continuation is under independent CI; technical acceptance requires second verified physically different exported film.",
-      "evidence_source": "Downloaded actual GitHub Actions artifact; independently computed ZIP SHA256, inspected source-bound native journal, saved genuine project, copied source ledger and native-evaluation.json. Export MP4 independently hashed and FFmpeg decoded; FFprobe verified 144 H264 video frames 1920x1080 24fps, 6s. Sample frames at 0.5s, 1.5s, 2.5s, 4.5s, 5.5s visually inspected. The exact 31 actual model-selected tool turns and all nine app ACK events inspected. No real owner media passed to hosted provider."
+      "evidence_source": "Downloaded actual GitHub Actions artifact; independently computed ZIP SHA256, inspected source-bound native journal, saved genuine project, copied source ledger and native-evaluation.json. Export MP4 independently hashed and FFmpeg decoded; FFprobe verified 144 H264 video frames 1920x1080 24fps, 6s. Sample frames at 0.5s, 1.5s, 2.5s, 4.5s, 5.5s visually inspected. The exact 31 actual model-selected tool turns and all nine app ACK events inspected. No real owner media passed to hosted provider.",
+      "first_export_visual_diagnostic": {
+        "source_export_sha256": "18946da466b47c8d97393df468ce2b3d91e1eeda35599cb7c09fd2173c116a8c",
+        "tool": "actual FFmpeg blackdetect on independently downloaded, sha256-matched 6-second MP4",
+        "filters": {
+          "min_black_duration_seconds": 0.25,
+          "pixel_black_threshold": 0.02,
+          "required_black_frame_ratio": 0.98
+        },
+        "detected_intervals_seconds": [
+          [
+            0,
+            2
+          ],
+          [
+            4,
+            5.958333
+          ]
+        ],
+        "total_black_interval_seconds_approx": 3.958333,
+        "video_duration_seconds": 6,
+        "video_only_no_audio_stream_observed": true,
+        "interpretation": "For this synthetic original engineering film, approximately 66% of six seconds were classified near-black under the stated physical threshold. The opening is a deliberate small white title on black; the ending remains visibly black before the model's subsequent unexported shape-clip revision. A technical black-frame diagnostic is NOT proof that black is artistically wrong, nor a human creative-quality score.",
+        "independent_creative_quality_approved": false
+      }
     },
     {
       "workflow_run": 42443385990,
