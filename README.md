@@ -66,6 +66,10 @@ its workspace. A completed run means the model finished with verified export
 evidence; artistic approval remains separate. An interrupted or failed run is
 retained for inspection and is never automatically replayed.
 
+`status` also checks the owning runner's live kernel locks. A saved `running`
+record whose runner has died is annotated as needing attention without rewriting
+that record or claiming recovery of an editor/render process.
+
 For the supported hosted NVIDIA adapter, choose `--provider nvidia` at `init`
 and provide `NVIDIA_API_KEY` only to the trusted runner environment. Both
 providers use the same native session and host grants. Uploading observation

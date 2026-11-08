@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import contextmanager
 import hashlib
 from importlib import metadata
 import json
@@ -38,6 +39,56 @@ def _write_status(session, value):
         os.replace(temporary, session / "status.json")
     finally:
         temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def _bound_session_runner(workspace_lock, session, session_id):
+    """Bind one session to live kernel locks; file contents alone prove no liveness."""
+    import fcntl
+    with open(session / ".runner.lock", "a", opener=lambda p, f:
+              os.open(p, f | os.O_NOFOLLOW, 0o600)) as session_lock:
+        fcntl.flock(session_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # A session-specific lock closes the transition window in which a new
+        # workspace lock holder has not yet replaced an old session binding.
+        workspace_lock.seek(0)
+        workspace_lock.truncate()
+        json.dump({"schema": 1, "session_id": session_id}, workspace_lock)
+        workspace_lock.flush()
+        os.fsync(workspace_lock.fileno())
+        yield
+
+
+def _probe_runner_lock(path, *, binding=False):
+    """Read-only lock observation. Missing/unstable metadata is unknown, not a PID guess."""
+    import fcntl
+    try:
+        lock = open(path, "r", encoding="utf-8", opener=lambda p, f:
+                    os.open(p, f | os.O_NOFOLLOW))
+    except FileNotFoundError:
+        return None, None
+    with lock:
+        info = os.fstat(lock.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o077):
+            raise ValueError("Runner lock must be a private owner-controlled file")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            held = False
+        except BlockingIOError:
+            held = True
+        session_id = None
+        if binding:
+            try:
+                raw = lock.read(1025)
+                value = _load_json(raw) if len(raw) <= 1024 else None
+                candidate = value.get("session_id") if isinstance(value, dict) else None
+                if (value.get("schema") == 1 and isinstance(candidate, str)
+                        and len(candidate) == 24
+                        and all(c in "0123456789abcdef" for c in candidate)):
+                    session_id = candidate
+            except (ValueError, UnicodeError, AttributeError):
+                pass  # A live owner may be replacing the bounded binding.
+        return held, session_id
 
 
 def _private_root(path):
@@ -245,67 +296,97 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
         sid = secrets.token_hex(12)
         session = root / "sessions" / sid
         session.mkdir(mode=0o700)
-        locations = {n: root / n / sid for n in ("staging", "outputs", "state")}
-        for directory in locations.values():
-            directory.mkdir(mode=0o700)
-        status = {"session_id": sid, "state": "preparing", "provider": config["provider"],
-                  "model_id": config["model_id"], "artistic_quality_approved": False,
-                  "outputs_directory": str(locations["outputs"]),
-                  "projects_directory": str(root / "projects"),
-                  "native_journal": str(session / "native-journal.jsonl")}
-        _write_status(session, status)
-        try:
-            sources = dict.fromkeys(Path(a).expanduser().resolve(strict=True) for a in assets)
-            ledger = [_stage_asset(a, locations["staging"], rights) for a in sources]
-            _write_new(session / "sources.json", ledger)
-            host = _read_private(root / "editor-grants.json")
-            host.update({n + "_root": str(p) for n, p in locations.items() if n != "state"})
-            _write_new(session / "host-grants.json", host)
-            owner_context = {"authorized_sources": ledger,
-                "existing_native_project": str(project_path) if project_path else None,
-                "projects_root": str(root / "projects"), "outputs_root": str(locations["outputs"])}
-            text = brief.strip() + "\n\nHost-authorized workspace facts (not an editing plan):\n" + json.dumps(owner_context, ensure_ascii=False)
-            if len(text) > 32000:
-                raise ValueError("Brief and asset context exceed the native session budget")
-            with open(session / "brief.txt", "x", encoding="utf-8", opener=lambda p, f: os.open(p, f, 0o600)) as out:
-                out.write(text)
-            argv = ["--source", config["editor_source"], "--config", str(session / "host-grants.json"),
-                    "--state", str(locations["state"]), "--brief-file", str(session / "brief.txt"),
-                    "--receipt", str(session / "native-journal.jsonl"), "--provider", config["provider"],
-                    "--model-id", config["model_id"], "--base-url", config["base_url"],
-                    "--max-turns", str(max_turns), "--model-timeout", str(model_timeout),
-                    "--structured-actions", "--evaluation-evidence", "export"]
-            for flag, value in (("--xvfb-binary", xvfb_binary), ("--display", display)):
-                if value:
-                    argv.extend([flag, str(value)])
-            if project_path is not None:
-                argv.extend(["--project", str(project_path)])
-            if allow_cloud_image_upload:
-                argv.append("--allow-cloud-image-upload")
-            args = build_parser().parse_args(argv)
-            status["state"] = "running"
+        with _bound_session_runner(lock, session, sid):
+            locations = {n: root / n / sid for n in ("staging", "outputs", "state")}
+            for directory in locations.values():
+                directory.mkdir(mode=0o700)
+            status = {"session_id": sid, "state": "preparing", "provider": config["provider"],
+                      "model_id": config["model_id"], "artistic_quality_approved": False,
+                      "outputs_directory": str(locations["outputs"]),
+                      "projects_directory": str(root / "projects"),
+                      "native_journal": str(session / "native-journal.jsonl")}
             _write_status(session, status)
-            summary = asyncio.run(run_native_session(args))
-            status.update(state=("completed" if summary.get("evaluation_evidence_satisfied") is True
-                                 else "needs_attention"), result=summary)
-            _write_status(session, status)
-            return status
-        except BaseException as exc:
-            # The persisted receipt/native project are kept. Never replay a
-            # possible write or claim recovery from the status file alone.
-            status.update(state="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
-                          error_type=type(exc).__name__, automatic_write_replay=False)
-            _write_status(session, status)
-            raise
+            try:
+                sources = dict.fromkeys(Path(a).expanduser().resolve(strict=True) for a in assets)
+                ledger = [_stage_asset(a, locations["staging"], rights) for a in sources]
+                _write_new(session / "sources.json", ledger)
+                host = _read_private(root / "editor-grants.json")
+                host.update({n + "_root": str(p) for n, p in locations.items() if n != "state"})
+                _write_new(session / "host-grants.json", host)
+                owner_context = {"authorized_sources": ledger,
+                    "existing_native_project": str(project_path) if project_path else None,
+                    "projects_root": str(root / "projects"), "outputs_root": str(locations["outputs"])}
+                text = brief.strip() + "\n\nHost-authorized workspace facts (not an editing plan):\n" + json.dumps(owner_context, ensure_ascii=False)
+                if len(text) > 32000:
+                    raise ValueError("Brief and asset context exceed the native session budget")
+                with open(session / "brief.txt", "x", encoding="utf-8", opener=lambda p, f: os.open(p, f, 0o600)) as out:
+                    out.write(text)
+                argv = ["--source", config["editor_source"], "--config", str(session / "host-grants.json"),
+                        "--state", str(locations["state"]), "--brief-file", str(session / "brief.txt"),
+                        "--receipt", str(session / "native-journal.jsonl"), "--provider", config["provider"],
+                        "--model-id", config["model_id"], "--base-url", config["base_url"],
+                        "--max-turns", str(max_turns), "--model-timeout", str(model_timeout),
+                        "--structured-actions", "--evaluation-evidence", "export"]
+                for flag, value in (("--xvfb-binary", xvfb_binary), ("--display", display)):
+                    if value:
+                        argv.extend([flag, str(value)])
+                if project_path is not None:
+                    argv.extend(["--project", str(project_path)])
+                if allow_cloud_image_upload:
+                    argv.append("--allow-cloud-image-upload")
+                args = build_parser().parse_args(argv)
+                status["state"] = "running"
+                _write_status(session, status)
+                summary = asyncio.run(run_native_session(args))
+                status.update(state=("completed" if summary.get("evaluation_evidence_satisfied") is True
+                                     else "needs_attention"), result=summary)
+                _write_status(session, status)
+                return status
+            except BaseException as exc:
+                # The persisted receipt/native project are kept. Never replay a
+                # possible write or claim recovery from the status file alone.
+                status.update(state="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
+                              error_type=type(exc).__name__, automatic_write_replay=False)
+                _write_status(session, status)
+                raise
 
 
 def workspace_status(path):
     root, _, _ = load_workspace(path)
+    held_before, bound_before = _probe_runner_lock(root / ".run.lock", binding=True)
     sessions = []
     for directory in sorted((root / "sessions").iterdir()):
         if not directory.is_symlink() and directory.is_dir():
-            sessions.append(_read_private(directory / "status.json"))
-    return {"workspace": str(root), "sessions": sessions}
+            try:
+                record = _read_private(directory / "status.json")
+            except ValueError:
+                # A new session directory precedes its first atomic status
+                # publication. Do not turn that narrow window into an error.
+                if (not (directory / "status.json").exists()
+                        and not (directory / "status.json").is_symlink()):
+                    continue
+                raise
+            sessions.append((directory, record))
+    held_after, bound_after = _probe_runner_lock(root / ".run.lock", binding=True)
+    bound_session = bound_after if bound_before == bound_after else None
+    for directory, record in sessions:
+        if record.get("state") not in ("preparing", "running"):
+            continue
+        session_held, _ = _probe_runner_lock(directory / ".runner.lock")
+        if (held_before is True and held_after is True and session_held is True
+                and bound_session == directory.name == record.get("session_id")):
+            observed = "active"
+        elif session_held is False or (held_before is False and held_after is False):
+            observed = "not_running"
+        else:
+            observed = "unknown"
+        # This is a read-only observation, never a replacement for the saved
+        # state, an outcome/recovery claim, or permission to replay native writes.
+        record["runner_liveness"] = {"status": observed,
+            "requires_attention": observed != "active", "automatic_write_replay": False}
+    return {"workspace": str(root), "sessions": [record for _, record in sessions],
+            "runner_observation": {"workspace_lock_held": held_after,
+                "bound_session_id": bound_session, "scope": "host_runner_only"}}
 
 
 def main(argv=None):
