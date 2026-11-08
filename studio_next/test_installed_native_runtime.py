@@ -60,6 +60,16 @@ class InstalledNativeRuntimeTests(unittest.TestCase):
             entrypoints = next(p for p in source.namelist() if p.endswith("/entry_points.txt"))
             self.assertIn("zx7-studio = studio_next.studio_cli:main",
                           source.read(entrypoints).decode())
+            from email.parser import Parser
+            metadata_path = next(p for p in source.namelist() if p.endswith("/METADATA"))
+            metadata = Parser().parsestr(source.read(metadata_path).decode())
+            self.assertEqual(metadata["License-Expression"], "MIT AND GPL-3.0-only")
+            license_files = metadata.get_all("License-File")
+            self.assertEqual(set(license_files), {"LICENSE", "studio_next/editor_runtime/LICENSE",
+                                                  "studio_next/editor_runtime/NOTICE"})
+            base = metadata_path.removesuffix("METADATA") + "licenses/"
+            for license_file in license_files:
+                self.assertEqual(source.read(base + license_file), (ROOT / license_file).read_bytes())
             self.assertEqual(source.read("studio_next/editor_runtime/editor.example.json"),
                              (ROOT / "engines/velorn/editor.example.json").read_bytes())
 

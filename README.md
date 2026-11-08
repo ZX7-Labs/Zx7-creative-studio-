@@ -76,6 +76,11 @@ providers use the same native session and host grants. Uploading observation
 images to NVIDIA additionally requires `--allow-cloud-image-upload` on `run`;
 source text and tool results are part of the hosted model conversation.
 
+The wheel contains MIT-licensed BODY code and a GPL-3.0-only native runtime.
+It ships both license texts and upstream notices; its distribution metadata
+records both licenses. The root MIT license does not replace the native
+runtime's GPL terms. See the [native source and notices](engines/velorn/README.md).
+
 The installed package includes the MCP bridge; the complete pinned editor,
 its Node dependencies and model runtime are installed separately. The existing
 BODY service and specialized engine tools remain available below.
