@@ -2914,6 +2914,127 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     host_once_after_acknowledged_write=bad)
 
 
+    async def test_import_ack_requires_fresh_native_asset_count_before_placement(self):
+        """Real 4B trial #42427570784 imported a real source, but the
+        immediate get_project snapshot still reported assetCount 0 and the
+        placement precondition rejected its model-chosen next operation.
+        Recover by observing, never by inventing assets or retrying a write.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+        from unittest.mock import patch
+
+        async def no_wait(_):
+            return None
+
+        class LaggedImportEditor(FakeSession):
+            def __init__(self, never_converges=False):
+                super().__init__()
+                self.never_converges = never_converges
+                self.import_applied = False
+                self.import_reads = 0
+                self.tools.extend([
+                    SimpleNamespace(name="get_project", description="Native state",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="import_asset_from_path",
+                                    description="Import authorized actual source",
+                                    input_schema={"type": "object", "properties": {
+                                        "path": {"type": "string"},
+                                        "previewOnly": {"type": "boolean"}}}),
+                    SimpleNamespace(name="add_asset_to_timeline",
+                                    description="Place imported native asset",
+                                    input_schema={"type": "object", "properties": {
+                                        "assetId": {"type": "string"},
+                                        "previewOnly": {"type": "boolean"}}}),
+                ])
+
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                if name == "get_project":
+                    if self.import_applied:
+                        self.import_reads += 1
+                    count = (1 if self.import_applied and not
+                             self.never_converges and self.import_reads >= 3
+                             else 0)
+                    response = {
+                        "mcp": {"hasProject": True},
+                        "project": {"id": "pinned-real-project",
+                                    "assetCount": count,
+                                    "currentTimelineId": "timeline-real"},
+                        "currentTimeline": {"id": "timeline-real",
+                                            "clipCount": 0},
+                        "assetCount": count}
+                elif name == "import_asset_from_path":
+                    if self.import_applied:
+                        raise AssertionError("Must not retry accepted native write")
+                    self.import_applied = True
+                    response = {"success": True,
+                                "result": {"previewOnly": False,
+                                           "asset": {"id": "native-asset-1"}}}
+                elif name == "add_asset_to_timeline":
+                    response = {"success": True,
+                                "result": {"previewOnly": False,
+                                           "clip": {"id": "native-clip-1"}}}
+                else:
+                    raise AssertionError(name)
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(response))])
+
+        for never_converges in (False, True):
+            with self.subTest(never_converges=never_converges):
+                session = LaggedImportEditor(never_converges)
+                grants = {t.name: (
+                    "write" if t.name in ("update_text_clip",
+                                          "import_asset_from_path",
+                                          "add_asset_to_timeline") else "read")
+                    for t in session.tools}
+                model = ScriptedModel([
+                    decision("invoke", tool="import_asset_from_path",
+                             inputs={"path": "/owned/synthetic.mp4",
+                                     "previewOnly": False}),
+                    decision("invoke", tool="add_asset_to_timeline",
+                             inputs={"assetId": "native-asset-1",
+                                     "previewOnly": False}),
+                    decision("finish", summary="No invented state or write"),
+                ])
+                with patch("studio_next.native_creative_control.asyncio.sleep",
+                           new=no_wait):
+                    result = await NativeCreativeControl(
+                        session, model, max_turns=3, host_tool_access=grants,
+                        host_preconditions={
+                            "add_asset_to_timeline": [
+                                "project_open", "project_assets_available"]},
+                        host_possible_effects={
+                            "import_asset_from_path": [
+                                "project_assets_available"]}).run(
+                            "Use imported original in native timeline")
+                self.assertEqual(result["status"], "model_finished_unverified")
+                self.assertEqual([t for t, _ in session.calls].count(
+                    "import_asset_from_path"), 1)
+                self.assertEqual(session.import_reads,
+                                 4 if never_converges else 3)
+                lag_events = [e for e in result["events"] if
+                              e["kind"] == "host_project_post_write_asset_lag"]
+                self.assertEqual(len(lag_events),
+                                 4 if never_converges else 2)
+                if never_converges:
+                    self.assertEqual([t for t, _ in session.calls].count(
+                        "add_asset_to_timeline"), 0)
+                    self.assertTrue(model.observed[1][
+                        "last_host_project_write_reconciliation"][
+                            "asset_inventory_not_yet_observed"])
+                    self.assertIn("host_precondition", [
+                        x.get("validation_keyword") for x in result["events"]
+                        if x["kind"] == "model_action_rejected"])
+                else:
+                    self.assertEqual([t for t, _ in session.calls].count(
+                        "add_asset_to_timeline"), 1)
+                    self.assertEqual(
+                        model.observed[1]["native_project_presence_from_last_inspection"],
+                        "present")
+                self.assertTrue(audit_native_journal(
+                    result["events"], host_tool_access=grants)[
+                        "journal_chain_structurally_valid"])
+
     async def test_lagging_native_project_snapshot_converges_using_read_only_reconciliation(self):
         from studio_next.native_creative_audit import audit_native_journal
         session = FakeSession()
