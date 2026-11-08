@@ -2449,6 +2449,136 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                  "native_tool_uncertain_outcome")
                 self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_pinned_electron_asset_placement_default_preview_then_independent_commit(self):
+        """4B real trial #42427570784: model omitted previewOnly in a
+        placement call and real Electron MCP returned safe preview. The
+        controller must not misreport an uncertain write or auto-apply it.
+        """
+        class PlacementSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools.extend([
+                    SimpleNamespace(name="get_project", description="Native project",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="add_asset_to_timeline",
+                                    description="Place real imported asset",
+                                    input_schema={"type": "object", "properties": {
+                                        "assetId": {"type": "string"},
+                                        "previewOnly": {"type": "boolean"}}}),
+                ])
+
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                if name == "get_project":
+                    response = {"mcp": {"hasProject": True},
+                                "project": {"id": "real-editor"},
+                                "currentTimeline": {"clipCount": 0}}
+                elif name == "add_asset_to_timeline" and (
+                        inputs.get("previewOnly") is not False):
+                    response = {
+                        "previewOnly": True, "action": name,
+                        "message": "Asset placement plan only. No timeline change was made.",
+                        "plan": {"action": name, "previewOnly": True,
+                                 "asset": {"id": "imported-asset"}},
+                        "suggestedApplyCall": {
+                            "tool": name, "arguments": {
+                                "assetId": "imported-asset",
+                                "previewOnly": False}}}
+                elif name == "add_asset_to_timeline":
+                    response = {"success": True, "action": name,
+                                "result": {"success": True, "clipId": "native-clip"}}
+                else:
+                    raise AssertionError(name)
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(response))])
+
+        session = PlacementSession()
+        grants = {tool.name: (
+            "write" if tool.name in ("update_text_clip", "add_asset_to_timeline")
+            else "read") for tool in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetId": "imported-asset"}),
+            decision("invoke", tool="add_asset_to_timeline",
+                     inputs={"assetId": "imported-asset", "previewOnly": False}),
+            decision("finish", summary="Actual edit requested after preview"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=3, host_tool_access=grants,
+            host_verified_top_level_preview_tools=(
+                "add_asset_to_timeline",)).run(
+                    "Place a previously imported source on the editable timeline")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        previews = [e for e in result["events"]
+                    if e["kind"] == "native_tool_preview"]
+        writes = [e for e in result["events"]
+                  if e["kind"] == "native_tool_result" and
+                     e.get("host_application_write_acknowledged") is True]
+        self.assertEqual(len(previews), 1)
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(previews[0]["tool"], "add_asset_to_timeline")
+        self.assertEqual(model.observed[1]["last_native_preview_feedback"]["tool"],
+                         "add_asset_to_timeline")
+        self.assertEqual([t for t, _ in session.calls].count(
+            "add_asset_to_timeline"), 2)
+
+    async def test_unverified_or_contradictory_asset_preview_remains_uncertain(self):
+        """No model text, unexpected action, or false success field may
+        impersonate the actual pinned Electron MCP no-write receipt.
+        """
+        class PlacementReply(FakeSession):
+            def __init__(self, receipt):
+                super().__init__()
+                self.receipt = receipt
+                self.tools.append(SimpleNamespace(
+                    name="add_asset_to_timeline", description="Native asset placement",
+                    input_schema={"type": "object", "properties": {
+                        "previewOnly": {"type": "boolean"}}}))
+
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(self.receipt))])
+
+        good = {
+            "previewOnly": True, "action": "add_asset_to_timeline",
+            "message": "Asset placement plan only. No timeline change was made.",
+            "plan": {"action": "add_asset_to_timeline", "previewOnly": True},
+            "suggestedApplyCall": {"tool": "add_asset_to_timeline",
+                                    "arguments": {"previewOnly": False}}}
+        failures = (
+            ({**good, "success": True}, {}),
+            ({**good, "action": "other_tool"}, {}),
+            ({**good, "plan": {"action": "other_tool", "previewOnly": True}}, {}),
+            ({**good, "suggestedApplyCall": {
+                "tool": "other_tool", "arguments": {"previewOnly": False}}}, {}),
+            ({**good, "suggestedApplyCall": {
+                "tool": "add_asset_to_timeline", "arguments": {
+                    "previewOnly": True}}}, {}),
+            ({**good, "unexpected": 1}, {}),
+            (good, {"previewOnly": False}),
+            (good, {"previewOnly": True, "without_attestation": True}),
+        )
+        for receipt, extra_inputs in failures:
+            session = PlacementReply(receipt)
+            grants = {t.name: (
+                "write" if t.name in ("update_text_clip", "add_asset_to_timeline")
+                else "read") for t in session.tools}
+            inp = {k: v for k, v in extra_inputs.items()
+                   if k != "without_attestation"}
+            model = ScriptedModel([decision("invoke",
+                    tool="add_asset_to_timeline", inputs=inp)])
+            attested = () if extra_inputs.get("without_attestation") else (
+                "add_asset_to_timeline",)
+            result = await NativeCreativeControl(
+                session, model, max_turns=1, host_tool_access=grants,
+                host_verified_top_level_preview_tools=attested).run(
+                    "Inspect preview safely")
+            self.assertEqual(result["status"],
+                             "native_error_requires_state_reconciliation")
+            self.assertEqual(result["events"][-1]["kind"],
+                             "native_tool_uncertain_outcome")
+
     async def test_real_empty_timeline_rejects_duplicate_before_stateful_native_rpc(self):
         """Physical Qwen failure #42420526258: source filename is not
         an existing editable clip id. A false host precondition is not
