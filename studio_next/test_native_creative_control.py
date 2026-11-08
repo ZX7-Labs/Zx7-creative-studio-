@@ -168,6 +168,172 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                              for e in result["events"]), 2)
         self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_real_native_timeline_jpeg_reaches_model_without_fake_export_proof(self):
+        """Actual NVIDIA/Nemotron run #42435132392 produced a genuine
+        editable clip and then saw pinned inspect_timeline_frame JPEG.
+        The old controller rejected every JPEG before the vision model.
+        This fixture tests read-only protocol only, not creative success.
+        """
+        from studio_next.native_creative_audit import (
+            audit_native_journal, NativeJournalError)
+
+        # This is a bounded protocol fixture, NOT a real captured image.
+        jpeg = b"\\xff\\xd8\\xff\\xe0" + b"fixture-for-protocol-safety" + b"\\xff\\xd9"
+        sha = hashlib.sha256(jpeg).hexdigest()
+
+        class FrameSession(FakeSession):
+            def __init__(self, payload=None, mimetype="image/jpeg"):
+                super().__init__()
+                self.payload = payload
+                self.mimetype = mimetype
+                self.tools.extend([
+                    SimpleNamespace(name="get_project", description="Native project",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="inspect_timeline_frame",
+                                    description="Actual native visual preview",
+                                    input_schema={"type": "object", "properties": {
+                                        "includeImage": {"type": "boolean"},
+                                        "timeSeconds": {"type": "number"}}}),
+                ])
+
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                if name == "get_project":
+                    payload = {
+                        "mcp": {"hasProject": True},
+                        "project": {"id": "saved-editable-project",
+                                    "currentTimelineId": "native-timeline-1"},
+                        "currentTimeline": {"id": "native-timeline-1",
+                                            "clipCount": 1}}
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text=json.dumps(payload))])
+                if name != "inspect_timeline_frame":
+                    raise AssertionError("Unrequested native editor mutation")
+                payload = self.payload or {
+                    "timeline": {"id": "native-timeline-1"},
+                    "requested": {"timeSeconds": 1.5},
+                    "frame": {"timeSeconds": 1.5, "frame": 36, "fps": 24},
+                    "activeClipCount": 1, "visualClipCount": 1,
+                    "capture": {"imageIncluded": True, "renderer": "live"},
+                    "warning": "", "generatedAt": "source-protocol-fixture",
+                }
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(payload)),
+                    SimpleNamespace(type="image", mime_type=self.mimetype,
+                                    data=base64.b64encode(jpeg).decode())])
+
+        def grants(session):
+            return {t.name: (
+                "write" if t.name == "update_text_clip" else "read")
+                for t in session.tools}
+
+        session = FrameSession()
+        model = ScriptedModel([
+            decision("invoke", tool="inspect_timeline_frame",
+                     inputs={"timeSeconds": 1.5, "includeImage": True}),
+            decision("finish", summary="Timeline frame is not a verified MP4"),
+        ])
+        outcome = await NativeCreativeControl(
+            session, model, max_turns=2, host_tool_access=grants(session),
+            host_verified_timeline_preview_tools=(
+                "inspect_timeline_frame",),
+            required_evidence=("physical_export_verified",)).run(
+            "Review current native video without assuming an export")
+        self.assertEqual(outcome["status"], "turn_budget_exhausted")
+        self.assertEqual(len(model.images_observed), 1)
+        visual_context, images = model.images_observed[0]
+        self.assertEqual(images, [("image/jpeg", jpeg)])
+        self.assertEqual(visual_context["observed_picture_sha256"], [sha])
+        self.assertEqual(visual_context["native_picture_origin"],
+                         "live_editable_timeline_preview_not_verified_export")
+        self.assertEqual(visual_context["missing_completion_evidence"],
+                         ["physical_export_verified"])
+        native = [e for e in outcome["events"] if
+                  e["kind"] == "native_tool_result" and
+                  e["tool"] == "inspect_timeline_frame"]
+        self.assertEqual(len(native), 1)
+        self.assertEqual(native[0]["image_sha256"], [sha])
+        self.assertTrue(native[0]["native_timeline_preview_unverified_export"])
+        self.assertIsNone(native[0]["observed_export_sha256"])
+        self.assertIsNone(native[0]["independently_verified_export_sha256"])
+        self.assertEqual(sum(e.get("independently_verified_export_sha256") is not None
+                             for e in outcome["events"]), 0)
+        self.assertTrue(audit_native_journal(
+            outcome["events"], host_tool_access=grants(session))[
+                "journal_chain_structurally_valid"])
+        tampered = [dict(e) for e in outcome["events"]]
+        item = next(x for x in tampered if
+                    x.get("tool") == "inspect_timeline_frame" and
+                    x["kind"] == "native_tool_result")
+        item["observed_export_sha256"] = "a" * 64
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(tampered, host_tool_access=grants(session))
+        tampered = [dict(e) for e in outcome["events"]]
+        item = next(x for x in tampered if
+                    x.get("tool") == "inspect_timeline_frame" and
+                    x["kind"] == "native_tool_result")
+        item.pop("native_timeline_preview_unverified_export")
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(tampered, host_tool_access=grants(session))
+
+        cases = (
+            {"timeline": {"id": "wrong-project"}},
+            {"capture": {"imageIncluded": False}},
+            {"activeClipCount": True},
+            {"visualClipCount": 5},
+            {"export_sha256": "a" * 64},
+        )
+        baseline = {
+            "timeline": {"id": "native-timeline-1"},
+            "requested": {"timeSeconds": 1.5},
+            "frame": {"timeSeconds": 1.5, "frame": 36, "fps": 24},
+            "activeClipCount": 1, "visualClipCount": 1,
+            "capture": {"imageIncluded": True},
+        }
+        for change in cases:
+            payload = {**baseline, **change}
+            with self.subTest(change=change):
+                bad = FrameSession(payload)
+                proposed = ScriptedModel([decision(
+                    "invoke", tool="inspect_timeline_frame",
+                    inputs={"includeImage": True})])
+                with self.assertRaises(NativeCreativeControlError):
+                    await NativeCreativeControl(
+                        bad, proposed, max_turns=1,
+                        host_tool_access=grants(bad),
+                        host_verified_timeline_preview_tools=(
+                            "inspect_timeline_frame",)).run("Preview native frame")
+                self.assertEqual(proposed.images_observed, [])
+                self.assertEqual(len([n for n, _ in bad.calls
+                                      if n == "inspect_timeline_frame"]), 1)
+
+        bad = FrameSession()
+        with self.assertRaises(NativeCreativeControlError):
+            NativeCreativeControl(
+                bad, ScriptedModel([]),
+                host_tool_access=grants(bad),
+                host_verified_timeline_preview_tools=("unknown",))
+        untrusted = FrameSession()
+        with self.assertRaises(NativeCreativeControlError):
+            await NativeCreativeControl(
+                untrusted, ScriptedModel([decision(
+                    "invoke", tool="inspect_timeline_frame", inputs={})]),
+                host_tool_access=grants(untrusted),
+                max_turns=1).run("No source attestation")
+        wrong_schema = FrameSession()
+        wrong_schema.tools = [
+            t if t.name != "inspect_timeline_frame" else
+            SimpleNamespace(name=t.name, description=t.description,
+                            input_schema={"type": "object", "properties": {}})
+            for t in wrong_schema.tools]
+        with self.assertRaisesRegex(
+                NativeCreativeControlError, "includeImage boolean"):
+            await NativeCreativeControl(
+                wrong_schema, ScriptedModel([]),
+                host_tool_access=grants(wrong_schema),
+                host_verified_timeline_preview_tools=(
+                    "inspect_timeline_frame",)).run("Host schema mismatch")
+
     async def test_impossible_host_evidence_contract_fails_before_neural_inference(self):
         session = FakeSession()
         grants = {tool.name: "read" for tool in session.tools}
