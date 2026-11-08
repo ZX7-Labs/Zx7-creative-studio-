@@ -1741,6 +1741,8 @@ class NativeCreativeControl:
                             outcome = "native_error_requires_state_reconciliation"
                             break
                         if (success is not True or
+                                (isinstance(host_response, dict) and
+                                 host_response.get("previewOnly") is True) or
                                 (isinstance(host_result, dict) and
                                  "previewOnly" in host_result and preview is not False)):
                             # No application-level acknowledgment, or the host
