@@ -185,10 +185,10 @@ def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], li
                 raise NativeCreativeControlError("Corrupt native image encoding") from exc
             total += len(picture)
             valid_signature = (
-                picture.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+                picture.startswith(b"\x89PNG\r\n\x1a\n")
                 if mime == "image/png" else (
-                    picture.startswith(b"\\xff\\xd8\\xff") and
-                    picture.endswith(b"\\xff\\xd9")))
+                    picture.startswith(b"\xff\xd8\xff") and
+                    picture.endswith(b"\xff\xd9")))
             if (not 8 <= len(picture) <= _MAX_IMAGE_BYTES or
                     total > _MAX_TOTAL_IMAGE_BYTES or
                     not valid_signature):
