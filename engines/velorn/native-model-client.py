@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
-from studio_next.native_editor_source_pin import (pinned_electron_asset_placement_previews, pinned_electron_timeline_frame_previews)
+from studio_next.native_editor_source_pin import (pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
@@ -248,7 +248,8 @@ async def main(args):
                     ("create_project",) if fresh else ()),
                 host_verified_top_level_preview_tools=(
                     pinned_electron_marker_previews(args.source, host_grants) +
-                    pinned_electron_asset_placement_previews(args.source, host_grants)),
+                    pinned_electron_asset_placement_previews(args.source, host_grants) +
+                    pinned_electron_clip_edit_previews(args.source, host_grants)),
                 host_verified_timeline_preview_tools=(
                     pinned_electron_timeline_frame_previews(args.source, host_grants)),
                 required_evidence=required,
