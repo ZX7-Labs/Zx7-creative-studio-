@@ -164,8 +164,17 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(source["inputSchema"]["required"], [])
                         presented = catalog[name].input_schema
                         self.assertEqual(presented["required"], ["outputPath"])
-                        self.assertEqual(presented["properties"],
-                                         source["inputSchema"]["properties"])
+                        self.assertEqual(
+                            presented["properties"]["previewOnly"],
+                            source["inputSchema"]["properties"]["previewOnly"])
+                        self.assertEqual(
+                            source["inputSchema"]["properties"]["outputPath"],
+                            {"type": "string"})
+                        self.assertEqual(
+                            presented["properties"]["outputPath"]["minLength"], 1)
+                        self.assertIn(
+                            "REQUIRED by the trusted BODY host",
+                            presented["properties"]["outputPath"]["description"])
                         self.assertTrue((await session.call_tool(name, {})).is_error)
                         self.assertTrue((await session.call_tool(
                             name, {"outputPath": 42})).is_error)
