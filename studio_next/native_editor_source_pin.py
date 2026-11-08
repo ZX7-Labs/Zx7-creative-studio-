@@ -18,6 +18,9 @@ _PINNED_MARKER_PREVIEWS = (
 _PINNED_ASSET_PLACEMENT_PREVIEWS = (
     "add_asset_to_timeline", "add_assets_to_timeline",
 )
+_PINNED_CLIP_EDIT_PREVIEWS = (
+    "move_clips", "trim_clips", "delete_clips",
+)
 
 
 def _verified_editor_grants(grants: dict) -> bool:
@@ -101,3 +104,21 @@ def pinned_electron_timeline_frame_previews(
             not _source_matches_pinned_electron_mcp(source)):
         return ()
     return ("inspect_timeline_frame",)
+
+
+def pinned_electron_clip_edit_previews(
+        source: Path, grants: dict) -> tuple[str, ...]:
+    """Attest pinned native default read-only move/trim/delete plan receipts.
+
+    The exact Electron MCP intercepts previewOnly missing/true before
+    renderer performAction. A model must independently select
+    previewOnly:false to commit; no host-generated move is authorized.
+    """
+    if not _verified_editor_grants(grants):
+        raise ValueError("Pinned clip-preview source requires trusted grants")
+    if not isinstance(source, Path):
+        raise ValueError("Pinned clip-preview source requires a Path")
+    if not _source_matches_pinned_electron_mcp(source):
+        return ()
+    return tuple(name for name in _PINNED_CLIP_EDIT_PREVIEWS
+                 if grants.get(name) == "write")
