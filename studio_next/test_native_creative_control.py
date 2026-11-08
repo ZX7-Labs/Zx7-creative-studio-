@@ -2318,6 +2318,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     result = {"previewOnly": True, "markerCount": 1,
                               "markers": [{"id": "marker-physical-1",
                                            "time": 2.0, "label": "Review"}]}
+                    if name != "add_timeline_markers":
+                        result["mode"] = "markerIds"
+                        result["missingMarkerIds"] = []
                 elif name == "add_timeline_markers" and inputs.get("previewOnly") is False:
                     result = {"success": True, "action": name,
                               "markerCount": 1, "result": {"markerCount": 1}}
@@ -2420,6 +2423,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             ({**valid_flat, "markers": []}, {"previewOnly": True}, True),
             ({**valid_flat, "markerCount": True}, {"previewOnly": True}, True),
             ({**valid_flat, "result": {}}, {"previewOnly": True}, True),
+            ({**valid_flat, "error": "unexpected"}, {"previewOnly": True}, True),
         )
         for receipt, inputs, authorized in scenarios:
             with self.subTest(receipt=receipt, inputs=inputs, authorized=authorized):
