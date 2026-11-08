@@ -180,3 +180,53 @@ test('Pinned Electron MCP returns genuine JPEG as editable timeline preview, not
   assert.equal(rendererCalls, 1)
   assert.equal(Object.hasOwn(metadata, 'export_sha256'), false)
 })
+
+test('Real pinned Electron native clip move/trim/delete defaults are no-write plans', async () => {
+  const { server, applied } = nativeSession()
+  server.updateSnapshot({
+    app: { name: 'Velorn' },
+    project: { id: 'source-pinned-native-fixture',
+               currentTimelineId: 'native-active-timeline' },
+    currentTimeline: {
+      id: 'native-active-timeline', fps: 24, duration: 5,
+      playheadPosition: 0, markers: [],
+      tracks: [{ id: 'video-1', name: 'Real Video', type: 'video',
+                 locked: false, visible: true }],
+      clips: [{ id: 'native-clip-1', trackId: 'video-1', assetId: 'original-1',
+                type: 'video', startTime: 0, duration: 4, enabled: true }],
+    },
+    assets: [{ id: 'original-1', name: 'Owned original.mp4',
+               type: 'video', duration: 4 }],
+    timelines: [],
+  })
+  const requests = [
+    ['move_clips', { clipId: 'native-clip-1', startSeconds: 1.25 }],
+    ['trim_clips', { clipId: 'native-clip-1', durationSeconds: 2.5 }],
+    ['delete_clips', { clipId: 'native-clip-1' }],
+  ]
+  const messages = {
+    move_clips: 'Clip move plan only. No timeline change was made.',
+    trim_clips: 'Clip trim plan only. No timeline change was made.',
+    delete_clips: 'Clip delete plan only. No timeline change was made.',
+  }
+  for (const [tool, args] of requests) {
+    const receipt = nativeText(await server.callTool(tool, args))
+    assert.equal(receipt.previewOnly, true)
+    assert.equal(receipt.action, tool)
+    assert.equal(receipt.message, messages[tool])
+    assert.equal(Object.hasOwn(receipt, 'success'), false)
+    assert.equal(Object.hasOwn(receipt, 'result'), false)
+    assert.equal(receipt.suggestedApplyCall.tool, tool)
+    assert.equal(receipt.suggestedApplyCall.arguments.previewOnly, false)
+    assert.equal(typeof receipt.plan, 'object')
+    assert.deepEqual(applied, [], tool + ': default plan must not call renderer')
+  }
+  // Explicit application is a different, independently chosen operation.
+  const preview = nativeText(await server.callTool('move_clips', requests[0][1]))
+  const appliedResponse = nativeText(await server.callTool(
+    preview.suggestedApplyCall.tool, preview.suggestedApplyCall.arguments))
+  assert.equal(appliedResponse.success, true)
+  assert.equal(appliedResponse.action, 'move_clips')
+  assert.equal(applied.length, 1)
+  assert.equal(applied[0].action, 'move_clips')
+})
