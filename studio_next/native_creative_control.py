@@ -174,8 +174,8 @@ def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], li
             texts.append(txt)
         elif kind == "image":
             mime = _field(block, "mime_type", _field(block, "mimeType"))
-            if mime != "image/png":
-                raise NativeCreativeControlError("Only original bounded PNG evidence is accepted")
+            if mime not in ("image/png", "image/jpeg"):
+                raise NativeCreativeControlError("Unsupported original native image MIME type")
             raw = _field(block, "data")
             if not isinstance(raw, str) or len(raw) > 6_000_000:
                 raise NativeCreativeControlError("Invalid encoded native image evidence")
@@ -184,9 +184,14 @@ def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], li
             except (ValueError, base64.binascii.Error) as exc:
                 raise NativeCreativeControlError("Corrupt native image encoding") from exc
             total += len(picture)
+            valid_signature = (
+                picture.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+                if mime == "image/png" else (
+                    picture.startswith(b"\\xff\\xd8\\xff") and
+                    picture.endswith(b"\\xff\\xd9")))
             if (not 8 <= len(picture) <= _MAX_IMAGE_BYTES or
                     total > _MAX_TOTAL_IMAGE_BYTES or
-                    not picture.startswith(b"\x89PNG\r\n\x1a\n")):
+                    not valid_signature):
                 raise NativeCreativeControlError("Native image is malformed or over budget")
             images.append((mime, picture))
         elif kind == "audio":
