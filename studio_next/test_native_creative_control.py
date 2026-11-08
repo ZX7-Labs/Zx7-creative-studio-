@@ -2369,12 +2369,32 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
 
         for invalid in (("add_timeline_markers", "add_timeline_markers"),
-                        ("unknown",), ("get_project",)):
+                        ("unknown",), ("get_project",), ({"bad": "type"},)):
             with self.subTest(invalid=invalid), self.assertRaises(
                     NativeCreativeControlError):
                 NativeCreativeControl(session, ScriptedModel([]),
                     host_tool_access=grants,
                     host_requires_explicit_commit_for=invalid)
+
+        # A host cannot claim a preview hazard if the live editor never
+        # exposed that boolean field. It must inspect/reconfigure the actual
+        # source contract before the model receives any operation.
+        changed_schema = StrictNativeMarkers()
+        changed_schema.tools = [
+            item if item.name != "remove_timeline_markers" else
+            SimpleNamespace(name=item.name, description=item.description,
+                            input_schema={"type": "object", "properties": {
+                                "all": {"type": "boolean"}}})
+            for item in changed_schema.tools]
+        with self.assertRaisesRegex(
+                NativeCreativeControlError, "boolean previewOnly"):
+            await NativeCreativeControl(
+                changed_schema, ScriptedModel([]), max_turns=1,
+                host_tool_access=grants,
+                host_requires_explicit_commit_for=(
+                    "remove_timeline_markers",)).run(
+                    "Validate current installed editor schema")
+        self.assertEqual(changed_schema.calls, [])
 
     async def test_real_empty_timeline_rejects_duplicate_before_stateful_native_rpc(self):
         """Physical Qwen failure #42420526258: source filename is not
