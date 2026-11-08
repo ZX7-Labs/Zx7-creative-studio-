@@ -18,6 +18,7 @@ vfx_exr = ["OpenEXR>=3.3,<4", "numpy>=1.26,<3"]
 vfx_tracking = ["opencv-python-headless>=4.10,<5", "numpy>=1.26,<3", "Pillow>=10,<13"]
 
 [project.scripts]
+zx7-studio = "studio_next.studio_cli:main"
 zx7-body = "studio_next.body_service:main"
 zx7-client = "studio_next.body_client:main"
 zx7-editor = "studio_next.body_editor_client:main"
@@ -33,4 +34,4 @@ zx7-relink-mlt = "studio_next.body_mlt_relink:main"
 include = ["studio_next", "motion_studio"]
 
 [tool.setuptools.package-data]
-studio_next = ["fixtures/*.json"]
+studio_next = ["fixtures/*.json", "editor_runtime/*.mjs", "editor_runtime/*.json", "editor_runtime/LICENSE", "editor_runtime/NOTICE"]

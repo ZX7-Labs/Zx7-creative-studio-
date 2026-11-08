@@ -19,6 +19,7 @@ import sys
 
 from .body_editor_client import (
     EditorAccessError, EditorClientError, EditorToolError, _access_modes,
+    EditorPreDispatchError, HOST_PRE_DISPATCH_META, native_input_digest,
 )
 from .body_editor_policy import EditorPathPolicy
 
@@ -38,7 +39,8 @@ def _local_schema_references(schema):
 
 def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                          export_verifier=None, frame_observer=None,
-                         audio_observer=None, audio_timeline_observer=None):
+                         audio_observer=None, audio_timeline_observer=None,
+                         native_source: Path | None = None):
     """Return the official SDK server; discovery never expands host grants.
 
     Dependencies are imported here so the stdlib BODY remains usable without
@@ -51,6 +53,13 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     from mcp import types
 
     access = _access_modes(allowed_access)
+    from .native_editor_diagnostics import (
+        CONTENT_DIAGNOSTICS_TOOL, native_content_diagnostics_source_verified,
+        describe_native_text_semantics, inspect_native_content,
+    )
+    semantic_source = native_source is not None
+    if semantic_source and not native_content_diagnostics_source_verified(native_source):
+        raise ValueError("Native semantic diagnostics require clean pinned editor source")
     native = {tool["name"]: tool for tool in client.list_tools()}
     grants = dict(client.allowed_tools)
     if set(grants) - set(native):
@@ -61,6 +70,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         if mode not in access:
             continue
         schema = native[name]["inputSchema"]
+        if semantic_source:
+            schema = describe_native_text_semantics(name, schema)
         if (isinstance(getattr(client, "_policy", None), EditorPathPolicy) and
                 name in ("export_timeline", "export_fcpxml")):
             # Pinned editor lists outputPath as optional, but BODY's actual
@@ -107,6 +118,29 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     observed_audio_name = "zx7_observe_verified_export_audio"
     observed_audio_timeline_name = "zx7_observe_verified_export_audio_timeline"
     verified_exports = {}
+    content_diagnostics = (semantic_source and "read" in access and
+                           grants.get("get_timeline") == "read")
+    if CONTENT_DIAGNOSTICS_TOOL in native:
+        raise ValueError("Native editor tool name collides with BODY content diagnostics")
+    if content_diagnostics:
+        read_schema = native["get_timeline"]["inputSchema"]
+        properties = read_schema.get("properties", {})
+        if (properties.get("includeClips", {}).get("type") != "boolean" or
+                properties.get("limit", {}).get("type") != "integer" or
+                not validators["get_timeline"].is_valid({"includeClips": True, "limit": 1000})):
+            raise ValueError("Native timeline read schema differs from attested diagnostics")
+        schema = {"type": "object", "properties": {
+            "limit": {"type": "integer", "minimum": 1, "maximum": 32,
+                      "description": "Maximum factual warning records; defaults to 16."}},
+                  "additionalProperties": False}
+        tools[CONTENT_DIAGNOSTICS_TOOL] = types.Tool(
+            name=CONTENT_DIAGNOSTICS_TOOL,
+            description=("Read the actual native timeline and report bounded factual content "
+                         "warnings: zero opacity envelopes, hidden/disabled picture and "
+                         "muted/absent audio lanes. No edits or artistic judgments; "
+                         "embedded video audio and physical output are not assessed."),
+            inputSchema=schema)
+        validators[CONTENT_DIAGNOSTICS_TOOL] = jsonschema.Draft202012Validator(schema)
     if frame_observer is not None and (export_verifier is None or not callable(frame_observer)):
         raise ValueError("Frame observation requires a real host export verifier")
     if audio_observer is not None and (export_verifier is None or not callable(audio_observer)):
@@ -216,6 +250,20 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             validators[name].validate(arguments)
         except jsonschema.ValidationError as exc:
             return failed("Invalid native tool arguments: " + exc.message)
+        if name == CONTENT_DIAGNOSTICS_TOOL and content_diagnostics:
+            try:
+                # Share the SAME lock as native writes. Observation cannot
+                # interleave a write, and never submits one itself.
+                async with lock:
+                    with anyio.CancelScope(shield=True):
+                        result = await anyio.to_thread.run_sync(
+                            lambda: client.call("get_timeline", {"includeClips": True, "limit": 1000},
+                                                allowed_access=access), abandon_on_cancel=False)
+                proof = inspect_native_content(result, warning_limit=arguments.get("limit", 16))
+                return types.CallToolResult(is_error=False, content=[types.TextContent(
+                    type="text", text=json.dumps(proof, allow_nan=False))])
+            except (EditorAccessError, EditorClientError, ValueError):
+                return failed("Native content diagnostic observation was unavailable or malformed")
         if name == verified_export_name:
             try:
                 async with inspection_capacity:
@@ -358,6 +406,12 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             return types.CallToolResult.model_validate(result)
         except EditorToolError as exc:
             return types.CallToolResult.model_validate(exc.result)
+        except EditorPreDispatchError as exc:
+            return types.CallToolResult(is_error=True,
+                content=[types.TextContent(type="text", text=str(exc))],
+                _meta={HOST_PRE_DISPATCH_META: {
+                    "version": 1, "tool": name,
+                    "inputs_sha256": native_input_digest(arguments), "code": exc.code}})
         except (EditorAccessError, PermissionError, ValueError) as exc:
             return failed(str(exc))
         except EditorClientError as exc:
@@ -375,6 +429,8 @@ def main(argv=None):
                         help="Host-owned editor grants and workspace roots")
     parser.add_argument("--print-launch-config", action="store_true",
                         help="Validate and print canonical roots without contacting the editor")
+    parser.add_argument("--native-source", type=Path,
+                        help="Opt into content diagnostics/parameter descriptions for clean pinned editor source")
     options = parser.parse_args(argv)
     try:
         from .body_editor_policy import load_editor_config
@@ -409,7 +465,8 @@ def main(argv=None):
         server = create_editor_server(config.client(), allowed_access=config.allowed_access,
                                       export_verifier=export_verifier, frame_observer=frame_observer,
                                       audio_observer=audio_observer,
-                                      audio_timeline_observer=audio_timeline_observer)
+                                      audio_timeline_observer=audio_timeline_observer,
+                                      native_source=options.native_source)
 
         async def serve():
             from mcp.server.stdio import stdio_server

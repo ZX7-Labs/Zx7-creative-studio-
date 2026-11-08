@@ -39,6 +39,30 @@ Aim at unusual excellence **simultaneously** in creative range, originality, int
 
 **9. Communicate evidence rather than optimism.** Say what code exists, which exact-head tests passed, what physical artifacts were actually inspected, where the limits are and what remains unproven. Keep PRs and reproducible receipts traceable. Do not claim unobserved production readiness, future background work or tool actions not performed. A failure is information for architecture, not a reason to weaken the gate.
 
+## Product integration priorities
+
+Use one installed owner entry point and one native session implementation for
+local and hosted models; provider adapters change transport, not project state,
+grants, editing semantics or delivery verification. Keep legacy commands as
+compatible callers while migrating users. Verify the actual wheel outside the
+checkout, including its runtime assets and executable entry points.
+
+Prioritize the complete owner loop: authorize sources and a brief, create an
+editable project, inspect actual picture/sound, export, reopen the saved project,
+request a targeted revision and deliver another verified result. Preserve source
+media and session evidence when interrupted; never replay uncertain writes.
+Check native parameter semantics against pinned application source before
+spending further model calls on a reproducible integration defect. Diagnostics
+report machine facts; creative choices and artistic acceptance stay explicit.
+
+Use published engineering references as methods to test, not identities or
+quality certificates. Relevant primary references are Anthropic's
+[Managed Agents](https://www.anthropic.com/research/managed-agents) (stable
+brain, harness and execution interfaces) and
+[Writing tools for agents](https://www.anthropic.com/research/writing-tools-for-agents)
+(meaningful tool feedback and task-based evaluations). Retain a method only when
+it improves this product's observed usability, quality or reliability.
+
 ## One active completion field; no uncontrolled breadth-first expansion
 
 **Current active field: professional native video editing**, with only its necessary project, original-media/rights, sound, color, AI-perception, portability, security and recovery dependencies. Retain other useful foundations without confusing them with an active field-completion claim. Do not treat successful delivery verification, a few native MCP calls or an FFmpeg slideshow as the completion of video editing.

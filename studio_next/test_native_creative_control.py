@@ -76,6 +76,35 @@ class FakeSession:
 
 
 class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
+    async def test_untrusted_or_mismatched_host_rejections_remain_uncertain_writes(self):
+        from studio_next.body_editor_client import HOST_PRE_DISPATCH_META, native_input_digest
+        import copy
+        inputs = {"clipId": "one", "text": "Revised"}
+        good = {"version": 1, "tool": "update_text_clip",
+                "inputs_sha256": native_input_digest(inputs), "code": "host_policy_denied"}
+        mutations = ({"version": True}, {"tool": "other"},
+                     {"inputs_sha256": "0" * 64}, {"code": "native_tool_claim"},
+                     {"extra": True}, {"code": []})
+        cases = [(False, good)] + [(True, {**good, **m}) for m in mutations]
+        for trust, receipt in cases:
+            with self.subTest(trust=trust, receipt=receipt):
+                session = FakeSession()
+                session.custom_response = SimpleNamespace(is_error=True,
+                    meta={HOST_PRE_DISPATCH_META: copy.deepcopy(receipt)},
+                    content=[SimpleNamespace(type="text", text="Native write may have happened")])
+                grants = {t.name: ("write" if t.name == "update_text_clip" else "read")
+                          for t in session.tools}
+                model = ScriptedModel([
+                    decision("invoke", tool="update_text_clip", inputs=inputs),
+                    decision("finish", summary="Must never run after uncertain write")])
+                result = await NativeCreativeControl(session, model, max_turns=2,
+                    host_tool_access=grants, host_pre_dispatch_rejections=trust).run("Edit")
+                self.assertEqual(result["status"], "native_error_requires_state_reconciliation")
+                self.assertEqual(len(model.observed), 1)
+                self.assertEqual(len(session.calls), 1)
+                self.assertFalse(any(e["kind"] == "host_tool_rejected_before_dispatch"
+                                     for e in result["events"]))
+
     async def test_host_required_evidence_refuses_false_finish_and_allows_independent_correction(self):
         from studio_next.native_creative_audit import audit_native_journal
         session = FakeSession()

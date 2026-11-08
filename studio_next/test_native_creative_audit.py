@@ -73,6 +73,62 @@ def trace():
 
 
 class NativeCreativeAuditTests(unittest.TestCase):
+    def test_audit_cli_rejects_write_disabled_by_host_access(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from studio_next.native_creative_audit import main
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            journal, config = root / "journal.jsonl", root / "host.json"
+            journal.write_text("\n".join(json.dumps(e) for e in trace()) + "\n")
+            host = {
+                "endpoint": "http://127.0.0.1:19790/mcp",
+                **{n + "_root": str(root / n) for n in ("projects", "staging", "outputs")},
+                "allowed_tools": {n: access for n, access in HOST.items()
+                                  if not n.startswith("zx7_")},
+                "allowed_access": ["read", "write"],
+                "verify_native_exports": True,
+            }
+            argv = ["audit", "--journal", str(journal), "--host-editor-config", str(config)]
+            config.write_text(json.dumps(host))
+            with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(main(), 0)
+            self.assertTrue(json.loads(output.getvalue())["journal_chain_structurally_valid"])
+            # Keep the configured write names, but disable their access mode.
+            # The same receipt must now fail rather than mint edit proof.
+            host["allowed_access"] = ["read"]
+            config.write_text(json.dumps(host))
+            with patch("sys.argv", argv), self.assertRaisesRegex(NativeJournalError, "host grant"):
+                main()
+
+    def test_audit_cli_requires_independent_trusted_bridge_opt_in(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from studio_next.native_creative_audit import main
+        events = trace()[:2]
+        events[0]["host_pre_dispatch_rejections"] = True
+        events.append({"sequence": 2, "kind": "host_tool_rejected_before_dispatch",
+            "turn": 0, "tool": "get_timeline", "inputs_sha256": events[1]["inputs_sha256"],
+            "rejection_code": "host_policy_denied", "no_native_dispatch": True,
+            "no_automatic_retry": True})
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            journal, config = root / "journal.jsonl", root / "host.json"
+            journal.write_text("\n".join(json.dumps(e) for e in events) + "\n")
+            config.write_text(json.dumps({
+                "endpoint": "http://127.0.0.1:19790/mcp",
+                **{n + "_root": str(root / n) for n in ("projects", "staging", "outputs")},
+                "allowed_tools": {"get_timeline": "read"}}))
+            argv = ["audit", "--journal", str(journal), "--host-editor-config", str(config)]
+            with patch("sys.argv", argv), self.assertRaises(NativeJournalError):
+                main()
+            with patch("sys.argv", [*argv, "--trust-host-pre-dispatch-rejections"]), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(main(), 0)
+            self.assertTrue(json.loads(output.getvalue())["journal_chain_structurally_valid"])
+
     def test_new_edit_invalidates_previous_export_and_frame_completion_proofs(self):
         def review_audit(events, **kwargs):
             return audit_native_journal(

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping
 import http.client
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -44,6 +45,48 @@ class EditorToolError(EditorClientError):
 
 class EditorAccessError(PermissionError):
     """Host grants, caller access or policy prohibit the call."""
+
+
+HOST_PRE_DISPATCH_META = "zx7.host/pre-dispatch-rejection"
+HOST_REJECTION_FEEDBACK = MappingProxyType({
+    "output_exists": "Native export cannot overwrite an existing destination; choose a new outputPath",
+    "output_path_required": "Native export requires an explicit new outputPath",
+    "host_policy_denied": "Native tool rejected by host policy; choose authorized arguments",
+})
+
+
+class EditorPreDispatchError(EditorAccessError):
+    """Trusted local policy refused the target call before native dispatch.
+
+    Never use for native/transport errors or guards which may already mutate.
+    """
+
+    def __init__(self, code):
+        self.code = code
+        super().__init__(HOST_REJECTION_FEEDBACK[code])
+
+
+def native_input_digest(arguments):
+    return hashlib.sha256(json.dumps(arguments, sort_keys=True,
+        separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+
+
+def host_pre_dispatch_rejection(result, tool, arguments):
+    """Validate binding, NOT authenticity. Caller must trust the MCP bridge.
+
+    The bridge reserves this metadata and strips it from all native results.
+    A matching string in native/model-authored content grants no authority.
+    """
+    meta = result.get("_meta") if isinstance(result, dict) else getattr(result, "meta", None)
+    receipt = meta.get(HOST_PRE_DISPATCH_META) if type(meta) is dict else None
+    if (type(receipt) is not dict or
+            set(receipt) != {"version", "tool", "inputs_sha256", "code"} or
+            type(receipt["version"]) is not int or receipt["version"] != 1 or
+            receipt["tool"] != tool or type(receipt["code"]) is not str or
+            receipt["code"] not in HOST_REJECTION_FEEDBACK or
+            receipt["inputs_sha256"] != native_input_digest(arguments)):
+        return None
+    return receipt["code"]
 
 
 def _reject_constant(value):
@@ -200,7 +243,7 @@ class LocalEditorClient:
             raise EditorAccessError(f"Native tool requires {access} access")
         arguments = _json_arguments(arguments)
         if self._policy is not None and self._policy(tool_name, arguments, access) is not True:
-            raise EditorAccessError("Native tool rejected by host policy")
+            raise EditorPreDispatchError("host_policy_denied")
         if tool_name == "split_clip" and arguments.get("previewOnly") is False:
             # The upstream inspect_clip summary omits effects/keyframes.
             # Require both the existing per-clip identity inspection and the
@@ -225,6 +268,12 @@ class LocalEditorClient:
         if (not isinstance(result, dict) or not isinstance(result.get("content"), list)
                 or ("isError" in result and type(result["isError"]) is not bool)):
             raise EditorProtocolError("Malformed native tool result")
+        # Only this BODY bridge may attest a pre-dispatch refusal. A native
+        # tool may return arbitrary metadata even when it reports failure.
+        for key in ("_meta", "meta"):
+            if isinstance(result.get(key), dict) and HOST_PRE_DISPATCH_META in result[key]:
+                result = {**result, key: {k: v for k, v in result[key].items()
+                                         if k != HOST_PRE_DISPATCH_META}}
         if result.get("isError"):
             raise EditorToolError(tool_name, result)
         return result

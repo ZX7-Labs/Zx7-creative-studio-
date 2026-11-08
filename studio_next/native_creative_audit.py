@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import stat
+from .body_editor_client import HOST_REJECTION_FEEDBACK
 
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -108,7 +109,7 @@ def read_native_journal(path: Path):
 
 
 def audit_native_journal(events, *, host_tool_access, expected_required_evidence=None,
-                         host_content_revision_tools=()):
+                         host_content_revision_tools=(), host_pre_dispatch_rejections=False):
     """Check every transition and trace real export-to-observation identity.
 
     host_tool_access comes from the trusted owner grants, not from model text.
@@ -123,6 +124,8 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
         raise NativeJournalError("Invalid event sequence or host access inventory")
     if not isinstance(events[0], dict) or events[0].get("kind") != "session_started":
         raise NativeJournalError("Journal lacks a session identity")
+    if type(host_pre_dispatch_rejections) is not bool:
+        raise NativeJournalError("Invalid independent host rejection policy")
     required = events[0].get("required_completion_evidence", [])
     if (not isinstance(required, list) or
             any(not isinstance(item, str) or item not in _COMPLETION_EVIDENCE_TYPES
@@ -459,11 +462,23 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             continue
         if kind in ("native_tool_result", "native_tool_preview",
                     "native_tool_reported_error", "native_tool_uncertain_outcome",
-                    "native_observation_rejected", "native_read_tool_reported_error"):
+                    "native_observation_rejected", "native_read_tool_reported_error",
+                    "host_tool_rejected_before_dispatch"):
             if pending is None or (event.get("turn"), event.get("tool")) != pending[:2]:
                 raise NativeJournalError("Native outcome does not match a submitted call")
             turn, tool, access = pending
             pending = None
+            if kind == "host_tool_rejected_before_dispatch":
+                if (not host_pre_dispatch_rejections or
+                        events[0].get("host_pre_dispatch_rejections") is not True or
+                        event.get("no_native_dispatch") is not True or
+                        event.get("no_automatic_retry") is not True or
+                        type(event.get("rejection_code")) is not str or
+                        event["rejection_code"] not in HOST_REJECTION_FEEDBACK or
+                        event.get("inputs_sha256") != events[i - 1].get("inputs_sha256") or
+                        events[i - 1].get("kind") != "native_tool_submitted"):
+                    raise NativeJournalError("Host pre-dispatch rejection lacks trusted bound receipt")
+                continue
             if kind == "native_tool_preview":
                 # The native application acknowledged *a proposed plan*, not
                 # an applied edit. It has no authority to advance write proof.
@@ -621,20 +636,32 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--journal", type=Path, required=True)
     p.add_argument("--host-editor-config", type=Path, required=True)
+    p.add_argument("--trust-host-pre-dispatch-rejections", action="store_true",
+                   help="Attest the journal used the trusted BODY MCP bridge, not a raw native/plugin session")
+    p.add_argument("--native-source", type=Path,
+                   help="Independently attest pinned native content diagnostics used in this session")
     args = p.parse_args()
     from .body_editor_policy import load_editor_config
     # The SAME real policy loader that launches the editor validates grants
     # and roots. Extra ZX7 sensor names are inserted ONLY when the actual
     # host config enabled them and the read capability was owner-granted.
     config = load_editor_config(args.host_editor_config)
-    grants = dict(config.allowed_tools)
+    grants = {name: access for name, access in config.allowed_tools.items()
+              if access in config.allowed_access}
     if config.verify_native_exports and "read" in config.allowed_access:
         extras = {_EXPORT, *_OBSERVERS}
         if any(name in grants for name in extras):
             raise NativeJournalError("Namespaced BODY sensors collide with native grants")
         grants.update({name: "read" for name in extras})
+    if args.native_source is not None:
+        from .native_editor_diagnostics import native_content_diagnostics_source_verified
+        if not native_content_diagnostics_source_verified(args.native_source):
+            raise NativeJournalError("Native diagnostics source cannot be independently attested")
+        if "read" in config.allowed_access and grants.get("get_timeline") == "read":
+            grants["zx7_inspect_native_content"] = "read"
     outcome = audit_native_journal(read_native_journal(args.journal),
-                                   host_tool_access=grants)
+                                   host_tool_access=grants,
+                                   host_pre_dispatch_rejections=args.trust_host_pre_dispatch_rejections)
     print(json.dumps(outcome, indent=2, sort_keys=True))
     return 0
 

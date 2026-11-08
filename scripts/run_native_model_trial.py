@@ -260,10 +260,8 @@ async def trial(args, lock, artifacts, command):
         system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts)
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
-    host = dict(config['allowed_tools'])
-    host.update({name: 'read' for name in ('zx7_verify_native_export',
-        'zx7_observe_verified_export_frame', 'zx7_observe_verified_export_samples',
-        'zx7_observe_verified_export_audio', 'zx7_observe_verified_export_audio_timeline')})
+    from studio_next.native_editor_session import native_session_grants
+    host = native_session_grants(config, args.source)
     content_tools = {'update_text_clip', 'update_shape_clip', 'set_clip_style', 'set_clip_mask',
         'set_clip_keyframes', 'set_clip_audio', 'set_clip_speed', 'move_clips', 'trim_clips',
         'delete_clips', 'add_asset_to_timeline', 'add_assets_to_timeline', 'replace_clip_with_asset',
@@ -299,6 +297,7 @@ async def trial(args, lock, artifacts, command):
                     admitted_model_session, model, max_turns=max_model_turns,
                     receipt_path=artifacts / 'native-journal.jsonl',
                     host_tool_access=host, catalog_mode="indexed",
+                    host_pre_dispatch_rejections=True,
                     host_preconditions={
                         "import_asset_from_path": ["project_open"],
                         "add_asset_to_timeline": [
@@ -348,6 +347,7 @@ async def trial(args, lock, artifacts, command):
                         json.dumps(gateway.host_budget_evidence(), indent=2))
     audit = audit_native_journal(
         read_native_journal(artifacts / 'native-journal.jsonl'),
+        host_pre_dispatch_rejections=True,
         host_tool_access=host, expected_required_evidence=completion_evidence,
         host_content_revision_tools=host_content_revision_tools)
     (artifacts / 'journal-audit.json').write_text(json.dumps(audit, indent=2))

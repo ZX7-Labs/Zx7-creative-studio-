@@ -160,6 +160,62 @@
       "failure": "The model autonomously created an editable project, imported an original synthetic video, committed actual native placements (2 original video clips and one text clip), inspected the live timeline frame, and checked export readiness. It then selected export_timeline without outputPath. Real source-backed EditorPathPolicy.requires new explicit outputPath to keep exports inside authorized roots without overwriting files. The pinned Electron MCP schema advertises outputPath as OPTIONAL, so the model's provider-native function grammar allowed this mismatch. The exact recorded error digest matches SHA256 of the bounded host-policy string list [\"Native export requires an explicit new outputPath\"]. This host policy rejects before calling the native HTTP editor. The generic controller, lacking that specific prior proof, conservatively treated the write error as uncertain and terminated. There is no exported MP4, no decoded export frame, and no verified revision.",
       "actual_root_fix": "Compose original native tool schema with the trusted EditorPathPolicy at the MCP source boundary: require outputPath, preserve all native fields, supply bounded host-derived description of safe new absolute output path, refuse schema mismatch at setup. This strict JSON Schema reaches the NVIDIA provider-native tool definition; BODY independently rejects omitted path before any editor RPC. No output path or creative edit is selected by host. Reject existing destination and path escape through existing policy.",
       "evidence_source": "Downloaded actual Actions artifact ZIP, verified SHA256, inspected 35 native journal events and saved .comfystudio and original source copy; independently compared exact ERROR digest to _bounded_error_digest([policy error text]) using SHA256. Pinned upstream Electron schema source independently confirms optional outputPath, while trusted BODY EditorPathPolicy enforces it. No private owner footage, raw provider key, or model-generated fallback."
+    },
+    {
+      "workflow_run": 42444331745,
+      "request_commit": "17c6b08d4a80be03ec045c3f25bbaac81c4f2bdf",
+      "artifact_id": 13602883719,
+      "artifact_zip_sha256": "423a586fe9e95729c18555a26665088b684b6f271e938ddfde7bba8a8569d640",
+      "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "synthetic_only": true,
+      "original_private_owner_media_sent": false,
+      "real_model_tool_decisions": 31,
+      "saved_native_project_sha256": "39090984a3a1aa0e9fe15e5b550e2ebc65a94a11b749cc13a15bebe17ba418c4",
+      "saved_active_timeline_clip_count": 2,
+      "saved_source_backed_video_clips": 1,
+      "native_write_acknowledgments": 7,
+      "model_observed_verified_export_frames": 1,
+      "post_observation_content_revision_tool": "update_text_clip",
+      "first_export": {
+        "relative_path": "outputs/momentum_v1.mp4",
+        "sha256": "774e0e28af0c11211e5faa491ed2637542d88873a4147df8519dbcb2996a70de",
+        "bytes": 201844,
+        "codec": "h264",
+        "width": 1920,
+        "height": 1080,
+        "fps": 24,
+        "frames": 144,
+        "duration_seconds": 6,
+        "audio_streams": 0,
+        "decoded_frame_sequence_sha256": "fb468ca9b36401665ca3946d5693cbaa18dd0e2a932e43c11e940c2a4397e444",
+        "independent_ffmpeg_decode_verified": true,
+        "ffmpeg_blackdetect_intervals_seconds": [
+          [
+            0,
+            2
+          ],
+          [
+            4,
+            5.958333
+          ]
+        ],
+        "blackdetect_settings": "blackdetect=d=0.1:pix_th=0.10; diagnostics, not an artistic score",
+        "sampled_visual_review": "Six one-second samples: black opening/end and source gradient in middle; no visible text in these samples. No professional artistic approval."
+      },
+      "different_second_export_verified": false,
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "native_video_field_complete": false,
+      "failure_kind": "host_pre_dispatch_refusal_misclassified_as_uncertain_native_write",
+      "rejected_tool": "export_timeline",
+      "rejected_turn": 30,
+      "actual_error_receipt_sha256": "cf4a7243b814285945e4cb38cd00023cde5f15023881397c0c3cf75041766322",
+      "identified_error_text": "Native export cannot overwrite an existing destination; choose a new outputPath",
+      "error_digest_independently_matched": true,
+      "root_cause": "The model revised text after observing the first verified export, then selected an existing output destination. The trusted filesystem policy rejected before native HTTP dispatch. MCP erased that phase and the controller conservatively terminated as though a write might have occurred.",
+      "fix_scope": "Typed pre-dispatch host policy errors, request-bound reserved MCP metadata stripped from all upstream results, explicit host opt-in for controller and independent auditor, next-turn bounded model feedback without retries or path selection. Native/transport errors remain uncertain. Durable attempt accounting and professional creative acceptance are not claimed.",
+      "evidence_source": "Downloaded actual artifact ZIP; matched upload SHA256; audited 74-event journal, saved project and source/first export; independently decoded all 144 frames and matched sequence digest. No new hosted model call was made during diagnosis.",
+      "live_model_retest_after_fix": false
     }
   ]
 }

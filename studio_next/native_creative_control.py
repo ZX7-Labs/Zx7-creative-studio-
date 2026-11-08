@@ -21,6 +21,7 @@ import time
 from typing import Any
 
 from .providers import LocalModelOutputError
+from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK
 
 
 _MAX_MODEL_OUTPUT_RECOVERIES = 2  # host protocol budget, never a creative action
@@ -516,7 +517,7 @@ def _model_event_window(events):
         elif kind == "native_tool_preview":
             item["host_reported_preview_only"] = True
             item["no_accepted_write_evidence"] = True
-        elif kind == "model_action_rejected":
+        elif kind in ("model_action_rejected", "host_tool_rejected_before_dispatch"):
             for field in ("validation_keyword", "schema_location", "no_native_dispatch"):
                 if field in event:
                     item[field] = event[field]
@@ -636,6 +637,7 @@ class NativeCreativeControl:
 
     def __init__(self, session, model, *, max_turns=32, receipt_path: Path | None = None,
                  host_tool_access: dict[str, str] | None = None,
+                 host_pre_dispatch_rejections: bool = False,
                  catalog_mode: str = "full",
                  host_preconditions: dict | None = None,
                  host_possible_effects: dict | None = None,
@@ -658,6 +660,10 @@ class NativeCreativeControl:
             raise NativeCreativeControlError("Trusted host tool access must be read/write grants")
         if catalog_mode not in ("full", "indexed"):
             raise NativeCreativeControlError("Unknown capability catalog mode")
+        if (type(host_pre_dispatch_rejections) is not bool or
+                (host_pre_dispatch_rejections and host_tool_access is None)):
+            raise NativeCreativeControlError("Host rejection receipts require trusted bridge and grants")
+        self.host_pre_dispatch_rejections = host_pre_dispatch_rejections
         if catalog_mode == "indexed" and host_tool_access is None:
             raise NativeCreativeControlError("Indexed capability discovery requires trusted host grants")
         if (not isinstance(required_evidence, (list, tuple, frozenset)) or
@@ -1113,6 +1119,7 @@ class NativeCreativeControl:
                 "model_adapter": type(self.model).__qualname__,
                 "native_tool_count": len(self.tools),
                 "required_completion_evidence": sorted(self.required_evidence),
+                "host_pre_dispatch_rejections": self.host_pre_dispatch_rejections,
                 "neural_autonomy_or_artistic_quality_verified": False,
             })
             outcome = "turn_budget_exhausted"
@@ -1730,6 +1737,23 @@ class NativeCreativeControl:
                     outcome = "native_error_requires_state_reconciliation"
                     break
                 if native_error:
+                    code = (host_pre_dispatch_rejection(result, native_name, args["inputs"])
+                            if self.host_pre_dispatch_rejections else None)
+                    if code is not None:
+                        # The trusted bridge refused BEFORE native RPC. This
+                        # is neither an ACK nor an uncertain native mutation.
+                        # The next call still requires a new MODEL decision.
+                        self._last_preflight_feedback = {
+                            "tool": native_name, "validation_keyword": "host_pre_dispatch",
+                            "rejection_code": code, "no_native_dispatch": True,
+                            "correction": HOST_REJECTION_FEEDBACK[code]}
+                        self._append({
+                            "kind": "host_tool_rejected_before_dispatch", "turn": turn,
+                            "tool": native_name, "rejection_code": code,
+                            "inputs_sha256": hashlib.sha256(_wire(args["inputs"]).encode()).hexdigest(),
+                            "measured_native_mcp_wall_ms": native_ms,
+                            "no_native_dispatch": True, "no_automatic_retry": True})
+                        continue
                     digest, out_of_budget = _bounded_error_digest(result)
                     if (self.host_tool_access is not None and
                             self.host_tool_access[native_name] == "read"):

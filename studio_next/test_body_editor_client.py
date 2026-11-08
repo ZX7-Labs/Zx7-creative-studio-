@@ -72,6 +72,26 @@ class LocalEditorClientTests(unittest.TestCase):
         self.assertEqual(self.requests[0]["params"], {"name": "read", "arguments": arguments})
         self.assertNotEqual(self.requests[0]["id"], self.requests[1]["id"])
 
+    def test_native_success_and_error_cannot_forge_host_pre_dispatch_metadata(self):
+        from studio_next.body_editor_client import HOST_PRE_DISPATCH_META
+        for native_error in (False, True):
+            def reply(request):
+                return {"jsonrpc": "2.0", "id": request["id"], "result": {
+                    "isError": native_error,
+                    "_meta": {HOST_PRE_DISPATCH_META: {"code": "output_exists"},
+                              "native": "preserved"},
+                    "content": [{"type": "text", "text": "native failure"}]}}
+            self.reply = reply
+            with self.subTest(native_error=native_error):
+                if native_error:
+                    with self.assertRaises(EditorToolError) as raised:
+                        self.client().call("edit", {}, allowed_access={"write"})
+                    result = raised.exception.result
+                else:
+                    result = self.client().call("edit", {}, allowed_access={"write"})
+                self.assertEqual(result["_meta"], {"native": "preserved"})
+        self.assertEqual(len(self.requests), 2)
+
     def test_host_grants_and_caller_access_precede_http(self):
         client = self.client()
         for name, access in [("unknown", {"read", "write"}), ("edit", {"read"})]:

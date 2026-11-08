@@ -4,6 +4,7 @@ These tests do not simulate a neural edit or claim an artistic result.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import runpy
 from pathlib import Path
@@ -258,6 +259,61 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertEqual(type(structured).__name__, "LocalNativeStructuredCreativeModel")
         self.assertEqual(type(legacy).__name__, "LocalCreativeModel")
         self.assertNotIn("response_format", structured.settings.sampling)
+
+    def test_actual_native_launcher_requires_media_consent_only_for_cloud_review(self):
+        """Exercise launcher admission with real model factories, stopping
+        before any editor process or model request can be started.
+        """
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        entry = runpy.run_path(str(script), run_name="native_review_consent_test")["main"]
+
+        class ReachedNativeLaunch(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            state = root / "state"
+            state.mkdir()
+            config = root / "host.json"
+            config.write_text(json.dumps({"allowed_tools": {
+                "get_project": "read", "update_text_clip": "write"}}))
+            brief = root / "brief.txt"
+            brief.write_text("Revise the editable project after observing its export.")
+            common = dict(
+                source=root, state=state, config=config, brief_file=brief,
+                receipt=root / "receipt.jsonl", xvfb_binary=None,
+                xvfb_lib_dir=None, display=None, software_gpu=False,
+                no_sandbox=False, base_url="http://127.0.0.1:8080",
+                model_id=_ALLOWED_MODEL, model_timeout=15,
+                structured_actions=True, fresh_trial_project=False,
+                evaluation_evidence="reviewed-revision")
+            cases = (
+                ("local", False, None),
+                ("nvidia", False, "explicit synthetic image upload permission"),
+                ("local", True, "Cloud-media consent requires --provider nvidia"),
+                ("nvidia", True, None),
+            )
+            for provider, cloud_consent, refusal in cases:
+                args = SimpleNamespace(**common, provider=provider,
+                                       allow_cloud_image_upload=cloud_consent)
+                with self.subTest(provider=provider, consent=cloud_consent), patch(
+                        "studio_next.nvidia_model.NvidiaCreativeModel.verify_host_credentials"
+                        ) as credentials, patch.dict(entry.__globals__, {
+                            "stdio_client": unittest.mock.Mock(
+                                side_effect=ReachedNativeLaunch)
+                        }):
+                    launch = entry.__globals__["stdio_client"]
+                    if refusal is None:
+                        with self.assertRaises(ReachedNativeLaunch):
+                            asyncio.run(entry(args))
+                        launch.assert_called_once()
+                    else:
+                        with self.assertRaisesRegex(ValueError, refusal):
+                            asyncio.run(entry(args))
+                        launch.assert_not_called()
+                    self.assertEqual(credentials.call_count,
+                                     1 if provider == "nvidia" else 0)
 
     def test_native_trial_actually_requests_structured_actions(self):
         with tempfile.TemporaryDirectory() as scratch:

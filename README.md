@@ -29,7 +29,7 @@ audiovisual export; it is not an autonomous AI or artistic-quality evaluation.
 Python `LocalEditorClient` preserves native MCP schemas and requires explicit
 host grants. `body_catalog(workspace, editor_client=client)` attaches granted
 operations to the existing BODY catalog. Professional field completion,
-autonomous creative acceptance and distribution packaging remain open.
+autonomous creative acceptance and complete desktop distribution remain open.
 
 For an MCP-capable local AI client, the [standard MCP launcher](engines/velorn/README.md#connect-a-local-ai-client-through-standard-mcp)
 starts the existing editor and the permissioned bridge in one process. Install
@@ -37,6 +37,44 @@ the optional `.[editor]` extra; host configuration controls grants and media
 roots. Models remain separate and no hosted AI API is required.
 The [SDK-client execution record](research/editor-mcp-evidence.json) preserves
 the measured scope and exact tested source digests.
+
+## Create and revise a native project
+
+On Linux, install Python 3.11+, Node, FFmpeg/FFprobe and the pinned editor's
+[build dependencies](engines/velorn/README.md). Run Electron as an ordinary user
+with its Chromium sandbox enabled. Start a local OpenAI-compatible model server
+separately; its exact model ID must appear in `/v1/models`.
+
+```sh
+python -m pip install '.[editor,production]'
+zx7-studio init ./my-studio --source ./third_party/velorn --model-id YOUR_MODEL_ID
+zx7-studio doctor ./my-studio
+zx7-studio run ./my-studio --brief-file ./brief.txt --asset ./source.mov --rights 'I own this footage'
+zx7-studio status ./my-studio
+```
+
+`doctor` checks installed runtime files, the source pin, editor build and actual
+local model inventory before inference. It reports missing setup; it does not
+install an engine or download model weights. A graphical display is required;
+for headless runs supply `--xvfb-binary /path/to/Xvfb` if available.
+
+Revise an existing saved native project using the same command with
+`--project ./my-studio/projects/PROJECT_DIRECTORY` and a new brief. The host opens and verifies that selected project before the model decides
+the editing actions. Each run preserves
+private source copies, rights declarations, a native journal and status under
+its workspace. A completed run means the model finished with verified export
+evidence; artistic approval remains separate. An interrupted or failed run is
+retained for inspection and is never automatically replayed.
+
+For the supported hosted NVIDIA adapter, choose `--provider nvidia` at `init`
+and provide `NVIDIA_API_KEY` only to the trusted runner environment. Both
+providers use the same native session and host grants. Uploading observation
+images to NVIDIA additionally requires `--allow-cloud-image-upload` on `run`;
+source text and tool results are part of the hosted model conversation.
+
+The installed package includes the MCP bridge; the complete pinned editor,
+its Node dependencies and model runtime are installed separately. The existing
+BODY service and specialized engine tools remain available below.
 
 ## Run locally
 

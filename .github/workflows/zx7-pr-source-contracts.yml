@@ -1,7 +1,6 @@
 name: ZX7 Pull Request Source and Native Project Gate
 on:
   pull_request:
-    branches: [main]
     paths:
       - "studio_next/**"
       - "motion_studio/**"
@@ -74,6 +73,8 @@ jobs:
         run: python -m unittest studio_next.test_provider studio_next.test_nvidia_model studio_next.test_nvidia_tool_model studio_next.test_nvidia_native_tool_model studio_next.test_local_native_structured_model scripts.test_local_native_trial_request scripts.test_nvidia_smoke_request scripts.test_run_nvidia_native_trial studio_next.test_native_action_schema -v
       - name: Native editor transport, BODY grants and unchanged native schemas
         run: python -m unittest studio_next.test_body_editor_client studio_next.test_body_editor_catalog studio_next.test_body_editor_policy studio_next.test_body_editor_mcp studio_next.test_body_editor_split_guard studio_next.test_body_editor_extract_guard studio_next.test_body_editor_export studio_next.test_body_editor_frame studio_next.test_body_editor_audio studio_next.test_body_editor_audio_timeline studio_next.test_native_creative_control studio_next.test_native_audio_model_input studio_next.test_native_creative_audit studio_next.test_delivery_audit -v
+      - name: Installed native runtime and owner workflow
+        run: python -m unittest studio_next.test_installed_native_runtime studio_next.test_studio_cli studio_next.test_native_editor_diagnostics studio_next.test_native_editor_project -v
       - name: Local editor adapter path and tool policy
         run: node --test engines/velorn/*.test.mjs
       - name: Fast exact source-frame algebra and model-authored NLE ABI regression

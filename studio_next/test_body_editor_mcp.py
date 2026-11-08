@@ -65,7 +65,7 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                             owner.entered.set()
                             owner.hold.wait(timeout=3)
                         time.sleep(owner.delay)
-                        result = {"content": [{"type": "text", "text": "native"}],
+                        result = {"content": [{"type": "text", "text": getattr(owner, "native_text", "native")}],
                                   "_meta": {"native": "preserved"}, "isError": owner.native_fail}
                     finally:
                         with owner.state_lock:
@@ -94,12 +94,13 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
 
     async def with_session(self, check, *, access=frozenset({"read", "write"}),
                            export_verifier=None, frame_observer=None, audio_observer=None,
-                           audio_timeline_observer=None):
+                           audio_timeline_observer=None, native_source=None):
         server = create_editor_server(self.client, allowed_access=access,
                                       export_verifier=export_verifier,
                                       frame_observer=frame_observer,
                                       audio_observer=audio_observer,
-                                      audio_timeline_observer=audio_timeline_observer)
+                                      audio_timeline_observer=audio_timeline_observer,
+                                      native_source=native_source)
         async with create_client_server_memory_streams() as (client_streams, server_streams):
             async with anyio.create_task_group() as group:
                 group.start_soon(server.run, *server_streams, server.create_initialization_options())
@@ -120,6 +121,145 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.requests[-1]["params"], {
                 "name": "update_text_clip", "arguments": {"clipId": "native", "text": "Revised"}})
         await self.with_session(check)
+
+    async def test_source_attested_content_diagnostics_reads_native_state_without_writes(self):
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        self.tools = [{"name": "get_timeline", "inputSchema": {
+            "type": "object", "properties": {"includeClips": {"type": "boolean"},
+                                               "limit": {"type": "integer"}}}}]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={"get_timeline": "read"})
+        self.native_text = json.dumps({"id": "timeline-actual", "clipLimitApplied": False,
+            "tracks": [{"id": "v1", "type": "video", "visible": True, "muted": False},
+                       {"id": "a1", "type": "audio", "muted": True}],
+            "clips": [{"id": "title", "trackId": "v1", "type": "text",
+                       "enabled": True, "textProperties": {"text": "PRIVATE OWNER TITLE"},
+                       "transform": {"opacity": 100},
+                       "keyframes": {"opacity": [{"time": 0, "value": 0},
+                                                 {"time": 2, "value": 0}]}}]})
+        async def check(session):
+            tools = {t.name for t in (await session.list_tools()).tools}
+            self.assertIn("zx7_inspect_native_content", tools)
+            result = await session.call_tool("zx7_inspect_native_content", {"limit": 2})
+            self.assertFalse(result.is_error)
+            report = json.loads(result.content[0].text)
+            self.assertEqual(report["warning_counts"]["opacity_envelope_zero"], 1)
+            self.assertEqual(report["warning_counts"]["audio_track_muted"], 1)
+            self.assertEqual(len(report["warnings"]), 2)
+            self.assertNotIn("PRIVATE OWNER TITLE", result.content[0].text)
+            self.assertFalse(report["artistic_quality_approved"])
+            self.assertTrue(report["read_only"])
+            calls = [r["params"] for r in self.requests if r["method"] == "tools/call"]
+            self.assertEqual(calls, [{"name": "get_timeline", "arguments": {
+                "includeClips": True, "limit": 1000}}])
+        await self.with_session(check, native_source=source)
+
+    async def test_content_diagnostics_needs_source_attestation_and_native_read_grant(self):
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        self.tools = [TOOLS[0]]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={"get_project": "read"})
+        async def absent(session):
+            self.assertNotIn("zx7_inspect_native_content",
+                             [t.name for t in (await session.list_tools()).tools])
+        await self.with_session(absent, native_source=source)
+        self.tools = [{"name": "get_timeline", "inputSchema": {
+            "type": "object", "properties": {"includeClips": {"type": "boolean"},
+                                               "limit": {"type": "integer"}}}}]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={"get_timeline": "read"})
+        await self.with_session(absent)
+        with tempfile.TemporaryDirectory() as scratch, self.assertRaisesRegex(
+                ValueError, "clean pinned editor source"):
+            create_editor_server(self.client, native_source=Path(scratch))
+
+    async def test_failed_or_malformed_native_content_observation_is_not_a_report(self):
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        self.tools = [{"name": "get_timeline", "inputSchema": {
+            "type": "object", "properties": {"includeClips": {"type": "boolean"},
+                                               "limit": {"type": "integer"}}}}]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={"get_timeline": "read"})
+        async def check(session):
+            for self.native_fail, self.native_text in ((True, "PRIVATE PATH"), (False, "{}")):
+                result = await session.call_tool("zx7_inspect_native_content", {})
+                self.assertTrue(result.is_error)
+                self.assertNotIn("PRIVATE", result.content[0].text)
+            before = len(self.requests)
+            result = await session.call_tool("zx7_inspect_native_content", {"limit": True})
+            self.assertTrue(result.is_error)
+            self.assertEqual(len(self.requests), before)
+        await self.with_session(check, native_source=source)
+
+    async def test_rejected_export_path_can_be_corrected_without_replaying_a_write(self):
+        """Run #42444331745 stopped after a legitimate no-overwrite refusal.
+
+        Exercise the actual filesystem policy, HTTP client, official MCP SDK
+        and controller. The model stub tests protocol recovery, not creativity.
+        """
+        from studio_next.body_editor_policy import EditorPathPolicy
+        from studio_next.native_creative_control import NativeCreativeControl
+        from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
+        from studio_next.test_native_creative_control import ScriptedModel, decision
+        import copy
+        with tempfile.TemporaryDirectory() as scratch:
+            roots = [Path(scratch) / n for n in ("projects", "staging", "outputs")]
+            for root in roots:
+                root.mkdir()
+            old, new = (roots[2] / n for n in ("v1.mp4", "v2.mp4"))
+            old.write_bytes(b"preserved original export")
+            self.tools = [{"name": "export_timeline", "inputSchema": {
+                "type": "object", "properties": {"outputPath": {"type": "string"}}}}]
+            self.native_text = json.dumps({"success": True,
+                "native_tool": "export_timeline", "editable": True})
+            self.client = LocalEditorClient(self.endpoint,
+                allowed_tools={"export_timeline": "write"}, policy=EditorPathPolicy(*roots))
+            async def check(session):
+                refused = await session.call_tool("export_timeline", {"outputPath": str(old)})
+                self.assertTrue(refused.is_error)
+                # Host must preserve rejection phase, not generic is_error.
+                self.assertIsInstance(refused.meta, dict)
+                receipt = refused.meta["zx7.host/pre-dispatch-rejection"]
+                self.assertEqual(receipt["code"], "output_exists")
+                self.assertFalse(any(r["method"] == "tools/call" for r in self.requests))
+                model = ScriptedModel([
+                    decision("invoke", tool="export_timeline", inputs={"outputPath": str(old)}),
+                    decision("invoke", tool="export_timeline", inputs={"outputPath": str(new)}),
+                    decision("finish", summary="Protocol fixture only"),
+                ])
+                grants = {"export_timeline": "write"}
+                from studio_next.capability_gateway import CapabilityGateway
+                from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+                from studio_next.capability_session_budget import CapabilitySessionBudget
+                budget = CapabilitySessionBudget(max_calls=2, max_writes=2)
+                gateway = CapabilityGateway({"editor": (session, grants)}, session_budget=budget)
+                await gateway.refresh()
+                admitted = CapabilityGatewayMcpSession(gateway, "editor")
+                outcome = await NativeCreativeControl(admitted, model, max_turns=3,
+                    host_tool_access=grants, host_pre_dispatch_rejections=True).run("Revise export")
+                self.assertEqual(outcome["status"], "model_finished_unverified")
+                self.assertEqual(old.read_bytes(), b"preserved original export")
+                calls = [r for r in self.requests if r["method"] == "tools/call"]
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0]["params"]["arguments"], {"outputPath": str(new)})
+                feedback = model.observed[1]["last_rejected_native_action_feedback"]
+                self.assertEqual(feedback["rejection_code"], "output_exists")
+                self.assertTrue(feedback["no_native_dispatch"])
+                events = outcome["events"]
+                rejected = next(e for e in events if e["kind"] == "host_tool_rejected_before_dispatch")
+                self.assertTrue(rejected["no_native_dispatch"])
+                self.assertNotIn(str(old), json.dumps(events))
+                self.assertEqual(sum(e.get("host_application_write_acknowledged") is True
+                                     for e in events), 1)
+                audit_native_journal(events, host_tool_access=grants,
+                                     host_pre_dispatch_rejections=True)
+                for key, value in (("inputs_sha256", "f" * 64),
+                                   ("rejection_code", "made_up"),
+                                   ("no_native_dispatch", False)):
+                    corrupt = copy.deepcopy(events)
+                    next(e for e in corrupt if e["kind"] == rejected["kind"])[key] = value
+                    with self.subTest(key=key), self.assertRaises(NativeJournalError):
+                        audit_native_journal(corrupt, host_tool_access=grants,
+                                             host_pre_dispatch_rejections=True)
+                with self.assertRaises(NativeJournalError):
+                    audit_native_journal(events, host_tool_access=grants)
+            await self.with_session(check)
 
     async def test_host_export_policy_and_model_native_schema_agree_before_dispatch(self):
         """Real hosted NVIDIA run #42443385990 failed at export_timeline
