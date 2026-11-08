@@ -178,7 +178,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             audit_native_journal, NativeJournalError)
 
         # This is a bounded protocol fixture, NOT a real captured image.
-        jpeg = b"\\xff\\xd8\\xff\\xe0" + b"fixture-for-protocol-safety" + b"\\xff\\xd9"
+        jpeg = b"\xff\xd8\xff\xe0" + b"fixture-for-protocol-safety" + b"\xff\xd9"
         sha = hashlib.sha256(jpeg).hexdigest()
 
         class FrameSession(FakeSession):
