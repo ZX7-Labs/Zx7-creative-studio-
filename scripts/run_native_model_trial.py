@@ -22,6 +22,7 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
+from studio_next.native_editor_source_pin import (pinned_electron_marker_previews, pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalModelSettings
 from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
@@ -202,7 +203,15 @@ def fresh_trial_project_open_effects(projects_root):
     root = Path(projects_root)
     if not root.is_dir() or any(root.iterdir()):
         raise ValueError("Native trial requires a new empty project directory")
-    return {"create_project": ["project_open"]}
+    # Import is a real installed native operation that may establish a
+    # nonempty project asset inventory AFTER the project actually opens.
+    # The presence of staged media alone cannot establish that fact.
+    return {"create_project": ["project_open"],
+            "import_asset_from_path": ["project_assets_available"],
+            # These operations MAY populate an actual timeline, but a new
+            # content clip is not a saved/visible original-footage proof.
+            "add_asset_to_timeline": ["timeline_clips_available"],
+            "add_assets_to_timeline": ["timeline_clips_available"]}
 
 
 async def trial(args, lock, artifacts, command):
@@ -302,7 +311,10 @@ async def trial(args, lock, artifacts, command):
                         # with no native timeline must not be dispatched;
                         # fail preflight and let the model re-inspect reality.
                         "replace_clip_with_asset": [
-                            "project_open", "project_assets_available"],
+                            "project_open", "project_assets_available",
+                            "timeline_clips_available"],
+                        "duplicate_clip": [
+                            "project_open", "timeline_clips_available"],
                         "add_text_clip": ["project_open"],
                         "save_project": ["project_open"],
                         "export_timeline": ["project_open"],
@@ -313,9 +325,19 @@ async def trial(args, lock, artifacts, command):
                     # continuity or create an unrelated empty project. Other
                     # creative sessions are not globally subject to this rule.
                     host_once_after_acknowledged_write=("create_project",),
+                    # The pinned *Electron MCP* marker API, not the
+                    # downstream renderer handler, guarantees that these
+                    # previewOnly:true calls return a read-only top-level
+                    # preview before a mutating performAction is reached.
+                    host_verified_top_level_preview_tools=(
+                        pinned_electron_marker_previews(args.source, host) +
+                        pinned_electron_asset_placement_previews(args.source, host) +
+                        pinned_electron_clip_edit_previews(args.source, host)),
                     # Technical owner acceptance facts, NOT an editing plan.
                     # Failed model claims cannot end the trial before actual
                     # native activity, source-verified export and visual sensing.
+                    host_verified_timeline_preview_tools=(
+                        pinned_electron_timeline_frame_previews(args.source, host)),
                     required_evidence=completion_evidence,
                     host_content_revision_tools=host_content_revision_tools).run(brief),
                     timeout=2400)

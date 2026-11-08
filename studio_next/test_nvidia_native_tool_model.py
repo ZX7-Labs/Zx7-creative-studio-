@@ -160,6 +160,55 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertIn("zx7_finish_verified_session",
                       [x["function"]["name"] for x in functions])
 
+    def test_real_native_jpeg_is_sent_with_correct_provenance_and_no_export_claim(self):
+        """Source-pinned editable-timeline JPEG is visually reviewable by
+        NVIDIA but must never impersonate a verified decoded export frame.
+        A mocked HTTP boundary proves transport formatting, NOT live vision
+        quality or model autonomy.
+        """
+        import base64
+        import hashlib
+        jpeg = b"\xff\xd8\xff\xe0" + b"synthetic-renderer-JPEG" + b"\xff\xd9"
+        sha = hashlib.sha256(jpeg).hexdigest()
+        ctx = {**_context(),
+               "native_picture_origin":
+                   "live_editable_timeline_preview_not_verified_export",
+               "observed_picture_sha256": [sha],
+               "missing_completion_evidence": [
+                   "physical_export_verified", "verified_export_frame_observed"]}
+        recorded = []
+        class Opener:
+            def open(self, request, timeout):
+                recorded.append(json.loads(request.data))
+                return _reply(_provider_function("get_project"),
+                              '{"inputs":{},"reason":"Read current native project"}')
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-"+"E"*32}), patch(
+                "studio_next.nvidia_model.build_opener", return_value=Opener()):
+            model = NvidiaNativeToolCreativeModel(
+                system_prompt="Trusted actual editor model",
+                allow_image_upload=True)
+            answer = model.decide_with_images(ctx, [("image/jpeg", jpeg)])
+        self.assertEqual(answer["arguments"]["tool"], "get_project")
+        self.assertEqual(len(recorded), 1)
+        payload = recorded[0]
+        self.assertEqual(payload["tool_choice"], "required")
+        self.assertFalse(payload["parallel_tool_calls"])
+        text, label, image = payload["messages"][1]["content"]
+        self.assertEqual(text["type"], "text")
+        facts = json.loads(text["text"])
+        self.assertEqual(facts["native_picture_origin"],
+                         "live_editable_timeline_preview_not_verified_export")
+        self.assertIn("physical_export_verified",
+                      facts["missing_completion_evidence"])
+        self.assertEqual(json.loads(label["text"])["sha256"], sha)
+        self.assertEqual(image["type"], "image_url")
+        self.assertEqual(image["image_url"]["url"].split(",", 1)[0],
+                         "data:image/jpeg;base64")
+        self.assertEqual(base64.b64decode(
+            image["image_url"]["url"].split(",", 1)[1]), jpeg)
+        self.assertNotIn("nvapi-", json.dumps(payload))
+        self.assertFalse(ctx.get("physical_export_verified", False))
+
     def test_synthetic_image_upload_only_with_explicit_host_permission(self):
         from hashlib import sha256
         img = b"\\x89PNG\\r\\n\\x1a\\n" + b"synthetic-test-frame"

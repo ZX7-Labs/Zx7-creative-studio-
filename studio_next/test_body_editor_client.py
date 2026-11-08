@@ -81,6 +81,39 @@ class LocalEditorClientTests(unittest.TestCase):
         client.call("edit", {}, allowed_access={"write"})
         self.assertEqual(len(self.requests), 1)
 
+    def test_native_marker_preview_goes_to_source_verified_electron_mcp_without_rewriting_intent(self):
+        """The Electron MCP intercepts previewOnly:true before the renderer.
+        The shared client must preserve the boolean and exact caller grant;
+        a valid preview response has no success or action receipt.
+        """
+        def native_preview(request):
+            return {"jsonrpc": "2.0", "id": request["id"],
+                    "result": {"content": [{"type": "text", "text": json.dumps({
+                        "previewOnly": True, "markerCount": 1,
+                        "markers": [{"id": "marker-source"}]})}]}}
+        self.reply = native_preview
+        for tool_name, payload in (
+                ("add_timeline_markers", {"markers": [{"timeSeconds": 1.0}]}),
+                ("remove_timeline_markers", {"all": True}),
+                ("set_timeline_marker_properties", {"all": True, "label": "Revised"})):
+            client = LocalEditorClient(
+                self.endpoint, allowed_tools={tool_name: "write"})
+            with self.subTest(tool=tool_name):
+                with self.assertRaises(EditorAccessError):
+                    client.call(tool_name, {**payload, "previewOnly": True},
+                                allowed_access={"read"})
+                self.assertEqual(self.requests, [])
+                inputs = {**payload, "previewOnly": True}
+                receipt = client.call(tool_name, inputs,
+                                      allowed_access={"write"})
+                self.assertEqual(self.requests[0]["params"],
+                                 {"name": tool_name, "arguments": inputs})
+                response = json.loads(receipt["content"][0]["text"])
+                self.assertIs(response["previewOnly"], True)
+                self.assertNotIn("success", response)
+                self.assertNotIn("action", response)
+                self.requests.clear()
+
     def test_only_exact_true_policy_accepts_before_http(self):
         for verdict in [False, None, 1, "yes"]:
             with self.subTest(verdict=verdict), self.assertRaises(EditorAccessError):

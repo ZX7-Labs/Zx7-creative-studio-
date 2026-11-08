@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 
@@ -22,6 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
+from studio_next.native_editor_source_pin import (pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
@@ -33,6 +35,45 @@ def native_editor_child_environment(environ=None):
     child = dict(os.environ if environ is None else environ)
     child.pop("NVIDIA_API_KEY", None)
     return child
+
+
+_PINNED_MCP_PREVIEW_COMMIT = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+_PINNED_MARKER_PREVIEWS = (
+    "add_timeline_markers", "remove_timeline_markers",
+    "set_timeline_marker_properties",
+)
+
+
+def pinned_electron_marker_previews(source: Path, grants: dict):
+    """Attest the *actual Electron MCP entrypoint*, not renderer handlers.
+
+    Some renderer handlers mutate without parsing previewOnly because the
+    Electron MCP server validates/returns read-only previews first.
+    Only claim that special reply contract for an exact clean source pin.
+    An unknown build gets no optimistic preview attestation.
+    """
+    if (not isinstance(source, Path) or
+            not isinstance(grants, dict) or
+            not all(isinstance(name, str) and access in ("read", "write")
+                    for name, access in grants.items())):
+        raise ValueError("Pinned preview attestation needs trusted native source/grants")
+    safe_env = native_editor_child_environment()
+    try:
+        revision = subprocess.run(
+            ["git", "-C", str(source.resolve()), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+        if revision.returncode != 0 or revision.stdout.strip() != _PINNED_MCP_PREVIEW_COMMIT:
+            return ()
+        clean = subprocess.run(
+            ["git", "-C", str(source.resolve()), "diff", "--quiet", "HEAD",
+             "--", "electron/mcpServer.js"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+    except (OSError, subprocess.TimeoutExpired):
+        return ()
+    if clean.returncode != 0:
+        return ()
+    return tuple(name for name in _PINNED_MARKER_PREVIEWS
+                 if grants.get(name) == "write")
 
 
 def trial_machine_contracts(grants, *, fresh):
@@ -205,6 +246,12 @@ async def main(args):
                 host_possible_effects=machine_effects,
                 host_once_after_acknowledged_write=(
                     ("create_project",) if fresh else ()),
+                host_verified_top_level_preview_tools=(
+                    pinned_electron_marker_previews(args.source, host_grants) +
+                    pinned_electron_asset_placement_previews(args.source, host_grants) +
+                    pinned_electron_clip_edit_previews(args.source, host_grants)),
+                host_verified_timeline_preview_tools=(
+                    pinned_electron_timeline_frame_previews(args.source, host_grants)),
                 required_evidence=required,
                 host_content_revision_tools=host_revisions,
                 receipt_path=args.receipt).run(brief)

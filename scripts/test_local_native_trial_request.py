@@ -28,11 +28,16 @@ class LocalNativeTrialRequestTests(unittest.TestCase):
     def test_versioned_source_request_is_explicit_and_local_only(self):
         root = Path(__file__).resolve().parents[1]
         path = root / "research" / "local-native-trial-request.json"
-        self.assertEqual(validate_local_trial_request(path), "qwen3.5-2b")
+        # The versioned request is the selector: either explicitly pinned
+        # local candidate is legitimate. Do not hardcode today's baseline
+        # into an admission test and thereby reject a reviewed 4B trial.
+        requested = json.loads(path.read_text(encoding="utf-8"))["model_variant"]
+        self.assertIn(requested, ("qwen3.5-2b", "qwen3.5-4b"))
+        self.assertEqual(validate_local_trial_request(path), requested)
         result = subprocess.run(
             [sys.executable, "-m", "scripts.local_native_trial_request", str(path)],
             cwd=root, capture_output=True, text=True, check=True)
-        self.assertEqual(result.stdout, "qwen3.5-2b\n")
+        self.assertEqual(result.stdout, requested + "\n")
 
     def test_only_pinned_candidate_choices(self):
         with tempfile.TemporaryDirectory() as tmp:

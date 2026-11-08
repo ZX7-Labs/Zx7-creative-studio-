@@ -77,6 +77,115 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertEqual(child, {"PATH": "/usr/bin", "OTHER_SETTING": "keep"})
         self.assertIn("NVIDIA_API_KEY", given)
 
+    def test_pinned_real_electron_preview_attestation_requires_clean_exact_source(self):
+        """No agent route may claim read-only marker semantics from a random
+        editor checkout. Only the exact pinned clean Electron MCP source
+        grants the strict top-level preview protocol to eligible tools.
+        """
+        script = (Path(__file__).resolve().parents[1] / "engines" /
+                  "velorn" / "native-model-client.py")
+        method = runpy.run_path(str(script), run_name="native_marker_contract_test")[
+            "pinned_electron_marker_previews"]
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        grants = {
+            "add_timeline_markers": "write",
+            "remove_timeline_markers": "read",
+            "set_timeline_marker_properties": "write",
+        }
+        pin = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+        witnessed = []
+
+        def git_response(argv, **options):
+            witnessed.append((argv, options))
+            if "rev-parse" in argv:
+                return subprocess.CompletedProcess(argv, 0, pin + "\n", "")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with patch("subprocess.run", side_effect=git_response):
+            self.assertEqual(method(source, grants), (
+                "add_timeline_markers", "set_timeline_marker_properties"))
+        self.assertEqual(len(witnessed), 2)
+        self.assertEqual(witnessed[1][0][-2:], ["--", "electron/mcpServer.js"])
+        self.assertTrue(all("NVIDIA_API_KEY" not in opts["env"]
+                            for _, opts in witnessed))
+
+        def bad_commit(argv, **_):
+            return subprocess.CompletedProcess(argv, 0, "different-revision\n", "")
+        with patch("subprocess.run", side_effect=bad_commit):
+            self.assertEqual(method(source, grants), ())
+
+        def edited_source(argv, **_):
+            return subprocess.CompletedProcess(
+                argv, 0 if "rev-parse" in argv else 1,
+                pin + "\n" if "rev-parse" in argv else "", "")
+        with patch("subprocess.run", side_effect=edited_source):
+            self.assertEqual(method(source, grants), ())
+
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(method(source, grants), ())
+        with self.assertRaises(ValueError):
+            method(source, {"add_timeline_markers": "unknown-access"})
+
+    def test_pinned_clip_edit_previews_require_source_integrity_and_write_grant(self):
+        """Default native move/trim/delete preview plans do not grant
+        mutation authority to model text or unknown upstream editor builds.
+        """
+        from studio_next.native_editor_source_pin import (
+            pinned_electron_clip_edit_previews)
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        pin = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+        def clean(argv, **_):
+            return subprocess.CompletedProcess(
+                argv, 0, pin + "\n" if "rev-parse" in argv else "", "")
+        grants = {"move_clips": "write", "trim_clips": "write",
+                  "delete_clips": "read", "get_project": "read"}
+        with patch("subprocess.run", side_effect=clean):
+            self.assertEqual(pinned_electron_clip_edit_previews(
+                source, grants), ("move_clips", "trim_clips"))
+        with patch("subprocess.run", side_effect=lambda argv, **_: (
+                subprocess.CompletedProcess(
+                    argv, 0, "unknown-revision\n" if "rev-parse" in argv
+                    else "", ""))):
+            self.assertEqual(pinned_electron_clip_edit_previews(
+                source, grants), ())
+        with self.assertRaises(ValueError):
+            pinned_electron_clip_edit_previews(
+                source, {"move_clips": "execute-all"})
+
+    def test_pinned_timeline_jpeg_requires_exact_clean_source_and_two_read_grants(self):
+        """An actual native timeline JPEG is not a physical-export
+        verifier. Only the audited pinned Electron MCP entrypoint and
+        actual read grants may enable this separate model observation.
+        """
+        from studio_next.native_editor_source_pin import (
+            pinned_electron_timeline_frame_previews)
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        pin = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+
+        def clean_source(argv, **kwargs):
+            if "rev-parse" in argv:
+                return subprocess.CompletedProcess(argv, 0, pin + "\n", "")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        grants = {"inspect_timeline_frame": "read", "get_project": "read"}
+        with patch("subprocess.run", side_effect=clean_source):
+            self.assertEqual(pinned_electron_timeline_frame_previews(source, grants),
+                             ("inspect_timeline_frame",))
+            self.assertEqual(pinned_electron_timeline_frame_previews(
+                source, {"inspect_timeline_frame": "read"}), ())
+            self.assertEqual(pinned_electron_timeline_frame_previews(
+                source, {"inspect_timeline_frame": "write",
+                         "get_project": "read"}), ())
+        def modified_source(argv, **kwargs):
+            return subprocess.CompletedProcess(
+                argv, 0 if "rev-parse" in argv else 1,
+                pin + "\n" if "rev-parse" in argv else "", "")
+        with patch("subprocess.run", side_effect=modified_source):
+            self.assertEqual(pinned_electron_timeline_frame_previews(source, grants), ())
+        with self.assertRaises(ValueError):
+            pinned_electron_timeline_frame_previews(
+                source, {"inspect_timeline_frame": "promoted-to-write"})
+
     def test_native_contract_excludes_ungranted_tool_prerequisites(self):
         import runpy
         from studio_next.capability_fabric import CapabilityFabric

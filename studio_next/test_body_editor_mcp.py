@@ -121,6 +121,123 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 "name": "update_text_clip", "arguments": {"clipId": "native", "text": "Revised"}})
         await self.with_session(check)
 
+    async def test_host_export_policy_and_model_native_schema_agree_before_dispatch(self):
+        """Real hosted NVIDIA run #42443385990 failed at export_timeline
+        because the model-visible native schema allowed missing outputPath,
+        while BODY correctly requires a new explicit destination. The
+        trusted schema must reflect the trusted host policy before inference,
+        without silently picking a filename or authoring an export.
+        """
+        from studio_next.body_editor_policy import EditorPathPolicy
+        with tempfile.TemporaryDirectory() as scratch:
+            roots = [Path(scratch) / name for name in
+                     ("projects", "staging", "outputs")]
+            for root in roots:
+                root.mkdir()
+            native_exports = []
+            for name in ("export_timeline", "export_fcpxml"):
+                native_exports.append({
+                    "name": name,
+                    "description": "Actual source-pinned Velorn export",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "outputPath": {"type": "string"},
+                            "previewOnly": {"type": "boolean"}},
+                        "required": [],
+                        "additionalProperties": False}})
+            self.tools = [*TOOLS, *native_exports]
+            self.client = LocalEditorClient(
+                self.endpoint,
+                allowed_tools={"get_project": "read",
+                               "export_timeline": "write",
+                               "export_fcpxml": "write"},
+                policy=EditorPathPolicy(*roots))
+
+            async def check(session):
+                catalog = {x.name: x for x in (await session.list_tools()).tools}
+                self.assertEqual(
+                    set(catalog), {"get_project", "export_timeline", "export_fcpxml"})
+                for name in ("export_timeline", "export_fcpxml"):
+                    with self.subTest(name=name):
+                        source = next(t for t in self.tools if t["name"] == name)
+                        self.assertEqual(source["inputSchema"]["required"], [])
+                        presented = catalog[name].input_schema
+                        self.assertEqual(presented["required"], ["outputPath"])
+                        self.assertEqual(
+                            presented["properties"]["previewOnly"],
+                            source["inputSchema"]["properties"]["previewOnly"])
+                        self.assertEqual(
+                            source["inputSchema"]["properties"]["outputPath"],
+                            {"type": "string"})
+                        self.assertEqual(
+                            presented["properties"]["outputPath"]["minLength"], 1)
+                        self.assertIn(
+                            "REQUIRED by the trusted BODY host",
+                            presented["properties"]["outputPath"]["description"])
+                        # Exercise the exact provider-native function contract
+                        # used by the real NVIDIA 120B run without any cloud
+                        # inference, not a toy JSON Schema assertion alone.
+                        from studio_next.nvidia_native_tool_model import (
+                            NvidiaNativeToolCreativeModel)
+                        functions, mapping = (
+                            NvidiaNativeToolCreativeModel._tool_surface({
+                                "available_actions": ["invoke"],
+                                "compact_tool_catalog": False,
+                                "actual_granted_native_tools": [name],
+                                "host_native_tool_contracts": [{
+                                    "name": name,
+                                    "description": catalog[name].description,
+                                    "input_schema": presented}],
+                            }))
+                        self.assertEqual(len(functions), 1)
+                        self.assertEqual(mapping, {
+                            "zx7_native_" + name: ("invoke", name)})
+                        native_inputs = functions[0]["function"]["parameters"][
+                            "properties"]["inputs"]
+                        self.assertEqual(native_inputs["required"], ["outputPath"])
+                        self.assertEqual(
+                            native_inputs["properties"]["outputPath"]["minLength"], 1)
+                        self.assertTrue((await session.call_tool(name, {})).is_error)
+                        self.assertTrue((await session.call_tool(
+                            name, {"outputPath": 42})).is_error)
+                        self.assertTrue((await session.call_tool(
+                            name, {"outputPath": "/etc/blocked.mp4"})).is_error)
+                        self.assertFalse(any(
+                            row["method"] == "tools/call"
+                            for row in self.requests))
+                        requested = {"outputPath": str(roots[2] / (
+                            "model-selected-" + name + ".mp4")),
+                                     "previewOnly": False}
+                        applied = await session.call_tool(name, requested)
+                        self.assertFalse(applied.is_error)
+                        self.assertEqual(self.requests[-1]["params"],
+                                         {"name": name, "arguments": requested})
+                        self.requests.clear()
+            await self.with_session(check)
+
+            # Fail closed when the upstream editor removes/changes the actual
+            # exported path field: do not advertise a fabricated ABI.
+            self.tools = [TOOLS[0], {
+                "name": "export_timeline", "description": "Wrong native ABI",
+                "inputSchema": {"type": "object", "properties": {
+                    "outputPath": {"type": "integer"}}}}, native_exports[1]]
+            with self.assertRaisesRegex(
+                    ValueError, "host-required outputPath"):
+                create_editor_server(self.client, allowed_access={
+                    "read", "write"})
+
+            # Without the trusted EditorPathPolicy, generic native clients
+            # must not secretly change the installed editor input contract.
+            self.client = LocalEditorClient(
+                self.endpoint,
+                allowed_tools={"export_timeline": "write"})
+            self.tools = [native_exports[0]]
+            async def unmodified(session):
+                exposed = (await session.list_tools()).tools
+                self.assertEqual(exposed[0].input_schema["required"], [])
+            await self.with_session(unmodified)
+
     async def test_read_only_host_cannot_advertise_or_call_writes(self):
         async def check(session):
             self.assertEqual([tool.name for tool in (await session.list_tools()).tools], ["get_project"])
