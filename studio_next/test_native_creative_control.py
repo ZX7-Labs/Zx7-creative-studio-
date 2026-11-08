@@ -3010,7 +3010,15 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result["status"], "model_finished_unverified")
                 self.assertEqual([t for t, _ in session.calls].count(
                     "import_asset_from_path"), 1)
-                self.assertEqual(session.import_reads,
+                # The converged case performs a fourth read after the
+                # subsequent real placement ACK; distinguish that from the
+                # three necessary post-import observations.
+                self.assertEqual(session.import_reads, 4)
+                import_reads = [e for e in result["events"] if
+                                e["kind"] == "host_project_post_write_observation" and
+                                e.get("triggered_by_native_tool") ==
+                                    "import_asset_from_path"]
+                self.assertEqual(len(import_reads),
                                  4 if never_converges else 3)
                 lag_events = [e for e in result["events"] if
                               e["kind"] == "host_project_post_write_asset_lag"]
