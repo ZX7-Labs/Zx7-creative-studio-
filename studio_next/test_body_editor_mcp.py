@@ -166,8 +166,7 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(presented["required"], ["outputPath"])
                         self.assertEqual(presented["properties"],
                                          source["inputSchema"]["properties"])
-                        self.assertFalse((await session.call_tool(name, {})).is_error
-                                         is False)
+                        self.assertTrue((await session.call_tool(name, {})).is_error)
                         self.assertTrue((await session.call_tool(
                             name, {"outputPath": 42})).is_error)
                         self.assertTrue((await session.call_tool(
@@ -190,7 +189,7 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.tools = [TOOLS[0], {
                 "name": "export_timeline", "description": "Wrong native ABI",
                 "inputSchema": {"type": "object", "properties": {
-                    "outputPath": {"type": "integer"}}}}]
+                    "outputPath": {"type": "integer"}}}}, native_exports[1]]
             with self.assertRaisesRegex(
                     ValueError, "host-required outputPath"):
                 create_editor_server(self.client, allowed_access={
