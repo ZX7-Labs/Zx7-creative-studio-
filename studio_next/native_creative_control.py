@@ -1663,20 +1663,39 @@ class NativeCreativeControl:
                         # explicitly attests this exact tool/reply contract.
                         # Never infer no-write from an uncorrelated single
                         # "previewOnly" flag or a contradictory success:true.
+                        # The exact Electron MCP shapes differ between
+                        # marker addition and marker removal/update. Reject
+                        # unexpected keys (including misleading success/error)
+                        # rather than treating arbitrary top-level JSON as a
+                        # source-verified no-op.
+                        flat_preview_fields = {
+                            "add_timeline_markers": {
+                                "previewOnly", "markerCount", "markers"},
+                            "remove_timeline_markers": {
+                                "previewOnly", "mode", "markerCount",
+                                "missingMarkerIds", "markers"},
+                            "set_timeline_marker_properties": {
+                                "previewOnly", "mode", "markerCount",
+                                "missingMarkerIds", "markers"},
+                        }.get(native_name)
                         top_level_preview = (
                             native_name in self._host_verified_top_level_previews
+                            and flat_preview_fields is not None
                             and args["inputs"].get("previewOnly") is True
                             and isinstance(host_response, dict)
-                            and host_response.get("previewOnly") is True
-                            and "success" not in host_response
-                            and "result" not in host_response
-                            and "action" not in host_response
-                            and type(host_response.get("markerCount")) is int
+                            and set(host_response) == flat_preview_fields
+                            and host_response["previewOnly"] is True
+                            and type(host_response["markerCount"]) is int
                             and 0 <= host_response["markerCount"] <= 1000
-                            and type(host_response.get("markers")) is list
+                            and type(host_response["markers"]) is list
                             and len(host_response["markers"]) == host_response["markerCount"]
                             and all(type(marker) is dict
-                                    for marker in host_response["markers"]))
+                                    for marker in host_response["markers"])
+                            and (native_name == "add_timeline_markers" or (
+                                type(host_response["mode"]) is str and
+                                type(host_response["missingMarkerIds"]) is list and
+                                all(type(marker_id) is str for marker_id
+                                    in host_response["missingMarkerIds"]))))
                         wrapper_preview = (
                             isinstance(host_response, dict) and
                             host_response.get("previewOnly") is True and
