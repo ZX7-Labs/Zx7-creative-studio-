@@ -1024,6 +1024,17 @@ class NativeCreativeControl:
                     preview_field.get("type") != "boolean"):
                 raise NativeCreativeControlError(
                     "Source-verified preview requires native boolean previewOnly field")
+        for name in self._host_verified_timeline_previews:
+            if name not in validators:
+                raise NativeCreativeControlError(
+                    "Source-verified native timeline JPEG tool is absent")
+            properties = validators[name].schema.get("properties")
+            include_field = (properties.get("includeImage")
+                             if isinstance(properties, dict) else None)
+            if (not isinstance(include_field, dict) or
+                    include_field.get("type") != "boolean"):
+                raise NativeCreativeControlError(
+                    "Source-verified native JPEG requires real includeImage boolean")
         if self.receipt_path is not None:
             if not self.receipt_path.parent.is_dir():
                 raise NativeCreativeControlError("Receipt directory must already exist")
