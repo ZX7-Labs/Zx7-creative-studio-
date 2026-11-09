@@ -1,0 +1,32 @@
+# ZX7 continuation checkpoint
+
+Checked 2026-11-09 at 11:48 IST. This is a snapshot. Recheck live runs and the remote `main` before making decisions. The owner paused implementation to prepare this handoff. Already-started GitHub jobs can finish while the chat is closed.
+
+## What is on main
+
+The verified product baseline immediately before this documentation checkpoint is `0bb0425e6d2effdf8313d5444264ccc7e8918fe0`. The [installed native Studio workflow](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/237) is merged. It creates, saves, exports, reopens, and revises editable projects using the pinned Velorn editor. The [native placement fixes](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/238) are merged. They ground choices in active tracks and imported assets, refresh the inventory on project changes, and preview both placement methods before sending an apply request. CI verifies the pinned FFmpeg and FFprobe inputs.
+
+- All nine PR checks passed for the #238 head `47e45e397da0da79d77327066136a679d0bee213`. The broad suite reported 1,312 tests with one skip. The real native editor passed placement rejection, valid placement, export, reopen, and revision checks. [Full suite](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42568507999) · [Installed editor proof](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42568507872)
+- The scripted 60-second proof retained a project with seven tracks, eleven clips, and two versions. The archive checksum matched and the MP4 decoded independently. This establishes the tested engine workflow. [Video and editable project](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42568507986/artifacts/13651773681)
+
+The editor is pinned at Velorn `b3c02adbd5c0779feb8abf34978299e9502cc0e7`. The normal owner entry is `zx7-studio` as documented in the [README](../../README.md). For the current failure path, trace the [native controller](../../studio_next/native_creative_control.py), [permissioned editor bridge](../../studio_next/body_editor_mcp.py), and [local evaluation runner](../../scripts/run_native_model_trial.py).
+
+## Actual model runs and work in progress
+
+| Item | Last observed state | What to do with it |
+|---|---|---|
+| [Earlier Qwen3.5-4B run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42539752321) | The model imported footage, guessed a track, and later hit a 300-second CPU request timeout. No export. | Historical evidence for the track fix and CPU bottleneck. |
+| [Track-aware Qwen3.5-4B run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42545785849) | The model selected a real track and saved one source-backed editable clip. It stopped when a batch apply included an unimported asset. Zero exports. Six inference turns took about 22 minutes. | The result justified showing imported assets and preflighting placement. See the [retained run evidence](../../research/local-model-trial-evidence.json). |
+| [Batch recovery Qwen3.5-4B run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42567970402) | In progress in the model and editor step. Tests BODY `cbf189fdcd0826aafbe02fa30fd45c1b050f350b` with a 480-second model request limit and a 7,200-second trial limit. It predates the final project-refresh and single-placement follow-up in #238. | Check the final result and download its evidence before deciding on a fix or rerun. Attribute observations to the tested source. |
+| [Pinned tokenizer experiment](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42571358693) | Completed. The tokenizer reproduced six historical prompt counts. Compact encoding reduced their total from 25,895 to 23,658 tokens with the same parsed data. | This measures tokens. The experimental variant that replaces repeated receipts with references is outside the proposed change. |
+| [Compact encoding PR #239](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/239) and [paired CPU run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42571802016) | Draft at `0acab721eeecb49bf5aabb291da1cdb4911ac664`. 162 focused local tests passed. Source and custody CI passed. MLT checks and matched CPU prefill measurements were in progress. | Recheck exact-head checks and measured timings. Any speed claim needs the measurements. Any creative behavior claim needs a real model trial. |
+
+Several attempts failed before inference with HTTP 504 on pinned dependency downloads. The successful native proof used verified media packages. The active model run passed editor build and prefetch of the checksum-matched llama.cpp archive. Use that route for reproductions and distinguish dependency outages from model behavior. A passing opt-in CI job can include a skipped neural job, so check job steps before counting any actual inference.
+
+## Resume here
+
+1. Inspect the live model run and draft PR. Download any completed model artifact and check its SHA-256. Read the inference transcript and native journal, inspect the saved editable project and original copies, and independently decode any exports.
+2. The next technical gate is a real connected model independently choosing native edits, exporting, inspecting actual exported pixels, making a meaningful editable revision, and delivering a second verified export while preserving the original source. Match the exact tested commit and inspect before and after. If the run stops, find the first failing operation and reproduce it before changing or rerunning anything. Carry successful controls forward.
+3. Professional video completion still needs representative work, independent artistic review, recovery, and the remaining timing, sound, color, and custody checks in the [capability contract](../../CAPABILITIES.md). The broader motion, graphics, CGI, VFX, and other fields remain in scope. Their progress requires separate evidence.
+
+To check live GitHub status with an authorized CLI, run `gh run view 42567970402 --repo ZX7-Labs/Zx7-creative-studio-` and `gh pr checks 239 --repo ZX7-Labs/Zx7-creative-studio-`. A GitHub connector or the links above provide the same entry points.
