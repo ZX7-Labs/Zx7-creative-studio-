@@ -17,6 +17,7 @@ from itertools import islice
 import os
 from pathlib import Path
 import re
+import secrets
 import time
 from typing import Any
 
@@ -1887,6 +1888,15 @@ class NativeCreativeControl:
                             "tool": native_name, "validation_keyword": "host_pre_dispatch",
                             "rejection_code": code, "no_native_dispatch": True,
                             "correction": HOST_REJECTION_FEEDBACK[code]}
+                        if code == "output_exists" and native_name in ("export_timeline", "export_fcpxml"):
+                            requested = args["inputs"].get("outputPath")
+                            if isinstance(requested, str):
+                                path = Path(requested)
+                                if path.is_absolute() and re.fullmatch(r"\.[A-Za-z0-9]{1,12}", path.suffix):
+                                    # A candidate only. The model must choose a new call
+                                    # and the normal output policy still checks that path.
+                                    candidate = path.with_name(f"export-{secrets.token_hex(12)}{path.suffix}")
+                                    self._last_preflight_feedback["suggested_new_output_path"] = str(candidate)
                         self._append({
                             "kind": "host_tool_rejected_before_dispatch", "turn": turn,
                             "tool": native_name, "rejection_code": code,
