@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/studio-body-release-proof.yml"
       - "scripts/release_test_summary.py"
+      - "scripts/release_artifact_integrity.py"
       - "scripts/test_release_test_summary.py"
   workflow_dispatch:
 permissions:
