@@ -438,6 +438,81 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                              for e in result["events"]), 2)
         self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_reviewed_render_requires_fresh_matching_native_destination(self):
+        from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
+
+        paths = [f"/private/exports/v{index}.mp4" for index in range(7)]
+        digests = dict(zip(paths, [value * 64 for value in "abcdefa"], strict=True))
+        digests[paths[3]] = digests[paths[0]]
+        digests[paths[6]] = "1" * 64
+        png = b"\x89PNG\r\n\x1a\nproof"
+        png_hash = hashlib.sha256(png).hexdigest()
+
+        class ExportSession(FakeSession):
+            changed = False
+
+            async def call_tool(self, name, arguments):
+                path = arguments.get("outputPath") or arguments.get("path")
+                if name == "export_timeline":
+                    actual = paths[1] if path == paths[2] else path
+                    timeline = "other-timeline" if path == paths[4] else "timeline"
+                    value = {"success": True, "action": name, "outputPath": path,
+                             "projectPath": "/private/project", "timeline": {"id": timeline},
+                             "result": {"started": True, "outputPath": actual}}
+                elif name == "zx7_verify_native_export":
+                    digest = "9" * 64 if path == paths[5] and self.changed else digests[path]
+                    self.changed = self.changed or path == paths[5]
+                    value = {"physical_export_verified": True, "native_export_sha256": digest}
+                elif name == "zx7_observe_verified_export_frame":
+                    value = {"export_sha256": digests[path], "png_sha256": png_hash}
+                else:
+                    return await super().call_tool(name, arguments)
+                blocks = [SimpleNamespace(type="text", text=json.dumps(value))]
+                if name == "zx7_observe_verified_export_frame":
+                    blocks.append(SimpleNamespace(type="image", mime_type="image/png",
+                                                  data=base64.b64encode(png).decode()))
+                return SimpleNamespace(is_error=False, content=blocks)
+
+        session = ExportSession()
+        session.tools.append(SimpleNamespace(name="export_timeline", description="Render native timeline",
+            input_schema={"type": "object", "properties": {"outputPath": {"type": "string"}}}))
+        writes = {"export_timeline", "update_text_clip"}
+        grants = {tool.name: "write" if tool.name in writes else "read" for tool in session.tools}
+
+        def render(path):
+            return decision("invoke", tool="export_timeline", inputs={"outputPath": path})
+
+        def review(path):
+            return [decision("invoke", tool=name, inputs={"path": path}) for name in
+                    ("zx7_verify_native_export", "zx7_observe_verified_export_frame")]
+
+        finish = decision("finish", summary="Fixture completion")
+        actions = [render(paths[1]), render(paths[0]), *review(paths[0]),
+                   decision("invoke", tool="update_text_clip", inputs={"clipId": "title", "text": "new"}),
+                   *review(paths[1]), finish, render(paths[2]), *review(paths[2]), finish,
+                   render(paths[3]), *review(paths[3]), finish, render(paths[4]), *review(paths[4]), finish,
+                   render(paths[5]), *review(paths[5]),
+                   decision("invoke", tool="zx7_verify_native_export", inputs={"path": paths[5]}), finish,
+                   render(paths[6]), *review(paths[6]), finish]
+        required = ("reviewed_native_render_pair_verified",)
+        result = await NativeCreativeControl(
+            session, ScriptedModel(actions), max_turns=len(actions), host_tool_access=grants,
+            required_evidence=required, host_content_revision_tools=("update_text_clip",)).run("Revise")
+        events = result["events"]
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(sum(event["kind"] == "model_finish_rejected" for event in events), 5)
+        self.assertNotIn("/private/", json.dumps(events))
+        audit_args = dict(host_tool_access=grants, expected_required_evidence=required,
+                          host_content_revision_tools=("update_text_clip",))
+        audited = audit_native_journal(events, **audit_args)
+        self.assertEqual([item["export_sha256"] for item in audited["reviewed_native_render_pair"]],
+                         [digests[paths[0]], digests[paths[6]]])
+        tampered = [dict(event) for event in events]
+        last_image = next(event for event in reversed(tampered) if event.get("image_sha256"))
+        last_image["native_export_destination_sha256"] = "f" * 64
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(tampered, **audit_args)
+
     async def test_real_native_timeline_jpeg_reaches_model_without_fake_export_proof(self):
         """Actual NVIDIA/Nemotron run #42435132392 produced a genuine
         editable clip and then saw pinned inspect_timeline_frame JPEG.

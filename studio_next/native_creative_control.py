@@ -24,6 +24,10 @@ from typing import Any
 from .providers import LocalModelOutputError
 from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK
 from .native_editor_source_pin import source_verified_preview_intent
+from .native_render_evidence import (
+    DESTINATION_FIELD, RENDER_TOOL, REVIEWED_RENDER_PAIR,
+    destination_digest, native_render_binding, reviewed_render_pair,
+)
 
 
 _MAX_MODEL_OUTPUT_RECOVERIES = 2  # host protocol budget, never a creative action
@@ -51,6 +55,7 @@ _COMPLETION_EVIDENCE_TYPES = frozenset({
     "native_write_acknowledged", "physical_export_verified",
     "post_observation_native_write_acknowledged",
     "verified_export_frame_observed",
+    REVIEWED_RENDER_PAIR,
 })
 
 
@@ -739,7 +744,7 @@ class NativeCreativeControl:
                 len(set(host_content_revision_tools)) != len(host_content_revision_tools) or
                 any(host_tool_access is None or host_tool_access.get(name) != "write"
                     for name in host_content_revision_tools) or
-                ("post_observation_native_write_acknowledged" in self.required_evidence
+                (self.required_evidence & {"post_observation_native_write_acknowledged", REVIEWED_RENDER_PAIR}
                  and not host_content_revision_tools)):
             raise NativeCreativeControlError(
                 "Reviewed native content revision requires trusted write-role tool grants")
@@ -987,6 +992,9 @@ class NativeCreativeControl:
             proven.add("physical_export_verified")
         if current_frames:
             proven.add("verified_export_frame_observed")
+        if (REVIEWED_RENDER_PAIR in self.required_evidence and
+                reviewed_render_pair(self.events, self.host_content_revision_tools)):
+            proven.add(REVIEWED_RENDER_PAIR)
         return sorted(self.required_evidence - proven)
 
     def _append(self, event: dict):
@@ -1113,14 +1121,14 @@ class NativeCreativeControl:
         if self.required_evidence:
             grants = self.host_tool_access
             needs_review_write = (
-                "post_observation_native_write_acknowledged" in self.required_evidence)
+                self.required_evidence & {"post_observation_native_write_acknowledged", REVIEWED_RENDER_PAIR})
             missing_write = (bool(self.required_evidence & {
                 "native_write_acknowledged",
                 "post_observation_native_write_acknowledged"}) and
                 not any(access == "write" for access in grants.values()))
             needs_export = bool(self.required_evidence & {
                 "physical_export_verified", "verified_export_frame_observed",
-                "post_observation_native_write_acknowledged"})
+                "post_observation_native_write_acknowledged", REVIEWED_RENDER_PAIR})
             missing_export = (needs_export and
                               grants.get(_VERIFIED_EXPORT_TOOL) != "read")
             missing_frame = (
@@ -1128,7 +1136,8 @@ class NativeCreativeControl:
                  needs_review_write) and
                 not any(grants.get(name) == "read" for name in
                         _VERIFIED_FRAME_TOOLS))
-            if missing_write or missing_export or missing_frame:
+            missing_render = REVIEWED_RENDER_PAIR in self.required_evidence and grants.get(RENDER_TOOL) != "write"
+            if missing_write or missing_export or missing_frame or missing_render:
                 raise NativeCreativeControlError(
                     "Host requires completion evidence unsupported by granted native tools")
         if (self.host_tool_access is not None and
@@ -2272,7 +2281,15 @@ class NativeCreativeControl:
                         self._placement_observations.clear()
                     else:
                         self._placement_observations.pop(native_name, None)
-                self._append({"kind": "native_tool_result", "turn": turn,
+                render_binding = {}
+                if REVIEWED_RENDER_PAIR in self.required_evidence:
+                    if native_name == RENDER_TOOL and self.host_tool_access.get(native_name) == "write":
+                        render_binding = native_render_binding(args["inputs"].get("outputPath"), host_response)
+                    elif native_name == _VERIFIED_EXPORT_TOOL or native_name in _VERIFIED_FRAME_TOOLS:
+                        path_digest = destination_digest(args["inputs"].get("path"))
+                        if path_digest is not None:
+                            render_binding[DESTINATION_FIELD] = path_digest
+                self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
                               "text_sha256": [hashlib.sha256(s.encode()).hexdigest() for s in texts],

@@ -72,6 +72,13 @@ its workspace. A completed run means the model finished with verified export
 evidence; artistic approval remains separate. An interrupted or failed run is
 retained for inspection and is never automatically replayed.
 
+Use `run --reviewed-revision` to require two separately verified native renders
+of the same timeline, with a model-observed frame on each side of an
+acknowledged content edit. The second render must follow the latest edit and
+its verified bytes must differ. The NVIDIA route also requires explicit
+`--allow-cloud-image-upload` for this profile. Production quality assessment
+still requires reviewing the actual picture, motion and sound.
+
 `status` also checks the owning runner's live kernel locks. A saved `running`
 record whose runner has died is annotated as needing attention without rewriting
 that record or claiming recovery of an editor/render process.

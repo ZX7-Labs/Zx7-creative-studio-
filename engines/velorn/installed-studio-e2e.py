@@ -39,6 +39,7 @@ def exercise(source, xvfb):
         selected_steps = []
         errors = []
         readiness = []
+        observed_frame_requests = []
 
         class Fixture(BaseHTTPRequestHandler):
             def send_json(self, value, status=200):
@@ -58,7 +59,12 @@ def exercise(source, xvfb):
                     assert self.path == "/v1/chat/completions", self.path
                     request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                     assert request["model"] == "scripted-installation-fixture"
-                    context = json.loads(request["messages"][1]["content"])
+                    content = request["messages"][1]["content"]
+                    if isinstance(content, list):
+                        assert any(item["type"] == "image_url" for item in content)
+                        observed_frame_requests.append(True)
+                        content = content[0]["text"]
+                    context = json.loads(content)
                     owner = json.loads(context["creative_brief"].split("\n\n", 1)[1].split("\n", 1)[1])
                     output = Path(owner["outputs_root"]) / "fixture.mp4"
                     tool, args = selected_steps[0]
@@ -97,7 +103,7 @@ def exercise(source, xvfb):
             def log_message(self, *_):
                 pass
 
-        def verify(_, output):
+        def verify(output):
             deadline = time.monotonic() + 40
             while time.monotonic() < deadline:
                 try:
@@ -127,14 +133,18 @@ def exercise(source, xvfb):
         export_settings = {"target": "h264_project", "width": 320, "height": 180,
             "fps": 24, "range": "custom", "startSeconds": 0, "endSeconds": 2,
             "includeAudio": False}
-        delivery = [
-            ("save_project", {"previewOnly": False}),
-            ("check_export_readiness", export_settings),
-            ("export_timeline", lambda _, output: {**export_settings,
-                "outputPath": str(output), "previewOnly": False}),
-            ("zx7_verify_native_export", verify),
-            (None, None),
-        ]
+        def delivery(filename, *, observe=False):
+            steps = [
+                ("save_project", {"previewOnly": False}),
+                ("check_export_readiness", export_settings),
+                ("export_timeline", lambda _, output: {**export_settings,
+                    "outputPath": str(output.with_name(filename)), "previewOnly": False}),
+                ("zx7_verify_native_export", lambda _, output: verify(output.with_name(filename))),
+            ]
+            if observe:
+                steps.append(("zx7_observe_verified_export_frame", lambda _, output: {
+                    "path": str(output.with_name(filename)), "at_seconds": 0.5}))
+            return steps
         with ThreadingHTTPServer(("127.0.0.1", 0), Fixture) as server:
             thread = Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -152,7 +162,7 @@ def exercise(source, xvfb):
                     ("add_asset_to_timeline", lambda owner, _: {
                         "assetName": Path(owner["authorized_sources"][0]["path"]).name,
                         "startSeconds": 0, "includeAudio": False, "previewOnly": False}),
-                    *delivery,
+                    *delivery("fixture.mp4"), (None, None),
                 ]
                 first = studio_command(*runner, "--brief", "एक नया project बनाओ।",
                                        "--asset", original, "--rights", "Generated installation fixture")
@@ -164,18 +174,26 @@ def exercise(source, xvfb):
                 assert digest(copied) == original_sha == digest(original)
                 first_frames = decode(Path(first["outputs_directory"]) / "fixture.mp4")
                 selected_steps[:] = [
+                    *delivery("before.mp4", observe=True),
                     ("add_track", {"type": "video", "name": "Revision titles", "previewOnly": False}),
                     ("add_text_clip", {"text": "INSTALLED REVISION", "startSeconds": 0,
                         "durationSeconds": 2, "style": {"fontSize": 28}, "previewOnly": False}),
-                    *delivery,
+                    *delivery("fixture.mp4", observe=True), (None, None),
                 ]
-                revised = studio_command(*runner, "--brief", "उसी project में title जोड़ो।", "--project", saved.parent)
+                revised = studio_command(*runner, "--brief", "उसी project में title जोड़ो।",
+                    "--project", saved.parent, "--reviewed-revision", "--max-turns", "48")
                 assert not selected_steps and revised["state"] == "completed"
                 assert revised["result"]["owner_project_setup"]["active_project_identity_verified"]
                 assert list((studio / "projects").glob("*/project.comfystudio")) == [saved]
                 assert digest(saved) != initial_sha and digest(copied) == digest(original) == original_sha
                 assert "INSTALLED REVISION" in saved.read_text()
-                final_frames = decode(Path(revised["outputs_directory"]) / "fixture.mp4")
+                revised_outputs = Path(revised["outputs_directory"])
+                before_file, after_file = (revised_outputs / name for name in ("before.mp4", "fixture.mp4"))
+                pair = revised["result"]["reviewed_native_render_pair"]
+                assert [item["export_sha256"] for item in pair] == [digest(before_file), digest(after_file)]
+                assert len(observed_frame_requests) >= 2
+                assert decode(before_file) == first_frames
+                final_frames = decode(after_file)
                 assert len(first_frames) == len(final_frames) and first_frames != final_frames
                 assert {s["session_id"] for s in studio_command("status", studio)["sessions"]} == {
                     first["session_id"], revised["session_id"]}

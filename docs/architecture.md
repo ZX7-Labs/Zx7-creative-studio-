@@ -317,6 +317,12 @@ pending decision, actual tool result, evidence and budget. Replacing a model is
 an explicit new session/revision policy, not a reason to lose the project.
 Compact historical context with references to durable facts and evidence;
 avoid repeatedly appending transcripts to prompts or source documentation.
+Keep injected project context small and load additional receipts on demand.
+Current project facts should carry their source and native revision identity.
+Agent-authored notes can guide retrieval but cannot replace a project or
+execution receipt. Require measured decision accuracy and latency before
+changing the provider's context representation.
+[Research on memory layers and stale notes](https://www.anthropic.com/research/components-of-agent-memory)
 
 ### Actual model-to-native editor evidence
 

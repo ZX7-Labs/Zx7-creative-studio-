@@ -16,6 +16,9 @@ from pathlib import Path
 import re
 import stat
 from .body_editor_client import HOST_REJECTION_FEEDBACK
+from .native_render_evidence import (
+    DESTINATION_FIELD, RENDER_TOOL, REVIEWED_RENDER_PAIR, SCOPE_FIELD, reviewed_render_pair,
+)
 
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -34,6 +37,7 @@ _COMPLETION_EVIDENCE_TYPES = frozenset({
     "native_write_acknowledged", "physical_export_verified",
     "post_observation_native_write_acknowledged",
     "verified_export_frame_observed",
+    REVIEWED_RENDER_PAIR,
 })
 _AUDIO = "zx7_observe_verified_export_audio"
 _CRITICAL_END = frozenset({
@@ -201,7 +205,7 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 host_tool_access.get(name) != "write"
                 for name in host_content_revision_tools) or
             len(set(host_content_revision_tools)) != len(host_content_revision_tools) or
-            ("post_observation_native_write_acknowledged" in required
+            (set(required) & {"post_observation_native_write_acknowledged", REVIEWED_RENDER_PAIR}
              and not host_content_revision_tools)):
         raise NativeJournalError(
             "Independent review revision roles require trusted native write grants")
@@ -224,7 +228,7 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
     finished = False
     terminal = None
 
-    def missing_evidence():
+    def missing_evidence(prior_events):
         proven = set()
         if writes:
             proven.add("native_write_acknowledged")
@@ -234,6 +238,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             proven.add("physical_export_verified")
         if fresh_frames:
             proven.add("verified_export_frame_observed")
+        if (REVIEWED_RENDER_PAIR in required and
+                reviewed_render_pair(prior_events, host_content_revision_tools)):
+            proven.add(REVIEWED_RENDER_PAIR)
         return sorted(set(required) - proven)
 
     for i, event in enumerate(events):
@@ -486,9 +493,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
         if kind == "model_finish_rejected":
             # This is a model-selected finish REFUSED by the owner host: no
             # native dispatch and no claim that artistic work was completed.
+            missing = missing_evidence(events[:i])
             if (pending is not None or event.get("no_native_dispatch") is not True or
-                    not missing_evidence() or
-                    event.get("missing_completion_evidence") != missing_evidence()):
+                    not missing or event.get("missing_completion_evidence") != missing):
                 raise NativeJournalError("Unproven or fabricated completion refusal")
             continue
         if kind == "model_action_rejected":
@@ -586,6 +593,12 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     raise NativeJournalError("Untrusted or malformed recoverable read failure")
                 continue
             if kind == "native_tool_result":
+                path, scope = event.get(DESTINATION_FIELD), event.get(SCOPE_FIELD)
+                if ((path is not None and (not _sha(path) or
+                        tool not in ({RENDER_TOOL, _EXPORT} | _FRAME_OBSERVERS))) or
+                        (scope is not None and (not _sha(scope) or path is None or tool != RENDER_TOOL)) or
+                        (tool == RENDER_TOOL and path is not None and (scope is None or access != "write"))):
+                    raise NativeJournalError("Invalid native render destination or timeline binding")
                 if event.get("human_or_artistic_quality_approved") is not False:
                     raise NativeJournalError("Technical tool output cannot assert artistic approval")
                 if (not isinstance(event.get("text_sha256"), list) or
@@ -670,7 +683,7 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 finished = True
             continue
         if kind == "model_finished":
-            if pending is not None or missing_evidence():
+            if pending is not None or missing_evidence(events[:i]):
                 raise NativeJournalError("Model finished with an unresolved native write")
             # Preserve old valid journal compatibility, but require new
             # private-summary receipts to have a real SHA and length, never
@@ -692,7 +705,7 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
 
     if pending is not None:
         raise NativeJournalError("Native outcome absent; the last write may have occurred")
-    return {
+    report = {
         "schema": 1,
         "journal_chain_structurally_valid": True,
         "host_completion_policy_independently_matched": expected_required_evidence is not None,
@@ -708,6 +721,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
         "video_editing_capability_complete": False,
         "human_or_artistic_quality_approved": False,
     }
+    if REVIEWED_RENDER_PAIR in required:
+        report["reviewed_native_render_pair"] = reviewed_render_pair(events, host_content_revision_tools)
+    return report
 
 
 def main():

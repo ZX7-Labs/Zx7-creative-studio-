@@ -110,8 +110,10 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         model = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
         with patch.object(studio, "doctor", return_value={"ready": True}), \
                 patch.object(native_editor_session, "run_native_session", model):
-            report = studio.run_workspace(self.root, brief="Revise my title", project=selected)
+            report = studio.run_workspace(self.root, brief="Revise my title", project=selected,
+                                          reviewed_revision=True)
         self.assertEqual(model.await_args.args[0].project, selected)
+        self.assertEqual(model.await_args.args[0].evaluation_evidence, "reviewed-revision")
         self.assertEqual(report["state"], "needs_attention")
         self.assertTrue(Path(report["outputs_directory"]).is_dir())
 
@@ -174,6 +176,8 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertTrue(args.indexed_catalog)
         self.assertFalse(args.allow_cloud_image_upload)
         self.assertTrue(args.structured_actions)
+        with self.assertRaisesRegex(ValueError, "explicit --allow-cloud-image-upload"):
+            studio.run_workspace(self.root, brief="Review the export", reviewed_revision=True)
 
     def test_uncertain_native_failure_is_retained_without_second_submission(self):
         from studio_next import native_editor_session
