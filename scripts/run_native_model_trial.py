@@ -10,7 +10,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import stat
 import socket
 import subprocess
 import sys
@@ -30,6 +32,57 @@ from studio_next.local_native_structured_model import LocalNativeStructuredCreat
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
+
+
+# The real Qwen trial #42650208249 publicly retained Chromium IndexedDB,
+# Local Storage and Session Storage leveldb *.log files because its forensic
+# copier recursively globbed for *.log. A browser-profile log extension is
+# NOT an authorization to publish user/session state.
+_ALLOWED_EDITOR_DIAGNOSTICS = (
+    "launcher.log", "velorn/app.log", "velorn/export-worker.log")
+_SESSION_NAME = re.compile(r"session-[A-Za-z0-9_-]{1,64}\\Z")
+_MAX_RETAINED_LOG_BYTES = 1024 * 1024
+
+
+def retain_safe_native_editor_logs(editor_state: Path, artifacts: Path) -> int:
+    """Keep only explicitly reviewed native diagnostics, never browser storage.
+
+    Artifacts in the local CPU trial are public CI evidence; preserve the real
+    result, pinned sources, journal and actual failures without indiscriminately
+    copying a Chromium profile. A source file is opened NOFOLLOW and read in
+    bounded chunks; unknown, linked or absent diagnostics are not retained.
+    """
+    editor_state = Path(editor_state)
+    artifacts = Path(artifacts)
+    if editor_state.is_symlink() or not editor_state.is_dir():
+        return 0
+    retained = 0
+    for session in sorted(editor_state.iterdir()):
+        if (not _SESSION_NAME.fullmatch(session.name) or
+                session.is_symlink() or not session.is_dir()):
+            continue
+        for relative in _ALLOWED_EDITOR_DIAGNOSTICS:
+            candidate = session / relative
+            if candidate.parent.is_symlink() or candidate.is_symlink():
+                continue
+            try:
+                flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+                fd = os.open(candidate, flags)
+            except OSError:
+                continue
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode):
+                    continue
+                os.lseek(fd, max(0, info.st_size - _MAX_RETAINED_LOG_BYTES), os.SEEK_SET)
+                content = os.read(fd, _MAX_RETAINED_LOG_BYTES)
+            finally:
+                os.close(fd)
+            target = artifacts / "engine-logs" / session.name / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+            retained += 1
+    return retained
 
 
 async def admit_local_native_model_session(native_session, host_grants, *,
@@ -529,10 +582,9 @@ def main():
             process.terminate()
             try: process.wait(timeout=10)
             except subprocess.TimeoutExpired: process.kill(); process.wait()
-        for log in (args.runtime / 'editor-state').glob('session-*/**/*.log'):
-            target = args.artifacts / 'engine-logs' / log.relative_to(args.runtime / 'editor-state')
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(log.read_bytes()[-1024 * 1024:])
+        evidence['retained_allowlisted_native_diagnostic_logs'] = (
+            retain_safe_native_editor_logs(
+                args.runtime / 'editor-state', args.artifacts))
         (args.artifacts / 'evidence.json').write_text(json.dumps(evidence, indent=2, allow_nan=False))
     if not evidence['technical_trial_completed']:
         raise RuntimeError('Model trial did not reach edit/observe/revise/export acceptance; no fallback used')
