@@ -25,6 +25,8 @@ import time
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from proof_contract import assert_editor_catalog
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -101,23 +103,11 @@ async def exercise(options):
 
     async with connected() as session:
         discovered = (await session.list_tools()).tools
-        discovered_names = {tool.name for tool in discovered}
-        body_tools = discovered_names - set(tools)
-        mandatory = {"zx7_verify_native_export", "zx7_observe_verified_export_frame",
-                     "zx7_observe_verified_export_samples", "zx7_observe_verified_export_audio"}
-        # Current main and its next in-field observation extension may expose
-        # different read-only BODY tools; the full 77 native schemas remain
-        # exact, and unknown/ungranted host tools cannot silently appear.
-        allowed_body = mandatory | {"zx7_observe_verified_export_audio_timeline"}
-        assert mandatory.issubset(body_tools), sorted(body_tools)
-        assert body_tools.issubset(allowed_body), sorted(body_tools)
-        assert discovered_names == set(tools) | body_tools
         from studio_next.body_editor_client import LocalEditorClient
         native = {tool["name"]: tool for tool in LocalEditorClient(
             "http://127.0.0.1:19790/mcp", allowed_tools={}).list_tools()}
-        for tool in discovered:
-            if tool.name in native:
-                assert tool.input_schema == native[tool.name]["inputSchema"]
+        assert_editor_catalog(discovered, tools, native)
+        body_tools = {tool.name for tool in discovered} - set(tools)
         assert (await session.call_tool("queue_prompt_generation_batch", {})).is_error
         assert (await session.call_tool("create_project", {"name": "Bad", "width": "wrong"})).is_error
         await call(session, "create_project", {"name": "ZX7 original minute editing acceptance", "width": 640, "height": 360, "fps": 24, "previewOnly": False})
