@@ -134,6 +134,35 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rejected["missing_completion_evidence"], ["native_write_acknowledged"])
         self.assertEqual(len(session.calls), 1)
 
+    async def test_indexed_local_placement_requires_explicit_preview_or_commit(self):
+        from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
+        from jsonschema import Draft202012Validator
+
+        tool = "add_asset_to_timeline"
+        session = self.preview_failure_session(tool)
+        properties = session.tools[0].input_schema["properties"]
+        session.tools[0].input_schema["properties"] = {
+            **{f"option_{i}": {"type": "string"} for i in range(18)}, **properties}
+        implicit = decision("invoke", tool=tool, inputs={"assetName": "not-imported.mp4"})
+        explicit = decision("invoke", tool=tool, inputs={"assetName": "not-imported.mp4", "previewOnly": True})
+        model = ScriptedModel([decision("search", query=tool, limit=1), implicit, explicit,
+                               decision("finish", summary="One failed read-only preview")])
+        model.requires_indexed_native_function_contracts = True
+        result = await NativeCreativeControl(session, model, max_turns=4,
+            catalog_mode="indexed", host_tool_access={tool: "write"},
+            host_verified_top_level_preview_tools=(tool,)).run("Inspect native placement")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(session.calls, [(tool, explicit["arguments"]["inputs"])])
+        self.assertEqual(result["events"][-1]["kind"], "model_finished")
+        context = model.observed[1]
+        hint = context["host_selected_native_input_hints"][0]["input_properties"][0]
+        self.assertEqual(hint, {"name": "previewOnly", "json_type": "boolean", "required": True})
+        grammar = Draft202012Validator(LocalNativeStructuredCreativeModel._current_host_schema(context))
+        self.assertFalse(grammar.is_valid(implicit))
+        self.assertTrue(grammar.is_valid(explicit))
+        self.assertTrue(grammar.is_valid(decision("invoke", tool=tool, inputs={"previewOnly": False})))
+        self.assertNotIn("required", session.tools[0].input_schema)
+
     async def test_preview_failure_without_attestation_or_with_apply_intent_remains_uncertain(self):
         for tool, attested, inputs in (
                 ("add_asset_to_timeline", (), {"assetName": "missing"}),

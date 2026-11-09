@@ -764,6 +764,68 @@
       },
       "fixed_source_experiment_changed_product_code": false,
       "model_inference_not_replaced_with_script": true
+    },
+    {
+      "body_commit": "b39e84ff671fc2c74851b03a6f0a16832c77561c",
+      "workflow_commit": "6920a9ebb56a19c056a8f5c86270facc7439db08",
+      "workflow_run": 42539752321,
+      "artifact_id": 13641549540,
+      "artifact_zip_sha256": "b36d323ff46b7960e5b1737aeecae046749b57ed417a2c944b6e0840bce30cca",
+      "model": "unsloth/Qwen3.5-4B-GGUF",
+      "revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+      "quantization": "Q4_K_M",
+      "cpu_only": true,
+      "cpu_count": 4,
+      "ordinary_nonroot_chromium_sandbox": true,
+      "actual_inference_turns": 8,
+      "successful_model_decisions": 7,
+      "measured_inference_wall_seconds": [
+        190.29,
+        152.28,
+        195.8,
+        225.87,
+        236.1,
+        238.07,
+        269.84,
+        300.12
+      ],
+      "server_reported_prompt_tokens_by_successful_turn": [
+        2605,
+        3795,
+        4274,
+        5106,
+        5083,
+        5237,
+        5976
+      ],
+      "model_server_peak_rss_bytes": 6516916224,
+      "model_ram_measurement_scope": "Linux /proc/PID/status VmHWM of this model-server PID only; not editor+OS total or cgroup peak",
+      "acknowledged_native_writes": 2,
+      "native_project_created": true,
+      "saved_project_sha256": "2ef8923653fdfb13a744b8d2d8d480a8b85dc242edc33f159f4cf8ba2ef4ec7a",
+      "saved_original_video_assets": 1,
+      "saved_active_timeline_clips": 0,
+      "original_source_sha256": "082aeb7dc55e51cd07b44785e0d8d6d9131d5e2d7a0d4b9d5219293b3354e64d",
+      "imported_copy_sha256_matches_original": true,
+      "independent_original_video_full_decode": true,
+      "physical_exports": 0,
+      "verified_frame_observations": 0,
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "native_field_complete": false,
+      "source_attested_failed_preview": {
+        "tool": "add_asset_to_timeline",
+        "previewOnly_omitted": true,
+        "native_error": "Track track-1 was not found.",
+        "native_error_sha256": "d4d9385b8511d56c70dc44a7e8e6bb50e3422f13dfd837d0eb86973adaf80a2b",
+        "renderer_write_dispatched": false,
+        "model_selected_new_decisions_after_failure": true
+      },
+      "terminal_model_error": "TimeoutError",
+      "terminal_llama_server_prompt_tokens_reprocessed": 5141,
+      "terminal_llama_server_prompt_processing_seconds": 237.24,
+      "finding": "Source-attested recovery worked. The model continued after an invalid-track placement preview, then the 300-second HTTP timeout interrupted its eighth inference. The current structured contract allowed omitting previewOnly, and the compact hints omitted the field after filling the bounded parameter window. No editorial or latency improvement is credited from this run.",
+      "model_inference_not_replaced_with_script": true
     }
   ]
 }

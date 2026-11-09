@@ -423,7 +423,7 @@ def _native_tool_hints(available):
     return hints
 
 
-def _selected_native_input_hints(tool_names, live_tools):
+def _selected_native_input_hints(tool_names, live_tools, *, admission_schemas=None):
     """Bounded parameter typing from granted, *currently selected* tools.
 
     This is not a creative script or permission. A small model needn't guess
@@ -435,16 +435,23 @@ def _selected_native_input_hints(tool_names, live_tools):
         if name not in live_tools:
             continue
         tool = live_tools[name]
-        schema = _field(tool, "input_schema", _field(tool, "inputSchema"))
+        schema = (admission_schemas[name] if admission_schemas is not None else
+                  _field(tool, "input_schema", _field(tool, "inputSchema")))
         if not isinstance(schema, dict) or not isinstance(schema.get("properties"), dict):
             continue
         entry = {"tool": name, "input_properties": []}
-        required = schema.get("required")
-        required = set(required) if isinstance(required, list) and all(
-            isinstance(item, str) for item in required) else set()
+        declared_required = schema.get("required", [])
+        if not isinstance(declared_required, list) or not all(
+                isinstance(item, str) for item in declared_required):
+            declared_required = []
+        required = set(declared_required)
         # Avoid materializing an arbitrarily large host-provided schema.
         # Do not truncate a property ID into a different, nonexistent input.
-        for key, source in islice(schema["properties"].items(), 16):
+        properties = schema["properties"]
+        prioritized = (key for key in ("previewOnly", *declared_required[:15]) if key in properties)
+        fields = dict.fromkeys((*prioritized, *islice(properties, 16)))
+        for key in islice(fields, 16):
+            source = properties.get(key)
             if (not isinstance(key, str) or not 1 <= len(key) <= 160 or
                     not isinstance(source, dict)):
                 continue
@@ -1061,6 +1068,8 @@ class NativeCreativeControl:
         # editor. The real host validates again; preflight grants nothing.
         import jsonschema
         from .body_editor_mcp import _local_schema_references
+        local_indexed_contracts = (self.catalog_mode == "indexed" and
+            getattr(self.model, "requires_indexed_native_function_contracts", False))
         validators = {}
         for native_name, native_tool in self.tools.items():
             schema = _field(native_tool, "input_schema", _field(native_tool, "inputSchema"))
@@ -1079,9 +1088,18 @@ class NativeCreativeControl:
                     "additionalProperties" not in admission and
                     "patternProperties" not in admission):
                 admission["additionalProperties"] = False
+            if local_indexed_contracts and source_verified_preview_intent(
+                    native_name, {}, self._host_verified_top_level_previews):
+                # An omitted flag on these pinned write tools means preview.
+                # Preserve both choices and require the local model to choose
+                # one explicitly. The native MCP schema remains unchanged.
+                admission["required"] = list(dict.fromkeys(
+                    [*admission.get("required", []), "previewOnly"]))
             cls = jsonschema.validators.validator_for(admission)
             cls.check_schema(admission)
             validators[native_name] = cls(admission)
+        selected_input_schemas = ({name: validator.schema for name, validator in validators.items()}
+                                  if local_indexed_contracts else None)
         # Restrict any special preview parser to an exact host-installed
         # native tool with an actual boolean previewOnly field.
         for name in self._host_verified_top_level_previews:
@@ -1267,7 +1285,8 @@ class NativeCreativeControl:
                     "inspectable_native_tools": list(self._inspectable_tied_candidates),
                     "host_observed_machine_affordances": host_frontier,
                     "host_selected_native_input_hints": (
-                        _selected_native_input_hints(visible_selectable, self.tools)
+                        _selected_native_input_hints(visible_selectable, self.tools,
+                            admission_schemas=selected_input_schemas)
                         if self.catalog_mode == "indexed" else []),
                     # After an acknowledged one-shot machine operation,
                     # reveal a compact term vocabulary grounded only in other
@@ -1351,8 +1370,6 @@ class NativeCreativeControl:
                 # Optional provider-neutral native tool contracts. They are
                 # derived from the *current actual MCP list* AND BODY grants,
                 # never from model text, a canned manifest or another agent.
-                local_indexed_contracts = (self.catalog_mode == "indexed" and
-                    getattr(self.model, "requires_indexed_native_function_contracts", False))
                 if local_indexed_contracts or getattr(self.model, "requires_native_function_contracts", False):
                     visible_names = (visible_selectable
                                      if self.catalog_mode == "indexed"
