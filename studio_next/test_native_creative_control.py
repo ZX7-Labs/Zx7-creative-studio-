@@ -654,6 +654,76 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NativeJournalError):
             audit_native_journal(forged, **kwargs)
 
+    async def test_failed_review_frame_uses_same_export_verification_not_another_export(self):
+        """A verified first movie must not bless an unverified second movie."""
+        from studio_next.native_render_evidence import DESTINATION_FIELD, destination_digest
+
+        first = "/private/exports/first.mp4"
+        second = "/private/exports/second.mp4"
+
+        class FrameReadFails(FakeSession):
+            def __init__(self, case):
+                super().__init__()
+                self.case = case
+                self.verifies = 0
+                self.tools.append(SimpleNamespace(
+                    name="export_timeline", description="Native render worker",
+                    input_schema={"type": "object", "properties": {
+                        "outputPath": {"type": "string"}}}))
+
+            async def call_tool(self, name, arguments):
+                if name == "zx7_verify_native_export":
+                    self.verifies += 1
+                    if self.case == "invalidated" and self.verifies == 2:
+                        self.calls.append((name, arguments))
+                        return SimpleNamespace(is_error=True, content=[
+                            SimpleNamespace(type="text", text="Decoder rejected current file")])
+                if name == "zx7_observe_verified_export_frame":
+                    self.calls.append((name, arguments))
+                    return SimpleNamespace(is_error=True, content=[
+                        SimpleNamespace(type="text", text="Untrusted native error details")])
+                return await super().call_tool(name, arguments)
+
+        for case in ("different", "same", "invalidated"):
+            with self.subTest(case=case):
+                selected = second if case == "different" else first
+                actions = [decision("invoke", tool="zx7_verify_native_export",
+                                    inputs={"path": first})]
+                if case == "invalidated":
+                    actions.append(decision("invoke", tool="zx7_verify_native_export",
+                                            inputs={"path": first}))
+                actions.extend([
+                    decision("invoke", tool="zx7_observe_verified_export_frame",
+                             inputs={"path": selected, "at_seconds": 0.5}),
+                    decision("finish", summary="A failed read is never a finished revision")])
+                model = ScriptedModel(actions)
+                session = FrameReadFails(case)
+                grants = {tool.name: (
+                    "write" if tool.name in {"export_timeline", "update_text_clip"} else "read")
+                    for tool in session.tools}
+                result = await NativeCreativeControl(
+                    session, model, max_turns=len(actions),
+                    host_tool_access=grants,
+                    required_evidence=("reviewed_native_render_pair_verified",),
+                    host_content_revision_tools=("update_text_clip",)).run("Review two real exports")
+                self.assertEqual(result["status"], "model_finished_unverified")
+                feedback = model.observed[-1]["last_rejected_native_action_feedback"]
+                if case in ("different", "invalidated"):
+                    self.assertEqual(feedback["validation_keyword"],
+                                     "no_verified_export_receipt")
+                    self.assertEqual(feedback["required_before_frame_observation"],
+                                     "zx7_verify_native_export")
+                    self.assertTrue(feedback["same_physical_export_required"])
+                    self.assertTrue(feedback["no_automatic_retry"])
+                else:
+                    self.assertTrue(feedback is None or
+                                    feedback.get("validation_keyword") != "no_verified_export_receipt")
+                errors = [event for event in result["events"]
+                          if event["kind"] == "native_read_tool_reported_error"]
+                self.assertEqual(errors[-1][DESTINATION_FIELD], destination_digest(selected))
+                self.assertNotIn("/private/", json.dumps(result["events"]))
+                self.assertEqual(len(session.calls), len(actions) - 1)
+
     async def test_real_native_timeline_jpeg_reaches_model_without_fake_export_proof(self):
         """Actual NVIDIA/Nemotron run #42435132392 produced a genuine
         editable clip and then saw pinned inspect_timeline_frame JPEG.
