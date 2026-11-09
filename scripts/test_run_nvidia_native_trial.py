@@ -332,7 +332,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertIn("--structured-actions", command)
             self.assertNotIn("--indexed-catalog", command)
             self.assertIn("--fresh-trial-project", command)
-            self.assertEqual(command[command.index("--max-turns") + 1], "40")
+            self.assertEqual(command[command.index("--max-turns") + 1], "48")
 
     def test_saved_native_trial_requires_active_real_source_clip(self):
         """Only a structural acceptance fixture, not model or video proof."""
