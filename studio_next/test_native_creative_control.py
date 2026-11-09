@@ -237,6 +237,36 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(grammar.is_valid(decision("invoke", tool=placement, inputs={"previewOnly": False})))
         self.assertTrue(audit_native_journal(result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
 
+    async def test_local_batch_placement_exposes_imported_assets_without_staged_paths(self):
+        tool = "add_assets_to_timeline"
+        class InventorySession(FakeSession):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    value = {"project": {"currentTimelineId": "current"},
+                             "currentTimeline": {"id": "current", "clipCount": 1}, "mcp": {"hasProject": True}}
+                else:
+                    value = {"count": 1, "limitApplied": False, "assets": [
+                        {"id": "native-asset", "name": "first.mp4", "type": "video", "path": "/private/input.mp4"}]}
+                return SimpleNamespace(is_error=False, content=[SimpleNamespace(type="text", text=json.dumps(value))])
+
+        session = InventorySession()
+        session.tools = [
+            SimpleNamespace(name="get_project", description="Read project", input_schema={"type": "object"}),
+            SimpleNamespace(name="get_assets", description="Read imported assets", input_schema={"type": "object"}),
+            SimpleNamespace(name=tool, description="Place multiple assets", input_schema={"type": "object",
+                "properties": {"previewOnly": {"type": "boolean"}}}),
+        ]
+        model = ScriptedModel([decision("search", query=tool, limit=1), decision("finish", summary="Observed imported media")])
+        model.requires_indexed_native_function_contracts = True
+        grants = {"get_project": "read", "get_assets": "read", tool: "write"}
+        await NativeCreativeControl(session, model, max_turns=2, catalog_mode="indexed",
+            host_tool_access=grants, host_verified_top_level_preview_tools=(tool,)).run("Inspect the imported footage")
+        self.assertEqual(session.calls, [("get_project", {}), ("get_assets", {"limit": 16})])
+        self.assertEqual(model.observed[1]["native_placement_assets"], {
+            "assets": [{"id": "native-asset", "name": "first.mp4", "type": "video"}],
+            "count": 1, "complete": True, "staged_files_require_import": True})
+
     async def test_attested_preview_does_not_recover_malformed_status_or_error_content(self):
         malformed = (
             {"isError": True, "is_error": False, "content": []},

@@ -220,6 +220,35 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
 
         await self.with_session(check, native_source=source)
 
+    async def test_pinned_asset_batch_requires_a_successful_read_only_plan(self):
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        tool = "add_assets_to_timeline"
+        self.tools = [{"name": tool, "inputSchema": {"type": "object", "properties": {
+            "assetNames": {"type": "array", "items": {"type": "string"}},
+            "previewOnly": {"type": "boolean"}}}}]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={tool: "write"})
+        proposal = {"assetNames": ["first.mp4", "unimported.mp4"], "previewOnly": False}
+
+        async def check(session):
+            self.native_fail = True
+            self.native_text = 'No placeable asset matched "unimported.mp4".'
+            blocked = await session.call_tool(tool, proposal)
+            self.assertTrue(blocked.is_error)
+            self.assertEqual(blocked.meta["zx7.host/pre-dispatch-rejection"]["code"],
+                             "placement_plan_unconfirmed")
+            self.assertEqual([r["params"]["arguments"] for r in self.requests if r["method"] == "tools/call"],
+                             [{**proposal, "previewOnly": True}])
+            self.native_fail = False
+            self.native_text = json.dumps({"action": tool, "previewOnly": True,
+                                           "plan": {"previewOnly": True}})
+            corrected = {"assetNames": ["first.mp4"], "previewOnly": False}
+            response = await session.call_tool(tool, corrected)
+            self.assertFalse(response.is_error)
+            self.assertEqual([r["params"]["arguments"] for r in self.requests if r["method"] == "tools/call"][-2:],
+                             [{**corrected, "previewOnly": True}, corrected])
+
+        await self.with_session(check, native_source=source)
+
     async def test_rejected_export_path_can_be_corrected_without_replaying_a_write(self):
         """Run #42444331745 stopped after a legitimate no-overwrite refusal.
 
