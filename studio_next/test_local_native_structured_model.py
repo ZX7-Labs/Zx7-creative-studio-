@@ -43,6 +43,76 @@ class LocalNativeStructuredModelTests(unittest.TestCase):
     def _action_map(schema):
         return {x["properties"]["action"]["const"]: x for x in schema["oneOf"]}
 
+    def test_local_cpu_prompt_reuses_stable_host_prefix_without_hiding_evidence(self):
+        """The previous real 4B run spent >250s reprocessing a mostly
+        identical prompt after catalog discovery. The optimization must
+        preserve every host-owned tool input, raw proof and model permission.
+        It must never select a different edit or bypass the live grammar.
+        """
+        base = {
+            "creative_brief": "Use original authorized video on a native editor",
+            "compact_tool_catalog": True,
+            "available_actions": ["search", "describe", "invoke"],
+            "selectable_native_tools": ["add_asset_to_timeline"],
+            "inspectable_native_tools": [],
+            "actual_granted_native_tools": [],
+            "required_completion_evidence": ["physical_export_verified"],
+            "host_selected_native_input_hints": [
+                {"tool": "add_asset_to_timeline",
+                 "input_properties": [{"name": "assetId", "json_type": "string"}] * 20}],
+            "capability_overview": {"revision": "actual-source-catalog"},
+            "host_observed_machine_affordances": {"matches": [
+                {"name": "add_asset_to_timeline", "possible": True}]},
+            "native_read_snapshot_cache": [{"tool": "get_project",
+                                             "result_texts": ['{"assetCount":1}']}],
+            "latest_events": [{"kind": "native_tool_result", "tool": "import_asset_from_path"}],
+            "last_acknowledged_native_write": {"native_application_acknowledged": True},
+        }
+        # Previous model turn and new host-state search differ. A cacheable
+        # prefix must not be interrupted by volatile state near the front.
+        old = {"available_actions": base["available_actions"],
+               "latest_events": [{"kind": "native_tool_schema",
+                                  "input_schema": {"type": "object",
+                                                   "properties": {"real": {"type": "string"}}}}],
+               **{k: v for k, v in base.items()
+                  if k not in ("available_actions", "latest_events")}}
+        newer = {"available_actions": base["available_actions"],
+                 "latest_events": [{"kind": "capability_searched",
+                                    "result_tool_names": ["export_timeline"]}],
+                 **{k: v for k, v in base.items()
+                    if k not in ("available_actions", "latest_events")}}
+        def prefix(a, b):
+            return next((i for i, (x, y) in enumerate(zip(a, b))
+                         if x != y), min(len(a), len(b)))
+        encoded = lambda value: json.dumps(value, ensure_ascii=False,
+                                            allow_nan=False)
+        pinned_old = self.model._stable_native_context(old)
+        pinned_new = self.model._stable_native_context(newer)
+        self.assertEqual(pinned_old, old)
+        self.assertEqual(pinned_new, newer)
+        self.assertEqual(set(pinned_new), set(newer))
+        self.assertGreater(prefix(encoded(pinned_old), encoded(pinned_new)),
+                           prefix(encoded(old), encoded(newer)))
+        self.assertEqual(
+            self.model._current_host_schema(pinned_old),
+            self.model._current_host_schema(old))
+        self.assertEqual(
+            self.model._current_host_schema(pinned_new),
+            self.model._current_host_schema(newer))
+
+        captured = []
+        def serve(request, timeout):
+            captured.append(json.loads(request.data))
+            return BytesIO(decision("search", {"query": "native export"}))
+        with patch("studio_next.providers.urlopen", side_effect=serve):
+            self.assertEqual(self.model.decide(newer)["action"], "search")
+        supplied = json.loads(captured[0]["messages"][1]["content"])
+        self.assertEqual(supplied, newer)
+        self.assertEqual(list(supplied), list(pinned_new))
+        self.assertEqual(self.model.settings.sampling, {})
+        with self.assertRaises(ValueError):
+            self.model._stable_native_context([])
+
     def test_initial_indexed_turn_forbids_guessing_unsearched_tool_or_finish(self):
         context = {"compact_tool_catalog": True,
                    "available_actions": ["search"],
@@ -120,6 +190,7 @@ class LocalNativeStructuredModelTests(unittest.TestCase):
         from scripts.run_native_model_trial import RecordedModel
         with tempfile.TemporaryDirectory() as temp:
             recorder = RecordedModel(self.model, Path(temp))
+            self.assertTrue(recorder.requires_indexed_native_function_contracts)
             context = {"compact_tool_catalog": True,
                        "available_actions": ["search"],
                        "selectable_native_tools": [],
@@ -142,6 +213,35 @@ class LocalNativeStructuredModelTests(unittest.TestCase):
             self.assertEqual(record["context"], context)
             self.assertEqual(record["decision"], answer)
             self.assertEqual(record["server_reported_token_usage"]["total_tokens"], 11)
+
+    def test_compact_decoder_binds_inputs_to_the_selected_native_operation(self):
+        from jsonschema import Draft202012Validator
+        single = {"type": "object", "properties": {"assetName": {"type": "string"}},
+                  "required": ["assetName"], "additionalProperties": False}
+        batch = {"type": "object", "$defs": {"name": {"type": "string"}},
+                 "properties": {"assetNames": {"type": "array", "items": {"$ref": "#/$defs/name"}}},
+                 "required": ["assetNames"], "additionalProperties": False}
+        context = {"compact_tool_catalog": True,
+                   "available_actions": ["search", "describe", "invoke"],
+                   "selectable_native_tools": ["add_asset_to_timeline", "add_assets_to_timeline"],
+                   "inspectable_native_tools": [],
+                   "host_native_tool_contracts": [
+                       {"name": "add_asset_to_timeline", "input_schema": single},
+                       {"name": "add_assets_to_timeline", "input_schema": batch}]}
+        accepted = {"action": "invoke", "reason": "Place the selected original",
+                    "arguments": {"tool": "add_assets_to_timeline", "inputs": {"assetNames": ["raw.mp4"]}}}
+        grammar = self._sample(context, accepted["action"], accepted["arguments"])
+        validator = Draft202012Validator(grammar)
+        self.assertTrue(validator.is_valid(accepted))
+        for tool, inputs in (("add_assets_to_timeline", {"assetNames": [12]}),
+                             ("add_assets_to_timeline", {"assetNames": ["raw.mp4"], "createTrack": True}),
+                             ("add_asset_to_timeline", {"assetNames": ["raw.mp4"]}),
+                             ("ungranted_tool", {"assetNames": ["raw.mp4"]})):
+            with self.subTest(tool=tool, inputs=inputs):
+                self.assertFalse(validator.is_valid({**accepted, "arguments": {"tool": tool, "inputs": inputs}}))
+        self.assertEqual(batch["properties"]["assetNames"]["items"]["$ref"], "#/$defs/name")
+        with self.assertRaises(ValueError):
+            self.model._current_host_schema({**context, "host_native_tool_contracts": []})
 
     def test_no_schema_leaks_to_configuration_or_separate_model_turn(self):
         first = {"compact_tool_catalog": True, "available_actions": ["search"],

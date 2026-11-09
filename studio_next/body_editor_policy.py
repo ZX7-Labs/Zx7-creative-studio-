@@ -13,7 +13,7 @@ import math
 from pathlib import Path
 from types import MappingProxyType
 
-from .body_editor_client import EditorAccessError, LocalEditorClient, _load_json
+from .body_editor_client import EditorAccessError, EditorPreDispatchError, LocalEditorClient, _load_json
 
 
 _CONFIG_LIMIT = 1024 * 1024
@@ -136,7 +136,7 @@ class EditorPathPolicy:
                 return False
         if tool_name in ("export_timeline", "export_fcpxml"):
             if "outputPath" not in arguments:
-                raise EditorAccessError("Native export requires an explicit new outputPath")
+                raise EditorPreDispatchError("output_path_required")
             try:
                 Path(arguments["outputPath"]).lstat()
             except FileNotFoundError:
@@ -144,7 +144,7 @@ class EditorPathPolicy:
             except OSError:
                 return False
             else:
-                raise EditorAccessError("Native export cannot overwrite an existing destination; choose a new outputPath")
+                raise EditorPreDispatchError("output_exists")
         if tool_name == "create_project":
             names = [arguments[key] for key in ("name", "projectName", "title") if key in arguments]
             if not names or not all(_project_name(name) for name in names):

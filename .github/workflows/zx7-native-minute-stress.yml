@@ -7,6 +7,9 @@ on:
       - "engines/velorn/mcp-e2e.py"
       - "studio_next/body_editor_*.py"
       - ".github/workflows/zx7-native-minute-stress.yml"
+      - "studio_next/editor_runtime/**"
+      - "studio_next/native_editor_diagnostics.py"
+      - "engines/velorn/proof_contract.py"
   workflow_dispatch:
 permissions:
   contents: read

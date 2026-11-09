@@ -21,6 +21,8 @@ import time
 from typing import Any
 
 from .providers import LocalModelOutputError
+from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK
+from .native_editor_source_pin import source_verified_preview_intent
 
 
 _MAX_MODEL_OUTPUT_RECOVERIES = 2  # host protocol budget, never a creative action
@@ -28,6 +30,12 @@ _MAX_ACTION_BYTES = 262_144
 _MAX_RESULT_TEXT = 64_000
 _MAX_IMAGE_BYTES = 4 * 1024 * 1024
 _MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024
+# Model context retains complete, bounded native READ receipts across different
+# read operations. Prior reads are always invalidated by an acknowledged write.
+_MAX_READ_SNAPSHOT_BYTES = 12_000
+_MAX_READ_SNAPSHOT_TOTAL_BYTES = 48_000
+_MAX_READ_SNAPSHOTS = 6
+_MAX_LAST_ACK_RECEIPT_BYTES = 16_000
 _MAX_AUDIO_BYTES = 128 * 1024
 _VERIFIED_FRAME_TOOLS = frozenset({
     "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples"})
@@ -168,8 +176,8 @@ def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], li
             texts.append(txt)
         elif kind == "image":
             mime = _field(block, "mime_type", _field(block, "mimeType"))
-            if mime != "image/png":
-                raise NativeCreativeControlError("Only original bounded PNG evidence is accepted")
+            if mime not in ("image/png", "image/jpeg"):
+                raise NativeCreativeControlError("Unsupported original native image MIME type")
             raw = _field(block, "data")
             if not isinstance(raw, str) or len(raw) > 6_000_000:
                 raise NativeCreativeControlError("Invalid encoded native image evidence")
@@ -178,9 +186,14 @@ def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], li
             except (ValueError, base64.binascii.Error) as exc:
                 raise NativeCreativeControlError("Corrupt native image encoding") from exc
             total += len(picture)
+            valid_signature = (
+                picture.startswith(b"\x89PNG\r\n\x1a\n")
+                if mime == "image/png" else (
+                    picture.startswith(b"\xff\xd8\xff") and
+                    picture.endswith(b"\xff\xd9")))
             if (not 8 <= len(picture) <= _MAX_IMAGE_BYTES or
                     total > _MAX_TOTAL_IMAGE_BYTES or
-                    not picture.startswith(b"\x89PNG\r\n\x1a\n")):
+                    not valid_signature):
                 raise NativeCreativeControlError("Native image is malformed or over budget")
             images.append((mime, picture))
         elif kind == "audio":
@@ -201,11 +214,105 @@ def _native_content(result: Any) -> tuple[list[str], list[tuple[str, bytes]], li
     return texts, images, audio
 
 
+def _native_active_timeline_id_from_text(texts):
+    """Require a coherent recent host-granted get_project timeline identity."""
+    if _native_timeline_clip_count_from_text(texts) is None:
+        return None
+    project = _strict_receipt(texts, "native active timeline")
+    return project["currentTimeline"]["id"]
+
+
+def _pinned_source_clip_edit_plan_matches(name, plan):
+    """Exact source-pinned no-write clip edit plan, not a successful edit.
+
+    Model arguments never create this attestation. The installed original
+    Electron MCP creates the plan BEFORE the mutating renderer bridge.
+    The whitelisted operation and the returned per-clip count must agree.
+    """
+    specs = {
+        "move_clips": ({"moveCount", "resolveOverlaps", "moves"},
+                       "moveCount", "moves"),
+        "trim_clips": ({"trimCount", "trims"},
+                       "trimCount", "trims"),
+        "delete_clips": ({"deleteCount", "ripple", "filter",
+                          "missingClipIds", "clips"},
+                         "deleteCount", "clips"),
+    }
+    spec = specs.get(name)
+    if spec is None or type(plan) is not dict:
+        return False
+    keys, count_key, array_key = spec
+    count = plan.get(count_key)
+    entries = plan.get(array_key)
+    if (set(plan) != keys or type(count) is not int or
+            not 0 <= count <= 1000 or type(entries) is not list or
+            len(entries) != count or
+            any(type(entry) is not dict for entry in entries)):
+        return False
+    if name == "move_clips":
+        return (type(plan["resolveOverlaps"]) is bool and
+                all(type(entry.get("clip")) is dict and
+                    type(entry.get("targetTrack")) is dict and
+                    type(entry.get("startSeconds")) in (int, float) and
+                    math.isfinite(entry["startSeconds"]) and
+                    entry["startSeconds"] >= 0
+                    for entry in entries))
+    if name == "trim_clips":
+        return all(type(entry.get("clip")) is dict and
+                   type(entry.get("before")) is dict and
+                   type(entry.get("updates")) is dict and
+                   bool(entry["updates"]) for entry in entries)
+    return (type(plan["ripple"]) is bool and
+            (plan["filter"] is None or type(plan["filter"]) is str) and
+            type(plan["missingClipIds"]) is list and
+            all(type(item) is str for item in plan["missingClipIds"]))
+
+
+def _source_bound_live_timeline_preview(
+        texts: list[str], images: list[tuple[str, bytes]], active_id: str):
+    """Source-attested pinned Electron inspectTimelineFrame JPEG observation.
+
+    A real editable-timeline preview is useful for a model to judge its
+    pending artistic decisions, but it is not a decoded MP4 and MUST NEVER
+    satisfy verified export/frame evidence. The genuine pinned MCP method
+    returns single current-frame JSON metadata plus an original JPEG binary.
+    """
+    if (type(active_id) is not str or not active_id or
+            len(texts) != 1 or len(images) != 1 or
+            images[0][0] != "image/jpeg"):
+        raise NativeCreativeControlError(
+            "Native timeline preview lacks one source-attested JPEG and timeline")
+    receipt = _strict_receipt(texts, "native editable timeline preview")
+    timeline = receipt.get("timeline")
+    frame = receipt.get("frame")
+    capture = receipt.get("capture")
+    active_count = receipt.get("activeClipCount")
+    visual_count = receipt.get("visualClipCount")
+    if (type(timeline) is not dict or timeline.get("id") != active_id or
+            type(frame) is not dict or
+            type(frame.get("frame")) is not int or frame["frame"] < 0 or
+            type(frame.get("fps")) not in (int, float) or
+            not math.isfinite(frame["fps"]) or frame["fps"] <= 0 or
+            type(frame.get("timeSeconds")) not in (int, float) or
+            not math.isfinite(frame["timeSeconds"]) or
+            frame["timeSeconds"] < 0 or
+            type(capture) is not dict or capture.get("imageIncluded") is not True or
+            type(active_count) is not int or active_count < 0 or
+            type(visual_count) is not int or visual_count < 0 or
+            visual_count > active_count or
+            "export_sha256" in receipt):
+        raise NativeCreativeControlError(
+            "Native timeline JPEG metadata disagrees with observed project")
+    return [hashlib.sha256(images[0][1]).hexdigest()]
+
+
 def _source_bound_images(texts: list[str], images: list[tuple[str, bytes]]):
     if not images:
         return []
-    if len(images) > 4 or len(texts) != 1:
-        raise NativeCreativeControlError("Native image output lacks a bounded single proof receipt")
+    if (len(images) > 4 or len(texts) != 1 or
+            any(mime != "image/png" for mime, _ in images)):
+        raise NativeCreativeControlError(
+            "Verified exported frame requires source-bound original PNG")
     receipt = _strict_receipt(texts, "Native image proof")
     if (not isinstance(receipt, dict) or
             not isinstance(receipt.get("export_sha256"), str) or
@@ -316,7 +423,7 @@ def _native_tool_hints(available):
     return hints
 
 
-def _selected_native_input_hints(tool_names, live_tools):
+def _selected_native_input_hints(tool_names, live_tools, *, admission_schemas=None):
     """Bounded parameter typing from granted, *currently selected* tools.
 
     This is not a creative script or permission. A small model needn't guess
@@ -328,16 +435,23 @@ def _selected_native_input_hints(tool_names, live_tools):
         if name not in live_tools:
             continue
         tool = live_tools[name]
-        schema = _field(tool, "input_schema", _field(tool, "inputSchema"))
+        schema = (admission_schemas[name] if admission_schemas is not None else
+                  _field(tool, "input_schema", _field(tool, "inputSchema")))
         if not isinstance(schema, dict) or not isinstance(schema.get("properties"), dict):
             continue
         entry = {"tool": name, "input_properties": []}
-        required = schema.get("required")
-        required = set(required) if isinstance(required, list) and all(
-            isinstance(item, str) for item in required) else set()
+        declared_required = schema.get("required", [])
+        if not isinstance(declared_required, list) or not all(
+                isinstance(item, str) for item in declared_required):
+            declared_required = []
+        required = set(declared_required)
         # Avoid materializing an arbitrarily large host-provided schema.
         # Do not truncate a property ID into a different, nonexistent input.
-        for key, source in islice(schema["properties"].items(), 16):
+        properties = schema["properties"]
+        prioritized = (key for key in ("previewOnly", *declared_required[:15]) if key in properties)
+        fields = dict.fromkeys((*prioritized, *islice(properties, 16)))
+        for key in islice(fields, 16):
+            source = properties.get(key)
             if (not isinstance(key, str) or not 1 <= len(key) <= 160 or
                     not isinstance(source, dict)):
                 continue
@@ -411,7 +525,7 @@ def _model_event_window(events):
         elif kind == "native_tool_preview":
             item["host_reported_preview_only"] = True
             item["no_accepted_write_evidence"] = True
-        elif kind == "model_action_rejected":
+        elif kind in ("model_action_rejected", "host_tool_rejected_before_dispatch"):
             for field in ("validation_keyword", "schema_location", "no_native_dispatch"):
                 if field in event:
                     item[field] = event[field]
@@ -426,8 +540,12 @@ def _model_event_window(events):
             # Preserve modality and physical export/source identity, never
             # recreate raw media or author an unsupported quality conclusion.
             for field in ("observed_export_sha256", "independently_verified_export_sha256",
-                          "image_sha256", "audio_sha256", "must_reconcile_native_state",
+                          "image_sha256", "audio_sha256",
+                          "native_timeline_preview_unverified_export",
+                          "must_reconcile_native_state",
                           "host_attested_read_only", "no_successful_native_observation",
+                          "host_source_attested_preview_only", "no_automatic_retry",
+                          "no_accepted_write_evidence",
                           "error_text_exceeded_evidence_budget"):
                 if event.get(field) is not None:
                     item[field] = event[field]
@@ -459,6 +577,65 @@ def _native_project_presence_from_text(texts):
     return "unknown"
 
 
+def _native_timeline_clip_count_from_text(texts):
+    """Count only actual active-timeline clips from a coherent host receipt.
+
+    A staged filename, marker, or guessed clipId is not a native timeline
+    object. No count is inferred when the active timeline identity or its
+    integer count is missing, malformed, or inconsistent.
+    """
+    if len(texts) != 1:
+        return None
+    try:
+        receipt = _strict_receipt(texts, "native timeline observation")
+    except NativeCreativeControlError:
+        return None
+    if (type(receipt) is not dict or
+            type(receipt.get("mcp")) is not dict or
+            receipt["mcp"].get("hasProject") is not True or
+            type(receipt.get("project")) is not dict or
+            type(receipt.get("currentTimeline")) is not dict):
+        return None
+    project, timeline = receipt["project"], receipt["currentTimeline"]
+    count = timeline.get("clipCount")
+    if (type(project.get("currentTimelineId")) is not str or
+            not project["currentTimelineId"] or
+            type(timeline.get("id")) is not str or
+            timeline["id"] != project["currentTimelineId"] or
+            type(count) is not int or count < 0):
+        return None
+    return count
+
+
+def _native_project_asset_count_from_text(texts):
+    """Read only consistent host-reported assets already imported into project.
+
+    Staged media in a user's brief is NOT an imported native project asset.
+    Missing, contradictory, negative or bool-valued counts mean unknown.
+    """
+    if len(texts) != 1:
+        return None
+    try:
+        receipt = _strict_receipt(texts, "native project asset observation")
+    except NativeCreativeControlError:
+        return None
+    if (type(receipt) is not dict or
+            type(receipt.get("mcp")) is not dict or
+            receipt["mcp"].get("hasProject") is not True or
+            type(receipt.get("project")) is not dict):
+        return None
+    values = []
+    for container in (receipt, receipt["project"]):
+        if "assetCount" in container:
+            count = container["assetCount"]
+            if type(count) is not int or count < 0:
+                return None
+            values.append(count)
+    if not values or len(set(values)) != 1:
+        return None
+    return values[0]
+
+
 class NativeCreativeControl:
     """Single in-process driver of an already host-authorized official MCP session.
 
@@ -470,10 +647,13 @@ class NativeCreativeControl:
 
     def __init__(self, session, model, *, max_turns=32, receipt_path: Path | None = None,
                  host_tool_access: dict[str, str] | None = None,
+                 host_pre_dispatch_rejections: bool = False,
                  catalog_mode: str = "full",
                  host_preconditions: dict | None = None,
                  host_possible_effects: dict | None = None,
                  host_once_after_acknowledged_write: tuple[str, ...] = (),
+                 host_verified_top_level_preview_tools: tuple[str, ...] = (),
+                 host_verified_timeline_preview_tools: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
                  host_content_revision_tools: tuple[str, ...] = ()):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
@@ -490,6 +670,10 @@ class NativeCreativeControl:
             raise NativeCreativeControlError("Trusted host tool access must be read/write grants")
         if catalog_mode not in ("full", "indexed"):
             raise NativeCreativeControlError("Unknown capability catalog mode")
+        if (type(host_pre_dispatch_rejections) is not bool or
+                (host_pre_dispatch_rejections and host_tool_access is None)):
+            raise NativeCreativeControlError("Host rejection receipts require trusted bridge and grants")
+        self.host_pre_dispatch_rejections = host_pre_dispatch_rejections
         if catalog_mode == "indexed" and host_tool_access is None:
             raise NativeCreativeControlError("Indexed capability discovery requires trusted host grants")
         if (not isinstance(required_evidence, (list, tuple, frozenset)) or
@@ -527,6 +711,33 @@ class NativeCreativeControl:
         # Trial-only single-project policy. A general creative session may
         # intentionally create multiple projects; never silently impose this.
         self._host_once_after_ack = frozenset(host_once_after_acknowledged_write)
+        if (not isinstance(host_verified_top_level_preview_tools, (tuple, list)) or
+                any(not isinstance(name, str) or not name or
+                    host_tool_access is None or host_tool_access.get(name) != "write"
+                    for name in host_verified_top_level_preview_tools) or
+                len(set(host_verified_top_level_preview_tools)) !=
+                len(host_verified_top_level_preview_tools)):
+            raise NativeCreativeControlError(
+                "Source-verified preview tools require distinct trusted write grants")
+        # Pinned Electron MCP handles selected top-level previewOnly:true
+        # requests BEFORE dispatching its actual mutating renderer action.
+        # The renderer handler alone is not the public MCP entrypoint.
+        # Never infer preview safety from model text or arbitrary tools.
+        self._host_verified_top_level_previews = frozenset(
+            host_verified_top_level_preview_tools)
+        if (not isinstance(host_verified_timeline_preview_tools, (tuple, list)) or
+                any(name != "inspect_timeline_frame" or
+                    host_tool_access is None or host_tool_access.get(name) != "read"
+                    for name in host_verified_timeline_preview_tools) or
+                len(set(host_verified_timeline_preview_tools)) !=
+                len(host_verified_timeline_preview_tools) or
+                (host_verified_timeline_preview_tools and (
+                    host_tool_access is None or
+                    host_tool_access.get("get_project") != "read"))):
+            raise NativeCreativeControlError(
+                "Source-verified timeline JPEG preview requires exact host read grants")
+        self._host_verified_timeline_previews = frozenset(
+            host_verified_timeline_preview_tools)
         if (not isinstance(self._host_preconditions, dict) or
                 not isinstance(self._host_possible_effects, dict)):
             raise NativeCreativeControlError("Trusted machine contracts must be objects")
@@ -534,6 +745,7 @@ class NativeCreativeControl:
             raise NativeCreativeControlError(
                 "Machine contracts require an explicit trusted host grant map")
         self._capabilities = None
+        self._machine_contracts = None
         self._last_search_result = None
         self._previous_search_signature = None
         self._identical_search_repetitions = 0
@@ -542,6 +754,9 @@ class NativeCreativeControl:
         # set of actual host grants. A model must explicitly describe
         # one candidate before it can submit a write. No automatic pick.
         self._inspectable_tied_candidates: list[str] = []
+        # Current-turn host-attested machine possibilities, never remembered
+        # as successful writes or allowed to grant uninstalled native tools.
+        self._host_frontier_tools: list[str] = []
         self.host_tool_access = dict(host_tool_access) if host_tool_access is not None else None
         self.session = session
         self.model = model
@@ -551,7 +766,12 @@ class NativeCreativeControl:
         self.tools: dict[str, Any] = {}
         self._last_images: list[tuple[str, bytes]] = []
         self._last_hashes: list[str] = []
+        self._last_image_provenance: str | None = None
         self._last_native_texts: list[str] = []
+        # Context continuity is not an editor cache or state attestation.
+        # Actual native schema, project IDs, and writes remain authoritative.
+        self._native_read_snapshots: dict[str, dict] = {}
+        self._last_acknowledged_native_write: dict | None = None
         # Ground project presence only in actual native get_project results,
         # never in model text, metadata discovery, or an earlier session.
         self._project_presence = "unknown"
@@ -567,6 +787,87 @@ class NativeCreativeControl:
         self._native_mcp_wall_ms_total = 0.0
         self._started = False
         self._receipt = None
+
+    def _remember_native_read(self, name, inputs, texts, *, origin):
+        """Keep *complete* successful READ receipts available across tool turns.
+
+        In real model trials, get_assets was immediately overwritten by
+        get_timeline/get_project and the model never retained the imported asset
+        identity. This is a bounded in-memory read-view, not an executable
+        operation, a persisted secret, a new permission or a creative plan.
+        Treat it as a point-in-time observation; host writes re-check current
+        schemas and project identity through the existing BODY gateway.
+        """
+        if (self.host_tool_access is None or
+                self.host_tool_access.get(name) != "read"):
+            return
+        if origin not in ("model_selected", "bootstrap", "host_reconciliation"):
+            raise NativeCreativeControlError("Unrecognized native read provenance")
+        item = {"tool": name, "inputs": copy.deepcopy(inputs),
+                "source": origin, "result_texts": list(texts),
+                "native_read_only_by_host_grant": True,
+                "not_a_live_editor_state_lock": True}
+        # A partial truncated JSON document would misrepresent real native
+        # state. Oversized observations stay available as last_native_result,
+        # but are not retained as falsely complete cross-turn snapshots.
+        if len(_wire(item).encode("utf-8")) > _MAX_READ_SNAPSHOT_BYTES:
+            self._native_read_snapshots.pop(name, None)
+            return
+        self._native_read_snapshots.pop(name, None)
+        self._native_read_snapshots[name] = item
+        while (len(self._native_read_snapshots) > _MAX_READ_SNAPSHOTS or
+               len(_wire(list(self._native_read_snapshots.values())).encode(
+                   "utf-8")) > _MAX_READ_SNAPSHOT_TOTAL_BYTES):
+            self._native_read_snapshots.pop(next(iter(self._native_read_snapshots)))
+
+    def _trusted_project_clip_count(self):
+        snapshot = self._native_read_snapshots.get("get_project")
+        if (self.host_tool_access is None or
+                self.host_tool_access.get("get_project") != "read" or
+                not snapshot or
+                snapshot.get("native_read_only_by_host_grant") is not True):
+            return None
+        return _native_timeline_clip_count_from_text(snapshot["result_texts"])
+
+    def _trusted_project_active_timeline_id(self):
+        snapshot = self._native_read_snapshots.get("get_project")
+        if (self.host_tool_access is None or
+                self.host_tool_access.get("get_project") != "read" or
+                not snapshot or
+                snapshot.get("native_read_only_by_host_grant") is not True):
+            return None
+        return _native_active_timeline_id_from_text(snapshot["result_texts"])
+
+    def _trusted_project_asset_count(self):
+        # Only a host-authorized successful native get_project read can mint
+        # this fact. Each acknowledged native WRITE clears the old snapshot.
+        snapshot = self._native_read_snapshots.get("get_project")
+        if (self.host_tool_access is None or
+                self.host_tool_access.get("get_project") != "read" or
+                not snapshot or
+                snapshot.get("native_read_only_by_host_grant") is not True):
+            return None
+        return _native_project_asset_count_from_text(snapshot["result_texts"])
+
+    def _remember_native_write_ack(self, name, texts):
+        """Preserve the exact model-selected application receipt after
+        automatic get_project reconciliation replaces last_native_result.
+        Neither application ACK nor this memory proves the film is complete.
+        """
+        item = {"tool": name, "native_application_acknowledged": True,
+                "result_texts": list(texts),
+                "not_independently_verified_native_edit": True}
+        if len(_wire(item).encode("utf-8")) > _MAX_LAST_ACK_RECEIPT_BYTES:
+            item = {"tool": name, "native_application_acknowledged": True,
+                    "receipt_omitted_due_to_size": True,
+                    "result_sha256": [hashlib.sha256(x.encode()).hexdigest()
+                                     for x in texts],
+                    "not_independently_verified_native_edit": True}
+        # The write is confirmed only AFTER validation. Previous READ views
+        # could now refer to a different document/version, even when the
+        # create/import API acknowledged successfully.
+        self._native_read_snapshots.clear()
+        self._last_acknowledged_native_write = item
 
     def _missing_completion_evidence(self):
         """Use only accepted native results and current-edit export custody.
@@ -654,12 +955,14 @@ class NativeCreativeControl:
                     or args["tool"] not in self.tools or
                     (self.catalog_mode == "indexed" and
                      args["tool"] not in self._selectable_tools and
-                     args["tool"] not in self._inspectable_tied_candidates)):
+                     args["tool"] not in self._inspectable_tied_candidates and
+                     args["tool"] not in self._host_frontier_tools)):
                 raise NativeCreativeControlError("Model requested an ungranted or unsearched native tool")
         elif (set(args) != {"tool", "inputs"} or not isinstance(args["tool"], str)
                 or args["tool"] not in self.tools or not isinstance(args["inputs"], dict) or
                 (self.catalog_mode == "indexed" and
                  args["tool"] not in self._selectable_tools and
+                 args["tool"] not in self._host_frontier_tools and
                  not self._host_write_already_acknowledged(args["tool"]))):
             raise NativeCreativeControlError(
                 "Model requested ungranted, unsearched tool or invalid inputs")
@@ -673,9 +976,11 @@ class NativeCreativeControl:
         context = copy.deepcopy(context)
         pictures = self._last_images
         hashes = self._last_hashes
+        image_provenance = self._last_image_provenance
         audio = self._last_audio
         audio_evidence = self._last_audio_evidence
         self._last_images, self._last_hashes = [], []
+        self._last_image_provenance = None
         self._last_audio, self._last_audio_evidence = [], None
         if pictures and audio:
             raise NativeCreativeControlError("Cross-modal evaluation requires a separately audited backend")
@@ -689,6 +994,7 @@ class NativeCreativeControl:
                 raise NativeCreativeControlError(
                     "Native visual evidence requires an image-capable actual model")
             context["observed_picture_sha256"] = hashes
+            context["native_picture_origin"] = image_provenance
             return await asyncio.to_thread(self.model.decide_with_images, context, pictures)
         return await asyncio.to_thread(self.model.decide, context)
 
@@ -743,11 +1049,18 @@ class NativeCreativeControl:
             if missing_write or missing_export or missing_frame:
                 raise NativeCreativeControlError(
                     "Host requires completion evidence unsupported by granted native tools")
-        if self.catalog_mode == "indexed":
+        if (self.host_tool_access is not None and
+                (self.catalog_mode == "indexed" or
+                 self._host_preconditions or self._host_possible_effects)):
             from .capability_fabric import CapabilityFabric
-            self._capabilities = CapabilityFabric(
+            # Safety prerequisites must apply to BOTH full-tool NVIDIA and
+            # indexed-tool local models. Previously the full catalog silently
+            # skipped all host machine preflight checks.
+            self._machine_contracts = CapabilityFabric(
                 {"native": (available, self.host_tool_access,
                             self._host_preconditions, self._host_possible_effects)})
+            if self.catalog_mode == "indexed":
+                self._capabilities = self._machine_contracts
         tool_hints = _native_tool_hints(available) if self.catalog_mode == "full" else []
         show_tool_hints = self.catalog_mode == "full"
         # Same local-only schema family as the MCP host: preflight avoids
@@ -755,6 +1068,8 @@ class NativeCreativeControl:
         # editor. The real host validates again; preflight grants nothing.
         import jsonschema
         from .body_editor_mcp import _local_schema_references
+        local_indexed_contracts = (self.catalog_mode == "indexed" and
+            getattr(self.model, "requires_indexed_native_function_contracts", False))
         validators = {}
         for native_name, native_tool in self.tools.items():
             schema = _field(native_tool, "input_schema", _field(native_tool, "inputSchema"))
@@ -773,9 +1088,42 @@ class NativeCreativeControl:
                     "additionalProperties" not in admission and
                     "patternProperties" not in admission):
                 admission["additionalProperties"] = False
+            if local_indexed_contracts and source_verified_preview_intent(
+                    native_name, {}, self._host_verified_top_level_previews):
+                # An omitted flag on these pinned write tools means preview.
+                # Preserve both choices and require the local model to choose
+                # one explicitly. The native MCP schema remains unchanged.
+                admission["required"] = list(dict.fromkeys(
+                    [*admission.get("required", []), "previewOnly"]))
             cls = jsonschema.validators.validator_for(admission)
             cls.check_schema(admission)
             validators[native_name] = cls(admission)
+        selected_input_schemas = ({name: validator.schema for name, validator in validators.items()}
+                                  if local_indexed_contracts else None)
+        # Restrict any special preview parser to an exact host-installed
+        # native tool with an actual boolean previewOnly field.
+        for name in self._host_verified_top_level_previews:
+            if name not in validators:
+                raise NativeCreativeControlError(
+                    "Source-verified preview names an absent native tool")
+            properties = validators[name].schema.get("properties")
+            preview_field = (properties.get("previewOnly")
+                             if isinstance(properties, dict) else None)
+            if (not isinstance(preview_field, dict) or
+                    preview_field.get("type") != "boolean"):
+                raise NativeCreativeControlError(
+                    "Source-verified preview requires native boolean previewOnly field")
+        for name in self._host_verified_timeline_previews:
+            if name not in validators:
+                raise NativeCreativeControlError(
+                    "Source-verified native timeline JPEG tool is absent")
+            properties = validators[name].schema.get("properties")
+            include_field = (properties.get("includeImage")
+                             if isinstance(properties, dict) else None)
+            if (not isinstance(include_field, dict) or
+                    include_field.get("type") != "boolean"):
+                raise NativeCreativeControlError(
+                    "Source-verified native JPEG requires real includeImage boolean")
         if self.receipt_path is not None:
             if not self.receipt_path.parent.is_dir():
                 raise NativeCreativeControlError("Receipt directory must already exist")
@@ -792,6 +1140,7 @@ class NativeCreativeControl:
                 "model_adapter": type(self.model).__qualname__,
                 "native_tool_count": len(self.tools),
                 "required_completion_evidence": sorted(self.required_evidence),
+                "host_pre_dispatch_rejections": self.host_pre_dispatch_rejections,
                 "neural_autonomy_or_artistic_quality_verified": False,
             })
             outcome = "turn_budget_exhausted"
@@ -842,6 +1191,8 @@ class NativeCreativeControl:
                         else:
                             self._last_native_texts = texts
                             self._project_presence = _native_project_presence_from_text(texts)
+                            self._remember_native_read("get_project", {}, texts,
+                                                       origin="bootstrap")
                             self._append({"kind": "host_project_bootstrap_observation",
                                           "tool": "get_project", "host_attested_read_only": True,
                                           "text_sha256": [hashlib.sha256(x.encode()).hexdigest()
@@ -871,10 +1222,51 @@ class NativeCreativeControl:
                                   "host_observed_value": False,
                                   "no_native_dispatch": True})
             for turn in range(self.max_turns):
+                # Real Qwen trial #42420526258: 17 searches, an empty
+                # host-confirmed project, no source import, then a rejected
+                # duplicate of a clip that did not exist. A *machine*
+                # affordance must remain visible even if the model searches
+                # for unrelated artistic operations. This is NOT an edit plan.
+                self._host_frontier_tools = []
+                host_frontier = None
+                if self._capabilities is not None:
+                    trusted_facts = {}
+                    if self._project_presence in ("present", "absent"):
+                        trusted_facts["project_open"] = self._project_presence == "present"
+                    project_assets = self._trusted_project_asset_count()
+                    if project_assets is not None:
+                        trusted_facts["project_assets_available"] = project_assets > 0
+                    project_clips = self._trusted_project_clip_count()
+                    if project_clips is not None:
+                        trusted_facts["timeline_clips_available"] = project_clips > 0
+                    if False in trusted_facts.values():
+                        possible = self._capabilities.affordance_frontier(
+                            trusted_facts=trusted_facts, namespace="native", limit=4)
+                        options = []
+                        for option in possible["matches"]:
+                            native_name = self._capabilities.resolve(
+                                option["id"], revision=self._capabilities.revision)[
+                                    "native_name"]
+                            if (native_name in self.tools and
+                                    self.host_tool_access is not None and
+                                    native_name in self.host_tool_access and
+                                    not self._host_write_already_acknowledged(native_name)):
+                                options.append({**option, "tool": native_name})
+                                self._host_frontier_tools.append(native_name)
+                        if options:
+                            host_frontier = {
+                                "matches": options,
+                                "observed_missing_machine_facts": sorted(
+                                    key for key, value in trusted_facts.items() if not value),
+                                "facts_from_current_host_reads_only": True,
+                                "possibilities_not_creative_instructions": True,
+                            }
+                visible_selectable = list(dict.fromkeys(
+                    self._host_frontier_tools + self._selectable_tools))[:8]
                 indexed_actions = ["search"]
-                if self._selectable_tools or self._inspectable_tied_candidates:
+                if visible_selectable or self._inspectable_tied_candidates:
                     indexed_actions.append("describe")
-                if self._selectable_tools:
+                if visible_selectable:
                     indexed_actions.append("invoke")
                 context = {
                     "creative_brief": brief,
@@ -889,10 +1281,12 @@ class NativeCreativeControl:
                     "actual_granted_native_tools": (
                         [] if self.catalog_mode == "indexed" else list(self.tools)),
                     "compact_tool_catalog": self.catalog_mode == "indexed",
-                    "selectable_native_tools": list(self._selectable_tools),
+                    "selectable_native_tools": visible_selectable,
                     "inspectable_native_tools": list(self._inspectable_tied_candidates),
+                    "host_observed_machine_affordances": host_frontier,
                     "host_selected_native_input_hints": (
-                        _selected_native_input_hints(self._selectable_tools, self.tools)
+                        _selected_native_input_hints(visible_selectable, self.tools,
+                            admission_schemas=selected_input_schemas)
                         if self.catalog_mode == "indexed" else []),
                     # After an acknowledged one-shot machine operation,
                     # reveal a compact term vocabulary grounded only in other
@@ -913,6 +1307,11 @@ class NativeCreativeControl:
                     "turn": turn,
                     "latest_events": _model_event_window(self.events),
                     "last_native_result_texts": self._last_native_texts,
+                    # Retain both the last model-selected accepted write and
+                    # simultaneous source reads. Host-only get_project checks
+                    # MUST NOT erase a native import receipt/asset identity.
+                    "last_acknowledged_native_write": self._last_acknowledged_native_write,
+                    "native_read_snapshot_cache": list(self._native_read_snapshots.values()),
                     "native_project_presence_from_last_inspection": self._project_presence,
                     # A successful write and a lagging native READ are a
                     # contradiction, never permission to create again.
@@ -939,6 +1338,10 @@ class NativeCreativeControl:
                     # NOT a completed film. IDs remain model-observed only.
                     "host_verified_execution_progress": {
                         "project_presence": self._project_presence,
+                        "project_asset_count_from_native_read":
+                            self._trusted_project_asset_count(),
+                        "active_timeline_clip_count_from_native_read":
+                            self._trusted_project_clip_count(),
                         "acknowledged_native_writes": sum(
                             e.get("kind") == "native_tool_result" and
                             e.get("host_application_write_acknowledged") is True
@@ -967,9 +1370,8 @@ class NativeCreativeControl:
                 # Optional provider-neutral native tool contracts. They are
                 # derived from the *current actual MCP list* AND BODY grants,
                 # never from model text, a canned manifest or another agent.
-                # The ordinary local structured-JSON backend is unchanged.
-                if getattr(self.model, "requires_native_function_contracts", False):
-                    visible_names = (list(self._selectable_tools)
+                if local_indexed_contracts or getattr(self.model, "requires_native_function_contracts", False):
+                    visible_names = (visible_selectable
                                      if self.catalog_mode == "indexed"
                                      else list(self.tools))
                     specs = []
@@ -979,11 +1381,11 @@ class NativeCreativeControl:
                                 self.host_tool_access.get(candidate) not in ("read", "write")):
                             raise NativeCreativeControlError(
                                 "Native provider tool contract lacks an actual host grant")
-                        if self._host_write_already_acknowledged(candidate):
+                        if not local_indexed_contracts and self._host_write_already_acknowledged(candidate):
                             continue
                         item = self.tools[candidate]
-                        schema = _field(item, "input_schema",
-                                        _field(item, "inputSchema"))
+                        schema = (validators[candidate].schema if local_indexed_contracts else
+                                  _field(item, "input_schema", _field(item, "inputSchema")))
                         if not isinstance(schema, dict) or schema.get("type") != "object":
                             raise NativeCreativeControlError(
                                 "Native function signature is not an object schema")
@@ -1280,14 +1682,20 @@ class NativeCreativeControl:
                                       list(invalid.schema_path)[:16])[:512],
                                   "no_native_dispatch": True})
                     continue
-                if (self._capabilities is not None and
+                if (self._machine_contracts is not None and
                         native_name in self._host_preconditions):
                     known_facts = {}
                     if self._project_presence in ("present", "absent"):
                         known_facts["project_open"] = self._project_presence == "present"
-                    readiness = self._capabilities.check_prerequisites(
+                    project_assets = self._trusted_project_asset_count()
+                    if project_assets is not None:
+                        known_facts["project_assets_available"] = project_assets > 0
+                    project_clips = self._trusted_project_clip_count()
+                    if project_clips is not None:
+                        known_facts["timeline_clips_available"] = project_clips > 0
+                    readiness = self._machine_contracts.check_prerequisites(
                         "native/" + native_name,
-                        revision=self._capabilities.revision,
+                        revision=self._machine_contracts.revision,
                         trusted_facts=known_facts)
                     if not readiness["admissible"]:
                         # No RPC happened. Allow an independent model choice
@@ -1310,7 +1718,11 @@ class NativeCreativeControl:
                                       "no_native_dispatch": True})
                         continue
                 self._last_preflight_feedback = None
+                source_preview_only = source_verified_preview_intent(
+                    native_name, args["inputs"], self._host_verified_top_level_previews)
                 self._append({"kind": "native_tool_submitted", "turn": turn,
+                              **({"host_source_attested_preview_only": True}
+                                 if source_preview_only else {}),
                               **timing,
                               "tool": native_name,
                               "inputs_sha256": hashlib.sha256(_wire(args["inputs"]).encode()).hexdigest(),
@@ -1350,7 +1762,54 @@ class NativeCreativeControl:
                     outcome = "native_error_requires_state_reconciliation"
                     break
                 if native_error:
+                    code = (host_pre_dispatch_rejection(result, native_name, args["inputs"])
+                            if self.host_pre_dispatch_rejections else None)
+                    if code is not None:
+                        # The trusted bridge refused BEFORE native RPC. This
+                        # is neither an ACK nor an uncertain native mutation.
+                        # The next call still requires a new MODEL decision.
+                        self._last_preflight_feedback = {
+                            "tool": native_name, "validation_keyword": "host_pre_dispatch",
+                            "rejection_code": code, "no_native_dispatch": True,
+                            "correction": HOST_REJECTION_FEEDBACK[code]}
+                        self._append({
+                            "kind": "host_tool_rejected_before_dispatch", "turn": turn,
+                            "tool": native_name, "rejection_code": code,
+                            "inputs_sha256": hashlib.sha256(_wire(args["inputs"]).encode()).hexdigest(),
+                            "measured_native_mcp_wall_ms": native_ms,
+                            "no_native_dispatch": True, "no_automatic_retry": True})
+                        continue
                     digest, out_of_budget = _bounded_error_digest(result)
+                    error_blocks = _field(result, "content", ())
+                    # This policy depends on the actual pinned MCP branch,
+                    # validated model inputs and a well-formed error receipt.
+                    # It never treats an applied/unknown write or transport
+                    # failure as safe merely because it contains preview text.
+                    if (source_preview_only and not out_of_budget and
+                            isinstance(error_blocks, (tuple, list)) and len(error_blocks) == 1
+                            and _field(error_blocks[0], "type") == "text"
+                            and isinstance(_field(error_blocks[0], "text"), str)):
+                        raw_error = _field(error_blocks[0], "text")
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "source_attested_native_preview",
+                            "host_source_attested_preview_only": True,
+                            "no_renderer_write_dispatch": True,
+                            "no_successful_native_observation": True,
+                            "untrusted_native_error_text": raw_error.encode("utf-8")[:2048].decode("utf-8", "ignore"),
+                            "correction": "Preview failed without applying an edit. Inspect actual native state and independently choose the next action; no call was automatically retried."}
+                        self._append({
+                            "kind": "native_read_tool_reported_error", "turn": turn,
+                            "tool": native_name,
+                            "measured_native_mcp_wall_ms": native_ms,
+                            "error_sha256": digest,
+                            "error_text_exceeded_evidence_budget": False,
+                            "host_attested_read_only": True,
+                            "host_source_attested_preview_only": True,
+                            "no_successful_native_observation": True,
+                            "no_automatic_retry": True,
+                            "no_accepted_write_evidence": True})
+                        continue
                     if (self.host_tool_access is not None and
                             self.host_tool_access[native_name] == "read"):
                         # The explicit host-owned grant proves this call is
@@ -1380,10 +1839,18 @@ class NativeCreativeControl:
                     break
                 try:
                     texts, images, audio = _native_content(result)
-                    # Only the host-owned decoder observers may introduce new
-                    # source-bound image/audio. Native tools and model-authored
-                    # text cannot impersonate independently verified sensors.
-                    if images and native_name not in _VERIFIED_FRAME_TOOLS:
+                    # Export-frame sensors remain the ONLY way to verify an
+                    # exported MP4. Pinned Electron inspectTimelineFrame is a
+                    # separate host-granted READ that may return a real JPEG
+                    # from the editable timeline, not a decoded export.
+                    live_timeline_image = (
+                        bool(images) and
+                        native_name in self._host_verified_timeline_previews and
+                        self.host_tool_access is not None and
+                        self.host_tool_access.get(native_name) == "read" and
+                        args["inputs"].get("includeImage") is not False)
+                    if (images and native_name not in _VERIFIED_FRAME_TOOLS
+                            and not live_timeline_image):
                         raise NativeCreativeControlError("Untrusted tool supplied image evidence")
                     if audio and native_name not in _VERIFIED_AUDIO_TOOLS:
                         raise NativeCreativeControlError("Untrusted tool supplied audio evidence")
@@ -1414,8 +1881,97 @@ class NativeCreativeControl:
                         # (b) generic Velorn runRendererActionTool omits
                         #     success entirely on preview, but binds BOTH
                         #     wrapper and nested result to the native action.
+                        # (c) pinned Velorn Electron MCP marker methods
+                        # return {previewOnly:true,markerCount:N,markers:[...]}
+                        # directly without "action"/"result", before any
+                        # renderer mutation. This is a real read-only preview
+                        # ONLY when the model asked for preview and the host
+                        # explicitly attests this exact tool/reply contract.
                         # Never infer no-write from an uncorrelated single
                         # "previewOnly" flag or a contradictory success:true.
+                        # The exact Electron MCP shapes differ between
+                        # marker addition and marker removal/update. Reject
+                        # unexpected keys (including misleading success/error)
+                        # rather than treating arbitrary top-level JSON as a
+                        # source-verified no-op.
+                        flat_preview_fields = {
+                            "add_timeline_markers": {
+                                "previewOnly", "markerCount", "markers"},
+                            "remove_timeline_markers": {
+                                "previewOnly", "mode", "markerCount",
+                                "missingMarkerIds", "markers"},
+                            "set_timeline_marker_properties": {
+                                "previewOnly", "mode", "markerCount",
+                                "missingMarkerIds", "markers"},
+                        }.get(native_name)
+                        top_level_preview = (
+                            native_name in self._host_verified_top_level_previews
+                            and flat_preview_fields is not None
+                            and args["inputs"].get("previewOnly") is True
+                            and isinstance(host_response, dict)
+                            and set(host_response) == flat_preview_fields
+                            and host_response["previewOnly"] is True
+                            and type(host_response["markerCount"]) is int
+                            and 0 <= host_response["markerCount"] <= 1000
+                            and type(host_response["markers"]) is list
+                            and len(host_response["markers"]) == host_response["markerCount"]
+                            and all(type(marker) is dict
+                                    for marker in host_response["markers"])
+                            and (native_name == "add_timeline_markers" or (
+                                type(host_response["mode"]) is str and
+                                type(host_response["missingMarkerIds"]) is list and
+                                all(type(marker_id) is str for marker_id
+                                    in host_response["missingMarkerIds"]))))
+                        # Pinned Electron MCP addAsset(s)ToTimeline intercepts
+                        # default preview (missing previewOnly or true) before
+                        # performAction. The response is a flat *plan*, not
+                        # generic runRendererActionTool nested output. Trial
+                        # #42427570784 correctly imported source but halted
+                        # because this safe default preview was misclassified
+                        # as a possible native mutation. Require the EXACT
+                        # source-verified plan/suggested-apply envelope, the
+                        # original model's non-commit intent, and an actual
+                        # model-selectable previewOnly:false apply command.
+                        placement_preview_messages = {
+                            "add_asset_to_timeline":
+                                "Asset placement plan only. No timeline change was made.",
+                            "add_assets_to_timeline":
+                                "Batch asset placement plan only. No timeline change was made.",
+                            "move_clips":
+                                "Clip move plan only. No timeline change was made.",
+                            "trim_clips":
+                                "Clip trim plan only. No timeline change was made.",
+                            "delete_clips":
+                                "Clip delete plan only. No timeline change was made.",
+                        }
+                        placement_apply = (
+                            host_response.get("suggestedApplyCall")
+                            if isinstance(host_response, dict) else None)
+                        placement_preview = (
+                            native_name in self._host_verified_top_level_previews
+                            and native_name in placement_preview_messages
+                            and args["inputs"].get("previewOnly") in (None, True)
+                            and isinstance(host_response, dict)
+                            and set(host_response) == {
+                                "previewOnly", "action", "message", "plan",
+                                "suggestedApplyCall"}
+                            and host_response["previewOnly"] is True
+                            and host_response["action"] == native_name
+                            and host_response["message"] ==
+                                placement_preview_messages[native_name]
+                            and type(host_response["plan"]) is dict
+                            and (
+                                (native_name in (
+                                    "add_asset_to_timeline", "add_assets_to_timeline")
+                                 and host_response["plan"].get("action") == native_name
+                                 and host_response["plan"].get("previewOnly") is True)
+                                or _pinned_source_clip_edit_plan_matches(
+                                    native_name, host_response["plan"]))
+                            and type(placement_apply) is dict
+                            and set(placement_apply) == {"tool", "arguments"}
+                            and placement_apply["tool"] == native_name
+                            and type(placement_apply["arguments"]) is dict
+                            and placement_apply["arguments"].get("previewOnly") is False)
                         wrapper_preview = (
                             isinstance(host_response, dict) and
                             host_response.get("previewOnly") is True and
@@ -1423,11 +1979,12 @@ class NativeCreativeControl:
                             isinstance(host_result, dict) and
                             host_result.get("action") == native_name)
                         acknowledged_preview = (
-                            preview is True and (
-                                (success is False and (
-                                    not isinstance(host_response, dict) or
-                                    host_response.get("previewOnly", True) is True
-                                )) or (success is None and wrapper_preview)))
+                            top_level_preview or placement_preview or (
+                                preview is True and (
+                                    (success is False and (
+                                        not isinstance(host_response, dict) or
+                                        host_response.get("previewOnly", True) is True
+                                    )) or (success is None and wrapper_preview))))
                         if success is False or acknowledged_preview:
                             if acknowledged_preview:
                                 # Actual pinned editor defaults to a preview
@@ -1479,6 +2036,8 @@ class NativeCreativeControl:
                             outcome = "native_error_requires_state_reconciliation"
                             break
                         if (success is not True or
+                                (isinstance(host_response, dict) and
+                                 host_response.get("previewOnly") is True) or
                                 (isinstance(host_result, dict) and
                                  "previewOnly" in host_result and preview is not False)):
                             # No application-level acknowledgment, or the host
@@ -1503,7 +2062,11 @@ class NativeCreativeControl:
                         # Only the native application's explicit success ACK
                         # clears the pending preview. No host-selected edit.
                         self._last_native_preview_feedback = None
-                    hashes = _source_bound_images(texts, images)
+                    hashes = (
+                        _source_bound_live_timeline_preview(
+                            texts, images, self._trusted_project_active_timeline_id())
+                        if live_timeline_image else
+                        _source_bound_images(texts, images))
                     audio_evidence = _source_bound_audio(texts, audio)
                     new_export_sha = None
                     observed_export_sha = None
@@ -1513,7 +2076,7 @@ class NativeCreativeControl:
                                 p.get("native_export_sha256")):
                             raise NativeCreativeControlError("Native export has no independent physical decoder proof")
                         new_export_sha = p["native_export_sha256"]
-                    elif images:
+                    elif images and not live_timeline_image:
                         p = _strict_receipt(texts, "verified native video")
                         if not _digest(p.get("export_sha256")):
                             raise NativeCreativeControlError("Native frame lacks source identity")
@@ -1557,7 +2120,27 @@ class NativeCreativeControl:
                     self._post_write_state_warning = None
                 self._last_native_texts = texts
                 self._last_images, self._last_hashes = images, hashes
+                self._last_image_provenance = (
+                    "live_editable_timeline_preview_not_verified_export"
+                    if live_timeline_image else (
+                        "independently_verified_export_frame" if images else None))
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
+                # Capture only a genuinely observed pre-write native count.
+                # Pinned Electron may acknowledge an import before its async
+                # project snapshot has published the new asset. An immediate
+                # read of 0 is stale after an import from a verified 0 baseline.
+                prior_import_asset_count = (
+                    self._trusted_project_asset_count()
+                    if native_name == "import_asset_from_path" and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(native_name) == "write"
+                    else None)
+                if (self.host_tool_access is not None and
+                        self.host_tool_access.get(native_name) == "write"):
+                    self._remember_native_write_ack(native_name, texts)
+                elif not images and not audio:
+                    self._remember_native_read(native_name, args["inputs"], texts,
+                                               origin="model_selected")
                 self._append({"kind": "native_tool_result", "turn": turn,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
@@ -1578,6 +2161,8 @@ class NativeCreativeControl:
                                   self.host_tool_access.get(native_name) == "write"
                                   else None),
                               "image_sha256": hashes,
+                              "native_timeline_preview_unverified_export": (
+                                  True if live_timeline_image else None),
                               "audio_sha256": audio_evidence["wav_sha256"] if audio_evidence else None,
                               "independently_verified_export_sha256": new_export_sha,
                               "observed_export_sha256": observed_export_sha,
@@ -1597,34 +2182,39 @@ class NativeCreativeControl:
                 # fresh host read. This left project_open UNKNOWN immediately
                 # after a successful asset import, so the next model-selected
                 # timeline edit was refused by the trusted prerequisite gate.
-                # Re-observe after any host-authorized WRITE which either
-                # establishes OR requires project_open. A native ACK alone
-                # never proves that the editor remains on the same project.
-                # Reuse the bounded, independently journaled read-only
-                # reconciliation; never retry the model-selected WRITE.
-                effects = self._host_possible_effects.get(native_name, ())
-                prerequisites = self._host_preconditions.get(native_name, ())
+                # Re-observe after EVERY acknowledged native editor write
+                # when the host has granted get_project. The actual 26-turn
+                # Qwen run lost its project/asset-count evidence after
+                # add_timeline_markers, which had no project_open prerequisite.
+                # A native write ACK cannot preserve the previous state fact.
+                # This is a bounded READ-only reconciliation, never replay
+                # of a model-authored write; an error remains unknown.
                 reobserve_project = (
-                    (isinstance(effects, (list, tuple)) and
-                     "project_open" in effects) or
-                    (isinstance(prerequisites, (list, tuple)) and
-                     "project_open" in prerequisites))
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(native_name) == "write")
                 if (reobserve_project and
                         self.host_tool_access is not None and
                         self.host_tool_access.get("get_project") == "read" and
                         "get_project" in validators and
                         validators["get_project"].is_valid({})):
                     self._post_write_state_warning = None
-                    for read_attempt in (1, 2):
-                        if read_attempt == 2:
-                            # Physical pinned Velorn/Electron/MCP CI
-                            # #41160859730 observed a successful native
-                            # create ACK, an 11.86ms absent first snapshot,
-                            # and visibility only after 471.33ms / four reads.
-                            # A 200ms second read was empirically too early.
-                            # This bounded 1.5s grace is an engineering
-                            # budget, NOT a claimed upstream debounce or
-                            # maximum latency. Never retry a native WRITE.
+                    expected_import_asset_count = (
+                        prior_import_asset_count + 1
+                        if type(prior_import_asset_count) is int else None)
+                    # Import can be acknowledged while the app's published
+                    # snapshot still reports the PREVIOUS asset inventory.
+                    # Do not mistake that stale 0 for evidence that no
+                    # usable imported asset exists, or invent a positive count.
+                    # The budget is bounded read-only observation; never
+                    # retry the model's real native write.
+                    read_attempt_limit = (
+                        4 if expected_import_asset_count is not None else 2)
+                    for read_attempt in range(1, read_attempt_limit + 1):
+                        if read_attempt > 1:
+                            # Existing native create evidence needed >200ms.
+                            # Imported asset visibility was still stale on the
+                            # first read in real 4B run #42427570784.
+                            # This fixed small budget is not a latency SLA.
                             await asyncio.sleep(1.5)
                         try:
                             refreshed = await self.session.call_tool("get_project", {})
@@ -1697,6 +2287,8 @@ class NativeCreativeControl:
                         observation = _native_project_presence_from_text(state_texts)
                         self._project_presence = observation
                         self._last_native_texts = state_texts
+                        self._remember_native_read("get_project", {}, state_texts,
+                                                   origin="host_reconciliation")
                         self._append({"kind": "host_project_post_write_observation",
                                       "tool": "get_project",
                                       "triggered_by_native_tool": native_name,
@@ -1717,6 +2309,35 @@ class NativeCreativeControl:
                                 "project_state_unknown": True,
                                 "must_inspect_native_project": True}
                             break
+                        if observation == "present" and (
+                                expected_import_asset_count is not None):
+                            actual_asset_count = _native_project_asset_count_from_text(
+                                state_texts)
+                            if (actual_asset_count is None or
+                                    actual_asset_count < expected_import_asset_count):
+                                # Keep the confirmed project presence but
+                                # discard a stale snapshot before the next
+                                # model turn. It cannot mint a false negative
+                                # asset precondition. Expose only bounded
+                                # current provenance and an explicit warning.
+                                self._native_read_snapshots.pop("get_project", None)
+                                self._post_write_state_warning = {
+                                    "read_only_reconciliation_incomplete": True,
+                                    "asset_inventory_not_yet_observed": True,
+                                    "must_inspect_native_project": True}
+                                self._append({
+                                    "kind": "host_project_post_write_asset_lag",
+                                    "triggered_by_native_tool": native_name,
+                                    "read_attempt": read_attempt,
+                                    "expected_minimum_asset_count":
+                                        expected_import_asset_count,
+                                    "observed_asset_count": actual_asset_count,
+                                    "host_attested_read_only": True,
+                                    "no_model_selected_mutation": True,
+                                    "no_automatic_write_retry": True})
+                                if read_attempt < read_attempt_limit:
+                                    continue
+                                break
                         if observation == "present":
                             break
                         if read_attempt == 2:

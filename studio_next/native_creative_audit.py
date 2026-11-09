@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import stat
+from .body_editor_client import HOST_REJECTION_FEEDBACK
 
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -108,7 +109,8 @@ def read_native_journal(path: Path):
 
 
 def audit_native_journal(events, *, host_tool_access, expected_required_evidence=None,
-                         host_content_revision_tools=()):
+                         host_content_revision_tools=(), host_pre_dispatch_rejections=False,
+                         host_verified_preview_error_tools=()):
     """Check every transition and trace real export-to-observation identity.
 
     host_tool_access comes from the trusted owner grants, not from model text.
@@ -123,6 +125,17 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
         raise NativeJournalError("Invalid event sequence or host access inventory")
     if not isinstance(events[0], dict) or events[0].get("kind") != "session_started":
         raise NativeJournalError("Journal lacks a session identity")
+    if type(host_pre_dispatch_rejections) is not bool:
+        raise NativeJournalError("Invalid independent host rejection policy")
+    from .native_editor_source_pin import source_verified_preview_intent
+    if (not isinstance(host_verified_preview_error_tools, (tuple, list, frozenset)) or
+            any(not isinstance(name, str) or host_tool_access.get(name) != "write"
+                for name in host_verified_preview_error_tools) or
+            len(set(host_verified_preview_error_tools)) != len(host_verified_preview_error_tools) or
+            any(not source_verified_preview_intent(name, {"previewOnly": True},
+                    host_verified_preview_error_tools) for name in host_verified_preview_error_tools)):
+        raise NativeJournalError("Invalid independent source-preview failure policy")
+    preview_error_tools = frozenset(host_verified_preview_error_tools)
     required = events[0].get("required_completion_evidence", [])
     if (not isinstance(required, list) or
             any(not isinstance(item, str) or item not in _COMPLETION_EVIDENCE_TYPES
@@ -222,26 +235,44 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
         if kind in ("host_project_post_write_observation",
                     "host_project_post_write_error"):
             previous = events[i - 1] if i > 0 else {}
-            # Old receipts were never independently versioned; a missing
-            # attempt is not a valid new bounded-read claim. Historical
-            # artifacts must be examined with their original source version.
             attempt = event.get("read_attempt")
-            if type(attempt) is not int or attempt not in (1, 2):
+            if type(attempt) is not int or not 1 <= attempt <= 4:
                 raise NativeJournalError("Unbounded post-write read attempt")
-            original_write = previous
-            if attempt == 2:
-                # Only an immediately preceding first host read attesting
-                # ABSENCE may authorize one more READ. No repeated write,
-                # unsigned state claim or fabricated third observation.
-                original_write = events[i - 2] if i >= 2 else {}
-                if (previous.get("kind") != "host_project_post_write_observation" or
-                        previous.get("read_attempt") != 1 or
-                        previous.get("project_presence") != "absent"):
-                    raise NativeJournalError("Second host read lacks a contradictory first read")
-            elif previous.get("kind") != "native_tool_result":
-                raise NativeJournalError("First project read lacks acknowledged native write")
+            # A second create read is only permitted after absent; a repeat
+            # asset-import read is only permitted after the immediately
+            # preceding signed journal observation reported a *lag*.
+            # Every link must lead to a single original model-selected
+            # acknowledged write. No intervening write or arbitrary tool.
+            if attempt == 1:
+                if previous.get("kind") != "native_tool_result":
+                    raise NativeJournalError(
+                        "First project read lacks acknowledged native write")
+            elif previous.get("kind") == "host_project_post_write_asset_lag":
+                if (previous.get("read_attempt") != attempt - 1 or
+                        previous.get("triggered_by_native_tool") !=
+                        event.get("triggered_by_native_tool")):
+                    raise NativeJournalError("Asset lag read sequence is inconsistent")
+            elif (attempt == 2 and
+                  previous.get("kind") == "host_project_post_write_observation" and
+                  previous.get("read_attempt") == 1 and
+                  previous.get("project_presence") == "absent"):
+                pass
+            else:
+                raise NativeJournalError("Repeated native read lacks valid predecessor")
+            original_index = i - 1
+            visited = 0
+            while (original_index >= 0 and
+                   events[original_index].get("kind") in (
+                       "host_project_post_write_observation",
+                       "host_project_post_write_asset_lag")):
+                original_index -= 1
+                visited += 1
+                if visited > 7:
+                    raise NativeJournalError("Unbounded project read chain")
+            original_write = events[original_index] if original_index >= 0 else {}
             if (pending is not None or
                     original_write.get("kind") != "native_tool_result" or
+                    original_write.get("host_application_write_acknowledged") is not True or
                     event.get("triggered_by_native_tool") != original_write.get("tool") or
                     host_tool_access.get(original_write.get("tool")) != "write" or
                     host_tool_access.get("get_project") != "read" or
@@ -267,6 +298,31 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                              digest is None and oversized is None)
                 if not (reported or exception):
                     raise NativeJournalError("Untrusted failed post-write project read")
+            continue
+        if kind == "host_project_post_write_asset_lag":
+            previous = events[i - 1] if i > 0 else {}
+            attempt = event.get("read_attempt")
+            if (pending is not None or
+                    previous.get("kind") != "host_project_post_write_observation" or
+                    previous.get("project_presence") != "present" or
+                    previous.get("read_attempt") != attempt or
+                    type(attempt) is not int or not 1 <= attempt <= 4 or
+                    event.get("triggered_by_native_tool") != "import_asset_from_path" or
+                    previous.get("triggered_by_native_tool") !=
+                        "import_asset_from_path" or
+                    host_tool_access.get("import_asset_from_path") != "write" or
+                    host_tool_access.get("get_project") != "read" or
+                    type(event.get("expected_minimum_asset_count")) is not int or
+                    event["expected_minimum_asset_count"] < 1 or
+                    (event.get("observed_asset_count") is not None and
+                     (type(event["observed_asset_count"]) is not int or
+                      event["observed_asset_count"] < 0 or
+                      event["observed_asset_count"] >=
+                        event["expected_minimum_asset_count"])) or
+                    event.get("host_attested_read_only") is not True or
+                    event.get("no_model_selected_mutation") is not True or
+                    event.get("no_automatic_write_retry") is not True):
+                raise NativeJournalError("Untrusted native asset-inventory lag claim")
             continue
         if kind == "host_project_post_write_inconsistent":
             # Two READ observations saying absent after an acknowledged
@@ -416,11 +472,23 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             continue
         if kind in ("native_tool_result", "native_tool_preview",
                     "native_tool_reported_error", "native_tool_uncertain_outcome",
-                    "native_observation_rejected", "native_read_tool_reported_error"):
+                    "native_observation_rejected", "native_read_tool_reported_error",
+                    "host_tool_rejected_before_dispatch"):
             if pending is None or (event.get("turn"), event.get("tool")) != pending[:2]:
                 raise NativeJournalError("Native outcome does not match a submitted call")
             turn, tool, access = pending
             pending = None
+            if kind == "host_tool_rejected_before_dispatch":
+                if (not host_pre_dispatch_rejections or
+                        events[0].get("host_pre_dispatch_rejections") is not True or
+                        event.get("no_native_dispatch") is not True or
+                        event.get("no_automatic_retry") is not True or
+                        type(event.get("rejection_code")) is not str or
+                        event["rejection_code"] not in HOST_REJECTION_FEEDBACK or
+                        event.get("inputs_sha256") != events[i - 1].get("inputs_sha256") or
+                        events[i - 1].get("kind") != "native_tool_submitted"):
+                    raise NativeJournalError("Host pre-dispatch rejection lacks trusted bound receipt")
+                continue
             if kind == "native_tool_preview":
                 # The native application acknowledged *a proposed plan*, not
                 # an applied edit. It has no authority to advance write proof.
@@ -441,8 +509,21 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 # to advance artistic/export/source-completion counters.
                 digest = event.get("error_sha256")
                 flag = event.get("error_text_exceeded_evidence_budget")
-                if (access != "read" or
-                        event.get("host_attested_read_only") is not True or
+                preview_failure = event.get("host_source_attested_preview_only") is True
+                if preview_failure:
+                    if (access != "write" or tool not in preview_error_tools or
+                            flag is not False or not _sha(digest) or
+                            events[i - 1].get("kind") != "native_tool_submitted" or
+                            events[i - 1].get("host_source_attested_preview_only") is not True or
+                            event.get("no_automatic_retry") is not True or
+                            event.get("no_accepted_write_evidence") is not True or
+                            any(event.get(key) for key in (
+                                "host_application_write_acknowledged",
+                                "independently_verified_export_sha256", "observed_export_sha256"))):
+                        raise NativeJournalError("Recoverable preview failure lacks independent source/intent proof")
+                elif access != "read":
+                    raise NativeJournalError("Write error cannot be audited as a failed read")
+                if (event.get("host_attested_read_only") is not True or
                         event.get("no_successful_native_observation") is not True or
                         type(flag) is not bool or
                         ((digest is None) != flag) or
@@ -498,7 +579,22 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     raise NativeJournalError("No physical export proof on successful verification")
                 if tool in _OBSERVERS and seen_sha is None:
                     raise NativeJournalError("Native A/V observation lacks export provenance")
-                if bool(event.get("image_sha256")) != (tool in _FRAME_OBSERVERS):
+                # A source-pinned native timeline JPEG is a legitimate
+                # read-only creative preview, NOT a physically decoded MP4.
+                # Never allow its hash to satisfy observed_export_sha256 or
+                # the stronger verified-export-frame completion evidence.
+                timeline_preview = event.get(
+                    "native_timeline_preview_unverified_export")
+                if timeline_preview is not None and (
+                        timeline_preview is not True or
+                        tool != "inspect_timeline_frame" or access != "read" or
+                        seen_sha is not None or new_sha is not None or
+                        len(event.get("image_sha256", [])) != 1 or
+                        event.get("audio_sha256") is not None):
+                    raise NativeJournalError(
+                        "Native timeline JPEG cannot masquerade as verified export")
+                if bool(event.get("image_sha256")) != (
+                        tool in _FRAME_OBSERVERS or timeline_preview is True):
                     raise NativeJournalError("Native visual evidence mismatches sensor identity")
                 audio_sha = event.get("audio_sha256")
                 if audio_sha is not None:
@@ -563,20 +659,41 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--journal", type=Path, required=True)
     p.add_argument("--host-editor-config", type=Path, required=True)
+    p.add_argument("--trust-host-pre-dispatch-rejections", action="store_true",
+                   help="Attest the journal used the trusted BODY MCP bridge, not a raw native/plugin session")
+    p.add_argument("--native-source", type=Path,
+                   help="Independently attest pinned native content diagnostics used in this session")
     args = p.parse_args()
     from .body_editor_policy import load_editor_config
     # The SAME real policy loader that launches the editor validates grants
     # and roots. Extra ZX7 sensor names are inserted ONLY when the actual
     # host config enabled them and the read capability was owner-granted.
     config = load_editor_config(args.host_editor_config)
-    grants = dict(config.allowed_tools)
+    grants = {name: access for name, access in config.allowed_tools.items()
+              if access in config.allowed_access}
     if config.verify_native_exports and "read" in config.allowed_access:
         extras = {_EXPORT, *_OBSERVERS}
         if any(name in grants for name in extras):
             raise NativeJournalError("Namespaced BODY sensors collide with native grants")
         grants.update({name: "read" for name in extras})
+    preview_error_tools = ()
+    if args.native_source is not None:
+        from .native_editor_diagnostics import native_content_diagnostics_source_verified
+        if not native_content_diagnostics_source_verified(args.native_source):
+            raise NativeJournalError("Native diagnostics source cannot be independently attested")
+        from .native_editor_source_pin import (
+            pinned_electron_marker_previews, pinned_electron_asset_placement_previews,
+            pinned_electron_clip_edit_previews,
+        )
+        preview_error_tools = (pinned_electron_marker_previews(args.native_source, grants) +
+            pinned_electron_asset_placement_previews(args.native_source, grants) +
+            pinned_electron_clip_edit_previews(args.native_source, grants))
+        if "read" in config.allowed_access and grants.get("get_timeline") == "read":
+            grants["zx7_inspect_native_content"] = "read"
     outcome = audit_native_journal(read_native_journal(args.journal),
-                                   host_tool_access=grants)
+                                   host_tool_access=grants,
+                                   host_pre_dispatch_rejections=args.trust_host_pre_dispatch_rejections,
+                                   host_verified_preview_error_tools=preview_error_tools)
     print(json.dumps(outcome, indent=2, sort_keys=True))
     return 0
 

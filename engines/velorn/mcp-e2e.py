@@ -19,6 +19,8 @@ import time
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from proof_contract import assert_editor_catalog
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -93,13 +95,10 @@ async def exercise(options):
 
     async with connected() as session:
         discovered = (await session.list_tools()).tools
-        assert {tool.name for tool in discovered} == set(tools) | {"zx7_verify_native_export", "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples", "zx7_observe_verified_export_audio", "zx7_observe_verified_export_audio_timeline"}
         from studio_next.body_editor_client import LocalEditorClient
         native = {tool["name"]: tool for tool in LocalEditorClient(
             "http://127.0.0.1:19790/mcp", allowed_tools={}).list_tools()}
-        for tool in discovered:
-            if tool.name in native:
-                assert tool.input_schema == native[tool.name]["inputSchema"]
+        assert_editor_catalog(discovered, tools, native)
         # One genuine pinned-editor catalog audit, not an inference or an
         # execution guarantee. Do not grant absent specialist/cloud tools.
         from studio_next.native_capability_audit import audit_native_coverage
@@ -211,6 +210,13 @@ async def exercise(options):
             "human_or_artistic_quality_approved": False,
         }, sort_keys=True), flush=True)
         project = Path(state["project"]["path"])
+        blocked_output = outputs / "no-source.mp4"
+        unready = await session.call_tool("export_timeline", {
+            "outputPath": str(blocked_output), "target": "h264_project",
+            "range": "custom", "startSeconds": 0, "endSeconds": 2,
+            "previewOnly": False})
+        assert unready.is_error and not blocked_output.exists(), unready
+        assert unready.meta["zx7.host/pre-dispatch-rejection"]["code"] == "export_readiness_unconfirmed"
         assert (await session.call_tool("import_asset_from_path", {"path": "/etc/passwd", "previewOnly": False})).is_error
         for name, count in (("source.mp4", 1), ("tone.wav", 2)):
             await call(session, "import_asset_from_path", {"path": str(staging / name), "previewOnly": False})
@@ -835,8 +841,8 @@ async def exercise(options):
     audio_rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples))
     assert .03 < audio_rms < .2
     receipt = {"success": True, "kind": "scripted official SDK client; no autonomous model evaluation",
-        "transport": "standard MCP stdio; Python SDK 2.3.0", "nativeSchemasUnchanged": True,
-        "discoveredGrantedTools": len(tools), "additionalVerifiedBodyTools": 5, "physicalVisualFrameObserved": True,
+        "transport": "standard MCP stdio; Python SDK 2.3.0", "nativeSchemaContractVerified": True,
+        "discoveredGrantedTools": len(tools), "additionalVerifiedBodyTools": len(discovered) - len(tools), "physicalVisualFrameObserved": True,
         "physicalBoundedSourceAudioObserved": True,
         "physicalTemporalAudioEnvelopeObserved": True,
         "physicalSparseTemporalFramesObserved": True,

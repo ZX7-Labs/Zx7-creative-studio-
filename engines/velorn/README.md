@@ -142,6 +142,11 @@ python engines/velorn/native-model-client.py \
 ```
 
 The app gets **only** the host's explicit grants. Model text is not authority.
+The launcher lets the model correct a host policy refusal only when the trusted
+BODY bridge proves the editor call was never dispatched. Existing exports stay
+protected; BODY never chooses another path or retries the write automatically.
+Native errors and lost responses still require state reconciliation. Gateway
+budget reservations remain conservative; this is not crash-durable recovery.
 The local model must return one `{action,arguments,reason}` JSON decision
 per turn; the driver does not bake in a timeline or shot sequence. Actual
 MCP text output is supplied to the next decision but only its SHA evidence
@@ -186,8 +191,13 @@ enabled physical export verification. The model cannot grant itself sensors.
 ```sh
 python -m studio_next.native_creative_audit \
   --journal /private/new-model-session.jsonl \
-  --host-editor-config /private/owner-native-grants.json
+  --host-editor-config /private/owner-native-grants.json \
+  --trust-host-pre-dispatch-rejections
 ```
+
+Use the final flag only for sessions launched through this trusted BODY bridge.
+It is independent host authority, not a claim read from the journal. Omit it for
+raw native or other plugin sessions; their error metadata cannot prove no write.
 
 For each tool call the driver writes an ordered intent before RPC and a
 separate result (or terminal uncertainty), preserving checked result hashes

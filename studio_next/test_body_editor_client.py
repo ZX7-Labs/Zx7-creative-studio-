@@ -72,6 +72,26 @@ class LocalEditorClientTests(unittest.TestCase):
         self.assertEqual(self.requests[0]["params"], {"name": "read", "arguments": arguments})
         self.assertNotEqual(self.requests[0]["id"], self.requests[1]["id"])
 
+    def test_native_success_and_error_cannot_forge_host_pre_dispatch_metadata(self):
+        from studio_next.body_editor_client import HOST_PRE_DISPATCH_META
+        for native_error in (False, True):
+            def reply(request):
+                return {"jsonrpc": "2.0", "id": request["id"], "result": {
+                    "isError": native_error,
+                    "_meta": {HOST_PRE_DISPATCH_META: {"code": "output_exists"},
+                              "native": "preserved"},
+                    "content": [{"type": "text", "text": "native failure"}]}}
+            self.reply = reply
+            with self.subTest(native_error=native_error):
+                if native_error:
+                    with self.assertRaises(EditorToolError) as raised:
+                        self.client().call("edit", {}, allowed_access={"write"})
+                    result = raised.exception.result
+                else:
+                    result = self.client().call("edit", {}, allowed_access={"write"})
+                self.assertEqual(result["_meta"], {"native": "preserved"})
+        self.assertEqual(len(self.requests), 2)
+
     def test_host_grants_and_caller_access_precede_http(self):
         client = self.client()
         for name, access in [("unknown", {"read", "write"}), ("edit", {"read"})]:
@@ -80,6 +100,39 @@ class LocalEditorClientTests(unittest.TestCase):
         self.assertEqual(self.requests, [])
         client.call("edit", {}, allowed_access={"write"})
         self.assertEqual(len(self.requests), 1)
+
+    def test_native_marker_preview_goes_to_source_verified_electron_mcp_without_rewriting_intent(self):
+        """The Electron MCP intercepts previewOnly:true before the renderer.
+        The shared client must preserve the boolean and exact caller grant;
+        a valid preview response has no success or action receipt.
+        """
+        def native_preview(request):
+            return {"jsonrpc": "2.0", "id": request["id"],
+                    "result": {"content": [{"type": "text", "text": json.dumps({
+                        "previewOnly": True, "markerCount": 1,
+                        "markers": [{"id": "marker-source"}]})}]}}
+        self.reply = native_preview
+        for tool_name, payload in (
+                ("add_timeline_markers", {"markers": [{"timeSeconds": 1.0}]}),
+                ("remove_timeline_markers", {"all": True}),
+                ("set_timeline_marker_properties", {"all": True, "label": "Revised"})):
+            client = LocalEditorClient(
+                self.endpoint, allowed_tools={tool_name: "write"})
+            with self.subTest(tool=tool_name):
+                with self.assertRaises(EditorAccessError):
+                    client.call(tool_name, {**payload, "previewOnly": True},
+                                allowed_access={"read"})
+                self.assertEqual(self.requests, [])
+                inputs = {**payload, "previewOnly": True}
+                receipt = client.call(tool_name, inputs,
+                                      allowed_access={"write"})
+                self.assertEqual(self.requests[0]["params"],
+                                 {"name": tool_name, "arguments": inputs})
+                response = json.loads(receipt["content"][0]["text"])
+                self.assertIs(response["previewOnly"], True)
+                self.assertNotIn("success", response)
+                self.assertNotIn("action", response)
+                self.requests.clear()
 
     def test_only_exact_true_policy_accepts_before_http(self):
         for verdict in [False, None, 1, "yes"]:

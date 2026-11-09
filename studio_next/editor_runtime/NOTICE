@@ -1,0 +1,11 @@
+Velorn adapter source in this directory: GPL-3.0-only.
+Upstream: https://github.com/VelornLabs/velorn
+Pinned source revision: b3c02adbd5c0779feb8abf34978299e9502cc0e7
+Upstream package version: 0.3.37
+Upstream license: GPL-3.0-only (upstream LICENSE contains GNU GPL version 3).
+Copyright: Velorn contributors; preserve upstream notices and source.
+
+The complete pinned upstream source and applicable notices must remain available
+with reused/distributed upstream code. FFmpeg, Electron, RIFE, fonts, models and
+other dependencies retain their own separate licenses. Optional cloud/model
+integrations are not required for this local editor/export integration.

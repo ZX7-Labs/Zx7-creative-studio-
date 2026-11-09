@@ -22,6 +22,7 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
+from studio_next.native_editor_source_pin import (pinned_electron_marker_previews, pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
 from studio_next.providers import LocalModelSettings
 from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
@@ -150,6 +151,10 @@ class RecordedModel:
         self.turn = 0
 
     @property
+    def requires_indexed_native_function_contracts(self):
+        return getattr(self.model, "requires_indexed_native_function_contracts", False)
+
+    @property
     def last_call_usage(self):
         return self.model.last_call_usage
 
@@ -202,7 +207,15 @@ def fresh_trial_project_open_effects(projects_root):
     root = Path(projects_root)
     if not root.is_dir() or any(root.iterdir()):
         raise ValueError("Native trial requires a new empty project directory")
-    return {"create_project": ["project_open"]}
+    # Import is a real installed native operation that may establish a
+    # nonempty project asset inventory AFTER the project actually opens.
+    # The presence of staged media alone cannot establish that fact.
+    return {"create_project": ["project_open"],
+            "import_asset_from_path": ["project_assets_available"],
+            # These operations MAY populate an actual timeline, but a new
+            # content clip is not a saved/visible original-footage proof.
+            "add_asset_to_timeline": ["timeline_clips_available"],
+            "add_assets_to_timeline": ["timeline_clips_available"]}
 
 
 async def trial(args, lock, artifacts, command):
@@ -251,10 +264,8 @@ async def trial(args, lock, artifacts, command):
         system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts)
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
-    host = dict(config['allowed_tools'])
-    host.update({name: 'read' for name in ('zx7_verify_native_export',
-        'zx7_observe_verified_export_frame', 'zx7_observe_verified_export_samples',
-        'zx7_observe_verified_export_audio', 'zx7_observe_verified_export_audio_timeline')})
+    from studio_next.native_editor_session import native_session_grants
+    host = native_session_grants(config, args.source)
     content_tools = {'update_text_clip', 'update_shape_clip', 'set_clip_style', 'set_clip_mask',
         'set_clip_keyframes', 'set_clip_audio', 'set_clip_speed', 'move_clips', 'trim_clips',
         'delete_clips', 'add_asset_to_timeline', 'add_assets_to_timeline', 'replace_clip_with_asset',
@@ -290,16 +301,23 @@ async def trial(args, lock, artifacts, command):
                     admitted_model_session, model, max_turns=max_model_turns,
                     receipt_path=artifacts / 'native-journal.jsonl',
                     host_tool_access=host, catalog_mode="indexed",
+                    host_pre_dispatch_rejections=True,
                     host_preconditions={
                         "import_asset_from_path": ["project_open"],
-                        "add_asset_to_timeline": ["project_open"],
-                        "add_assets_to_timeline": ["project_open"],
+                        "add_asset_to_timeline": [
+                            "project_open", "project_assets_available"],
+                        "add_assets_to_timeline": [
+                            "project_open", "project_assets_available"],
                         # The second physical 2B trial attempted a native
                         # replacement after an acknowledged create but before
                         # the project was independently observable. A write
                         # with no native timeline must not be dispatched;
                         # fail preflight and let the model re-inspect reality.
-                        "replace_clip_with_asset": ["project_open"],
+                        "replace_clip_with_asset": [
+                            "project_open", "project_assets_available",
+                            "timeline_clips_available"],
+                        "duplicate_clip": [
+                            "project_open", "timeline_clips_available"],
                         "add_text_clip": ["project_open"],
                         "save_project": ["project_open"],
                         "export_timeline": ["project_open"],
@@ -310,9 +328,19 @@ async def trial(args, lock, artifacts, command):
                     # continuity or create an unrelated empty project. Other
                     # creative sessions are not globally subject to this rule.
                     host_once_after_acknowledged_write=("create_project",),
+                    # The pinned *Electron MCP* marker API, not the
+                    # downstream renderer handler, guarantees that these
+                    # previewOnly:true calls return a read-only top-level
+                    # preview before a mutating performAction is reached.
+                    host_verified_top_level_preview_tools=(
+                        pinned_electron_marker_previews(args.source, host) +
+                        pinned_electron_asset_placement_previews(args.source, host) +
+                        pinned_electron_clip_edit_previews(args.source, host)),
                     # Technical owner acceptance facts, NOT an editing plan.
                     # Failed model claims cannot end the trial before actual
                     # native activity, source-verified export and visual sensing.
+                    host_verified_timeline_preview_tools=(
+                        pinned_electron_timeline_frame_previews(args.source, host)),
                     required_evidence=completion_evidence,
                     host_content_revision_tools=host_content_revision_tools).run(brief),
                     timeout=2400)
@@ -323,6 +351,11 @@ async def trial(args, lock, artifacts, command):
                         json.dumps(gateway.host_budget_evidence(), indent=2))
     audit = audit_native_journal(
         read_native_journal(artifacts / 'native-journal.jsonl'),
+        host_pre_dispatch_rejections=True,
+        host_verified_preview_error_tools=(
+            pinned_electron_marker_previews(args.source, host) +
+            pinned_electron_asset_placement_previews(args.source, host) +
+            pinned_electron_clip_edit_previews(args.source, host)),
         host_tool_access=host, expected_required_evidence=completion_evidence,
         host_content_revision_tools=host_content_revision_tools)
     (artifacts / 'journal-audit.json').write_text(json.dumps(audit, indent=2))
@@ -330,10 +363,11 @@ async def trial(args, lock, artifacts, command):
     movies = {}
     for path in outputs.glob('*.mp4'):
         movies.setdefault(sha(path), set()).add(path.resolve())
-    decisions = {record['context']['turn']: record['decision']
+    inference = {record['context']['turn']: record
         for record in map(json.loads, (artifacts / 'inference-transcript.jsonl').read_text().splitlines())
         if 'decision' in record}
     observed_sources, revisions, last_revision, last_save, revised_exports = set(), 0, -1, -1, []
+    sources_before_revision = set()
     exported_after_revision = set()
     for index, event in enumerate(outcome['events']):
         if event.get('kind') != 'native_tool_result':
@@ -343,34 +377,57 @@ async def trial(args, lock, artifacts, command):
         if observed_sources and event.get('tool') in content_tools:
             revisions += 1
             last_revision = index
+            sources_before_revision = observed_sources.copy()
             revised_exports = []
             exported_after_revision = set()
         if last_revision >= 0 and event.get('tool') == 'export_timeline':
-            output_path = decisions[event['turn']]['arguments']['inputs'].get('outputPath')
+            output_path = inference[event['turn']]['decision']['arguments']['inputs'].get('outputPath')
             if isinstance(output_path, str):
                 exported_after_revision.add(Path(output_path).resolve())
         verified = event.get('independently_verified_export_sha256')
         if (last_revision >= 0 and verified and verified not in observed_sources
                 and movies.get(verified, set()) & exported_after_revision):
             revised_exports.append(verified)
-        if event.get('image_sha256') and event.get('observed_export_sha256'):
+        delivered_images = inference.get(event['turn'] + 1, {}).get('image_sha256', [])
+        if (event.get('observed_export_sha256') and
+                any(digest in delivered_images for digest in event.get('image_sha256', []))):
             observed_sources.add(event['observed_export_sha256'])
-    native_projects = [path for path in projects.glob('*/project.comfystudio')
-        if any(timeline.get('clips') for timeline in json.loads(path.read_text()).get('timelines', []))]
-    def decoded_frames(path):
-        raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(path),
-            '-map', '0:v:0', '-f', 'framemd5', '-'], timeout=60).decode()
-        return [line.split(',')[-1].strip() for line in raw.splitlines() if line and not line.startswith('#')]
-    changed_pixels = any(decoded_frames(next(iter(movies[before]))) != decoded_frames(next(iter(movies[after])))
-        for before in observed_sources for after in revised_exports if before in movies and after in movies)
+    # Use the same source custody and timed-picture checks as the hosted trial.
+    from scripts.run_nvidia_native_trial import decoded_video_frames_sha256, verify_saved_native_trial
+    try:
+        saved_native = verify_saved_native_trial(artifacts, source_ledger=source_assets, max_clip_duration=8)
+    except (ValueError, OSError) as exc:
+        saved_native = {"native_saved_project_verified": False,
+                        "native_saved_project_rejection_type": type(exc).__name__}
+    else:
+        saved_native["native_saved_project_verified"] = True
+    native_projects = list(projects.glob('*/project.comfystudio')) if saved_native["native_saved_project_verified"] else []
+    # The same observed/exported digest may appear at more than one path. Pick
+    # one deterministically and decode it at most once for this comparison.
+    changed_presentation = False
+    presentation_rejection = None
+    if sources_before_revision and revised_exports:
+        try:
+            presentations = {
+                digest: decoded_video_frames_sha256(min(movies[digest]), max_frames=960)
+                for digest in (sources_before_revision | set(revised_exports)) & movies.keys()
+            }
+            changed_presentation = any(
+                presentations[before] != presentations[after]
+                for before in sources_before_revision & presentations.keys()
+                for after in revised_exports if after in presentations)
+        except (ValueError, OSError, subprocess.SubprocessError) as exc:
+            presentation_rejection = type(exc).__name__
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
-              and bool(revised_exports) and changed_pixels)
+              and bool(revised_exports) and changed_presentation)
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
-            'decoded_frame_sequence_changed': changed_pixels,
+            'decoded_frame_sequence_changed': changed_presentation,
+            'decoded_frame_sequence_rejection_type': presentation_rejection,
             'verified_exports_after_final_revision': revised_exports,
-            'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects], 'audit': audit,
+            'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects],
+            'saved_native_source_evidence': saved_native, 'audit': audit,
             'acceptance_note': 'Source-chain and model-operation evidence only, not artistic acceptance'}
 
 

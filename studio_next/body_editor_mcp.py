@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import copy
 import json
 import hashlib
 import math
@@ -18,7 +19,9 @@ import sys
 
 from .body_editor_client import (
     EditorAccessError, EditorClientError, EditorToolError, _access_modes,
+    EditorPreDispatchError, HOST_PRE_DISPATCH_META, native_input_digest, _load_json,
 )
+from .body_editor_policy import EditorPathPolicy
 
 
 def _local_schema_references(schema):
@@ -36,7 +39,8 @@ def _local_schema_references(schema):
 
 def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                          export_verifier=None, frame_observer=None,
-                         audio_observer=None, audio_timeline_observer=None):
+                         audio_observer=None, audio_timeline_observer=None,
+                         native_source: Path | None = None):
     """Return the official SDK server; discovery never expands host grants.
 
     Dependencies are imported here so the stdlib BODY remains usable without
@@ -49,6 +53,13 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     from mcp import types
 
     access = _access_modes(allowed_access)
+    from .native_editor_diagnostics import (
+        CONTENT_DIAGNOSTICS_TOOL, native_content_diagnostics_source_verified,
+        describe_native_text_semantics, inspect_native_content,
+    )
+    semantic_source = native_source is not None
+    if semantic_source and not native_content_diagnostics_source_verified(native_source):
+        raise ValueError("Native semantic diagnostics require clean pinned editor source")
     native = {tool["name"]: tool for tool in client.list_tools()}
     grants = dict(client.allowed_tools)
     if set(grants) - set(native):
@@ -59,17 +70,79 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         if mode not in access:
             continue
         schema = native[name]["inputSchema"]
+        if semantic_source:
+            schema = describe_native_text_semantics(name, schema)
+        if (isinstance(getattr(client, "_policy", None), EditorPathPolicy) and
+                name in ("export_timeline", "export_fcpxml")):
+            # Pinned editor lists outputPath as optional, but BODY's actual
+            # host-owned filesystem policy REQUIRES an explicit new output.
+            # Real NVIDIA 120B run #42443385990 selected export_timeline
+            # without outputPath; the host correctly rejected it BEFORE
+            # native dispatch. Expose that SAME required field in the model
+            # grammar instead of allowing an inevitable, costly rejection.
+            # This tightens a known grant; it never supplies a path, chooses
+            # an export, or grants filesystem authority to the model.
+            if (type(schema) is not dict or
+                    type(schema.get("properties")) is not dict or
+                    type(schema["properties"].get("outputPath")) is not dict or
+                    schema["properties"]["outputPath"].get("type") != "string"):
+                raise ValueError(
+                    "Native export schema does not expose host-required outputPath")
+            existing_required = schema.get("required", [])
+            if (type(existing_required) is not list or
+                    any(type(field) is not str for field in existing_required)):
+                raise ValueError("Native export has invalid required-field schema")
+            schema = copy.deepcopy(schema)
+            schema["required"] = list(dict.fromkeys(
+                [*existing_required, "outputPath"]))
+            # The upstream source describes this field as optional because
+            # Velorn itself can default to its renders directory. BODY cannot
+            # allow that implicit path: it needs an explicit scoped, new
+            # destination to preserve source custody and avoid overwrites.
+            # Never put a private workspace path into a static tool schema.
+            schema["properties"]["outputPath"]["description"] = (
+                "REQUIRED by the trusted BODY host: choose a new absolute "
+                "output file path inside the authorized projects/outputs "
+                "workspace, never an existing destination. The owner's "
+                "creative brief supplies the actual permitted root.")
+            schema["properties"]["outputPath"]["minLength"] = 1
         _local_schema_references(schema)
         validator = jsonschema.validators.validator_for(schema)
         validator.check_schema(schema)
         validators[name] = validator(schema)
-        tools[name] = types.Tool.model_validate(native[name])
+        tools[name] = types.Tool.model_validate({
+            **native[name], "inputSchema": schema})
     verified_export_name = "zx7_verify_native_export"
     observed_frame_name = "zx7_observe_verified_export_frame"
     observed_samples_name = "zx7_observe_verified_export_samples"
     observed_audio_name = "zx7_observe_verified_export_audio"
     observed_audio_timeline_name = "zx7_observe_verified_export_audio_timeline"
     verified_exports = {}
+    content_diagnostics = (semantic_source and "read" in access and
+                           grants.get("get_timeline") == "read")
+    export_readiness = (semantic_source and "read" in access and
+                        grants.get("check_export_readiness") == "read")
+    if CONTENT_DIAGNOSTICS_TOOL in native:
+        raise ValueError("Native editor tool name collides with BODY content diagnostics")
+    if content_diagnostics:
+        read_schema = native["get_timeline"]["inputSchema"]
+        properties = read_schema.get("properties", {})
+        if (properties.get("includeClips", {}).get("type") != "boolean" or
+                properties.get("limit", {}).get("type") != "integer" or
+                not validators["get_timeline"].is_valid({"includeClips": True, "limit": 1000})):
+            raise ValueError("Native timeline read schema differs from attested diagnostics")
+        schema = {"type": "object", "properties": {
+            "limit": {"type": "integer", "minimum": 1, "maximum": 32,
+                      "description": "Maximum factual warning records; defaults to 16."}},
+                  "additionalProperties": False}
+        tools[CONTENT_DIAGNOSTICS_TOOL] = types.Tool(
+            name=CONTENT_DIAGNOSTICS_TOOL,
+            description=("Read the actual native timeline and report bounded factual content "
+                         "warnings: zero opacity envelopes, hidden/disabled picture and "
+                         "muted/absent audio lanes. No edits or artistic judgments; "
+                         "embedded video audio and physical output are not assessed."),
+            inputSchema=schema)
+        validators[CONTENT_DIAGNOSTICS_TOOL] = jsonschema.Draft202012Validator(schema)
     if frame_observer is not None and (export_verifier is None or not callable(frame_observer)):
         raise ValueError("Frame observation requires a real host export verifier")
     if audio_observer is not None and (export_verifier is None or not callable(audio_observer)):
@@ -170,6 +243,30 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     async def list_tools(_ctx, _params):
         return types.ListToolsResult(tools=list(tools.values()))
 
+    def call_native(name, arguments):
+        # The pinned exporter and this read use the same native readiness
+        # function. A newly written clip may be saved before the published
+        # snapshot contains it. Decline an unready render before submitting
+        # its write, so the model can inspect or correct the current edit.
+        if (export_readiness and name == "export_timeline" and
+                arguments.get("previewOnly") is not True):
+            fields = native["check_export_readiness"]["inputSchema"]["properties"]
+            read_args = {key: value for key, value in arguments.items() if key in fields}
+            try:
+                observed = client.call("check_export_readiness", read_args, allowed_access=access)
+                blocks = observed["content"]
+                if (len(blocks) != 1 or not isinstance(blocks[0], dict) or
+                        blocks[0].get("type") != "text" or
+                        not isinstance(blocks[0].get("text"), str) or
+                        len(blocks[0]["text"]) > 131072):
+                    raise ValueError("Native readiness did not return one bounded receipt")
+                state = _load_json(blocks[0]["text"])
+                if not isinstance(state, dict) or state.get("ready") is not True or state.get("blockers") != []:
+                    raise ValueError("Native readiness was not established")
+            except (EditorClientError, EditorAccessError, ValueError):
+                raise EditorPreDispatchError("export_readiness_unconfirmed") from None
+        return client.call(name, arguments, allowed_access=access)
+
     async def call_tool(_ctx, params):
         name = params.name
         if name not in tools:
@@ -179,6 +276,20 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             validators[name].validate(arguments)
         except jsonschema.ValidationError as exc:
             return failed("Invalid native tool arguments: " + exc.message)
+        if name == CONTENT_DIAGNOSTICS_TOOL and content_diagnostics:
+            try:
+                # Share the SAME lock as native writes. Observation cannot
+                # interleave a write, and never submits one itself.
+                async with lock:
+                    with anyio.CancelScope(shield=True):
+                        result = await anyio.to_thread.run_sync(
+                            lambda: client.call("get_timeline", {"includeClips": True, "limit": 1000},
+                                                allowed_access=access), abandon_on_cancel=False)
+                proof = inspect_native_content(result, warning_limit=arguments.get("limit", 16))
+                return types.CallToolResult(is_error=False, content=[types.TextContent(
+                    type="text", text=json.dumps(proof, allow_nan=False))])
+            except (EditorAccessError, EditorClientError, ValueError):
+                return failed("Native content diagnostic observation was unavailable or malformed")
         if name == verified_export_name:
             try:
                 async with inspection_capacity:
@@ -316,11 +427,17 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             async with lock:
                 with anyio.CancelScope(shield=True):
                     result = await anyio.to_thread.run_sync(
-                        lambda: client.call(name, arguments, allowed_access=access),
+                        lambda: call_native(name, arguments),
                         abandon_on_cancel=False)
             return types.CallToolResult.model_validate(result)
         except EditorToolError as exc:
             return types.CallToolResult.model_validate(exc.result)
+        except EditorPreDispatchError as exc:
+            return types.CallToolResult(is_error=True,
+                content=[types.TextContent(type="text", text=str(exc))],
+                _meta={HOST_PRE_DISPATCH_META: {
+                    "version": 1, "tool": name,
+                    "inputs_sha256": native_input_digest(arguments), "code": exc.code}})
         except (EditorAccessError, PermissionError, ValueError) as exc:
             return failed(str(exc))
         except EditorClientError as exc:
@@ -338,6 +455,8 @@ def main(argv=None):
                         help="Host-owned editor grants and workspace roots")
     parser.add_argument("--print-launch-config", action="store_true",
                         help="Validate and print canonical roots without contacting the editor")
+    parser.add_argument("--native-source", type=Path,
+                        help="Opt into content diagnostics/parameter descriptions for clean pinned editor source")
     options = parser.parse_args(argv)
     try:
         from .body_editor_policy import load_editor_config
@@ -372,7 +491,8 @@ def main(argv=None):
         server = create_editor_server(config.client(), allowed_access=config.allowed_access,
                                       export_verifier=export_verifier, frame_observer=frame_observer,
                                       audio_observer=audio_observer,
-                                      audio_timeline_observer=audio_timeline_observer)
+                                      audio_timeline_observer=audio_timeline_observer,
+                                      native_source=options.native_source)
 
         async def serve():
             from mcp.server.stdio import stdio_server

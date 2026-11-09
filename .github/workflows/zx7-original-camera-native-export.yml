@@ -6,6 +6,10 @@ on:
     paths:
       - engines/velorn/mcp-e2e.py
       - .github/workflows/zx7-original-camera-native-export.yml
+      - "studio_next/editor_runtime/**"
+      - "studio_next/native_editor_diagnostics.py"
+      - "engines/velorn/proof_contract.py"
+      - "studio_next/body_editor_*.py"
   workflow_dispatch:
 permissions:
   contents: read

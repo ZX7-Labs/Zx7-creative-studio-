@@ -7,6 +7,12 @@ on:
       - "studio_next/body_editor_*.py"
       - "studio_next/test_body_editor_*.py"
       - ".github/workflows/zx7-editor-mcp-real-e2e.yml"
+      - "studio_next/editor_runtime/**"
+      - "studio_next/native_editor_diagnostics.py"
+      - "studio_next/native_editor_session.py"
+      - "studio_next/native_editor_project.py"
+      - "studio_next/studio_cli.py"
+      - "pyproject.toml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -65,6 +71,11 @@ jobs:
             --source "$GITHUB_WORKSPACE/third_party/velorn" \
             --xvfb-binary /usr/bin/Xvfb \
             --display 127.0.0.1:95
+      - name: Prove installed Studio creates and revises an editable project outside the checkout
+        run: |
+          python -u engines/velorn/installed-studio-e2e.py \
+            --source "$GITHUB_WORKSPACE/third_party/velorn" \
+            --xvfb-binary /usr/bin/Xvfb
       - name: Diagnose isolated native editor startup without hiding failures
         if: failure()
         run: |
