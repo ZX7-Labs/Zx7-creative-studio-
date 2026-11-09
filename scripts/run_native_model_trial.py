@@ -260,7 +260,8 @@ async def trial(args, lock, artifacts, command):
               '--config', str(config_path), '--state', str(args.runtime / 'editor-state'),
               '--python', sys.executable, '--xvfb-binary', args.xvfb_binary, '--display', args.display]
     model = RecordedModel(LocalNativeStructuredCreativeModel(LocalModelSettings(
-        model_id=lock['server']['alias'], base_url='http://127.0.0.1:8080', timeout_seconds=300),
+        model_id=lock['server']['alias'], base_url='http://127.0.0.1:8080',
+        timeout_seconds=args.model_timeout),
         system_prompt=NATIVE_CREATIVE_SYSTEM), artifacts)
     # This mapping originates in the trusted host config, not the
     # replaceable neural model. Only READ errors may be safely corrected.
@@ -343,7 +344,7 @@ async def trial(args, lock, artifacts, command):
                         pinned_electron_timeline_frame_previews(args.source, host)),
                     required_evidence=completion_evidence,
                     host_content_revision_tools=host_content_revision_tools).run(brief),
-                    timeout=2400)
+                    timeout=args.trial_timeout)
                 finally:
                     # Admitted calls are not evidence of real native commits;
                     # write bounded model-neutral accounting even on failure.
@@ -437,6 +438,10 @@ def main():
         parser.add_argument('--' + name, required=True, type=Path)
     parser.add_argument('--xvfb-binary', default='/usr/bin/Xvfb')
     parser.add_argument('--display', default='127.0.0.1:95')
+    parser.add_argument('--model-timeout', type=int, choices=(300, 480), default=300,
+                        help='Seconds for one local model response')
+    parser.add_argument('--trial-timeout', type=int, choices=(2400, 7200), default=2400,
+                        help='Seconds for the full model and editor loop')
     parser.add_argument('--model-lock', type=Path,
         default=ROOT / 'engines/velorn/local-model-trial.lock.json',
         help='Local pinned model manifest; default remains the verified 2B baseline')
@@ -446,7 +451,8 @@ def main():
     args.runtime.mkdir(parents=True, exist_ok=True)
     evidence = {'schema': 1, 'technical_trial_completed': False, 'artistic_quality_approved': False,
                 'native_field_complete': False, 'script_supplied_editor_mutations': 0,
-                'cpu_count': os.cpu_count(), 'model_ram_independently_measured': False}
+                'cpu_count': os.cpu_count(), 'model_ram_independently_measured': False,
+                'model_timeout_seconds': args.model_timeout, 'trial_timeout_seconds': args.trial_timeout}
     process = None
     lock = json.loads(args.model_lock.resolve().read_text())
     if lock.get('model', {}).get('license') != 'Apache-2.0':

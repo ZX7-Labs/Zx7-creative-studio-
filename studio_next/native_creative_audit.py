@@ -232,6 +232,16 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if not (reported or exception):
                     raise NativeJournalError("Malformed failed project bootstrap evidence")
             continue
+        if kind == "host_placement_track_observation":
+            count, digest = event.get("observed_track_count"), event.get("text_sha256")
+            if (pending is not None or event.get("tool") != "get_timeline" or
+                    host_tool_access.get("get_timeline") != "read" or
+                    event.get("host_attested_read_only") is not True or
+                    event.get("no_model_selected_mutation") is not True or
+                    not ((count is None and digest is None) or
+                         (type(count) is int and 0 <= count <= 32 and _sha(digest)))):
+                raise NativeJournalError("Placement track observation lacks bounded host read evidence")
+            continue
         if kind in ("host_project_post_write_observation",
                     "host_project_post_write_error"):
             previous = events[i - 1] if i > 0 else {}
