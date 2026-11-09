@@ -620,6 +620,91 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             result["events"], host_tool_access=grants,
             expected_required_evidence=required)["journal_chain_structurally_valid"])
 
+    async def test_current_verified_bytes_offer_real_frame_read_without_rescanning(self):
+        """Actual 4B transcript: once the same export is verified, an observer
+        must be selectable without a new catalog search. This scripted model
+        proves protocol reachability, not neural creative skill or image quality.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        export = "/private/native/exports/checked.mp4"
+        movie_sha = "a" * 64
+        png = b"\x89PNG\r\n\x1a\n" + b"scripted-observation"
+        png_sha = hashlib.sha256(png).hexdigest()
+
+        class HostFrameSession(FakeSession):
+            async def call_tool(self, name, arguments):
+                if name == "zx7_observe_verified_export_frame":
+                    self.calls.append((name, arguments))
+                    result = {"export_sha256": movie_sha, "png_sha256": png_sha}
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text=json.dumps(result)),
+                        SimpleNamespace(type="image", mime_type="image/png",
+                                        data=base64.b64encode(png).decode())])
+                return await super().call_tool(name, arguments)
+
+        session = HostFrameSession()
+        session.tools = [
+            SimpleNamespace(
+                name="zx7_verify_native_export", description="Verify physical export bytes",
+                input_schema={"type": "object", "properties": {
+                    "path": {"type": "string"}}, "required": ["path"]}),
+            SimpleNamespace(
+                name="zx7_observe_verified_export_frame",
+                description="Observe decoded pixels from verified physical export",
+                input_schema={"type": "object", "properties": {
+                    "path": {"type": "string"}}, "required": ["path"]}),
+        ]
+        grants = {tool.name: "read" for tool in session.tools}
+        required = ("physical_export_verified", "verified_export_frame_observed")
+        model = ScriptedModel([
+            decision("search", query="zx7_verify_native_export"),
+            decision("invoke", tool="zx7_verify_native_export",
+                     inputs={"path": export}),
+            decision("describe", tool="zx7_observe_verified_export_frame"),
+            decision("invoke", tool="zx7_observe_verified_export_frame",
+                     inputs={"path": export}),
+            decision("finish", summary="Observed physical frames"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, catalog_mode="indexed", max_turns=5,
+            host_tool_access=grants, required_evidence=required).run(
+                "Choose how to review the verified physical export")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        # After the model-chosen decoded-frame observation, the next
+        # decision is sent via the genuine image-aware model protocol.
+        # Counting text-only observations as all decisions would miss that.
+        self.assertEqual(len(model.observed), 4)
+        self.assertEqual(len(model.images_observed), 1)
+        self.assertEqual(len(model.observed) + len(model.images_observed), 5)
+        self.assertTrue(model.images_observed[0][1])
+        before = model.observed[1]["host_verified_execution_progress"]
+        self.assertFalse(before["verified_export_still_needs_model_visible_frame"])
+        self.assertEqual(before["current_frame_observation_read_selectable"], [])
+        after = model.observed[2]
+        progress = after["host_verified_execution_progress"]
+        self.assertEqual(progress["current_distinct_verified_output_count"], 1)
+        self.assertTrue(progress["verified_export_still_needs_model_visible_frame"])
+        self.assertEqual(progress["current_frame_observation_read_selectable"],
+                         ["zx7_observe_verified_export_frame"])
+        self.assertIn("zx7_observe_verified_export_frame",
+                      after["selectable_native_tools"])
+        # The only calls actually made were the model's two choices; the
+        # host did not preemptively decode a frame or retry a previous RPC.
+        self.assertEqual(session.calls, [
+            ("zx7_verify_native_export", {"path": export}),
+            ("zx7_observe_verified_export_frame", {"path": export}),
+        ])
+        next_progress = model.images_observed[0][0]["host_verified_execution_progress"]
+        self.assertEqual(next_progress["current_frame_observation_read_selectable"], [])
+        self.assertEqual(next_progress["verified_export_frame_observations"], 1)
+        self.assertNotIn("/private/", json.dumps(result["events"]))
+        report = audit_native_journal(
+            result["events"], host_tool_access=grants,
+            expected_required_evidence=required)
+        self.assertTrue(report["journal_chain_structurally_valid"])
+        self.assertEqual(report["observed_verified_export_digests"], [movie_sha])
+
     async def test_failed_later_export_verification_revokes_reviewed_pair(self):
         """A later failed read must not leave an earlier delivery approved.
 

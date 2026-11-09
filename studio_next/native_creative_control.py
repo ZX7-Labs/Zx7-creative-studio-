@@ -1396,6 +1396,35 @@ class NativeCreativeControl:
                                 "facts_from_current_host_reads_only": True,
                                 "possibilities_not_creative_instructions": True,
                             }
+                export_evidence = self._current_export_evidence()
+                # Actual Qwen3.5-4B run #42621894429 verified the exact
+                # same MP4 eight times, then kept `verify` as the only
+                # selectable indexed tool. The verified-frame READ required
+                # a fresh catalog search even though it was host-granted and
+                # installed. Surface only the current READ affordance from
+                # trusted physical receipts; do not inspect pixels, select
+                # a creative action, retry an operation, or manufacture a
+                # successful observation on the model's behalf.
+                frame_review_pending = (
+                    self.catalog_mode == "indexed" and
+                    bool(export_evidence["current_verified"]) and
+                    bool(export_evidence["current_verified"] -
+                         export_evidence["current_frames"]) and
+                    ("verified_export_frame_observed" in self.required_evidence or
+                     REVIEWED_RENDER_PAIR in self.required_evidence))
+                if frame_review_pending:
+                    actual_frame_tools = [
+                        tool for tool in sorted(_VERIFIED_FRAME_TOOLS)
+                        if (tool in self.tools and
+                            self.host_tool_access is not None and
+                            self.host_tool_access.get(tool) == "read")]
+                    # Keep a real observer among the first eight available
+                    # choices even if unrelated machine frontiers are full.
+                    # Do not add a non-granted or not-installed native tool.
+                    self._host_frontier_tools = (
+                        actual_frame_tools +
+                        [tool for tool in self._host_frontier_tools
+                         if tool not in actual_frame_tools])
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
                 placement_validator = None
@@ -1420,7 +1449,6 @@ class NativeCreativeControl:
                     indexed_actions.append("describe")
                 if visible_selectable:
                     indexed_actions.append("invoke")
-                export_evidence = self._current_export_evidence()
                 context = {
                     "creative_brief": brief,
                     # Expose only actions that the exact current grammar
@@ -1535,6 +1563,10 @@ class NativeCreativeControl:
                             name for name in sorted(_VERIFIED_FRAME_TOOLS)
                             if self.host_tool_access is not None and
                             self.host_tool_access.get(name) == "read"],
+                        "current_frame_observation_read_selectable": [
+                            name for name in visible_selectable
+                            if frame_review_pending and name in _VERIFIED_FRAME_TOOLS],
+                        "current_frame_observation_not_automatically_executed": True,
                     },
                 }
                 if placement_tracks is not None:
