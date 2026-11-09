@@ -283,8 +283,17 @@ class CreativeResearchTests(unittest.TestCase):
     def test_no_internal_links_and_no_unapproved_request_host(self):
         for link in ("http://example.com", "https://localhost/private",
                      "https://192.168.1.1/private","https://user:pwd@example.org/",
-                     "https://10.0.0.1/", "https://example.internal/"):
-            self.assertIsNone(_public_https(link))
+                     "https://10.0.0.1/", "https://example.internal/",
+                     "https://localhost./private", "https://test.local./private",
+                     "https://127.0.0.1./secret", "https://127.1/secret",
+                     "https://0177.0.0.1/secret", "https://0x7f.1/secret",
+                     "https://0x7f000001/secret",
+                     "https://127%2E0%2E0%2E1/secret",
+                     "https://[::ffff:127.0.0.1]/secret"):
+            with self.subTest(link=link):
+                self.assertIsNone(_public_https(link))
+        self.assertEqual(_public_https("https://example.org/visible"), 
+                         "https://example.org/visible")
         with self.assertRaises(CreativeResearchError):
             _public_api_json("https://evil.example.org/collect?data=secret")
 
