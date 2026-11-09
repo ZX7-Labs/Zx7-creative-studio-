@@ -250,7 +250,7 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
         await self.with_session(check, native_source=source)
 
     async def test_rejected_export_path_can_be_corrected_without_replaying_a_write(self):
-        """Run #42444331745 stopped after a legitimate no-overwrite refusal.
+        """Real hosted runs spent turns on legitimate no-overwrite refusals.
 
         Exercise the actual filesystem policy, HTTP client, official MCP SDK
         and controller. The model stub tests protocol recovery, not creativity.
@@ -264,7 +264,7 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             roots = [Path(scratch) / n for n in ("projects", "staging", "outputs")]
             for root in roots:
                 root.mkdir()
-            old, new = (roots[2] / n for n in ("v1.mp4", "v2.mp4"))
+            old = roots[2] / "v1.mp4"
             old.write_bytes(b"preserved original export")
             self.tools = [{"name": "export_timeline", "inputSchema": {
                 "type": "object", "properties": {"outputPath": {"type": "string"}}}}]
@@ -280,9 +280,22 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 receipt = refused.meta["zx7.host/pre-dispatch-rejection"]
                 self.assertEqual(receipt["code"], "output_exists")
                 self.assertFalse(any(r["method"] == "tools/call" for r in self.requests))
-                model = ScriptedModel([
+                class FeedbackModel(ScriptedModel):
+                    def decide(model, context):
+                        if len(model.observed) != 1:
+                            return super().decide(context)
+                        model.observed.append(context)
+                        feedback = context["last_rejected_native_action_feedback"]
+                        candidate = Path(feedback["suggested_new_output_path"])
+                        self.assertEqual(candidate.parent, old.parent)
+                        self.assertEqual(candidate.suffix, old.suffix)
+                        self.assertNotEqual(candidate, old)
+                        self.assertFalse(candidate.exists())
+                        self.assertFalse(any(r["method"] == "tools/call" for r in self.requests))
+                        return decision("invoke", tool="export_timeline", inputs={"outputPath": str(candidate)})
+
+                model = FeedbackModel([
                     decision("invoke", tool="export_timeline", inputs={"outputPath": str(old)}),
-                    decision("invoke", tool="export_timeline", inputs={"outputPath": str(new)}),
                     decision("finish", summary="Protocol fixture only"),
                 ])
                 grants = {"export_timeline": "write"}
@@ -299,14 +312,16 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(old.read_bytes(), b"preserved original export")
                 calls = [r for r in self.requests if r["method"] == "tools/call"]
                 self.assertEqual(len(calls), 1)
-                self.assertEqual(calls[0]["params"]["arguments"], {"outputPath": str(new)})
                 feedback = model.observed[1]["last_rejected_native_action_feedback"]
                 self.assertEqual(feedback["rejection_code"], "output_exists")
                 self.assertTrue(feedback["no_native_dispatch"])
+                self.assertEqual(calls[0]["params"]["arguments"],
+                                 {"outputPath": feedback["suggested_new_output_path"]})
                 events = outcome["events"]
                 rejected = next(e for e in events if e["kind"] == "host_tool_rejected_before_dispatch")
                 self.assertTrue(rejected["no_native_dispatch"])
                 self.assertNotIn(str(old), json.dumps(events))
+                self.assertNotIn(feedback["suggested_new_output_path"], json.dumps(events))
                 self.assertEqual(sum(e.get("host_application_write_acknowledged") is True
                                      for e in events), 1)
                 audit_native_journal(events, host_tool_access=grants,
