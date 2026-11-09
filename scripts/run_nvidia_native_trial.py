@@ -369,7 +369,10 @@ def trial_delivery_profile_compliant(
             decoded.picture_profile.get("width") != width or
             decoded.picture_profile.get("height") != height or
             decoded.picture_profile.get("codec_name") != "h264" or
-            decoded.picture_profile.get("sample_aspect_ratio") != "1:1" or
+            # The actual pinned Velorn 640x360 H.264 export omits SAR
+            # metadata (the ordinary implicit-square presentation); explicit
+            # anamorphic SAR is not acceptable for this fixed-format trial.
+            decoded.picture_profile.get("sample_aspect_ratio") not in (None, "1:1") or
             not isinstance(decoded.presentation, tuple) or
             not 0 < len(decoded.presentation) <= max_seconds * fps):
         return False
