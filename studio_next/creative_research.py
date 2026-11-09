@@ -10,6 +10,7 @@ import html
 import ipaddress
 import json
 import re
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -47,14 +48,29 @@ def _public_https(value):
         host = uri.hostname
         if uri.scheme != "https" or not host or uri.username or uri.password:
             return None
-        if host.lower() == "localhost" or host.lower().endswith((".local", ".internal")):
+        # URL parsers and browsers accept loopback spellings that
+        # ipaddress.ip_address() alone does not parse: 127.1, octal/hex
+        # IPv4, and a trailing DNS root dot. These are references only,
+        # but must never be advertised to a creative model as public links.
+        if "%" in host:
+            return None
+        hostname = host.rstrip(".").encode("idna").decode("ascii").lower()
+        if (not hostname or hostname == "localhost" or
+                hostname.endswith((".local", ".internal"))):
             return None
         try:
-            if not ipaddress.ip_address(host).is_global:
-                return None
+            address = ipaddress.ip_address(hostname)
         except ValueError:
-            if "." not in host:
-                return None
+            try:
+                # inet_aton normalizes legacy numeric IPv4 forms without
+                # resolving DNS or contacting an attacker-controlled host.
+                address = ipaddress.IPv4Address(socket.inet_aton(hostname))
+            except (OSError, ValueError):
+                if "." not in hostname or ".." in hostname:
+                    return None
+                address = None
+        if address is not None and not address.is_global:
+            return None
         return value
     except ValueError:
         return None
@@ -65,13 +81,29 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def validate_searxng_url(value):
+    """Accept a host-configured literal loopback service and canonicalize its base."""
+    if value is None:
+        return None
+    match = re.fullmatch(r"http://(127\.0\.0\.1|\[::1\]):([0-9]{1,5})/?", value,
+                         flags=re.IGNORECASE) if isinstance(value, str) else None
+    if match is None or not 1 <= int(match[2]) <= 65535:
+        raise CreativeResearchError("SearXNG requires a literal loopback HTTP base with an explicit port")
+    return f"http://{match[1]}:{int(match[2])}"
+
+
 def _public_api_json(url):
-    """Allowlisted HTTPS GET, no ambient proxy, redirect, or unbounded JSON."""
+    """Validate fixed public HTTPS providers before using the JSON transport."""
     hosts = {"api.openverse.org", "api.crossref.org", "commons.wikimedia.org",
              "api.artic.edu", "sfxmint.com"}
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname not in hosts:
         raise CreativeResearchError("Research request is not an approved free API")
+    return _bounded_json_get(url)
+
+
+def _bounded_json_get(url):
+    """Fetch from a caller-validated URL without ambient proxies or redirects."""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
     request = urllib.request.Request(url, headers={
         "User-Agent": "ZX7-BODY-CreativeResearch/0.1 (https://github.com/ZX7-Labs/Zx7-creative-studio-; metadata-only)",
@@ -85,7 +117,7 @@ def _public_api_json(url):
                 raise CreativeResearchError("Research metadata exceeds response budget")
             payload = json.loads(raw)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError,
-            ValueError) as exc:
+            ValueError, RecursionError) as exc:
         if isinstance(exc, CreativeResearchError):
             raise
         raise CreativeResearchError("Research provider unavailable or returned invalid JSON") from exc
@@ -107,14 +139,48 @@ def _check(query, limit):
 
 
 class CreativeResearch:
-    """Public-domain asset leads + scholarly metadata; no rights assertions.
+    """Creative asset, scholarly, and optional public web reference leads.
 
     An injected transport supports deterministic offline protocol tests.
     Production transport alone restricts network destinations and response size.
     """
 
-    def __init__(self, fetch_json=None):
+    def __init__(self, fetch_json=None, *, searxng_url=None):
         self._fetch = fetch_json or _public_api_json
+        self._searxng_url = validate_searxng_url(searxng_url)
+        self._fetch_web = fetch_json or _bounded_json_get
+
+    @property
+    def web_search_enabled(self):
+        return self._searxng_url is not None
+
+    def web(self, *, query, limit=8):
+        if not self.web_search_enabled:
+            raise CreativeResearchError("Host has not configured a local SearXNG service")
+        query = _check(query, limit)
+        url = _request_params(self._searxng_url + "/search", {"q": query, "format": "json"})
+        raw = self._fetch_web(url).get("results")
+        if not isinstance(raw, list):
+            raise CreativeResearchError("SearXNG reference metadata is malformed")
+        results = []
+        seen = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            page = _public_https(item.get("url"))
+            title = _plain(item.get("title"))
+            if not page or not title or page in seen:
+                continue
+            seen.add(page)
+            results.append({"title": title, "snippet": _plain(item.get("content"), 360),
+                            "source_page": page})
+            if len(results) == limit:
+                break
+        return {
+            "kind": "research_web_references", "provider": "searxng", "results": results,
+            "result_content_untrusted": True, "source_pages_reviewed": False,
+            "rights_verified": False, "import_authorized": False,
+        }
 
     def assets(self, *, query, media, limit=8):
         query = _check(query, limit)
@@ -181,7 +247,8 @@ class CreativeResearch:
             publication = item.get("container-title")
             journal = _plain(publication[0], 140) if isinstance(
                 publication, list) and publication else ""
-            dates = (item.get("published") or {}).get("date-parts") or []
+            published = item.get("published")
+            dates = published.get("date-parts") if isinstance(published, dict) else None
             year = (dates[0][0] if isinstance(dates, list) and dates and
                     isinstance(dates[0], list) and dates[0] and
                     type(dates[0][0]) is int and 1000 <= dates[0][0] <= 3000

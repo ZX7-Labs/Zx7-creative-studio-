@@ -94,6 +94,17 @@ providers use the same native session and host grants. Uploading observation
 images to NVIDIA additionally requires `--allow-cloud-image-upload` on `run`;
 source text and tool results are part of the hosted model conversation.
 
+Add `--allow-public-research` to `zx7-studio run` when the project can send
+model-written public queries to external research services. Either model
+transport can choose image, footage, sound or study lookups within the run.
+For broader web references, add `--searxng-url http://127.0.0.1:8082` and
+configure that local SearXNG instance to enable JSON output. Studio keeps
+these tools off by default and gives an enabled run eight research calls.
+The model can repeat details from its brief in a query. Enable this flag only
+when those details can be disclosed to the configured research services.
+Search results are untrusted leads. Import or reuse of media requires separate
+rights and source checks. See the [SearXNG search API](https://docs.searxng.org/dev/search_api.html).
+
 The wheel contains MIT-licensed BODY code and a GPL-3.0-only native runtime.
 It ships both license texts and upstream notices; its distribution metadata
 records both licenses. The root MIT license does not replace the native

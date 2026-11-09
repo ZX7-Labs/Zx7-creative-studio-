@@ -193,6 +193,25 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertFalse(report["automatic_write_replay"])
         self.assertFalse(report["artistic_quality_approved"])
 
+    def test_owner_public_research_flags_require_consent_and_reach_session(self):
+        from studio_next import native_editor_session
+        self.init()
+        runner = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", runner):
+            with self.assertRaisesRegex(ValueError, "explicit --allow-public-research"):
+                studio.run_workspace(self.root, brief="Creative brief", searxng_url="http://127.0.0.1:8082")
+            with self.assertRaises(ValueError):
+                studio.run_workspace(self.root, brief="Creative brief", allow_public_research=True,
+                                     searxng_url="http://192.168.1.4:8082")
+            runner.assert_not_awaited()
+            self.assertEqual(list((self.root / "sessions").iterdir()), [])
+            studio.run_workspace(self.root, brief="Creative brief", allow_public_research=True,
+                                 searxng_url="http://127.0.0.1:8082/")
+        args = runner.await_args.args[0]
+        self.assertTrue(args.allow_public_research)
+        self.assertEqual(args.searxng_url, "http://127.0.0.1:8082")
+
     def test_invalid_rights_setup_and_project_do_not_launch_model_or_copy_media(self):
         from studio_next import native_editor_session
         self.init()

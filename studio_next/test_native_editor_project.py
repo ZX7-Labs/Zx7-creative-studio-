@@ -116,6 +116,110 @@ class SelectedProjectTests(unittest.TestCase):
             setup.assert_awaited_once()
             self.assertEqual(setup.await_args.kwargs["project"], self.selected)
 
+    def test_native_model_can_choose_public_references_only_with_owner_consent(self):
+        from contextlib import asynccontextmanager
+        from types import SimpleNamespace
+        from studio_next import native_editor_session as native
+        from studio_next.test_native_creative_control import ScriptedModel, decision
+
+        class Editor:
+            async def initialize(self):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                pass
+
+            async def list_tools(self):
+                return SimpleNamespace(tools=[SimpleNamespace(name="update_text_clip",
+                    description="Edit a native title", input_schema={"type": "object",
+                        "properties": {"clipId": {"type": "string"}}})])
+
+            async def call_tool(self, name, arguments):
+                edits.append((name, arguments))
+                return result({"success": True, "action": name})
+
+        class Research:
+            web_search_enabled = True
+
+            def web(self, **arguments):
+                queries.append(arguments)
+                return {"results": [{"source_page": "https://example.org/reference"}],
+                        "import_authorized": False}
+
+            assets = studies = web
+
+        @asynccontextmanager
+        async def transport(*_):
+            yield (None, None)
+
+        config = self.root / "host.json"
+        config.write_text(json.dumps({"projects_root": str(self.root),
+            "allowed_tools": {"update_text_clip": "write"}, "allowed_access": ["write"]}))
+        brief = self.root / "brief.txt"
+        brief.write_text("Develop an original visual direction, then revise the title")
+        for provider in ("local", "nvidia"):
+            for enabled in (False, True):
+                with self.subTest(provider=provider, enabled=enabled):
+                    queries, edits = [], []
+                    flags = ["--allow-public-research", "--searxng-url", "http://127.0.0.1:8082"] if enabled else []
+                    args = native.build_parser().parse_args([
+                        "--source", str(self.root), "--config", str(config), "--state", str(self.root),
+                        "--brief-file", str(brief), "--receipt", str(self.root / f"{provider}-{enabled}.jsonl"),
+                        "--model-id", "fixture", "--provider", provider, "--indexed-catalog", *flags])
+                    actions = []
+                    if enabled:
+                        actions.extend([decision("search", query="research_web", limit=1),
+                            decision("invoke", tool="research_web", inputs={"query": "public motion references"})])
+                    actions.extend([decision("search", query="update_text_clip", limit=1),
+                                    decision("invoke", tool="update_text_clip", inputs={"clipId": "title"}),
+                                    decision("finish", summary="Fixture only")])
+                    model = ScriptedModel(actions)
+                    with patch.object(native, "stdio_client", transport), \
+                            patch.object(native, "ClientSession", return_value=Editor()), \
+                            patch.object(native, "native_decision_model", return_value=model), \
+                            patch("studio_next.creative_research_mcp.CreativeResearch", return_value=Research()) as factory:
+                        outcome = asyncio.run(native.run_native_session(args))
+                    self.assertEqual(outcome["status"], "model_finished_unverified")
+                    self.assertEqual(outcome["public_research_permitted_by_host"], enabled)
+                    self.assertEqual(factory.call_count, int(enabled))
+                    self.assertEqual(queries, [{"query": "public motion references"}] if enabled else [])
+                    self.assertEqual(edits, [("update_text_clip", {"clipId": "title"})])
+                    self.assertEqual(outcome["model_selected_write_receipts"], 1)
+                    if enabled:
+                        self.assertIn("research_web", model.observed[1]["selectable_native_tools"])
+                        self.assertIn("https://example.org/reference", model.observed[2]["last_native_result_texts"][0])
+                    self.assertNotIn("public motion references", args.receipt.read_text())
+
+    def test_research_budget_and_provider_failure_leave_no_asset_or_write(self):
+        from studio_next.creative_research import CreativeResearchError
+        from studio_next.creative_research_mcp import CreativeResearchMcpSession
+
+        class Research:
+            calls = 0
+
+            def studies(self, **_):
+                self.calls += 1
+                raise CreativeResearchError("private traceback")
+
+            assets = studies
+
+        async def check():
+            research = Research()
+            session = CreativeResearchMcpSession(allow_public_research=True, research_client=research, max_calls=1)
+            for status in ("provider_unavailable_or_refused", "call_budget_exhausted"):
+                response = await session.call_tool("research_studies", {"query": "public"})
+                body = json.loads(response.content[0].text)
+                self.assertEqual(body["status"], status)
+                self.assertEqual(body["results"], [])
+                self.assertFalse(body["import_authorized"])
+                self.assertNotIn("private traceback", response.content[0].text)
+            self.assertEqual(research.calls, 1)
+
+        asyncio.run(check())
+
     def test_preview_or_error_receipt_does_not_authorize_model_editing(self):
         for value in ({'previewOnly': True, 'action': 'open_project'}, {'success': False}):
             self.receipt.unlink(missing_ok=True)

@@ -1,14 +1,17 @@
-"""Offline adversarial contract tests; no paid API and no network traffic."""
+"""Research contract tests with fixtures and a local HTTP transport check."""
 import json
 import importlib.util
 import tempfile
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 from studio_next.creative_research import (
-    CreativeResearch, CreativeResearchError, _public_https, _public_api_json)
+    CreativeResearch, CreativeResearchError, _public_https, _public_api_json,
+    validate_searxng_url)
 from studio_next.body_integration import body_catalog
 
 
@@ -23,6 +26,94 @@ class FakePublicAPIs:
 
 
 class CreativeResearchTests(unittest.TestCase):
+    def test_searxng_base_url_admits_only_explicit_loopback_service(self):
+        self.assertIsNone(validate_searxng_url(None))
+        self.assertEqual(validate_searxng_url("http://127.0.0.1:08080/"),
+                         "http://127.0.0.1:8080")
+        self.assertEqual(validate_searxng_url("http://[::1]:8080"),
+                         "http://[::1]:8080")
+        for url in ("", "http://127.0.0.1", "http://127.0.0.1:0",
+                    "http://127.0.0.1:65536", "http://127.0.0.1:8080/search",
+                    "http://127.0.0.1:8080?", "http://127.0.0.1:8080#",
+                    "http://127.0.0.1:8080/?query=private",
+                    "http://user@127.0.0.1:8080", "http://127.0.0.2:8080",
+                    "http://localhost:8080", "https://127.0.0.1:8080",
+                    "http://[::ffff:127.0.0.1]:8080", "http://127.0.0.1:80\n80",
+                    "http://example.org:8080"):
+            with self.subTest(url=url), self.assertRaises(CreativeResearchError):
+                validate_searxng_url(url)
+
+    def test_web_search_needs_host_configuration_and_keeps_references_unverified(self):
+        provider = FakePublicAPIs()
+        disabled = CreativeResearch(provider)
+        self.assertFalse(disabled.web_search_enabled)
+        with self.assertRaises(CreativeResearchError):
+            disabled.web(query="lighting")
+        self.assertFalse(provider.calls)
+
+        provider.response = {"results": [
+            {"url": "https://127.0.0.1/private", "title": "Local request"},
+            {"url": "https://example.org/lighting", "title": "<b>Window light</b>",
+             "content": "<i>Public reference</i> " + "x" * 1_000,
+             "thumbnail": "https://example.org/unused.jpg", "license": "CC0"},
+            {"url": "https://example.org/ignored", "title": "Over limit"},
+        ]}
+        research = CreativeResearch(provider, searxng_url="http://[::1]:8080/")
+        self.assertTrue(research.web_search_enabled)
+        result = research.web(query="  देसी lighting & design  ", limit=1)
+        self.assertEqual(result["kind"], "research_web_references")
+        self.assertFalse(result["rights_verified"])
+        self.assertFalse(result["import_authorized"])
+        self.assertTrue(result["result_content_untrusted"])
+        self.assertEqual(len(result["results"]), 1)
+        reference = result["results"][0]
+        self.assertEqual(reference["title"], "Window light")
+        self.assertTrue(reference["snippet"].startswith("Public reference"))
+        self.assertLessEqual(len(reference["snippet"]), 360)
+        self.assertEqual(reference["source_page"], "https://example.org/lighting")
+        self.assertNotIn("thumbnail", reference)
+        self.assertNotIn("license", reference)
+        self.assertEqual(len(provider.calls), 1)
+        requested = urlsplit(provider.calls[0])
+        self.assertEqual((requested.hostname, requested.port, requested.path), ("::1", 8080, "/search"))
+        self.assertEqual(parse_qs(requested.query), {"q": ["देसी lighting & design"], "format": ["json"]})
+        provider.response = {"results": {}}
+        with self.assertRaises(CreativeResearchError):
+            research.web(query="design")
+
+    def test_web_search_uses_loopback_json_and_refuses_redirects(self):
+        requests = []
+
+        class LocalSearch(BaseHTTPRequestHandler):
+            def do_GET(self):
+                uri = urlsplit(self.path)
+                requests.append((uri.path, parse_qs(uri.query)))
+                if parse_qs(uri.query).get("q") == ["redirect"]:
+                    self.send_response(302)
+                    self.send_header("Location", "/unapproved")
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"results":[]}')
+
+            def log_message(self, *_args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), LocalSearch) as server:
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                research = CreativeResearch(searxng_url=f"http://127.0.0.1:{server.server_port}")
+                self.assertEqual(research.web(query="lighting")["results"], [])
+                with self.assertRaises(CreativeResearchError):
+                    research.web(query="redirect")
+            finally:
+                server.shutdown()
+                thread.join()
+        self.assertEqual(requests, [("/search", {"q": ["lighting"], "format": ["json"]}),
+                                    ("/search", {"q": ["redirect"], "format": ["json"]})])
+
     def test_openverse_cc0_filter_refuses_non_cc0_even_if_provider_misbehaves(self):
         provider = FakePublicAPIs()
         provider.response = {"results": [
@@ -85,11 +176,14 @@ class CreativeResearchTests(unittest.TestCase):
             {"type":"book","DOI":"10.2345/book","title":["Marketing"]},
             {"type":"journal-article","DOI":"https://evil.example/attack",
              "title":["Bad DOI"]},
+            {"type":"journal-article","DOI":"10.1234/story.2",
+             "title":["Unknown publication date"],"published":"unexpected"},
         ]}}
         result = CreativeResearch(provider).studies(query="storytelling attention",limit=8)
-        self.assertEqual(len(result["results"]),1)
+        self.assertEqual(len(result["results"]),2)
         self.assertEqual(result["results"][0]["title"],"Narrative attention")
         self.assertEqual(result["results"][0]["year"],2025)
+        self.assertIsNone(result["results"][1]["year"])
         self.assertFalse(result["results"][0]["study_results_verified"])
         self.assertFalse(result["results"][0]["peer_review_independently_verified"])
         self.assertIn("not evidence",result["claim"])
@@ -189,8 +283,17 @@ class CreativeResearchTests(unittest.TestCase):
     def test_no_internal_links_and_no_unapproved_request_host(self):
         for link in ("http://example.com", "https://localhost/private",
                      "https://192.168.1.1/private","https://user:pwd@example.org/",
-                     "https://10.0.0.1/", "https://example.internal/"):
-            self.assertIsNone(_public_https(link))
+                     "https://10.0.0.1/", "https://example.internal/",
+                     "https://localhost./private", "https://test.local./private",
+                     "https://127.0.0.1./secret", "https://127.1/secret",
+                     "https://0177.0.0.1/secret", "https://0x7f.1/secret",
+                     "https://0x7f000001/secret",
+                     "https://127%2E0%2E0%2E1/secret",
+                     "https://[::ffff:127.0.0.1]/secret"):
+            with self.subTest(link=link):
+                self.assertIsNone(_public_https(link))
+        self.assertEqual(_public_https("https://example.org/visible"), 
+                         "https://example.org/visible")
         with self.assertRaises(CreativeResearchError):
             _public_api_json("https://evil.example.org/collect?data=secret")
 
@@ -226,9 +329,13 @@ class CreativeResearchTests(unittest.TestCase):
                      "Optional research MCP SDK is not installed")
 class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
     def test_host_network_permission_is_mandatory(self):
-        from studio_next.creative_research_mcp import create_research_server
+        from studio_next.creative_research_mcp import (
+            create_research_server, CreativeResearchMcpSession)
         with self.assertRaises(PermissionError):
             create_research_server()
+        for count in (None, 0, 9, True, -1):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                CreativeResearchMcpSession(allow_public_research=True, max_calls=count)
 
     async def test_real_mcp_protocol_exposes_only_bounded_readonly_research(self):
         import anyio
@@ -272,6 +379,22 @@ class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(invalid.is_error)
                     self.assertEqual(research.calls,
                                      [("assets", {"query": "light", "media": "video"})])
+                    # The standalone official MCP entry must be no less
+                    # bounded than an opt-in Studio session. Invalid schema
+                    # calls do not consume research budget; successful calls do.
+                    for index in range(7):
+                        good = await session.call_tool(
+                            "research_studies", {"query": f"public-query-{index}"})
+                        self.assertFalse(good.is_error)
+                    denied = await session.call_tool(
+                        "research_studies", {"query": "ninth-outbound-query"})
+                    self.assertFalse(denied.is_error)
+                    status = json.loads(denied.content[0].text)
+                    self.assertEqual(status["status"], "call_budget_exhausted")
+                    self.assertFalse(status["import_authorized"])
+                    self.assertEqual(len(research.calls), 8)
+                    self.assertFalse(any("ninth-outbound-query" in str(call)
+                                         for call in research.calls))
                 group.cancel_scope.cancel()
 
 if __name__ == "__main__":

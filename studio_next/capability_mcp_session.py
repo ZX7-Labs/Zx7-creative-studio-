@@ -116,3 +116,27 @@ class CapabilityGatewayMcpSession:
             operation, revision=self._revision,
             inputs=arguments, request_id=request_id)
         return result["native_result"]
+
+
+class CombinedCapabilityMcpSession:
+    """Expose distinct host-granted sources through one model tool view."""
+
+    def __init__(self, gateway, *namespaces):
+        self._sessions = [CapabilityGatewayMcpSession(gateway, name) for name in namespaces]
+        self._routes = {}
+        for session in self._sessions:
+            for tool in session._original_grants:
+                if tool in self._routes:
+                    raise CapabilityExecutionError("Creative sources advertise a duplicate tool name")
+                self._routes[tool] = session
+
+    async def list_tools(self):
+        tools = []
+        for session in self._sessions:
+            tools.extend((await session.list_tools()).tools)
+        return SimpleNamespace(tools=tools, nextCursor=None)
+
+    async def call_tool(self, name, arguments):
+        if not isinstance(name, str) or name not in self._routes:
+            raise CapabilityExecutionError("Creative operation is not granted to this session")
+        return await self._routes[name].call_tool(name, arguments)
