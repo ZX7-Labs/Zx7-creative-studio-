@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "kind": "local-cpu-synthetic-native-editor-visual-revision",
-  "model_variant": "qwen3.5-2b",
+  "model_variant": "qwen3.5-4b",
   "synthetic_only": true,
   "hosted_model_api": false,
   "private_media": false,
   "max_model_turns": 48,
-  "request_id": "20261107-real-local-native-model-after-pr226"
+  "request_id": "20261109-qwen4b-strict-reviewed-after-255"
 }
