@@ -58,6 +58,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 {"cloud_synthetic_frames_allowed": False},
                 {"model_id": "untrusted/remote-model"},
                 {"max_turns": 800},
+                {"max_turns": 40},  # cannot silently re-run a stale consent budget
                 {"max_turns": True},
                 {"kind": "upload-private-footage"},
                 {"api_key": "not-a-permitted-field"},
@@ -314,6 +315,35 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                         launch.assert_not_called()
                     self.assertEqual(credentials.call_count,
                                      1 if provider == "nvidia" else 0)
+
+
+    def test_public_nvidia_trial_artifact_is_a_strict_synthetic_allowlist(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/zx7-nvidia-native-editor-trial.yml").read_text()
+        upload = workflow.split("uses: actions/upload-artifact@v4", 1)[1]
+        self.assertIn("include-hidden-files: false", upload)
+        self.assertIn("          path: |", upload)
+        paths = [line.strip() for line in upload.split("          path: |", 1)[1]
+                 .split("          include-hidden-files:", 1)[0].splitlines()
+                 if line.strip()]
+        prefix = "${{ runner.temp }}/zx7-nvidia-native-trial/"
+        self.assertTrue(all(p.startswith(prefix) for p in paths), paths)
+        suffixes = [p[len(prefix):] for p in paths]
+        # Every added forensic file requires explicit security review. Past
+        # uploads of the entire root accidentally included Electron Cookies,
+        # Chromium Cache and local-storage data from state/session-*/.
+        self.assertEqual(len(suffixes), len(set(suffixes)))
+        self.assertEqual(set(suffixes), {
+            "host-grants.json", "brief.txt", "source-ledger.json",
+            "native-evaluation.json", "native-journal.jsonl",
+            "native-client-stdout.txt", "native-client-stderr.txt",
+            "staging/original-neutral-gradient.mp4", "outputs/*.mp4",
+            "projects/**/*.comfystudio",
+            "projects/**/assets/video/*.mp4",
+            "projects/**/project.thumbnail.webp",
+        })
+        self.assertNotIn("zx7-nvidia-native-trial/\n", upload)
+        self.assertTrue(all(not p.startswith("state/") for p in suffixes))
 
     def test_native_trial_actually_requests_structured_actions(self):
         with tempfile.TemporaryDirectory() as scratch:
