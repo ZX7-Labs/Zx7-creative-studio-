@@ -23,7 +23,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: zx7-nvidia-native-creative-acceptance
+  # Only main-hosted requests share this costly/sensitive lane.
+  # Pull requests run OFFLINE admission and must never be blocked by an
+  # already-in-flight hosted inference; conversely PR CI cannot cancel or
+  # preempt a real hosted experiment.
+  group: ${{ github.event_name == 'pull_request' && format('zx7-nvidia-offline-{0}', github.ref) || 'zx7-nvidia-native-creative-acceptance' }}
   cancel-in-progress: false
 
 jobs:
