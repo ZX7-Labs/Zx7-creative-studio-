@@ -140,10 +140,12 @@ def native_decision_model(args):
     Hosted NVIDIA function calling is opt-in until a real provider protocol
     check succeeds. BODY continues to validate every actual editor operation.
     """
-    research_instructions = ""
+    prompt_suffix = (
+        "\nUse the owner's brief language for the final summary unless the owner requests another."
+    )
     if getattr(args, "allow_public_research", False):
         from studio_next.creative_research_mcp import PUBLIC_RESEARCH_SYSTEM
-        research_instructions = "\n\n" + PUBLIC_RESEARCH_SYSTEM
+        prompt_suffix += "\n\n" + PUBLIC_RESEARCH_SYSTEM
     if args.provider == "nvidia":
         if args.base_url != "http://127.0.0.1:8080":
             raise ValueError("NVIDIA endpoint is fixed, not overridden by --base-url")
@@ -176,7 +178,7 @@ def native_decision_model(args):
         model = model_type(
             nvidia_settings,
             system_prompt=(NATIVE_DIRECT_TOOL_SYSTEM if args.structured_actions
-                           else NATIVE_CREATIVE_SYSTEM) + research_instructions,
+                           else NATIVE_CREATIVE_SYSTEM) + prompt_suffix,
             allow_image_upload=args.allow_cloud_image_upload)
         model.verify_host_credentials()
         return model
@@ -193,7 +195,7 @@ def native_decision_model(args):
     return local_type(
         LocalModelSettings(base_url=args.base_url, model_id=args.model_id,
                            timeout_seconds=args.model_timeout),
-        system_prompt=NATIVE_CREATIVE_SYSTEM + research_instructions)
+        system_prompt=NATIVE_CREATIVE_SYSTEM + prompt_suffix)
 
 
 async def run_native_session(args):

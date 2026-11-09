@@ -27,6 +27,7 @@ jobs:
       - name: Real anonymous HTTPS requests to free official public APIs
         run: |
           python - <<'PY'
+          from time import monotonic
           from studio_next.creative_research import CreativeResearch
           research = CreativeResearch()
           checks = []
@@ -60,20 +61,36 @@ jobs:
           except Exception as exc:
               print(f"REAL studies: FAILED {type(exc).__name__}: {exc}", flush=True)
               checks.append(("studies", False))
-          for language, topic in (("en", "cinematography"), ("hi", "चलचित्र")):
+          for language, topic, edition in (
+              ("en", "cinematography", "en"),
+              ("hi", "चलचित्र", "hi"),
+              ("ja", "映画", "ja"),
+              ("ar", "سينما", "ar"),
+              ("es", "cinematografía", "es"),
+              ("zh-Hant", "電影", "zh"),
+              ("pt-BR", "cinema", "pt"),
+              ("ta", "திரைப்படம்", "ta"),
+          ):
               try:
+                  started = monotonic()
                   references = research.web(query=topic, language=language, limit=3)
+                  elapsed_ms = (monotonic() - started) * 1000
                   assert references["provider"] == "wikipedia"
+                  assert references["language"] == edition
                   assert references["result_content_untrusted"]
                   assert not references["import_authorized"]
                   assert references["results"]
-                  assert all(item["source_page"].startswith(f"https://{language}.wikipedia.org/?curid=")
+                  assert all(item["source_page"].startswith(f"https://{edition}.wikipedia.org/?curid=")
                              for item in references["results"])
-                  print(f"REAL wikipedia/{language}: {len(references['results'])} references", flush=True)
+                  print(f"REAL wikipedia/{language}: {len(references['results'])} references "
+                        f"in {elapsed_ms:.0f} ms", flush=True)
                   checks.append((f"wikipedia/{language}", True))
               except Exception as exc:
                   print(f"REAL wikipedia/{language}: FAILED {type(exc).__name__}: {exc}", flush=True)
                   checks.append((f"wikipedia/{language}", False))
+          editions = {origin for _, origin in research._wikipedia_sites().values()}
+          print(f"REAL Wikimedia SiteMatrix: {len(editions)} public Wikipedia editions", flush=True)
+          assert len(editions) >= 250, "Wikimedia catalog unexpectedly incomplete"
           print("Provider status:", checks, flush=True)
           if not all(success for _, success in checks):
               raise SystemExit("Free public API live contracts have unresolved failures")

@@ -170,7 +170,7 @@ class SelectedProjectTests(unittest.TestCase):
                     actions = []
                     if enabled:
                         actions.extend([decision("search", query="research_web", limit=1),
-                            decision("invoke", tool="research_web", inputs={"query": "public motion references"})])
+                            decision("invoke", tool="research_web", inputs={"query": "public motion references", "language": "ja"})])
                     actions.extend([decision("search", query="update_text_clip", limit=1),
                                     decision("invoke", tool="update_text_clip", inputs={"clipId": "title"}),
                                     decision("finish", summary="Fixture only")])
@@ -185,7 +185,7 @@ class SelectedProjectTests(unittest.TestCase):
                     self.assertEqual(factory.call_count, int(enabled))
                     if enabled:
                         factory.assert_called_once_with(searxng_url=None)
-                    self.assertEqual(queries, [{"query": "public motion references"}] if enabled else [])
+                    self.assertEqual(queries, [{"query": "public motion references", "language": "ja"}] if enabled else [])
                     self.assertEqual(edits, [("update_text_clip", {"clipId": "title"})])
                     self.assertEqual(outcome["model_selected_write_receipts"], 1)
                     if enabled:

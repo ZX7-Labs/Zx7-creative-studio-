@@ -15,12 +15,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
+from http.client import HTTPException
+from threading import Lock
 
 
-REFERENCE_WIKIS = {
-    "en": "https://en.wikipedia.org",
-    "hi": "https://hi.wikipedia.org",
-}
+REFERENCE_LANGUAGE_PATTERN = r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}"
+_WIKIPEDIA_HOST = re.compile(r"([a-z]{2,8}(?:-[a-z0-9]{1,8}){0,3})\.wikipedia\.org")
+_WIKIMEDIA_SITE_MATRIX = "https://meta.wikimedia.org/w/api.php"
 
 
 class CreativeResearchError(ValueError):
@@ -101,9 +102,13 @@ def validate_searxng_url(value):
 def _public_api_json(url):
     """Validate fixed public HTTPS providers before using the JSON transport."""
     hosts = {"api.openverse.org", "api.crossref.org", "commons.wikimedia.org",
-             "api.artic.edu", "sfxmint.com", "en.wikipedia.org", "hi.wikipedia.org"}
+             "api.artic.edu", "sfxmint.com"}
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or parsed.hostname not in hosts:
+    host = parsed.hostname
+    wikimedia_api = parsed.path == "/w/api.php" and (
+        host == "meta.wikimedia.org" or bool(_WIKIPEDIA_HOST.fullmatch(host or "")))
+    if (parsed.scheme != "https" or parsed.netloc != host or parsed.fragment or
+            (host not in hosts and not wikimedia_api)):
         raise CreativeResearchError("Research request is not an approved free API")
     return _bounded_json_get(url)
 
@@ -123,7 +128,7 @@ def _bounded_json_get(url):
                 raise CreativeResearchError("Research metadata exceeds response budget")
             payload = json.loads(raw)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError,
-            ValueError, RecursionError) as exc:
+            ValueError, HTTPException, RecursionError) as exc:
         if isinstance(exc, CreativeResearchError):
             raise
         raise CreativeResearchError("Research provider unavailable or returned invalid JSON") from exc
@@ -155,25 +160,80 @@ class CreativeResearch:
         self._fetch = fetch_json or _public_api_json
         self._searxng_url = validate_searxng_url(searxng_url)
         self._fetch_web = fetch_json or _bounded_json_get
+        self._site_catalog = None
+        self._site_lock = Lock()
 
     def web(self, *, query, limit=8, language=None):
         query = _check(query, limit)
-        if language is not None and (not isinstance(language, str) or language not in REFERENCE_WIKIS):
-            raise CreativeResearchError("Reference search language must be en or hi")
+        if language is not None:
+            if not isinstance(language, str) or not re.fullmatch(REFERENCE_LANGUAGE_PATTERN, language):
+                raise CreativeResearchError("Reference search requires a valid language tag")
         if self._searxng_url is None:
             provider = "wikipedia"
-            results = self._wikipedia_references(query, limit, language or "en")
+            language, base = self._resolve_wikipedia_site((language or "en").lower())
+            results = self._wikipedia_references(query, limit, base)
         else:
             provider = "searxng"
             results = self._searxng_references(query, limit, language)
         return {
             "kind": "research_web_references", "provider": provider, "results": results,
+            "language": language,
             "result_content_untrusted": True, "source_pages_reviewed": False,
             "rights_verified": False, "import_authorized": False,
         }
 
-    def _wikipedia_references(self, query, limit, language):
-        base = REFERENCE_WIKIS[language]
+    def _wikipedia_sites(self):
+        # Cache only the public site registry. It contains no research query.
+        with self._site_lock:
+            if self._site_catalog is not None:
+                return self._site_catalog
+            url = _request_params(_WIKIMEDIA_SITE_MATRIX, {
+                "action": "sitematrix", "format": "json", "smtype": "language",
+                "smlangprop": "code|site", "smsiteprop": "code|url", "smlimit": "max",
+            })
+            payload = self._fetch(url)
+            matrix = payload.get("sitematrix")
+            if not isinstance(matrix, dict) or "continue" in payload:
+                raise CreativeResearchError("Wikimedia site registry is unavailable or incomplete")
+            languages = {}
+            aliases = {}
+            for row in matrix.values():
+                if not isinstance(row, dict):
+                    continue
+                code, sites = row.get("code"), row.get("site")
+                if not isinstance(code, str) or not re.fullmatch(REFERENCE_LANGUAGE_PATTERN, code):
+                    continue
+                if not isinstance(sites, list):
+                    continue
+                for site in sites:
+                    if (not isinstance(site, dict) or site.get("code") != "wiki" or
+                            any(flag in site for flag in ("closed", "private", "fishbowl", "nonglobal"))):
+                        continue
+                    base = site.get("url")
+                    if not isinstance(base, str) or not base.startswith("https://"):
+                        continue
+                    host = _WIKIPEDIA_HOST.fullmatch(base.removeprefix("https://"))
+                    if host is None:
+                        continue
+                    entry = (code.lower(), base)
+                    languages[entry[0]] = entry
+                    aliases[host[1]] = entry
+            if not languages:
+                raise CreativeResearchError("Wikimedia site registry contains no searchable Wikipedia sites")
+            self._site_catalog = aliases | languages
+            return self._site_catalog
+
+    def _resolve_wikipedia_site(self, language):
+        if language == "all":
+            raise CreativeResearchError("Choose a Wikipedia language, or use all with SearXNG")
+        sites = self._wikipedia_sites()
+        while language:
+            if language in sites:
+                return sites[language]
+            language = language.rpartition("-")[0]
+        raise CreativeResearchError("Wikipedia has no public search site for the requested language")
+
+    def _wikipedia_references(self, query, limit, base):
         url = _request_params(base + "/w/api.php", {
             "action": "query", "list": "search", "format": "json", "srnamespace": 0,
             "srprop": "snippet", "srsearch": query, "srlimit": limit,
