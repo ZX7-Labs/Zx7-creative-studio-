@@ -43,15 +43,20 @@ the measured scope and exact tested source digests.
 On Linux, install Python 3.11+, Node, FFmpeg/FFprobe and the pinned editor's
 [build dependencies](engines/velorn/README.md). Run Electron as an ordinary user
 with its Chromium sandbox enabled. Start a local OpenAI-compatible model server
-separately; its exact model ID must appear in `/v1/models`.
+separately. Studio selects it automatically if `/v1/models` lists one
+model. If the server lists several, pass `--model-id` to choose one.
 
 ```sh
 python -m pip install '.[editor,production]'
-zx7-studio init ./my-studio --source ./third_party/velorn --model-id YOUR_MODEL_ID
+zx7-studio init ./my-studio --source ./third_party/velorn
 zx7-studio doctor ./my-studio
 zx7-studio run ./my-studio --brief-file ./brief.txt --asset ./source.mov --rights 'I own this footage'
 zx7-studio status ./my-studio
 ```
+
+The `--source` override is optional when a built editor is already present at
+`share/zx7-studio/velorn` under the active Python installation or in the
+matching source checkout.
 
 `doctor` checks installed runtime files, the source pin, editor build and actual
 local model inventory before inference. Sessions discover the granted native
@@ -89,7 +94,8 @@ result. It reads complete records only and leaves the journal intact. Export
 counts summarize earlier verifications rather than inspecting current media.
 
 For the supported hosted NVIDIA adapter, choose `--provider nvidia` at `init`
-and provide `NVIDIA_API_KEY` only to the trusted runner environment. Both
+and provide `NVIDIA_API_KEY` only to the trusted runner environment. Studio
+uses the adapter’s default model unless you supply `--model-id`. Both
 providers use the same native session and host grants. Uploading observation
 images to NVIDIA additionally requires `--allow-cloud-image-upload` on `run`;
 source text and tool results are part of the hosted model conversation.

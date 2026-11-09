@@ -149,8 +149,11 @@ def exercise(source, xvfb):
             thread = Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                studio_command("init", studio, "--source", source, "--model-id", "scripted-installation-fixture",
-                               "--base-url", f"http://127.0.0.1:{server.server_port}")
+                studio_command("init", studio, "--base-url",
+                               f"http://127.0.0.1:{server.server_port}")
+                settings = json.loads((studio / "studio.json").read_text(encoding="utf-8"))
+                assert Path(settings["editor_source"]) == source
+                assert settings["model_id"] == "scripted-installation-fixture"
                 assert studio_command("doctor", studio)["ready"]
                 runner = ("run", studio, "--xvfb-binary", xvfb, "--display", "127.0.0.1:95",
                           "--model-timeout", "90")

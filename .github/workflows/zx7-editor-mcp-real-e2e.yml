@@ -73,7 +73,12 @@ jobs:
             --display 127.0.0.1:95
       - name: Prove installed Studio creates and revises an editable project outside the checkout
         run: |
-          python -u engines/velorn/installed-studio-e2e.py \
+          studio_env="$RUNNER_TEMP/zx7-owner-proof-venv"
+          python -m venv --system-site-packages "$studio_env"
+          "$studio_env/bin/python" -m pip install --ignore-installed --no-deps .
+          mkdir -p "$studio_env/share/zx7-studio"
+          ln -s "$GITHUB_WORKSPACE/third_party/velorn" "$studio_env/share/zx7-studio/velorn"
+          PATH="$studio_env/bin:$PATH" "$studio_env/bin/python" -u engines/velorn/installed-studio-e2e.py \
             --source "$GITHUB_WORKSPACE/third_party/velorn" \
             --xvfb-binary /usr/bin/Xvfb
       - name: Diagnose isolated native editor startup without hiding failures
