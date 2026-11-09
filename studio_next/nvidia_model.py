@@ -182,6 +182,16 @@ class NvidiaCreativeModel(LocalCreativeModel):
             raise NvidiaTransportError("NVIDIA rejected inference request (HTTP %d)" %
                                        exc.code) from None
         except (URLError, OSError, ssl.SSLError) as exc:
+            # A 120B vision/reasoning response may exceed a short HTTP read
+            # timeout even when the API is reachable. Distinguish the bounded
+            # transport timeout from other network failures without ever
+            # exposing raw URL errors, request data, keys or response bodies.
+            # Do NOT automatically retry: a POST may already have incurred
+            # hosted inference cost. No native tool action is dispatched
+            # without a received, validated model decision.
+            reason = exc.reason if isinstance(exc, URLError) else exc
+            if isinstance(reason, TimeoutError):
+                raise NvidiaTransportError("NVIDIA inference transport timed out") from None
             raise NvidiaTransportError("NVIDIA inference connection failed") from None
 
     def _invoke(self, role, context, *, images=(), audio=()):
