@@ -10,6 +10,7 @@ import html
 import ipaddress
 import json
 import re
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -47,14 +48,29 @@ def _public_https(value):
         host = uri.hostname
         if uri.scheme != "https" or not host or uri.username or uri.password:
             return None
-        if host.lower() == "localhost" or host.lower().endswith((".local", ".internal")):
+        # URL parsers and browsers accept loopback spellings that
+        # ipaddress.ip_address() alone does not parse: 127.1, octal/hex
+        # IPv4, and a trailing DNS root dot. These are references only,
+        # but must never be advertised to a creative model as public links.
+        if "%" in host:
+            return None
+        hostname = host.rstrip(".").encode("idna").decode("ascii").lower()
+        if (not hostname or hostname == "localhost" or
+                hostname.endswith((".local", ".internal"))):
             return None
         try:
-            if not ipaddress.ip_address(host).is_global:
-                return None
+            address = ipaddress.ip_address(hostname)
         except ValueError:
-            if "." not in host:
-                return None
+            try:
+                # inet_aton normalizes legacy numeric IPv4 forms without
+                # resolving DNS or contacting an attacker-controlled host.
+                address = ipaddress.IPv4Address(socket.inet_aton(hostname))
+            except (OSError, ValueError):
+                if "." not in hostname or ".." in hostname:
+                    return None
+                address = None
+        if address is not None and not address.is_global:
+            return None
         return value
     except ValueError:
         return None
