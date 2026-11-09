@@ -13,6 +13,9 @@ import json
 from .creative_research import CreativeResearch, CreativeResearchError
 
 
+MAX_PUBLIC_RESEARCH_CALLS = 8
+
+
 _TOOL_DEFINITIONS = (
     ("research_assets",
      "Research CC0/public-domain footage, visual and audio *candidate* metadata. "
@@ -54,11 +57,11 @@ class CreativeResearchMcpSession:
     """The common MCP-shaped research source, separately authorized from editing."""
 
     def __init__(self, *, allow_public_research=False, research_client=None,
-                 searxng_url=None, max_calls=None):
+                 searxng_url=None, max_calls=MAX_PUBLIC_RESEARCH_CALLS):
         if allow_public_research is not True:
             raise PermissionError("Host must explicitly permit free public metadata research")
-        if max_calls is not None and (type(max_calls) is not int or max_calls < 1):
-            raise ValueError("Research call budget must be a positive integer")
+        if type(max_calls) is not int or not 1 <= max_calls <= MAX_PUBLIC_RESEARCH_CALLS:
+            raise ValueError("Research call budget must be between 1 and 8")
         import anyio
         import jsonschema
         from mcp import types
@@ -107,7 +110,7 @@ class CreativeResearchMcpSession:
 
         try:
             async with self._capacity:
-                if self._max_calls is not None and self._calls >= self._max_calls:
+                if self._calls >= self._max_calls:
                     return unavailable("call_budget_exhausted")
                 self._calls += 1
                 result = await anyio.to_thread.run_sync(lambda: handler(**arguments))
@@ -116,10 +119,7 @@ class CreativeResearchMcpSession:
                 raise CreativeResearchError("Bounded research result exceeded")
         except (CreativeResearchError, ValueError, TypeError):
             # No remote response body, owner prompt or traceback is exposed.
-            if self._max_calls is not None:
-                return unavailable("provider_unavailable_or_refused")
-            return types.CallToolResult(is_error=True, content=[
-                types.TextContent(type="text", text="Public research unavailable or refused")])
+            return unavailable("provider_unavailable_or_refused")
         return types.CallToolResult(is_error=False, content=[
             types.TextContent(type="text", text=encoded)])
 
