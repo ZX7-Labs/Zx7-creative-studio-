@@ -443,6 +443,11 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         # into invented track IDs or a new host permission. The controller
         # retains the installed native tool's original validation authority.
         session = ContentSession()
+        # Host grant inventory must EXACTLY equal the installed tool set.
+        # An unavailable current-timeline reader is not an ungranted but
+        # executable fake; remove it from the advertised MCP catalog too.
+        session.tools = [item for item in session.tools
+                         if item.name != "get_timeline"]
         restricted = {"get_project": "read", tool: "write"}
         model = ScriptedModel([
             decision("invoke", tool=tool, inputs={
