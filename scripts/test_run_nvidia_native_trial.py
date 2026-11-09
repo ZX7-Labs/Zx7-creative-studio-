@@ -345,6 +345,20 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertNotIn("zx7-nvidia-native-trial/\n", upload)
         self.assertTrue(all(not p.startswith("state/") for p in suffixes))
 
+    def test_offline_pr_admission_does_not_contend_with_hosted_cloud_inference(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/zx7-nvidia-native-editor-trial.yml").read_text()
+        group = workflow.split("concurrency:", 1)[1].split("jobs:", 1)[0]
+        self.assertIn("github.event_name == 'pull_request'", group)
+        self.assertIn("zx7-nvidia-offline-{0}", group)
+        self.assertIn("'zx7-nvidia-native-creative-acceptance'", group)
+        self.assertIn("cancel-in-progress: false", group)
+        # PR admission is deliberately credential-free; hosted execution
+        # still runs only on main and no image/secret egress is authorized
+        # because the offline test condition became independently runnable.
+        self.assertIn("if: github.event_name == 'pull_request'", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+
     def test_native_trial_actually_requests_structured_actions(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "trial"
