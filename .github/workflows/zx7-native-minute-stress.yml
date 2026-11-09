@@ -5,6 +5,8 @@ on:
     paths:
       - "engines/velorn/native-minute-stress.py"
       - "engines/velorn/mcp-e2e.py"
+      - "engines/velorn/install-ci-dependencies.sh"
+      - "engines/velorn/rebuild-ci-native-modules.sh"
       - "studio_next/body_editor_*.py"
       - ".github/workflows/zx7-native-minute-stress.yml"
       - "studio_next/editor_runtime/**"
