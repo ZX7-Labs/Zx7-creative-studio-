@@ -17,6 +17,12 @@ import urllib.request
 from html.parser import HTMLParser
 
 
+REFERENCE_WIKIS = {
+    "en": "https://en.wikipedia.org",
+    "hi": "https://hi.wikipedia.org",
+}
+
+
 class CreativeResearchError(ValueError):
     """Rejected request, untrusted response or unavailable free provider."""
 
@@ -95,7 +101,7 @@ def validate_searxng_url(value):
 def _public_api_json(url):
     """Validate fixed public HTTPS providers before using the JSON transport."""
     hosts = {"api.openverse.org", "api.crossref.org", "commons.wikimedia.org",
-             "api.artic.edu", "sfxmint.com"}
+             "api.artic.edu", "sfxmint.com", "en.wikipedia.org", "hi.wikipedia.org"}
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname not in hosts:
         raise CreativeResearchError("Research request is not an approved free API")
@@ -139,7 +145,7 @@ def _check(query, limit):
 
 
 class CreativeResearch:
-    """Creative asset, scholarly, and optional public web reference leads.
+    """Creative asset, scholarly, and public reference leads.
 
     An injected transport supports deterministic offline protocol tests.
     Production transport alone restricts network destinations and response size.
@@ -150,15 +156,53 @@ class CreativeResearch:
         self._searxng_url = validate_searxng_url(searxng_url)
         self._fetch_web = fetch_json or _bounded_json_get
 
-    @property
-    def web_search_enabled(self):
-        return self._searxng_url is not None
-
-    def web(self, *, query, limit=8):
-        if not self.web_search_enabled:
-            raise CreativeResearchError("Host has not configured a local SearXNG service")
+    def web(self, *, query, limit=8, language=None):
         query = _check(query, limit)
-        url = _request_params(self._searxng_url + "/search", {"q": query, "format": "json"})
+        if language is not None and (not isinstance(language, str) or language not in REFERENCE_WIKIS):
+            raise CreativeResearchError("Reference search language must be en or hi")
+        if self._searxng_url is None:
+            provider = "wikipedia"
+            results = self._wikipedia_references(query, limit, language or "en")
+        else:
+            provider = "searxng"
+            results = self._searxng_references(query, limit, language)
+        return {
+            "kind": "research_web_references", "provider": provider, "results": results,
+            "result_content_untrusted": True, "source_pages_reviewed": False,
+            "rights_verified": False, "import_authorized": False,
+        }
+
+    def _wikipedia_references(self, query, limit, language):
+        base = REFERENCE_WIKIS[language]
+        url = _request_params(base + "/w/api.php", {
+            "action": "query", "list": "search", "format": "json", "srnamespace": 0,
+            "srprop": "snippet", "srsearch": query, "srlimit": limit,
+        })
+        data = self._fetch(url).get("query")
+        raw = data.get("search") if isinstance(data, dict) else None
+        if not isinstance(raw, list):
+            raise CreativeResearchError("Wikipedia reference metadata is malformed")
+        results = []
+        seen = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            page_id = item.get("pageid")
+            title = _plain(item.get("title"))
+            if type(page_id) is not int or not 0 < page_id < 2**63 or not title or page_id in seen:
+                continue
+            seen.add(page_id)
+            results.append({"title": title, "snippet": _plain(item.get("snippet"), 360),
+                            "source_page": f"{base}/?curid={page_id}"})
+            if len(results) == limit:
+                break
+        return results
+
+    def _searxng_references(self, query, limit, language):
+        params = {"q": query, "format": "json"}
+        if language is not None:
+            params["language"] = language
+        url = _request_params(self._searxng_url + "/search", params)
         raw = self._fetch_web(url).get("results")
         if not isinstance(raw, list):
             raise CreativeResearchError("SearXNG reference metadata is malformed")
@@ -176,11 +220,7 @@ class CreativeResearch:
                             "source_page": page})
             if len(results) == limit:
                 break
-        return {
-            "kind": "research_web_references", "provider": "searxng", "results": results,
-            "result_content_untrusted": True, "source_pages_reviewed": False,
-            "rights_verified": False, "import_authorized": False,
-        }
+        return results
 
     def assets(self, *, query, media, limit=8):
         query = _check(query, limit)

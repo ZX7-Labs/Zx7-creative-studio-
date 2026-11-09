@@ -43,14 +43,48 @@ class CreativeResearchTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(CreativeResearchError):
                 validate_searxng_url(url)
 
-    def test_web_search_needs_host_configuration_and_keeps_references_unverified(self):
+    def test_default_web_uses_builtin_wikipedia_without_host_setup(self):
         provider = FakePublicAPIs()
-        disabled = CreativeResearch(provider)
-        self.assertFalse(disabled.web_search_enabled)
+        provider.response = {"query": {"search": [
+            {"pageid": True, "title": "Invalid identity"},
+            {"pageid": -1, "title": "Invalid identity"},
+            {"pageid": 82, "title": "  <b>चलचित्र</b>  ",
+             "snippet": "<em>संदर्भ</em>", "url": "https://example.org/ignored"},
+            {"pageid": 82, "title": "Duplicate"},
+            {"pageid": 83, "title": "Another"},
+            {"pageid": 84, "title": "Beyond limit"},
+        ]}}
+        research = CreativeResearch(provider)
+        response = research.web(query="  चलचित्र & प्रकाश  ", limit=2, language="hi")
+        self.assertEqual(response["provider"], "wikipedia")
+        self.assertEqual(response["results"], [
+            {"title": "चलचित्र", "snippet": "संदर्भ",
+             "source_page": "https://hi.wikipedia.org/?curid=82"},
+            {"title": "Another", "snippet": "",
+             "source_page": "https://hi.wikipedia.org/?curid=83"},
+        ])
+        self.assertTrue(response["result_content_untrusted"])
+        self.assertFalse(response["source_pages_reviewed"])
+        self.assertFalse(response["rights_verified"])
+        self.assertFalse(response["import_authorized"])
+        requested, = map(urlsplit, provider.calls)
+        self.assertEqual((requested.scheme, requested.netloc, requested.path),
+                         ("https", "hi.wikipedia.org", "/w/api.php"))
+        self.assertEqual(parse_qs(requested.query), {
+            "action": ["query"], "list": ["search"], "format": ["json"],
+            "srnamespace": ["0"], "srprop": ["snippet"],
+            "srsearch": ["चलचित्र & प्रकाश"], "srlimit": ["2"],
+        })
         with self.assertRaises(CreativeResearchError):
-            disabled.web(query="lighting")
-        self.assertFalse(provider.calls)
+            research.web(query="light", language="example.org")
+        self.assertEqual(len(provider.calls), 1)
+        provider.response = {"query": {"search": {}}}
+        with self.assertRaises(CreativeResearchError):
+            research.web(query="light")
+        self.assertEqual(urlsplit(provider.calls[-1]).hostname, "en.wikipedia.org")
 
+    def test_optional_searxng_keeps_references_unverified(self):
+        provider = FakePublicAPIs()
         provider.response = {"results": [
             {"url": "https://127.0.0.1/private", "title": "Local request"},
             {"url": "https://example.org/lighting", "title": "<b>Window light</b>",
@@ -59,7 +93,6 @@ class CreativeResearchTests(unittest.TestCase):
             {"url": "https://example.org/ignored", "title": "Over limit"},
         ]}
         research = CreativeResearch(provider, searxng_url="http://[::1]:8080/")
-        self.assertTrue(research.web_search_enabled)
         result = research.web(query="  देसी lighting & design  ", limit=1)
         self.assertEqual(result["kind"], "research_web_references")
         self.assertFalse(result["rights_verified"])
