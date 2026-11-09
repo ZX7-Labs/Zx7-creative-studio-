@@ -79,21 +79,46 @@ def _check_hidden_file(path: Path, root: Path, relative: PurePosixPath, *,
             not _SHA.fullmatch(receipt["sha256"]) or
             type(receipt["bytes"]) is not int or receipt["bytes"] < 100):
         raise ReleaseArtifactIntegrityError("Invalid synthetic publication receipt")
+    identity = receipt["identity"]
+    if (type(identity["project_key"]) is not str or
+            not _SHA.fullmatch(identity["project_key"])):
+        raise ReleaseArtifactIntegrityError("Invalid host publication project identity")
+    if (type(identity["input_key"]) is not str or
+            not _SHA.fullmatch(identity["input_key"]) or
+            type(identity["node_id"]) is not str or
+            not 1 <= len(identity["node_id"]) <= 256 or
+            any(ord(c) < 32 for c in identity["node_id"]) or
+            type(identity["tool_id"]) is not str or
+            not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", identity["tool_id"])):
+        raise ReleaseArtifactIntegrityError("Invalid host publication attempt identity")
     output = Path(receipt["output"])
-    if not output.is_absolute():
-        raise ReleaseArtifactIntegrityError("Publication receipt output must be absolute")
-    if relocated:
-        # Original host-absolute output paths must not be rewritten in an
-        # immutable receipt just because CI artifacts were downloaded elsewhere.
-        # This checks retained bytes and sibling identity, NOT host authority.
-        if not (path.parent.parent / output.name).is_file():
-            raise ReleaseArtifactIntegrityError("Relocated publication output is missing")
-    elif not output.is_relative_to(root) or output.parent != path.parent.parent:
+    if (not output.is_absolute() or ".." in output.parts or
+            str(output) != receipt["output"]):
+        raise ReleaseArtifactIntegrityError("Publication receipt output must be canonical absolute")
+    if not relocated and (not output.is_relative_to(root)
+                          or output.parent != path.parent.parent):
         raise ReleaseArtifactIntegrityError("Publication receipt references external output")
+    # The runtime derives receipt filenames from the exact host attempt and
+    # original absolute output path. A lookalike JSON under a valid hidden
+    # directory must not be presented as an authentic publication receipt.
+    canonical = hashlib.sha256(json.dumps(
+        {"identity": identity, "output": receipt["output"]},
+        sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest() + ".json"
+    if canonical != path.name:
+        raise ReleaseArtifactIntegrityError("Publication receipt identity filename mismatch")
     expected_stage = r"\.zx7-uncommitted-[0-9a-f]{32}" + re.escape(output.suffix)
     if (type(receipt["stage"]) is not str or
             not re.fullmatch(expected_stage, receipt["stage"])):
         raise ReleaseArtifactIntegrityError("Publication receipt references unsafe stage")
+    # Both pre-upload and relocated ZIP verification must bind receipt claims
+    # to the physically retained sibling output. The manifest alone only
+    # proves that the receipt file itself survived transport intact.
+    output_file = path.parent.parent / output.name
+    if output_file.is_symlink() or not output_file.is_file():
+        raise ReleaseArtifactIntegrityError("Publication receipt output is not retained")
+    if (output_file.stat().st_size != receipt["bytes"] or
+            _sha256(output_file) != receipt["sha256"]):
+        raise ReleaseArtifactIntegrityError("Publication receipt media digest mismatch")
     return True
 
 
