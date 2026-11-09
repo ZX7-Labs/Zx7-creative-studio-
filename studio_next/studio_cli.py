@@ -388,6 +388,11 @@ def workspace_status(path):
         # state, an outcome/recovery claim, or permission to replay native writes.
         record["runner_liveness"] = {"status": observed,
             "requires_attention": observed != "active", "automatic_write_replay": False}
+        if record["state"] == "running" and record.get("session_id") == directory.name:
+            journal = directory / "native-journal.jsonl"
+            if journal.exists() or journal.is_symlink():
+                from .native_creative_audit import native_journal_progress
+                record["native_progress"] = native_journal_progress(journal)
     return {"workspace": str(root), "sessions": [record for _, record in sessions],
             "runner_observation": {"workspace_lock_held": held_after,
                 "bound_session_id": bound_session, "scope": "host_runner_only"}}

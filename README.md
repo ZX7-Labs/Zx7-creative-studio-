@@ -71,6 +71,11 @@ retained for inspection and is never automatically replayed.
 `status` also checks the owning runner's live kernel locks. A saved `running`
 record whose runner has died is annotated as needing attention without rewriting
 that record or claiming recovery of an editor/render process.
+For a running session with a private native journal, `native_progress` reports
+acknowledged editor writes, recorded export verifications, and the latest
+journal event, including a submitted native tool still awaiting a recorded
+result. It reads complete records only and leaves the journal intact. Export
+counts summarize earlier verifications rather than inspecting current media.
 
 For the supported hosted NVIDIA adapter, choose `--provider nvidia` at `init`
 and provide `NVIDIA_API_KEY` only to the trusted runner environment. Both

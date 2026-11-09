@@ -76,12 +76,13 @@ def _strict_json(value):
         raise NativeJournalError("Invalid journal JSON") from exc
 
 
-def read_native_journal(path: Path):
-    """Read immutable private JSONL within a strict budget; never follow a symlink."""
+def read_native_journal(path: Path, *, live=False):
+    """Read bounded JSONL. Live readers use only the complete private prefix."""
     path = Path(path)
     if path.is_symlink():
         raise NativeJournalError("Journal cannot be a symlink")
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags = (os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) |
+             getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
     try:
         fd = os.open(path, flags)
     except OSError as exc:
@@ -91,12 +92,18 @@ def read_native_journal(path: Path):
         if (not stat.S_ISREG(source_stat.st_mode) or
                 source_stat.st_size > 16 * 1024 * 1024):
             raise NativeJournalError("Journal must be a bounded regular file")
+        if live and (source_stat.st_uid != os.getuid() or stat.S_IMODE(source_stat.st_mode) & 0o077):
+            raise NativeJournalError("Live journal must be private and owner-controlled")
         with os.fdopen(fd, "rb", closefd=False) as source:
             raw = source.read(16 * 1024 * 1024 + 1)
         if len(raw) > 16 * 1024 * 1024:
             raise NativeJournalError("Journal grew past the audit limit")
     finally:
         os.close(fd)
+    if live and not raw.endswith(b"\n"):
+        raw = raw.rpartition(b"\n")[0]
+    if live and not raw:
+        return []
     lines = raw.splitlines()
     if not lines or len(lines) > 1024 or any(not line or len(line) > 128 * 1024
                                               for line in lines):
@@ -106,6 +113,42 @@ def read_native_journal(path: Path):
     except UnicodeDecodeError as exc:
         raise NativeJournalError("Journal is not UTF-8") from exc
     return events
+
+
+def native_journal_progress(path: Path):
+    """Summarize recorded progress without returning receipts or authorizing replay."""
+    try:
+        events = read_native_journal(path, live=True)
+    except (NativeJournalError, OSError):
+        return {"state": "unavailable"}
+    if not events:
+        return {"state": "awaiting_first_record"}
+    writes = 0
+    exports = set()
+    for index, event in enumerate(events):
+        if (not isinstance(event, dict) or type(event.get("sequence")) is not int or
+                event["sequence"] != index or not isinstance(event.get("kind"), str) or
+                not re.fullmatch(r"[a-z_]{1,64}", event["kind"]) or
+                (event["kind"] == "session_started") != (index == 0)):
+            return {"state": "unavailable"}
+        if event["kind"] != "native_tool_result":
+            continue
+        receipt = event.get("host_application_write_receipt_sha256")
+        if (event.get("host_application_write_acknowledged") is True and
+                _sha(receipt) and event.get("text_sha256") == [receipt]):
+            writes += 1
+        verified = event.get("independently_verified_export_sha256")
+        if event.get("tool") == _EXPORT and _sha(verified):
+            exports.add(verified)
+    last = events[-1]
+    progress = {"state": "recorded", "complete_records": len(events),
+                "acknowledged_native_writes": writes, "recorded_export_verifications": len(exports),
+                "last_event_kind": last["kind"]}
+    tool = last.get("tool")
+    if (last["kind"] == "native_tool_submitted" and isinstance(tool, str) and
+            re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", tool)):
+        progress["pending_native_tool"] = tool
+    return progress
 
 
 def audit_native_journal(events, *, host_tool_access, expected_required_evidence=None,

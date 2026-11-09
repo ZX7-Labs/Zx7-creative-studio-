@@ -229,6 +229,52 @@ with patch.object(studio, 'doctor', return_value={'ready': True}), \
         self.assertEqual(path.read_bytes(), original)
         self.assertTrue((path.parent / "sources.json").is_file())
 
+    def test_status_reads_complete_live_journal_records_without_rewriting_evidence(self):
+        self.init()
+        process, sid = self.start_blocked_fixture_runner()
+        session = self.root / "sessions" / sid
+        status = (session / "status.json").read_bytes()
+        journal = session / "native-journal.jsonl"
+        ack, export = "a" * 64, "b" * 64
+        events = [
+            {"kind": "session_started"},
+            {"kind": "native_tool_submitted", "tool": "add_text_clip"},
+            {"kind": "native_tool_result", "tool": "add_text_clip",
+             "host_application_write_acknowledged": True,
+             "host_application_write_receipt_sha256": ack, "text_sha256": [ack]},
+            {"kind": "native_tool_submitted", "tool": "zx7_verify_native_export"},
+            {"kind": "native_tool_result", "tool": "zx7_verify_native_export",
+             "independently_verified_export_sha256": export},
+            {"kind": "native_tool_submitted", "tool": "save_project"},
+        ]
+        prefix = b"".join((json.dumps({"sequence": i, **event}) + "\n").encode()
+                          for i, event in enumerate(events))
+        partial = prefix + b'{"sequence":6,"kind":"native_tool_result"'
+        journal.write_bytes(partial)
+        journal.chmod(0o600)
+        report = studio.workspace_status(self.root)["sessions"][0]
+        self.assertEqual(report["runner_liveness"]["status"], "active")
+        self.assertEqual(report["native_progress"], {
+            "state": "recorded", "complete_records": 6,
+            "acknowledged_native_writes": 1, "recorded_export_verifications": 1,
+            "last_event_kind": "native_tool_submitted", "pending_native_tool": "save_project",
+        })
+        self.assertNotIn(ack, json.dumps(report["native_progress"]))
+        self.assertNotIn(export, json.dumps(report["native_progress"]))
+        self.assertEqual(journal.read_bytes(), partial)
+        self.assertEqual((session / "status.json").read_bytes(), status)
+
+        journal.write_bytes(prefix + b'invalid journal record\n')
+        invalid = studio.workspace_status(self.root)["sessions"][0]
+        self.assertEqual(invalid["native_progress"], {"state": "unavailable"})
+        self.assertEqual(invalid["runner_liveness"]["status"], "active")
+
+        journal.unlink()
+        os.mkfifo(journal, 0o600)
+        unsafe = studio.workspace_status(self.root)["sessions"][0]
+        self.assertEqual(unsafe["native_progress"], {"state": "unavailable"})
+        self.assertIsNone(process.poll())
+
     def test_killed_preparing_runner_is_not_reported_as_active(self):
         self.init()
         asset = self.base / "original.mov"
