@@ -25,6 +25,11 @@ _EDITOR_CLIENT = ROOT / "engines" / "velorn" / "native-model-client.py"
 _EXAMPLE = ROOT / "engines" / "velorn" / "editor.example.json"
 _PINNED_EDITOR = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
 _ALLOWED_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+# A previous genuine 40-turn hosted run verified two real exports and observed
+# their frames, but spent its last turns exporting a post-review revision and
+# could not independently verify that final output. The 48-turn experiment is
+# still strictly bounded, synthetic-only and host-permissioned.
+_TRIAL_MAX_TURNS = 48
 _PICTURE_PROFILE_FIELDS = (
     "width", "height", "sample_aspect_ratio", "codec_name", "pix_fmt",
     "color_range", "color_space", "color_transfer", "color_primaries",
@@ -422,7 +427,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         "--structured-actions",
         "--fresh-trial-project",
         "--evaluation-evidence", "reviewed-revision",
-        "--max-turns", "40",
+        "--max-turns", str(_TRIAL_MAX_TURNS),
         "--model-timeout", "90",
         "--source", str(_SOURCE_EDITOR),
         "--config", str(cfg),
