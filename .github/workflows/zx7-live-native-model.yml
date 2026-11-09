@@ -23,6 +23,8 @@ on:
       - ".github/workflows/zx7-live-native-model.yml"
       - "engines/velorn/local-model-trial-4b.candidate.json"
       - "research/local-native-trial-request.json"
+      - "scripts/run_native_model_trial.py"
+      - "scripts/test_native_model_trial_budget.py"
   # Ordinary PRs stay cheap. The optional local-neural run requires a
   # same-repository PR with an independently changed, strict versioned
   # synthetic-only request. Fork PRs cannot execute the heavyweight job.
