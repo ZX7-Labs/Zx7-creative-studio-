@@ -563,7 +563,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         This is scripted protocol evidence only; no real model or editor ran.
         """
         from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
-        from studio_next.native_render_evidence import DESTINATION_FIELD, destination_digest
+        from studio_next.native_render_evidence import (DESTINATION_FIELD, destination_digest, REVIEWED_NATIVE_EVIDENCE)
 
         before = "/private/native/exports/before.mp4"
         after = "/private/native/exports/after.mp4"
@@ -628,7 +628,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         session = VerifierLaterFails()
         grants = {tool.name: ("write" if tool.name in
             {"update_text_clip", "export_timeline"} else "read") for tool in session.tools}
-        required = ("reviewed_native_render_pair_verified",)
+        required = tuple(sorted(REVIEWED_NATIVE_EVIDENCE))
         result = await NativeCreativeControl(session, model, max_turns=12,
             host_tool_access=grants, required_evidence=required,
             host_content_revision_tools=("update_text_clip",)).run("Review a revised native export")
@@ -636,7 +636,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.verify_after_calls, 3)
         rejected = [e for e in result["events"] if e["kind"] == "model_finish_rejected"]
         self.assertEqual(len(rejected), 1)
-        self.assertEqual(rejected[0]["missing_completion_evidence"], list(required))
+        self.assertEqual(rejected[0]["missing_completion_evidence"], [
+            "physical_export_verified",
+            "reviewed_native_render_pair_verified",
+            "verified_export_frame_observed",
+        ])
+        # A stale physical/frame proof after the last failed read must not
+        # falsely satisfy generic evidence, not only the reviewed pair.
         failures = [e for e in result["events"]
                     if e["kind"] == "native_read_tool_reported_error"]
         self.assertEqual(len(failures), 1)
