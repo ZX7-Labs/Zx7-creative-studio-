@@ -30,6 +30,10 @@ _ALLOWED_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 # could not independently verify that final output. The 48-turn experiment is
 # still strictly bounded, synthetic-only and host-permissioned.
 _TRIAL_MAX_TURNS = 48
+_TRIAL_WIDTH = 640
+_TRIAL_HEIGHT = 360
+_TRIAL_FPS = 24
+_TRIAL_MAX_SECONDS = 6
 _PICTURE_PROFILE_FIELDS = (
     "width", "height", "sample_aspect_ratio", "codec_name", "pix_fmt",
     "color_range", "color_space", "color_transfer", "color_primaries",
@@ -43,6 +47,13 @@ _HOST_ALLOWED = frozenset({
     "add_shape_clip", "update_shape_clip", "set_clip_style",
     "save_project", "export_timeline", "move_clips",
 })
+
+
+def synthetic_trial_delivery_requirement(*, max_seconds):
+    """Tell the model the same delivery settings the physical checker enforces."""
+    return (f"Deliver H.264 MP4 at {_TRIAL_WIDTH}x{_TRIAL_HEIGHT}, {_TRIAL_FPS} fps, "
+            f"at most {max_seconds} seconds. Use those picture settings for the "
+            "project and both exports.")
 
 
 def _no_cloud_credentials():
@@ -123,8 +134,9 @@ def prepare_trial(workspace: Path, *, source: Path):
         "revised export. Keep the export settings identical to the first "
         "export so the editorial change can be compared. "
         "Do not repeat an uncertain native write. "
-        "This is a bounded synthetic engineering trial: video up to six "
-        "seconds, resolution 640x360, 24 fps. No model-generated footage, "
+        "This is a bounded synthetic engineering trial. "
+        f"{synthetic_trial_delivery_requirement(max_seconds=_TRIAL_MAX_SECONDS)} "
+        "No model-generated footage, "
         "external sources, downloaded media or private user assets are needed. "
         "The synthetic source is locally generated and may be inspected by "
         "this remote vision model. Final quality still requires independent "
@@ -377,7 +389,8 @@ def trial_picture_changed(before, after):
 
 
 def trial_delivery_profile_compliant(
-        decoded, *, width=640, height=360, fps=24, max_seconds=6):
+        decoded, *, width=_TRIAL_WIDTH, height=_TRIAL_HEIGHT,
+        fps=_TRIAL_FPS, max_seconds=_TRIAL_MAX_SECONDS):
     """Independently enforce this *experiment's* declared resource profile.
 
     This is NOT a ZX7 product-wide resolution, duration or aesthetic limit.

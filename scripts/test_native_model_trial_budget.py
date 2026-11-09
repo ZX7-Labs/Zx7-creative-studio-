@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from scripts.run_native_model_trial import build_trial_parser, retain_safe_native_editor_logs
+from scripts.run_nvidia_native_trial import synthetic_trial_delivery_requirement
 
 
 class NativeModelTrialBudgetTests(unittest.TestCase):
@@ -13,6 +14,11 @@ class NativeModelTrialBudgetTests(unittest.TestCase):
     def arguments(*extra):
         return ["--source", "/tmp/pinned-velorn", "--runtime", "/tmp/local-runtime",
                 "--artifacts", "/tmp/retained-trial", *extra]
+
+    def test_local_trial_brief_names_the_full_physical_delivery_contract(self):
+        requirement = synthetic_trial_delivery_requirement(max_seconds=8)
+        for term in ("H.264 MP4", "640x360", "24 fps", "at most 8 seconds"):
+            self.assertIn(term, requirement)
 
     def test_default_remains_bounded_for_non_extended_local_runs(self):
         args = build_trial_parser().parse_args(self.arguments())

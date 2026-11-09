@@ -23,6 +23,7 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from scripts.run_nvidia_native_trial import synthetic_trial_delivery_requirement
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.native_editor_source_pin import (pinned_electron_marker_previews, pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
@@ -42,6 +43,7 @@ _ALLOWED_EDITOR_DIAGNOSTICS = (
     "launcher.log", "velorn/app.log", "velorn/export-worker.log")
 _SESSION_NAME = re.compile(r"session-[A-Za-z0-9_-]{1,64}\Z")
 _MAX_RETAINED_LOG_BYTES = 1024 * 1024
+_LOCAL_TRIAL_MAX_SECONDS = 8
 
 
 def retain_safe_native_editor_logs(editor_state: Path, artifacts: Path) -> int:
@@ -304,8 +306,9 @@ async def trial(args, lock, artifacts, command):
         'Inspect a physically verified frame of your export, independently identify an improvement, '
         'make that editable change and deliver a new verified export. Save your native work. '
         'Keep the export settings identical for both versions so the editorial change can be compared. '
-        'This is a CPU technical trial: keep the film at most eight seconds and 640x360, '
-        'with small bounded state queries. Those are trial resource bounds, not product/style limits. '
+        'This is a CPU technical trial. '
+        f'{synthetic_trial_delivery_requirement(max_seconds=_LOCAL_TRIAL_MAX_SECONDS)} '
+        'Use small bounded state queries. Those are trial resource bounds, not product/style limits. '
         'Your model supports text and images, not native WAV listening; do not claim hearing. '
         'Known exporter limitation: at least one imported image/video must appear on the visual timeline. '
         f'Projects folder: {projects}. Output folder: {outputs}. '
@@ -449,7 +452,8 @@ async def trial(args, lock, artifacts, command):
         trial_picture_changed, verify_saved_native_trial,
     )
     try:
-        saved_native = verify_saved_native_trial(artifacts, source_ledger=source_assets, max_clip_duration=8)
+        saved_native = verify_saved_native_trial(
+            artifacts, source_ledger=source_assets, max_clip_duration=_LOCAL_TRIAL_MAX_SECONDS)
     except (ValueError, OSError) as exc:
         saved_native = {"native_saved_project_verified": False,
                         "native_saved_project_rejection_type": type(exc).__name__}
@@ -475,8 +479,8 @@ async def trial(args, lock, artifacts, command):
                     for item, matches in zip(pair, paths, strict=True))
                 picture_profiles = [before.picture_profile, after.picture_profile]
                 reviewed_pair_delivery_profile_compliant = (
-                    trial_delivery_profile_compliant(before, max_seconds=8) and
-                    trial_delivery_profile_compliant(after, max_seconds=8))
+                    trial_delivery_profile_compliant(before, max_seconds=_LOCAL_TRIAL_MAX_SECONDS) and
+                    trial_delivery_profile_compliant(after, max_seconds=_LOCAL_TRIAL_MAX_SECONDS))
                 changed_presentation = trial_picture_changed(before, after)
         except (ValueError, OSError, subprocess.SubprocessError) as exc:
             presentation_rejection = type(exc).__name__
