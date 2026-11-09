@@ -3,6 +3,12 @@
 set -euo pipefail
 
 test "$(uname -s):$(uname -m)" = Linux:x86_64
+mode=${1:-upstream}
+case "$mode" in
+  upstream|supported-electron) test "$#" -le 1 ;;
+  *) echo "Expected upstream or supported-electron" >&2; exit 2 ;;
+esac
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 npm ci --ignore-scripts --no-audit --no-fund
 assets=$(mktemp -d)
 trap 'rm -rf -- "$assets"' EXIT
@@ -49,4 +55,11 @@ install_binary @derhuerst/ffprobe-static ffprobe
 # Run every ordinary native install hook, including Electron. The two media
 # packages detect their checksum-verified executables at the expected paths.
 # A known Electron upstream 504 gets one checksum-preserving alternate route.
-bash ../../engines/velorn/rebuild-ci-native-modules.sh
+if [[ "$mode" == supported-electron ]]; then
+  # Keep the locked npm package and all its ordinary hooks. Replace only the
+  # upstream-pinned Electron executable distribution in this compatibility run.
+  ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm rebuild --no-audit --no-fund
+  bash "$script_dir/install-supported-electron.sh"
+else
+  bash "$script_dir/rebuild-ci-native-modules.sh"
+fi
