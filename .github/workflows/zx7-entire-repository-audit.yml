@@ -24,6 +24,10 @@ jobs:
         run: python -m pip install '.[production,editor]'
       - name: Verify native schema transport and host tool grants
         run: python -m unittest studio_next.test_body_editor_client studio_next.test_body_editor_catalog studio_next.test_body_editor_policy studio_next.test_body_editor_mcp -v
+      - name: Install native frame fixture encoder and decoder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
       - name: Verify adapter path policy and interrupted startup cleanup
         run: node --test engines/velorn/*.test.mjs
       - name: Verify local model parsing and native control evidence boundaries
