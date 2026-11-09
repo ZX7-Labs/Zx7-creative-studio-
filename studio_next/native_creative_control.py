@@ -912,12 +912,12 @@ class NativeCreativeControl:
             return None
         return _native_project_asset_count_from_text(snapshot["result_texts"])
 
-    async def _observe_placement_inventory(self, tool, arguments, validator):
+    async def _observe_placement_inventory(self, tool, arguments, validator, *, refresh=False):
         timeline_id = self._trusted_project_active_timeline_id()
         if timeline_id is None or not validator.is_valid(arguments):
             return None
         previous = self._placement_observations.get(tool)
-        if previous is not None and previous[0] == timeline_id:
+        if not refresh and previous is not None and previous[0] == timeline_id:
             return previous[1]
         inventory = None
         try:
@@ -1948,8 +1948,16 @@ class NativeCreativeControl:
                     content_inputs.get("newTrack") is not True and
                     content_inputs.get("trackStrategy") not in ("new", "newTopTrack"))
                 if needs_existing_video_track and content_track_sensing:
+                    # A model may have seen the same inventory one turn
+                    # ago. Another editor/client can add/remove tracks without
+                    # our own acknowledged native WRITE, so a stale cached
+                    # inventory must never reject a now-valid existing track.
+                    # Re-read only when a model explicitly selects a content
+                    # write with an existing target; native MCP still validates
+                    # again at actual dispatch (TOCTOU remains possible).
                     inspected = await self._observe_placement_inventory(
-                        "get_timeline", {"includeClips": False}, validators["get_timeline"])
+                        "get_timeline", {"includeClips": False},
+                        validators["get_timeline"], refresh=True)
                     if inspected is not None:
                         observed_video_ids = sorted(
                             track["id"] for track in inspected
