@@ -356,7 +356,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                      "path": "assets/video/" + source.name,
                      "settings": {"sourcePath": str(source)}}
             clip = {"id": "clip-1", "trackId": "video-1",
-                    "assetId": "asset-1", "duration": 3.0}
+                    "assetId": "asset-1", "startTime": 0.0, "duration": 3.0}
             timeline = {"id": "timeline-1", "tracks": [
                 {"id": "video-1", "type": "video"}], "clips": [clip]}
             project = {"currentTimelineId": "timeline-1",
@@ -384,6 +384,16 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "differs from owner SHA ledger"):
                 verify_saved_native_trial(workspace, source_ledger=sources, max_clip_duration=8)
 
+            # A source is still an active trial picture when it intersects
+            # the delivery interval by a fraction of a second. This validates
+            # source placement, not pixels being visible through other layers.
+            partly_visible = {**clip, "startTime": 5.75}
+            write_project({**project, "timelines": [
+                {**timeline, "clips": [partly_visible]}]})
+            self.assertEqual(
+                verify_saved_native_trial(workspace)["verified_source_backed_video_clips"], 1)
+            write_project(project)
+
             for change in (
                 {"timelines": [{**timeline, "clips": []}]},
                 {"currentTimelineId": "nonexistent"},
@@ -391,6 +401,27 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                     {**clip, "assetId": "unknown"}]}]},
                 {"timelines": [{**timeline, "clips": [
                     {**clip, "duration": 0}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "duration": float("inf")}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "duration": 10 ** 400}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": 6.0}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": 60.0}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": 10 ** 400}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": -0.25}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": float("nan")}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": "0"}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": True}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {key: value for key, value in clip.items()
+                     if key != "startTime"}]}]},
                 {"assets": [{**asset, "type": "image"}]},
                 {"timelines": [{**timeline, "clips": [
                     {**clip, "enabled": False}]}]},
