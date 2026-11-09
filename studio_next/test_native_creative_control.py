@@ -524,7 +524,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         before = "/private/native/exports/before.mp4"
         after = "/private/native/exports/after.mp4"
         sha = {before: "a" * 64, after: "b" * 64}
-        picture = b"\\x89PNG\\r\\n\\x1a\\n" + b"scripted-frame"
+        picture = b"\x89PNG\r\n\x1a\n" + b"scripted-frame"
         png_sha = hashlib.sha256(picture).hexdigest()
 
         class VerifierLaterFails(FakeSession):
