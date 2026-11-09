@@ -289,6 +289,247 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(grammar.is_valid(decision("invoke", tool=placement, inputs={"previewOnly": False})))
         self.assertTrue(audit_native_journal(result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
 
+    async def test_real_video_track_ids_protect_model_chosen_post_review_content_write(self):
+        # Real 4B turn 33 (run 42650208249) used timeline-... as the
+        # trackId for add_text_clip AFTER seeing a genuine verified PNG.
+        # The host must not send this known-invalid WRITE to the editor.
+        # The model still chooses the later valid creative action.
+        from studio_next.native_creative_audit import audit_native_journal
+
+        tool = "add_text_clip"
+        class CurrentNativeTracks(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools = [
+                    SimpleNamespace(name="get_project", description="Observe project",
+                                    input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_timeline", description="Observe active timeline",
+                                    input_schema={"type": "object", "properties": {
+                                        "includeClips": {"type": "boolean"}}}),
+                    SimpleNamespace(name=tool, description="Native editable type",
+                                    input_schema={"type": "object", "properties": {
+                                        "trackId": {"type": "string"},
+                                        "text": {"type": "string"},
+                                        "previewOnly": {"type": "boolean"}}}),
+                ]
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    content = {"project": {"currentTimelineId": "timeline-real",
+                                           "path": "/native/project"},
+                               "currentTimeline": {"id": "timeline-real",
+                                                   "clipCount": 1},
+                               "mcp": {"hasProject": True}}
+                elif name == "get_timeline":
+                    content = {"id": "timeline-real", "tracks": [
+                        {"id": "video-1", "type": "video", "name": "Picture",
+                         "locked": False},
+                        {"id": "audio-1", "type": "audio", "name": "Sound"}]}
+                else:
+                    content = {"success": True, "createdEditableTextClip": True}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(content))])
+
+        session = CurrentNativeTracks()
+        invalid_timeline = decision("invoke", tool=tool, inputs={
+            "trackId": "timeline-real", "text": "Small Steps. Clear Progress.",
+            "previewOnly": False})
+        invalid_audio = decision("invoke", tool=tool, inputs={
+            "trackId": "audio-1", "text": "Small Steps. Clear Progress.",
+            "previewOnly": False})
+        valid = decision("invoke", tool=tool, inputs={
+            "trackId": "video-1", "text": "Small Steps. Clear Progress.",
+            "previewOnly": False})
+        model = ScriptedModel([
+            decision("search", query=tool, limit=1),
+            invalid_timeline, invalid_audio, valid,
+            decision("finish", summary="The model placed editable typography")])
+        model.requires_indexed_native_function_contracts = True
+        grants = {"get_project": "read", "get_timeline": "read", tool: "write"}
+        with tempfile.TemporaryDirectory() as root:
+            journal = Path(root) / "native.jsonl"
+            result = await NativeCreativeControl(
+                session, model, max_turns=5, catalog_mode="indexed",
+                receipt_path=journal, host_tool_access=grants).run(
+                    "After seeing real picture, independently improve typography")
+            self.assertEqual(result["status"], "model_finished_unverified")
+            self.assertEqual([name for name, _ in session.calls].count(tool), 1)
+            self.assertIn((tool, valid["arguments"]["inputs"]), session.calls)
+            self.assertNotIn((tool, invalid_timeline["arguments"]["inputs"]), session.calls)
+            self.assertNotIn((tool, invalid_audio["arguments"]["inputs"]), session.calls)
+            observed = model.observed[1]["host_observed_content_video_tracks"]
+            self.assertEqual(observed["active_timeline_id"], "timeline-real")
+            self.assertEqual([track["id"] for track in observed["tracks"]], ["video-1"])
+            self.assertIs(observed["read_only"], True)
+            feedback = model.observed[2]["last_rejected_native_action_feedback"]
+            self.assertEqual(feedback["validation_keyword"], "host_observed_video_track_id")
+            self.assertEqual(feedback["verified_active_video_track_ids"], ["video-1"])
+            self.assertEqual(feedback["active_timeline_id_is_not_a_track_id"],
+                             "timeline-real")
+            self.assertTrue(feedback["no_native_dispatch"])
+            rejects = [e for e in result["events"] if
+                       e.get("kind") == "model_action_rejected" and
+                       e.get("validation_keyword") == "host_observed_video_track_id"]
+            self.assertEqual(len(rejects), 2)
+            self.assertTrue(all(e["no_native_dispatch"] for e in rejects))
+            self.assertFalse(any(e["kind"] == "native_tool_reported_error"
+                                 for e in result["events"]))
+            self.assertTrue(audit_native_journal(
+                result["events"], host_tool_access=grants
+            )["journal_chain_structurally_valid"])
+
+    async def test_content_write_rechecks_external_track_changes_before_dispatch(self):
+        # An external editor may replace track IDs WITHOUT a write by this
+        # model. Cached preflight hints are observations, not live authority.
+        # A fresh host read at actual content write admission prevents both
+        # false acceptance and false rejection of changed native tracks.
+        tool = "add_text_clip"
+        class ExternalTrackSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.track_id = "video-1"
+                self.tools = [
+                    SimpleNamespace(name="get_project", description="Read project",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_timeline", description="Read real tracks",
+                        input_schema={"type": "object", "properties": {
+                            "includeClips": {"type": "boolean"}}}),
+                    SimpleNamespace(name=tool, description="Add editable type",
+                        input_schema={"type": "object", "properties": {
+                            "trackId": {"type": "string"}, "text": {"type": "string"}}}),
+                ]
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                data = (
+                    {"project": {"currentTimelineId": "timeline-1"},
+                     "currentTimeline": {"id": "timeline-1", "clipCount": 1},
+                     "mcp": {"hasProject": True}} if name == "get_project" else
+                    {"id": "timeline-1", "tracks": [{
+                        "id": self.track_id, "type": "video"}]} if name == "get_timeline"
+                    else {"success": True})
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(data))])
+
+        session = ExternalTrackSession()
+        stale = decision("invoke", tool=tool,
+                         inputs={"trackId": "video-1", "text": "Updated"})
+        fresh = decision("invoke", tool=tool,
+                         inputs={"trackId": "video-2", "text": "Updated"})
+        class ModelWithExternalEdit(ScriptedModel):
+            def decide(self, context):
+                action = super().decide(context)
+                if len(self.observed) == 2:
+                    # The model saw video-1 in the previous host snapshot,
+                    # but an independently acting editor removes that track.
+                    session.track_id = "video-2"
+                return action
+
+        model = ModelWithExternalEdit([
+            decision("search", query=tool, limit=1), stale, fresh,
+            decision("finish", summary="Chosen current native video track")])
+        model.requires_indexed_native_function_contracts = True
+        grants = {"get_project": "read", "get_timeline": "read", tool: "write"}
+        result = await NativeCreativeControl(
+            session, model, max_turns=4, catalog_mode="indexed",
+            host_tool_access=grants).run("Retain exact current editor track identity")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(model.observed[1][
+            "host_observed_content_video_tracks"]["tracks"][0]["id"], "video-1")
+        self.assertEqual(model.observed[2][
+            "last_rejected_native_action_feedback"]["verified_active_video_track_ids"],
+                         ["video-2"])
+        self.assertEqual([call for call in session.calls if call[0] == tool],
+                         [(tool, fresh["arguments"]["inputs"])])
+        reads = [call for call in session.calls if call[0] == "get_timeline"]
+        self.assertGreaterEqual(len(reads), 3)
+        self.assertEqual(
+            len([event for event in result["events"]
+                 if event.get("validation_keyword") == "host_observed_video_track_id"]), 1)
+
+    async def test_content_track_validation_preserves_new_track_and_missing_read_grant(self):
+        # A model may deliberately create a new track. No fixed list of
+        # allowable creative layers and no fabricated read authority.
+        tool = "add_text_clip"
+        class ContentSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools = [
+                    SimpleNamespace(name="get_project", description="Read project",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_timeline", description="Read timeline",
+                        input_schema={"type": "object", "properties": {
+                            "includeClips": {"type": "boolean"}}}),
+                    SimpleNamespace(name=tool, description="New text content",
+                        input_schema={"type": "object", "properties": {
+                            "trackId": {"type": "string"}, "text": {"type": "string"},
+                            "createTrack": {"type": "boolean"},
+                            "trackStrategy": {"type": "string"},
+                            "previewOnly": {"type": "boolean"}}}),
+                ]
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                content = (
+                    {"project": {"currentTimelineId": "timeline-real"},
+                     "currentTimeline": {"id": "timeline-real", "clipCount": 1},
+                     "mcp": {"hasProject": True}} if name == "get_project" else
+                    {"id": "timeline-real", "tracks": [
+                        {"id": "video-1", "type": "video"}]} if name == "get_timeline"
+                    else {"success": True})
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(content))])
+
+        cases = [
+            ({"trackId": "future-id", "text": "Original",
+              "createTrack": True, "previewOnly": False}, True),
+            ({"trackId": "future-id", "text": "Original",
+              "trackStrategy": "newTopTrack", "previewOnly": False}, True),
+            ({"text": "Original", "previewOnly": False}, True),
+            ({"trackId": "unknown", "text": "Original",
+              "previewOnly": False}, False),
+        ]
+        for inputs, should_dispatch in cases:
+            with self.subTest(inputs=inputs):
+                session = ContentSession()
+                model = ScriptedModel([
+                    decision("invoke", tool=tool, inputs=inputs),
+                    decision("finish", summary="Native host decided final placement")])
+                grants = {"get_project": "read", "get_timeline": "read", tool: "write"}
+                result = await NativeCreativeControl(
+                    session, model, max_turns=2, host_tool_access=grants).run(
+                        "Choose the actual native content track freely")
+                actual_writes = [call for call in session.calls if call[0] == tool]
+                self.assertEqual(len(actual_writes), 1 if should_dispatch else 0)
+                if not should_dispatch:
+                    self.assertEqual(
+                        model.observed[1]["last_rejected_native_action_feedback"][
+                            "validation_keyword"], "host_observed_video_track_id")
+                    self.assertEqual(result["status"], "model_finished_unverified")
+
+        # The absence of an explicit get_timeline grant cannot be converted
+        # into invented track IDs or a new host permission. The controller
+        # retains the installed native tool's original validation authority.
+        session = ContentSession()
+        # Host grant inventory must EXACTLY equal the installed tool set.
+        # An unavailable current-timeline reader is not an ungranted but
+        # executable fake; remove it from the advertised MCP catalog too.
+        session.tools = [item for item in session.tools
+                         if item.name != "get_timeline"]
+        restricted = {"get_project": "read", tool: "write"}
+        model = ScriptedModel([
+            decision("invoke", tool=tool, inputs={
+                "trackId": "not-observed", "text": "Original", "previewOnly": False}),
+            decision("finish", summary="Native tool remains authoritative")])
+        result = await NativeCreativeControl(
+            session, model, max_turns=2, host_tool_access=restricted).run(
+                "Only owner-granted native tools")
+        self.assertEqual([name for name, _ in session.calls].count("get_timeline"), 0)
+        self.assertEqual([name for name, _ in session.calls].count(tool), 1)
+        self.assertIsNone(model.observed[0]["host_observed_content_video_tracks"])
+        self.assertEqual(result["status"], "model_finished_unverified")
+
     async def test_local_batch_placement_exposes_imported_assets_without_staged_paths(self):
         tool = "add_assets_to_timeline"
         class InventorySession(FakeSession):

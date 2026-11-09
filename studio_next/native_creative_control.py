@@ -46,6 +46,14 @@ _MAX_PLACEMENT_TRACKS = 32
 _MAX_PLACEMENT_ASSETS = 16
 _SINGLE_ASSET_PLACEMENT = "add_asset_to_timeline"
 _BATCH_ASSET_PLACEMENT = "add_assets_to_timeline"
+# Native content generators target an EXISTING video track unless their
+# own installed schema explicitly requests creation of a new track. Real Qwen
+# turn 33 in run #42650208249 confused the active timeline ID with a track ID,
+# sending an invalid add_text_clip write after genuinely observing pixels.
+# These are tool roles, not permitted artistic styles or preselected edits.
+_CONTENT_VIDEO_TRACK_WRITES = frozenset({
+    "add_text_clip", "add_shape_clip", "add_adjustment_clip",
+})
 _VERIFIED_FRAME_TOOLS = frozenset({
     "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples"})
 _VERIFIED_AUDIO_TOOLS = frozenset({"zx7_observe_verified_export_audio"})
@@ -904,12 +912,12 @@ class NativeCreativeControl:
             return None
         return _native_project_asset_count_from_text(snapshot["result_texts"])
 
-    async def _observe_placement_inventory(self, tool, arguments, validator):
+    async def _observe_placement_inventory(self, tool, arguments, validator, *, refresh=False):
         timeline_id = self._trusted_project_active_timeline_id()
         if timeline_id is None or not validator.is_valid(arguments):
             return None
         previous = self._placement_observations.get(tool)
-        if previous is not None and previous[0] == timeline_id:
+        if not refresh and previous is not None and previous[0] == timeline_id:
             return previous[1]
         inventory = None
         try:
@@ -1232,6 +1240,16 @@ class NativeCreativeControl:
         track_sensing = (local_indexed_contracts and
             _SINGLE_ASSET_PLACEMENT in self._host_verified_top_level_previews and
             self.host_tool_access.get("get_timeline") == "read")
+        # Both the small indexed model and the full NVIDIA tool model can
+        # confuse a project/timeline ID with a video TRACK ID. Only an actual
+        # host-granted get_timeline READ can give safe content-track choices.
+        # Absent that grant/schema/snapshot, retain the editor's original
+        # contract rather than inventing object identities or a new policy.
+        content_track_sensing = (
+            self.host_tool_access is not None and
+            self.host_tool_access.get("get_timeline") == "read" and
+            "get_timeline" in validators and
+            validators["get_timeline"].is_valid({"includeClips": False}))
         asset_sensing = (local_indexed_contracts and
             _BATCH_ASSET_PLACEMENT in self._host_verified_top_level_previews and
             self.host_tool_access.get("get_assets") == "read")
@@ -1430,7 +1448,24 @@ class NativeCreativeControl:
                 placement_validator = None
                 placement_tracks = None
                 placement_assets = None
+                content_video_tracks = None
                 turn_input_schemas = selected_input_schemas
+                # Host reads are observations only. They make real current
+                # video track identities visible; the model still chooses
+                # whether/what/where to create or revise. A native write
+                # invalidates the cached placement inventory.
+                if (content_track_sensing and
+                        bool(_CONTENT_VIDEO_TRACK_WRITES.intersection(visible_selectable))):
+                    inspected = await self._observe_placement_inventory(
+                        "get_timeline", {"includeClips": False}, validators["get_timeline"])
+                    if inspected is not None:
+                        content_video_tracks = {
+                            "active_timeline_id": self._trusted_project_active_timeline_id(),
+                            "tracks": [track for track in inspected
+                                       if track["type"] == "video"],
+                            "source": "host_authorized_current_timeline_read",
+                            "read_only": True,
+                        }
                 if asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable:
                     placement_assets = await self._observe_placement_inventory(
                         "get_assets", {"limit": _MAX_PLACEMENT_ASSETS}, validators["get_assets"])
@@ -1465,6 +1500,7 @@ class NativeCreativeControl:
                     "selectable_native_tools": visible_selectable,
                     "inspectable_native_tools": list(self._inspectable_tied_candidates),
                     "host_observed_machine_affordances": host_frontier,
+                    "host_observed_content_video_tracks": content_video_tracks,
                     "host_selected_native_input_hints": (
                         _selected_native_input_hints(visible_selectable, self.tools,
                             admission_schemas=turn_input_schemas)
@@ -1895,6 +1931,57 @@ class NativeCreativeControl:
                                       list(invalid.schema_path)[:16])[:512],
                                   "no_native_dispatch": True})
                     continue
+                # A model may propose a timeline ID as trackId, even after
+                # genuine visual review. For pinned content clip tools an
+                # explicitly supplied existing track MUST be one of the
+                # live host-observed video tracks before attempting the
+                # potentially stateful native action. Never infer IDs from
+                # the model's reason or from original/staged file names.
+                # The editor's createTrack/newTrack/newTopTrack path remains
+                # unrestricted: it is a distinct genuine creative operation.
+                content_inputs = args["inputs"]
+                needs_existing_video_track = (
+                    native_name in _CONTENT_VIDEO_TRACK_WRITES and
+                    type(content_inputs.get("trackId")) is str and
+                    bool(content_inputs["trackId"]) and
+                    content_inputs.get("createTrack") is not True and
+                    content_inputs.get("newTrack") is not True and
+                    content_inputs.get("trackStrategy") not in ("new", "newTopTrack"))
+                if needs_existing_video_track and content_track_sensing:
+                    # A model may have seen the same inventory one turn
+                    # ago. Another editor/client can add/remove tracks without
+                    # our own acknowledged native WRITE, so a stale cached
+                    # inventory must never reject a now-valid existing track.
+                    # Re-read only when a model explicitly selects a content
+                    # write with an existing target; native MCP still validates
+                    # again at actual dispatch (TOCTOU remains possible).
+                    inspected = await self._observe_placement_inventory(
+                        "get_timeline", {"includeClips": False},
+                        validators["get_timeline"], refresh=True)
+                    if inspected is not None:
+                        observed_video_ids = sorted(
+                            track["id"] for track in inspected
+                            if track["type"] == "video")
+                        if content_inputs["trackId"] not in observed_video_ids:
+                            self._last_preflight_feedback = {
+                                "tool": native_name,
+                                "validation_keyword": "host_observed_video_track_id",
+                                "verified_active_video_track_ids": observed_video_ids,
+                                "active_timeline_id_is_not_a_track_id":
+                                    self._trusted_project_active_timeline_id(),
+                                "choose_a_new_model_decision": True,
+                                "no_native_dispatch": True,
+                            }
+                            self._append({
+                                "kind": "model_action_rejected", "turn": turn,
+                                **timing, "tool": native_name,
+                                "inputs_sha256": hashlib.sha256(
+                                    _wire(content_inputs).encode()).hexdigest(),
+                                "validation_keyword": "host_observed_video_track_id",
+                                "schema_location": "properties/trackId",
+                                "no_native_dispatch": True,
+                            })
+                            continue
                 if (self._machine_contracts is not None and
                         native_name in self._host_preconditions):
                     known_facts = {}
