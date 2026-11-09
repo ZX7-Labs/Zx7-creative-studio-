@@ -483,6 +483,10 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             trial = lambda item: trial_delivery_profile_compliant(
                 item, width=64, height=36, fps=24, max_seconds=0.5)
             self.assertTrue(trial(before))
+            # The actual pinned 60-second Velorn H.264 proof has no SAR
+            # metadata. It must not fail an otherwise sound 640x360 export.
+            self.assertTrue(trial(before._replace(picture_profile={
+                **before.picture_profile, "sample_aspect_ratio": None})))
             self.assertTrue(trial(decode_trial_export(revised)))
             self.assertFalse(trial_delivery_profile_compliant(before))
             self.assertFalse(trial(decode_trial_export(retimed)))
