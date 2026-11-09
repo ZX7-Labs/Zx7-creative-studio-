@@ -4,6 +4,6 @@
   "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
   "synthetic_only": true,
   "cloud_synthetic_frames_allowed": true,
-  "max_turns": 40,
-  "request_id": "20261109-nvidia-strict-reviewed-after-255"
+  "max_turns": 48,
+  "request_id": "20261109-nvidia-48-strict-reviewed-after-271"
 }
