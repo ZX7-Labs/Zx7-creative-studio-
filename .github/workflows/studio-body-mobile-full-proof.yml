@@ -198,11 +198,38 @@ jobs:
           (root/'verified-release-evidence.json').write_text(json.dumps(release,indent=2)+'\n')
           print(json.dumps(release,indent=2))
           PY
-      - name: Retain real installer, original media, editable project and GUI/test evidence
-        if: always()
+      # actions/upload-artifact v4 excludes hidden directories by default.
+      # The generated manifest includes .zx7-publications receipts; without
+      # explicit inclusion the downloaded public proof drops source provenance.
+      # Never enable hidden uploads before checking exact file/receipt identity.
+      - name: Admit only exact manifested public release files and synthetic receipts
+        id: release_artifact_integrity
+        run: python -m scripts.release_artifact_integrity output/body-release-proof
+      - name: Retain complete safe installer, editable sources and provenance receipts
+        if: steps.release_artifact_integrity.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: zx7-integrated-mobile-native-body-proof
           path: output/body-release-proof/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Download the exact retained release proof for independent byte audit
+        if: steps.release_artifact_integrity.outcome == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: zx7-integrated-mobile-native-body-proof
+          path: ${{ runner.temp }}/zx7-retained-release-proof
+      - name: Reject missing or changed files in actual uploaded release archive
+        if: steps.release_artifact_integrity.outcome == 'success'
+        run: python -m scripts.release_artifact_integrity "$RUNNER_TEMP/zx7-retained-release-proof" --relocated
+      - name: Retain non-hidden failure diagnostics without exposing unvetted files
+        if: failure() && steps.release_artifact_integrity.outcome != 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-integrated-mobile-native-body-proof-incomplete-public-diagnostics
+          path: |
+            output/body-release-proof/all-tests.log
+            output/body-release-proof/verified-release-evidence.json
           if-no-files-found: warn
           retention-days: 7
