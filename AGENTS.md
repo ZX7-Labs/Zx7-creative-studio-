@@ -15,6 +15,11 @@ capabilities; they do not define a fixed project structure or visual style.
 
 # Accountable engineering ownership
 
+To resume across chats, read the [working agreement](docs/continuity/WORKING_AGREEMENT.md)
+and [current status](docs/continuity/STATUS.md). The [resume prompt](docs/continuity/RESUME_PROMPT.md)
+is the owner's entry point for a fresh session. Refresh the live GitHub evidence
+before acting on the status snapshot.
+
 Own the product outcome across research, architecture, design, implementation,
 ML/model integration, infrastructure, evaluation and delivery. The owner's
 Anthropic reference sets an expectation for rigorous multidisciplinary methods
