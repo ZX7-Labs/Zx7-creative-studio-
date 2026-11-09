@@ -1,0 +1,53 @@
+name: "ZX7 Studio — Ubuntu Source Installer"
+on:
+  pull_request:
+    paths:
+      - "scripts/install-zx7-linux.sh"
+      - ".github/workflows/zx7-linux-source-install.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-linux-source-install-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-source-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install from a source checkout into a fresh prefix
+        run: |
+          target="$RUNNER_TEMP/zx7-owner-install"
+          bash scripts/install-zx7-linux.sh "$target"
+          test -L "$target"
+          test -x "$target/bin/zx7-studio"
+          test "$("$target/node/bin/node" --version)" = "v24.22.2"
+          editor=$(realpath -- "$target/venv/share/zx7-studio/velorn")
+          test ! -e "$editor/.git/objects/info/alternates"
+          echo "ZX7_INSTALL_PREFIX=$target" >> "$GITHUB_ENV"
+          echo "ZX7_INSTALLED_EDITOR=$editor" >> "$GITHUB_ENV"
+      - name: Refuse a repeat install without replacing the installed prefix
+        run: |
+          before=$(readlink -- "$ZX7_INSTALL_PREFIX")
+          if bash scripts/install-zx7-linux.sh "$ZX7_INSTALL_PREFIX"; then
+            echo "Installer unexpectedly replaced the existing prefix" >&2
+            exit 1
+          fi
+          test "$(readlink -- "$ZX7_INSTALL_PREFIX")" = "$before"
+          "$ZX7_INSTALL_PREFIX/bin/zx7-studio" --help
+      - name: Verify sandboxed desktop selection and decoded sequence
+        run: |
+          electron="$ZX7_INSTALLED_EDITOR/node_modules/electron/dist/electron"
+          test "$(stat -c '%u:%a' "$(dirname -- "$electron")/chrome-sandbox")" = "0:4755"
+          xvfb-run -a timeout 40s "$electron" engines/velorn/image-sequence-selection-e2e.cjs \
+            "$ZX7_INSTALLED_EDITOR" after
+      - name: Run the installed owner console outside the checkout
+        run: |
+          PATH="$ZX7_INSTALL_PREFIX/bin:$PATH" "$ZX7_INSTALL_PREFIX/venv/bin/python" \
+            -u engines/velorn/installed-studio-e2e.py --source "$ZX7_INSTALLED_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb --live-research
