@@ -46,6 +46,7 @@ install_binary() {
 
 install_binary ffmpeg-static ffmpeg
 install_binary @derhuerst/ffprobe-static ffprobe
-# Run the ordinary native install hooks, including Electron. The two media
-# packages detect their verified executable at the expected module path.
-npm rebuild --no-audit --no-fund
+# Run every ordinary native install hook, including Electron. The two media
+# packages detect their checksum-verified executables at the expected paths.
+# A known Electron upstream 504 gets one checksum-preserving alternate route.
+bash ../../engines/velorn/rebuild-ci-native-modules.sh
