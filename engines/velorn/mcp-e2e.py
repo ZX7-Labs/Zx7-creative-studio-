@@ -221,7 +221,20 @@ async def exercise(options):
         for name, count in (("source.mp4", 1), ("tone.wav", 2)):
             await call(session, "import_asset_from_path", {"path": str(staging / name), "previewOnly": False})
             await wait(session, lambda state: state.get("assetCount") == count)
-        await call(session, "add_asset_to_timeline", {"assetName": "source.mp4", "startSeconds": 0, "includeAudio": False, "previewOnly": False})
+        unimported = await session.call_tool("add_assets_to_timeline", {
+            "assetNames": ["source.mp4", "not-imported.mp4"], "previewOnly": False})
+        assert unimported.is_error, unimported
+        assert unimported.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
+        missing = await session.call_tool("add_asset_to_timeline", {
+            "assetName": "not-imported.mp4", "previewOnly": False})
+        assert missing.is_error, missing
+        assert missing.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
+        assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
+        timeline = await call(session, "get_timeline", {"includeClips": False})
+        picture_track = next(track["id"] for track in timeline["tracks"] if track["type"] == "video")
+        await call(session, "add_assets_to_timeline", {"assetNames": ["source.mp4"],
+            "trackStrategy": "singleTrack", "trackId": picture_track, "startSeconds": 0,
+            "includeAudio": False, "previewOnly": False})
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 1)
         await call(session, "add_asset_to_timeline", {"assetName": "tone.wav", "startSeconds": 0, "previewOnly": False})
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 2)

@@ -184,7 +184,7 @@ from studio_next.durable_graph import DurableFilmGraph
 from studio_next.body_publication import physical_tool_attempt
 from studio_next.body_integration import _commit_actual_body_output
 root=Path(sys.argv[1])
-store=DurableFilmGraph(root/"owner-ledger.sqlite3")
+store=DurableFilmGraph(root/"owner-ledger.sqlite3",clock=lambda:1000.0)
 _,_,owner=store.start_or_reuse(
     "original-film","render-original","sha256-original-source",
     trusted_idempotent=True,
@@ -216,8 +216,9 @@ raise SystemExit("Expected process-death hook was not reached")
         self.assertEqual(len(list(self.root.glob(".zx7-uncommitted-*"))),1)
         before_receipts=list((self.root/".zx7-publications").glob("*.json"))
         self.assertEqual(len(before_receipts),1)
-        time.sleep(.15)
-        store=DurableFilmGraph(self.root/"owner-ledger.sqlite3")
+        # Advance only the lease clock. The process death, SQLite rollback,
+        # fsync and publication recovery are real regardless of CI scheduling.
+        store=DurableFilmGraph(self.root/"owner-ledger.sqlite3",clock=lambda:1000.15)
         status,_,new_owner=store.start_or_reuse(
             self.PROJECT,self.NODE,self.INPUT,
             trusted_idempotent=True,

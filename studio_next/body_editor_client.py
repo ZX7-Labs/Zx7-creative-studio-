@@ -52,6 +52,7 @@ HOST_REJECTION_FEEDBACK = MappingProxyType({
     "output_exists": "Native export cannot overwrite an existing destination; choose a new outputPath",
     "output_path_required": "Native export requires an explicit new outputPath",
     "export_readiness_unconfirmed": "Native export was not started. Inspect check_export_readiness before requesting a new export",
+    "placement_plan_unconfirmed": "No timeline edit was submitted. Inspect imported assets with get_assets, target tracks with get_timeline, or preview the placement for the editor error",
     "host_policy_denied": "Native tool rejected by host policy; choose authorized arguments",
 })
 

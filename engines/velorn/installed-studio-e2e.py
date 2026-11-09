@@ -74,8 +74,14 @@ def exercise(source, xvfb):
                     if tool is None:
                         action = {"action": "finish", "arguments": {"summary": "Scripted transport fixture completed"}}
                     elif tool in context["selectable_native_tools"]:
+                        inputs = args(owner, output) if callable(args) else args
+                        if tool == "add_asset_to_timeline":
+                            tracks = context["native_placement_tracks"]["tracks"]
+                            picture = next(track for track in tracks
+                                           if track["type"] == "video" and not track.get("locked"))
+                            inputs = {**inputs, "trackId": picture["id"]}
                         action = {"action": "invoke", "arguments": {"tool": tool,
-                            "inputs": args(owner, output) if callable(args) else args}}
+                            "inputs": inputs}}
                     else:
                         action = {"action": "search", "arguments": {"query": tool, "limit": 1}}
                     action["reason"] = "Explicit scripted installation test"

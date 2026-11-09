@@ -181,6 +181,100 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result["events"][-1]["kind"], "native_tool_reported_error")
                 self.assertNotIn("host_source_attested_preview_only", result["events"][1])
 
+    async def test_local_placement_uses_current_track_choices_and_refreshes_after_write(self):
+        from jsonschema import Draft202012Validator
+        from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
+        from studio_next.native_creative_audit import audit_native_journal
+
+        placement = "add_asset_to_timeline"
+        class TrackSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.track_id = "video-1"
+                self.tools = [
+                    SimpleNamespace(name="get_project", description="Read project", input_schema={
+                        "type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_timeline", description="Read timeline", input_schema={
+                        "type": "object", "properties": {"includeClips": {"type": "boolean"}}}),
+                    SimpleNamespace(name=placement, description="Place native footage", input_schema={
+                        "type": "object", "properties": {"trackId": {"type": "string"},
+                                                          "previewOnly": {"type": "boolean"}}}),
+                ]
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    external_switch = self.calls.count(("get_project", {})) == 3
+                    if external_switch:
+                        self.track_id = "video-external"
+                    value = {"project": {"currentTimelineId": "current",
+                                         "path": "/project-2" if external_switch else "/project-1"},
+                             "currentTimeline": {"id": "current", "clipCount": 0},
+                             "mcp": {"hasProject": True}}
+                elif name == "get_timeline":
+                    value = {"id": "current", "tracks": [{"id": self.track_id,
+                              "name": "Picture", "type": "video", "locked": False}]}
+                else:
+                    self.track_id = "video-current"
+                    value = {"success": True}
+                return SimpleNamespace(is_error=False, content=[SimpleNamespace(type="text", text=json.dumps(value))])
+
+        session = TrackSession()
+        guessed = decision("invoke", tool=placement, inputs={"trackId": "track-1", "previewOnly": False})
+        selected = decision("invoke", tool=placement, inputs={"trackId": "video-1", "previewOnly": False})
+        model = ScriptedModel([decision("search", query=placement, limit=1), guessed, selected,
+                               decision("search", query="get_project", limit=1),
+                               decision("invoke", tool="get_project", inputs={}),
+                               decision("search", query=placement, limit=1),
+                               decision("finish", summary="Placed real track fixture")])
+        model.requires_indexed_native_function_contracts = True
+        grants = {"get_project": "read", "get_timeline": "read", placement: "write"}
+        result = await NativeCreativeControl(session, model, max_turns=7,
+            catalog_mode="indexed", host_tool_access=grants,
+            host_verified_top_level_preview_tools=(placement,)).run("Place footage on an observed track")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(session.calls, [("get_project", {}), ("get_timeline", {"includeClips": False}),
+            (placement, selected["arguments"]["inputs"]), ("get_project", {}),
+            ("get_timeline", {"includeClips": False}), ("get_project", {}),
+            ("get_timeline", {"includeClips": False})])
+        for index, identity in ((1, "video-1"), (2, "video-1"), (3, "video-current"), (6, "video-external")):
+            self.assertEqual(model.observed[index]["native_placement_tracks"]["tracks"][0]["id"], identity)
+        grammar = Draft202012Validator(LocalNativeStructuredCreativeModel._current_host_schema(model.observed[1]))
+        self.assertFalse(grammar.is_valid(guessed))
+        self.assertTrue(grammar.is_valid(selected))
+        self.assertTrue(grammar.is_valid(decision("invoke", tool=placement, inputs={"previewOnly": False})))
+        self.assertTrue(audit_native_journal(result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
+    async def test_local_batch_placement_exposes_imported_assets_without_staged_paths(self):
+        tool = "add_assets_to_timeline"
+        class InventorySession(FakeSession):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    value = {"project": {"currentTimelineId": "current"},
+                             "currentTimeline": {"id": "current", "clipCount": 1}, "mcp": {"hasProject": True}}
+                else:
+                    value = {"count": 1, "limitApplied": False, "assets": [
+                        {"id": "native-asset", "name": "first.mp4", "type": "video", "path": "/private/input.mp4"}]}
+                return SimpleNamespace(is_error=False, content=[SimpleNamespace(type="text", text=json.dumps(value))])
+
+        session = InventorySession()
+        session.tools = [
+            SimpleNamespace(name="get_project", description="Read project", input_schema={"type": "object"}),
+            SimpleNamespace(name="get_assets", description="Read imported assets", input_schema={"type": "object"}),
+            SimpleNamespace(name=tool, description="Place multiple assets", input_schema={"type": "object",
+                "properties": {"previewOnly": {"type": "boolean"}}}),
+        ]
+        model = ScriptedModel([decision("search", query=tool, limit=1), decision("finish", summary="Observed imported media")])
+        model.requires_indexed_native_function_contracts = True
+        grants = {"get_project": "read", "get_assets": "read", tool: "write"}
+        await NativeCreativeControl(session, model, max_turns=2, catalog_mode="indexed",
+            host_tool_access=grants, host_verified_top_level_preview_tools=(tool,)).run("Inspect the imported footage")
+        self.assertEqual(session.calls, [("get_project", {}), ("get_assets", {"limit": 16})])
+        self.assertEqual(model.observed[1]["native_placement_assets"], {
+            "assets": [{"id": "native-asset", "name": "first.mp4", "type": "video"}],
+            "count": 1, "complete": True, "staged_files_require_import": True})
+
     async def test_attested_preview_does_not_recover_malformed_status_or_error_content(self):
         malformed = (
             {"isError": True, "is_error": False, "content": []},

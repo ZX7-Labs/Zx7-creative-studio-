@@ -826,6 +826,50 @@
       "terminal_llama_server_prompt_processing_seconds": 237.24,
       "finding": "Source-attested recovery worked. The model continued after an invalid-track placement preview, then the 300-second HTTP timeout interrupted its eighth inference. The current structured contract allowed omitting previewOnly, and the compact hints omitted the field after filling the bounded parameter window. No editorial or latency improvement is credited from this run.",
       "model_inference_not_replaced_with_script": true
+    },
+    {
+      "body_commit": "c31d0caf67ae04128d451c49f7942e94c24501f7",
+      "workflow_commit": "c04091f49f5e850fc1e3b7d50d892a0e0c13918e",
+      "workflow_run": 42545785849,
+      "artifact_id": 13643654784,
+      "artifact_zip_sha256": "1e2141fe8d1e240914307a74fe952da5f4728367da8c623857ced955ef5875fa",
+      "model": "unsloth/Qwen3.5-4B-GGUF",
+      "revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+      "cpu_only": true,
+      "cpu_count": 4,
+      "model_timeout_seconds": 480,
+      "trial_timeout_seconds": 7200,
+      "measured_inference_wall_seconds": [
+        172.36,
+        179.71,
+        176.25,
+        219.1,
+        233.26,
+        322.49
+      ],
+      "acknowledged_native_writes": 3,
+      "model_selected_track_id_matched_observed_native_track": true,
+      "model_selected_track_id": "video-1",
+      "saved_native_source_evidence": {
+        "native_project_sha256": "cd7c37ae7028411b910c51ec981a5c0878b5ac32c2aa5a3a42ca59b1fd320691",
+        "active_native_timeline_id": "timeline-1794188202616",
+        "saved_active_clip_count": 1,
+        "verified_source_backed_video_clips": 1,
+        "artistic_quality_approved": false,
+        "native_saved_project_verified": true
+      },
+      "imported_copy_sha256_matches_original": true,
+      "independent_original_video_full_decode": true,
+      "physical_exports": 0,
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "failure": {
+        "tool": "add_assets_to_timeline",
+        "native_error": "No placeable asset matched \"raw-gradient-1.mp4\".",
+        "native_error_sha256": "a54899fd571c245b0f6c65fdae195a03ec8b007508311017c19cbd9f3f0b1b22",
+        "model_requested_unimported_asset_in_an_apply_call": true
+      },
+      "model_inference_not_replaced_with_script": true
     }
   ]
 }

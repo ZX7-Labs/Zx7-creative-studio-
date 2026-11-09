@@ -37,6 +37,10 @@ _MAX_READ_SNAPSHOT_TOTAL_BYTES = 48_000
 _MAX_READ_SNAPSHOTS = 6
 _MAX_LAST_ACK_RECEIPT_BYTES = 16_000
 _MAX_AUDIO_BYTES = 128 * 1024
+_MAX_PLACEMENT_TRACKS = 32
+_MAX_PLACEMENT_ASSETS = 16
+_SINGLE_ASSET_PLACEMENT = "add_asset_to_timeline"
+_BATCH_ASSET_PLACEMENT = "add_assets_to_timeline"
 _VERIFIED_FRAME_TOOLS = frozenset({
     "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples"})
 _VERIFIED_AUDIO_TOOLS = frozenset({"zx7_observe_verified_export_audio"})
@@ -220,6 +224,50 @@ def _native_active_timeline_id_from_text(texts):
         return None
     project = _strict_receipt(texts, "native active timeline")
     return project["currentTimeline"]["id"]
+
+
+def _native_placement_tracks(texts, timeline_id):
+    timeline = _strict_receipt(texts, "native placement tracks")
+    tracks = timeline.get("tracks") if timeline.get("id") == timeline_id else None
+    if not isinstance(tracks, list) or len(tracks) > _MAX_PLACEMENT_TRACKS:
+        raise NativeCreativeControlError("Placement needs a bounded active-timeline track inventory")
+    choices = []
+    seen = set()
+    for track in tracks:
+        identity = track.get("id") if isinstance(track, dict) else None
+        if (not isinstance(identity, str) or not 1 <= len(identity) <= 128 or
+                identity != identity.strip() or any(ord(char) < 32 for char in identity) or
+                identity in seen or track.get("type") not in ("video", "audio")):
+            raise NativeCreativeControlError("Placement track identities are malformed or ambiguous")
+        seen.add(identity)
+        choice = {"id": identity, "type": track["type"]}
+        if isinstance(track.get("name"), str):
+            choice["name"] = track["name"][:120]
+        for flag in ("locked", "visible"):
+            if type(track.get(flag)) is bool:
+                choice[flag] = track[flag]
+        choices.append(choice)
+    return choices
+
+
+def _native_placement_assets(texts):
+    receipt = _strict_receipt(texts, "native imported assets")
+    assets, count, limited = receipt.get("assets"), receipt.get("count"), receipt.get("limitApplied")
+    if (not isinstance(assets, list) or type(count) is not int or type(limited) is not bool or
+            len(assets) != min(count, _MAX_PLACEMENT_ASSETS) or limited != (count > len(assets))):
+        raise NativeCreativeControlError("Imported asset inventory is incomplete or ambiguous")
+    choices, seen = [], set()
+    for asset in assets:
+        identity = asset.get("id") if isinstance(asset, dict) else None
+        if not isinstance(identity, str) or not 1 <= len(identity) <= 128 or identity in seen:
+            raise NativeCreativeControlError("Imported asset identities are malformed or ambiguous")
+        seen.add(identity)
+        choice = {"id": identity}
+        for field, maximum in (("name", 256), ("type", 32)):
+            if isinstance(asset.get(field), str) and len(asset[field]) <= maximum:
+                choice[field] = asset[field]
+        choices.append(choice)
+    return {"assets": choices, "count": count, "complete": not limited, "staged_files_require_import": True}
 
 
 def _pinned_source_clip_edit_plan_matches(name, plan):
@@ -771,6 +819,7 @@ class NativeCreativeControl:
         # Context continuity is not an editor cache or state attestation.
         # Actual native schema, project IDs, and writes remain authoritative.
         self._native_read_snapshots: dict[str, dict] = {}
+        self._placement_observations: dict[str, tuple[str, Any]] = {}
         self._last_acknowledged_native_write: dict | None = None
         # Ground project presence only in actual native get_project results,
         # never in model text, metadata discovery, or an earlier session.
@@ -849,6 +898,37 @@ class NativeCreativeControl:
             return None
         return _native_project_asset_count_from_text(snapshot["result_texts"])
 
+    async def _observe_placement_inventory(self, tool, arguments, validator):
+        timeline_id = self._trusted_project_active_timeline_id()
+        if timeline_id is None or not validator.is_valid(arguments):
+            return None
+        previous = self._placement_observations.get(tool)
+        if previous is not None and previous[0] == timeline_id:
+            return previous[1]
+        inventory = None
+        try:
+            result = await self.session.call_tool(tool, arguments)
+            if not _native_mcp_error_status(result):
+                texts, images, audio = _native_content(result)
+                if not images and not audio:
+                    inventory = (_native_placement_tracks(texts, timeline_id) if tool == "get_timeline"
+                                 else _native_placement_assets(texts))
+        except Exception:
+            # This is an optional, bounded READ. Native dispatch remains
+            # available under its original schema when observation fails.
+            pass
+        self._placement_observations[tool] = (timeline_id, inventory)
+        is_tracks = tool == "get_timeline"
+        kind = "host_placement_track_observation" if is_tracks else "host_placement_asset_observation"
+        count_field = "observed_track_count" if is_tracks else "observed_asset_count"
+        count = digest = None
+        if inventory is not None:
+            count = len(inventory if is_tracks else inventory["assets"])
+            digest = hashlib.sha256(texts[0].encode()).hexdigest()
+        self._append({"kind": kind, "tool": tool, count_field: count, "text_sha256": digest,
+                      "host_attested_read_only": True, "no_model_selected_mutation": True})
+        return inventory
+
     def _remember_native_write_ack(self, name, texts):
         """Preserve the exact model-selected application receipt after
         automatic get_project reconciliation replaces last_native_result.
@@ -867,6 +947,7 @@ class NativeCreativeControl:
         # could now refer to a different document/version, even when the
         # create/import API acknowledged successfully.
         self._native_read_snapshots.clear()
+        self._placement_observations.clear()
         self._last_acknowledged_native_write = item
 
     def _missing_completion_evidence(self):
@@ -1100,6 +1181,12 @@ class NativeCreativeControl:
             validators[native_name] = cls(admission)
         selected_input_schemas = ({name: validator.schema for name, validator in validators.items()}
                                   if local_indexed_contracts else None)
+        track_sensing = (local_indexed_contracts and
+            _SINGLE_ASSET_PLACEMENT in self._host_verified_top_level_previews and
+            self.host_tool_access.get("get_timeline") == "read")
+        asset_sensing = (local_indexed_contracts and
+            _BATCH_ASSET_PLACEMENT in self._host_verified_top_level_previews and
+            self.host_tool_access.get("get_assets") == "read")
         # Restrict any special preview parser to an exact host-installed
         # native tool with an actual boolean previewOnly field.
         for name in self._host_verified_top_level_previews:
@@ -1263,6 +1350,23 @@ class NativeCreativeControl:
                             }
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
+                placement_validator = None
+                placement_tracks = None
+                placement_assets = None
+                turn_input_schemas = selected_input_schemas
+                if asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable:
+                    placement_assets = await self._observe_placement_inventory(
+                        "get_assets", {"limit": _MAX_PLACEMENT_ASSETS}, validators["get_assets"])
+                if track_sensing and _SINGLE_ASSET_PLACEMENT in visible_selectable:
+                    placement_tracks = await self._observe_placement_inventory(
+                        "get_timeline", {"includeClips": False}, validators["get_timeline"])
+                    base_placement = validators[_SINGLE_ASSET_PLACEMENT]
+                    if placement_tracks is not None and base_placement.schema.get("properties", {}).get(
+                            "trackId", {}).get("type") == "string":
+                        schema = copy.deepcopy(base_placement.schema)
+                        schema["properties"]["trackId"]["enum"] = ["", *[track["id"] for track in placement_tracks]]
+                        placement_validator = base_placement.evolve(schema=schema)
+                        turn_input_schemas = {**selected_input_schemas, _SINGLE_ASSET_PLACEMENT: schema}
                 indexed_actions = ["search"]
                 if visible_selectable or self._inspectable_tied_candidates:
                     indexed_actions.append("describe")
@@ -1286,7 +1390,7 @@ class NativeCreativeControl:
                     "host_observed_machine_affordances": host_frontier,
                     "host_selected_native_input_hints": (
                         _selected_native_input_hints(visible_selectable, self.tools,
-                            admission_schemas=selected_input_schemas)
+                            admission_schemas=turn_input_schemas)
                         if self.catalog_mode == "indexed" else []),
                     # After an acknowledged one-shot machine operation,
                     # reveal a compact term vocabulary grounded only in other
@@ -1367,6 +1471,15 @@ class NativeCreativeControl:
                             for e in self.events),
                     },
                 }
+                if placement_tracks is not None:
+                    context["native_placement_tracks"] = {
+                        "timeline_id": self._trusted_project_active_timeline_id(),
+                        "tracks": placement_tracks,
+                        "track_id_optional": True,
+                        "omit_track_id_when_creating_new_track": True,
+                    }
+                if placement_assets is not None:
+                    context["native_placement_assets"] = placement_assets
                 # Optional provider-neutral native tool contracts. They are
                 # derived from the *current actual MCP list* AND BODY grants,
                 # never from model text, a canned manifest or another agent.
@@ -1384,7 +1497,7 @@ class NativeCreativeControl:
                         if not local_indexed_contracts and self._host_write_already_acknowledged(candidate):
                             continue
                         item = self.tools[candidate]
-                        schema = (validators[candidate].schema if local_indexed_contracts else
+                        schema = (turn_input_schemas[candidate] if local_indexed_contracts else
                                   _field(item, "input_schema", _field(item, "inputSchema")))
                         if not isinstance(schema, dict) or schema.get("type") != "object":
                             raise NativeCreativeControlError(
@@ -1657,9 +1770,11 @@ class NativeCreativeControl:
                                   "schema_location": "",
                                   "no_native_dispatch": True})
                     continue
-                invalid = next(validators[native_name].iter_errors(args["inputs"]), None)
+                validator = (placement_validator if native_name == _SINGLE_ASSET_PLACEMENT
+                             and placement_validator is not None else validators[native_name])
+                invalid = next(validator.iter_errors(args["inputs"]), None)
                 if invalid is not None:
-                    schema = validators[native_name].schema
+                    schema = validator.schema
                     self._last_preflight_feedback = {
                         "tool": native_name,
                         "validation_keyword": str(invalid.validator or "unknown")[:64],
@@ -2141,6 +2256,12 @@ class NativeCreativeControl:
                 elif not images and not audio:
                     self._remember_native_read(native_name, args["inputs"], texts,
                                                origin="model_selected")
+                    if native_name == "get_project":
+                        # Two projects can use the same native timeline ID.
+                        # An explicit project refresh invalidates both inventories.
+                        self._placement_observations.clear()
+                    else:
+                        self._placement_observations.pop(native_name, None)
                 self._append({"kind": "native_tool_result", "turn": turn,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,

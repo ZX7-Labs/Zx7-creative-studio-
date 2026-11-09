@@ -122,6 +122,9 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                            grants.get("get_timeline") == "read")
     export_readiness = (semantic_source and "read" in access and
                         grants.get("check_export_readiness") == "read")
+    from .native_editor_source_pin import pinned_electron_asset_placement_previews
+    placement_preflight = (pinned_electron_asset_placement_previews(native_source, grants)
+                           if semantic_source and "write" in access else ())
     if CONTENT_DIAGNOSTICS_TOOL in native:
         raise ValueError("Native editor tool name collides with BODY content diagnostics")
     if content_diagnostics:
@@ -243,6 +246,18 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     async def list_tools(_ctx, _params):
         return types.ListToolsResult(tools=list(tools.values()))
 
+    def bounded_native_receipt(result):
+        blocks = result["content"]
+        if (len(blocks) != 1 or not isinstance(blocks[0], dict) or
+                blocks[0].get("type") != "text" or
+                not isinstance(blocks[0].get("text"), str) or
+                len(blocks[0]["text"]) > 131072):
+            raise ValueError("Native preflight did not return one bounded receipt")
+        state = _load_json(blocks[0]["text"])
+        if not isinstance(state, dict):
+            raise ValueError("Native preflight did not return an object")
+        return state
+
     def call_native(name, arguments):
         # The pinned exporter and this read use the same native readiness
         # function. A newly written clip may be saved before the published
@@ -254,17 +269,25 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             read_args = {key: value for key, value in arguments.items() if key in fields}
             try:
                 observed = client.call("check_export_readiness", read_args, allowed_access=access)
-                blocks = observed["content"]
-                if (len(blocks) != 1 or not isinstance(blocks[0], dict) or
-                        blocks[0].get("type") != "text" or
-                        not isinstance(blocks[0].get("text"), str) or
-                        len(blocks[0]["text"]) > 131072):
-                    raise ValueError("Native readiness did not return one bounded receipt")
-                state = _load_json(blocks[0]["text"])
-                if not isinstance(state, dict) or state.get("ready") is not True or state.get("blockers") != []:
+                state = bounded_native_receipt(observed)
+                if state.get("ready") is not True or state.get("blockers") != []:
                     raise ValueError("Native readiness was not established")
             except (EditorClientError, EditorAccessError, ValueError):
                 raise EditorPreDispatchError("export_readiness_unconfirmed") from None
+        if name in placement_preflight and arguments.get("previewOnly") is False:
+            # The pinned Electron handlers resolve the placement and exit
+            # before performAction when previewOnly is true. Ask that same
+            # resolver before passing on the original, model-selected edit.
+            try:
+                state = bounded_native_receipt(client.call(
+                    name, {**arguments, "previewOnly": True}, allowed_access=access))
+                plan = state.get("plan")
+                if (state.get("action") != name or state.get("previewOnly") is not True or
+                        "success" in state or not isinstance(plan, dict) or
+                        plan.get("previewOnly") is not True):
+                    raise ValueError("Native placement preview was not established")
+            except (EditorClientError, EditorAccessError, ValueError):
+                raise EditorPreDispatchError("placement_plan_unconfirmed") from None
         return client.call(name, arguments, allowed_access=access)
 
     async def call_tool(_ctx, params):

@@ -50,7 +50,7 @@ jobs:
       - name: Build the complete source editor, not a mocked UI
         working-directory: third_party/velorn
         run: |
-          npm ci --no-audit --no-fund
+          bash ../../engines/velorn/install-ci-dependencies.sh
           npm run build
           test -s dist/index.html
       - name: Enable Chromium's intended SUID sandbox rather than disabling it
