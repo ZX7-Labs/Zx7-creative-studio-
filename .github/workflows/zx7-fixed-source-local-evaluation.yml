@@ -1,0 +1,107 @@
+name: "ZX7 fixed-source installed-runtime local evaluation"
+# One explicit experiment; no secrets, owner media or hosted inference.
+# The workflow branch is not the code under test: checkout is fixed below.
+on:
+  push:
+    branches: [evaluation/installed-native-local-cbf189f]
+    paths: [.github/workflows/zx7-fixed-source-local-evaluation.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zx7-fixed-source-local-cbf189f
+  cancel-in-progress: false
+jobs:
+  actual-local-model-and-native-editor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 135
+    env:
+      MODEL_VARIANT: qwen3.5-4b
+    steps:
+      - name: Check out exact BODY and complete pinned editor source
+        uses: actions/checkout@v4
+        with:
+          ref: cbf189fdcd0826aafbe02fa30fd45c1b050f350b
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Admit exactly one pinned source and local CPU model, without credentials
+        run: |
+          test "$(git rev-parse HEAD)" = "cbf189fdcd0826aafbe02fa30fd45c1b050f350b"
+          git diff --exit-code HEAD --
+          python -m unittest scripts.test_local_native_trial_request -v
+          python -m scripts.local_native_trial_request research/local-native-trial-request.json
+          python - <<'CHECK'
+          import json
+          from pathlib import Path
+          lock=json.loads(Path("engines/velorn/local-model-trial-4b.candidate.json").read_text())
+          assert lock["model"]["id"] == "unsloth/Qwen3.5-4B-GGUF"
+          assert lock["model"]["license"] == "Apache-2.0"
+          assert lock["runtime"]["source_commit"] == "68d20b884c3878217de79eade0a249efde96ab38"
+          assert lock["server"]["host"] == "127.0.0.1"
+          assert lock["server"]["args"][lock["server"]["args"].index("--n-gpu-layers")+1] == "0"
+          CHECK
+      - name: Install native display, codecs and declared local protocol dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg xvfb xauth x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Verify source pin and ordinary non-root execution identity
+        run: |
+          test "$(id -u)" -ne 0
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+          python --version
+          node --version
+      - name: Build existing production editor from its pinned source
+        working-directory: third_party/velorn
+        run: |
+          bash ../../engines/velorn/install-ci-dependencies.sh
+          npm run build
+          test -s dist/index.html
+      - name: Enable the intended Chromium sandbox helper
+        working-directory: third_party/velorn
+        run: |
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(stat -c '%u:%a' "$helper")" = "0:4755"
+      - name: Run identified CPU model with real native editor and source-bound observations
+        run: |
+          # Exact source-pinned model choices only; no arbitrary user-supplied
+          # paths, shell code, hosted inference, or unverifiable weights.
+          case "$MODEL_VARIANT" in
+            qwen3.5-2b) model_lock="engines/velorn/local-model-trial.lock.json" ;;
+            qwen3.5-4b) model_lock="engines/velorn/local-model-trial-4b.candidate.json" ;;
+            *) echo "Unknown pinned local model variant" >&2; exit 2 ;;
+          esac
+          python -u scripts/run_native_model_trial.py \
+            --model-lock "$GITHUB_WORKSPACE/$model_lock" \
+            --source "$GITHUB_WORKSPACE/third_party/velorn" \
+            --runtime "$RUNNER_TEMP/zx7-model-runtime" \
+            --artifacts "$GITHUB_WORKSPACE/output/live-native-model" \
+            --model-timeout 480 \
+            --trial-timeout 7200 \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:95
+      - name: Verify the pinned editor source remains unchanged
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+      - name: Preserve actual trial results, including failures, without model weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-live-native-model-qwen3.5-4b-${{ github.sha }}
+          path: output/live-native-model/
+          if-no-files-found: warn
+          retention-days: 14
