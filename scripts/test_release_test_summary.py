@@ -127,7 +127,7 @@ class ReleaseArtifactUploadIntegrityTests(unittest.TestCase):
 
             retained = base / "retained"
             self.extracted_archive(source, retained, include_hidden=True)
-            proof = verify_release_tree(retained)
+            proof = verify_release_tree(retained, relocated=True)
             self.assertTrue(proof["verified"])
             self.assertEqual(proof["files"], 2)
             self.assertEqual(proof["source_bound_publication_receipts"], 1)
