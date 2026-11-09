@@ -706,7 +706,15 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     host_tool_access=grants,
                     required_evidence=("reviewed_native_render_pair_verified",),
                     host_content_revision_tools=("update_text_clip",)).run("Review two real exports")
-                self.assertEqual(result["status"], "model_finished_unverified")
+                # A finish with no reviewed native render pair is refused by
+                # the host, then the bounded scripted turn budget expires.
+                # Do not turn this negative case into a successful finish.
+                self.assertEqual(result["status"], "turn_budget_exhausted")
+                refused = [event for event in result["events"]
+                           if event["kind"] == "model_finish_rejected"]
+                self.assertEqual(len(refused), 1)
+                self.assertIn("reviewed_native_render_pair_verified",
+                              refused[0]["missing_completion_evidence"])
                 feedback = model.observed[-1]["last_rejected_native_action_feedback"]
                 if case in ("different", "invalidated"):
                     self.assertEqual(feedback["validation_keyword"],
