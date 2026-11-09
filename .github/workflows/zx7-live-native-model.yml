@@ -105,7 +105,10 @@ jobs:
          needs.pr-local-model-opt-in.outputs.requested == 'true')
       )
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    # A recorded Qwen3.5-4B CPU trial took 123.6 inference minutes
+    # for 30 turns; a 55-minute CI ceiling cannot evaluate the 48-turn
+    # reviewed-revision contract. This longer cap is opt-in ONLY.
+    timeout-minutes: 240
     steps:
       - name: Check out exact BODY and complete pinned editor source
         uses: actions/checkout@v4
@@ -185,6 +188,7 @@ jobs:
             --source "$GITHUB_WORKSPACE/third_party/velorn" \
             --runtime "$RUNNER_TEMP/zx7-model-runtime" \
             --artifacts "$GITHUB_WORKSPACE/output/live-native-model" \
+            --model-timeout 480 --trial-timeout 13200 \
             --xvfb-binary /usr/bin/Xvfb \
             --display 127.0.0.1:95
       - name: Verify the pinned editor source remains unchanged
