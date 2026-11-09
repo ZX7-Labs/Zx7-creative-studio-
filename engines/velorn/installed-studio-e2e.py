@@ -38,6 +38,7 @@ def exercise(source, xvfb):
         original_sha = digest(original)
         selected_steps = []
         errors = []
+        readiness = []
 
         class Fixture(BaseHTTPRequestHandler):
             def send_json(self, value, status=200):
@@ -61,6 +62,15 @@ def exercise(source, xvfb):
                     owner = json.loads(context["creative_brief"].split("\n\n", 1)[1].split("\n", 1)[1])
                     output = Path(owner["outputs_root"]) / "fixture.mp4"
                     tool, args = selected_steps[0]
+                    if tool == "check_export_readiness" and context["last_native_result_texts"]:
+                        latest = json.loads(context["last_native_result_texts"][0])
+                        if "blockers" in latest and "deliveryTarget" in latest:
+                            readiness.append({"ready": latest["ready"], "blockers": latest["blockers"]})
+                            if latest["ready"] is True:
+                                selected_steps.pop(0)
+                                tool, args = selected_steps[0]
+                            else:
+                                time.sleep(0.2)
                     if tool is None:
                         action = {"action": "finish", "arguments": {"summary": "Scripted transport fixture completed"}}
                     elif tool in context["selectable_native_tools"]:
@@ -70,7 +80,7 @@ def exercise(source, xvfb):
                         action = {"action": "search", "arguments": {"query": tool, "limit": 1}}
                     action["reason"] = "Explicit scripted installation test"
                     Draft202012Validator(request["response_format"]["json_schema"]["schema"]).validate(action)
-                    if action["action"] != "search":
+                    if action["action"] != "search" and tool != "check_export_readiness":
                         selected_steps.pop(0)
                     self.send_json({"model": request["model"],
                         "choices": [{"message": {"content": json.dumps(action)}}]})
@@ -100,17 +110,22 @@ def exercise(source, xvfb):
             if errors:
                 raise errors[0]
             if result.returncode:
+                print("Native readiness observations:", readiness)
+                for journal in studio.glob("sessions/*/native-journal.jsonl"):
+                    print(journal.read_text())
                 for log in studio.glob("state/*/session-*/launcher.log"):
                     print(log.read_text()[-10000:])
                 raise AssertionError((result.returncode, result.stdout, result.stderr))
             return json.loads(result.stdout)
 
+        export_settings = {"target": "h264_project", "width": 320, "height": 180,
+            "fps": 24, "range": "custom", "startSeconds": 0, "endSeconds": 2,
+            "includeAudio": False}
         delivery = [
             ("save_project", {"previewOnly": False}),
-            ("export_timeline", lambda _, output: {"outputPath": str(output),
-                "target": "h264_project", "width": 320, "height": 180, "fps": 24,
-                "range": "custom", "startSeconds": 0, "endSeconds": 2,
-                "includeAudio": False, "previewOnly": False}),
+            ("check_export_readiness", export_settings),
+            ("export_timeline", lambda _, output: {**export_settings,
+                "outputPath": str(output), "previewOnly": False}),
             ("zx7_verify_native_export", verify),
             (None, None),
         ]
