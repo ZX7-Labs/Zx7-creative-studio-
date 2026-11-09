@@ -566,6 +566,11 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     raise NativeJournalError("Native preview was forged as an applied write")
                 continue
             if kind == "native_read_tool_reported_error":
+                destination = event.get(DESTINATION_FIELD)
+                if (destination is not None and (
+                        not _sha(destination) or access != "read" or
+                        tool not in ({_EXPORT} | _FRAME_OBSERVERS))):
+                    raise NativeJournalError("Invalid failed native export read binding")
                 # This branch is only valid for a host-attested READ. Failed
                 # reads are not positive native evidence and grant no ability
                 # to advance artistic/export/source-completion counters.
