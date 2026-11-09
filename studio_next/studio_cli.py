@@ -339,6 +339,10 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 if allow_cloud_image_upload:
                     argv.append("--allow-cloud-image-upload")
                 args = build_parser().parse_args(argv)
+                if project_path is not None:
+                    from .native_editor_project import checkpoint_saved_project
+                    status["prior_project_checkpoint"] = checkpoint_saved_project(
+                        project_path, session / "prior-project.comfystudio")
                 status["state"] = "running"
                 _write_status(session, status)
                 summary = asyncio.run(run_native_session(args))

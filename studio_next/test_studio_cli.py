@@ -1,5 +1,6 @@
 """Owner workflow integration. Fixture model responses do not prove creativity."""
 import contextlib
+import hashlib
 import io
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -113,6 +114,53 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(model.await_args.args[0].project, selected)
         self.assertEqual(report["state"], "needs_attention")
         self.assertTrue(Path(report["outputs_directory"]).is_dir())
+
+    def test_failed_revision_retains_exact_prior_saved_project(self):
+        from studio_next import native_editor_session
+        self.init()
+        selected = self.root / "projects" / "owned-project"
+        selected.mkdir()
+        native = selected / "project.comfystudio"
+        original = b'{"timelines":[{"id":"before","clips":[]}]}\n'
+        native.write_bytes(original)
+
+        async def interrupted_save(args):
+            snapshot = args.receipt.parent / "prior-project.comfystudio"
+            self.assertEqual(snapshot.read_bytes(), original)
+            self.assertEqual(stat.S_IMODE(snapshot.stat().st_mode), 0o600)
+            self.assertEqual(native.read_bytes(), original)
+            native.write_bytes(b'{"timelines":[{"id":"after"}]}\n')
+            raise RuntimeError("interrupted after native save")
+
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", side_effect=interrupted_save):
+            with self.assertRaisesRegex(RuntimeError, "interrupted after native save"):
+                studio.run_workspace(self.root, brief="Revise my title", project=selected)
+        status = studio.workspace_status(self.root)["sessions"][0]
+        self.assertEqual(status["state"], "failed")
+        self.assertFalse(status["automatic_write_replay"])
+        checkpoint = status["prior_project_checkpoint"]
+        self.assertEqual(checkpoint["project"], str(selected))
+        self.assertEqual(checkpoint["sha256"], hashlib.sha256(original).hexdigest())
+        self.assertEqual(checkpoint["bytes"], len(original))
+        self.assertEqual(Path(checkpoint["path"]).read_bytes(), original)
+        self.assertIn(b'"after"', native.read_bytes())
+
+    def test_revision_refuses_redirected_saved_project_before_editor_open(self):
+        from studio_next import native_editor_session
+        self.init()
+        selected = self.root / "projects" / "owned-project"
+        selected.mkdir()
+        external = self.base / "external.comfystudio"
+        external.write_text("{}")
+        (selected / "project.comfystudio").symlink_to(external)
+        model = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", model):
+            with self.assertRaisesRegex(ValueError, "Saved native project file must not be a symbolic link"):
+                studio.run_workspace(self.root, brief="Revise my title", project=selected)
+        model.assert_not_awaited()
+        self.assertEqual(external.read_text(), "{}")
 
     def test_hosted_transport_uses_the_same_bounded_catalog_as_local(self):
         from studio_next import native_editor_session
