@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - "studio_next/creative_research.py"
+      - "studio_next/creative_research_mcp.py"
       - "studio_next/test_creative_research.py"
       - ".github/workflows/zx7-creative-research-live.yml"
   workflow_dispatch:
@@ -59,6 +60,20 @@ jobs:
           except Exception as exc:
               print(f"REAL studies: FAILED {type(exc).__name__}: {exc}", flush=True)
               checks.append(("studies", False))
+          for language, topic in (("en", "cinematography"), ("hi", "चलचित्र")):
+              try:
+                  references = research.web(query=topic, language=language, limit=3)
+                  assert references["provider"] == "wikipedia"
+                  assert references["result_content_untrusted"]
+                  assert not references["import_authorized"]
+                  assert references["results"]
+                  assert all(item["source_page"].startswith(f"https://{language}.wikipedia.org/?curid=")
+                             for item in references["results"])
+                  print(f"REAL wikipedia/{language}: {len(references['results'])} references", flush=True)
+                  checks.append((f"wikipedia/{language}", True))
+              except Exception as exc:
+                  print(f"REAL wikipedia/{language}: FAILED {type(exc).__name__}: {exc}", flush=True)
+                  checks.append((f"wikipedia/{language}", False))
           print("Provider status:", checks, flush=True)
           if not all(success for _, success in checks):
               raise SystemExit("Free public API live contracts have unresolved failures")

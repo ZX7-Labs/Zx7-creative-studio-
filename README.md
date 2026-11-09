@@ -96,9 +96,11 @@ source text and tool results are part of the hosted model conversation.
 
 Add `--allow-public-research` to `zx7-studio run` when the project can send
 model-written public queries to external research services. Either model
-transport can choose image, footage, sound or study lookups within the run.
-For broader web references, add `--searxng-url http://127.0.0.1:8082` and
-configure that local SearXNG instance to enable JSON output. Studio keeps
+transport can choose image, footage, sound or scholarly lookups, or search
+English and Hindi Wikipedia for creative references. The built-in sources
+require no separate search service or API key. For broader web coverage,
+an owner can supply a local SearXNG instance with JSON output enabled via
+`--searxng-url http://127.0.0.1:8082`. Studio keeps
 these tools off by default and gives an enabled run eight research calls.
 The model can repeat details from its brief in a query. Enable this flag only
 when those details can be disclosed to the configured research services.

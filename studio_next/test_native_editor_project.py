@@ -142,8 +142,6 @@ class SelectedProjectTests(unittest.TestCase):
                 return result({"success": True, "action": name})
 
         class Research:
-            web_search_enabled = True
-
             def web(self, **arguments):
                 queries.append(arguments)
                 return {"results": [{"source_page": "https://example.org/reference"}],
@@ -164,7 +162,7 @@ class SelectedProjectTests(unittest.TestCase):
             for enabled in (False, True):
                 with self.subTest(provider=provider, enabled=enabled):
                     queries, edits = [], []
-                    flags = ["--allow-public-research", "--searxng-url", "http://127.0.0.1:8082"] if enabled else []
+                    flags = ["--allow-public-research"] if enabled else []
                     args = native.build_parser().parse_args([
                         "--source", str(self.root), "--config", str(config), "--state", str(self.root),
                         "--brief-file", str(brief), "--receipt", str(self.root / f"{provider}-{enabled}.jsonl"),
@@ -185,6 +183,8 @@ class SelectedProjectTests(unittest.TestCase):
                     self.assertEqual(outcome["status"], "model_finished_unverified")
                     self.assertEqual(outcome["public_research_permitted_by_host"], enabled)
                     self.assertEqual(factory.call_count, int(enabled))
+                    if enabled:
+                        factory.assert_called_once_with(searxng_url=None)
                     self.assertEqual(queries, [{"query": "public motion references"}] if enabled else [])
                     self.assertEqual(edits, [("update_text_clip", {"clipId": "title"})])
                     self.assertEqual(outcome["model_selected_write_receipts"], 1)
