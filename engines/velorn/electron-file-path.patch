@@ -1,0 +1,37 @@
+diff --git a/electron/preload.js b/electron/preload.js
+index 748860216ce007059ae848373afc99e0bc93ca01..0986e901725701c44ac5abcd25affbaa7bd748f1 100644
+--- a/electron/preload.js
++++ b/electron/preload.js
+@@ -1 +1 @@
+-const { contextBridge, ipcRenderer } = require('electron')
++const { contextBridge, ipcRenderer, webUtils } = require('electron')
+@@ -7,0 +8 @@ contextBridge.exposeInMainWorld('electronAPI', {
++  getPathForFile: (file) => webUtils?.getPathForFile?.(file) ?? file?.path ?? '',
+diff --git a/src/services/imageSequenceImport.js b/src/services/imageSequenceImport.js
+index a825b665d0721161fcec9530150345a36db9cce0..50bc3c1ecbcd4f78ac7acc4d091a9f5e884af5b3 100644
+--- a/src/services/imageSequenceImport.js
++++ b/src/services/imageSequenceImport.js
+@@ -50,3 +50,9 @@ export async function buildSequenceImportPlan(files) {
+-  // Electron's File objects carry absolute paths; without them we cannot
+-  // reach the frames from the main process.
+-  if (!fileList.every((f) => typeof f.path === 'string' && f.path)) return null
++  // Resolve paths for native selections through the isolated preload bridge.
++  // An in-memory File has no path and must stay on the normal import route.
++  const entries = fileList.map((file) => ({
++    name: file.name,
++    path: window.electronAPI.getPathForFile?.(file) ?? file.path,
++    file,
++  }))
++  if (!entries.every(({ path }) => typeof path === 'string' && path)) return null
++  const [first] = entries
+@@ -56 +62 @@ export async function buildSequenceImportPlan(files) {
+-    const inside = await listImageFiles(fileList[0].path)
++    const inside = await listImageFiles(first.path)
+@@ -69 +75 @@ export async function buildSequenceImportPlan(files) {
+-    const dirPath = await window.electronAPI.pathDirname(fileList[0].path)
++    const dirPath = await window.electronAPI.pathDirname(first.path)
+@@ -81,3 +87 @@ export async function buildSequenceImportPlan(files) {
+-  const { sequences, leftovers } = detectImageSequences(
+-    fileList.map((f) => ({ name: f.name, path: f.path, file: f }))
+-  )
++  const { sequences, leftovers } = detectImageSequences(entries)

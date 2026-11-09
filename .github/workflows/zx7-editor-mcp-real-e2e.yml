@@ -39,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            ffmpeg xvfb xauth x11-xkb-utils xkb-data \
+            ffmpeg unzip xvfb xauth x11-xkb-utils xkb-data \
             libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
             libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
           python -m pip install --no-cache-dir '.[editor,production]'
@@ -50,37 +50,53 @@ jobs:
           git -C third_party/velorn diff --exit-code HEAD --
           node --version
           python -c 'import mcp; import jsonschema; print("Actual MCP SDK and schema validation imported")'
-      - name: Build the complete source editor, not a mocked UI
-        working-directory: third_party/velorn
-        run: |
-          bash ../../engines/velorn/install-ci-dependencies.sh
-          npm run build
-          test -s dist/index.html
-      - name: Enable Chromium's intended SUID sandbox rather than disabling it
-        working-directory: third_party/velorn
-        run: |
-          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
-          test -f "$helper"
-          sudo chown root:root "$helper"
-          sudo chmod 4755 "$helper"
-          test "$(stat -c '%u:%a' "$helper")" = "0:4755"
-          echo "ELECTRON SANDBOX: ROOT-OWNED 4755 HELPER VERIFIED (no --no-sandbox)"
-      - name: Run original SDK client through owned native Electron app and whole A/V export
-        run: |
-          python -u engines/velorn/mcp-e2e.py \
-            --source "$GITHUB_WORKSPACE/third_party/velorn" \
-            --xvfb-binary /usr/bin/Xvfb \
-            --display 127.0.0.1:95
-      - name: Prove installed Studio creates and revises an editable project outside the checkout
+      - name: Prepare an independent approved desktop source in the installed prefix
         run: |
           studio_env="$RUNNER_TEMP/zx7-owner-proof-venv"
           python -m venv --system-site-packages "$studio_env"
           "$studio_env/bin/python" -m pip install --ignore-installed --no-deps .
           mkdir -p "$studio_env/share/zx7-studio"
-          ln -s "$GITHUB_WORKSPACE/third_party/velorn" "$studio_env/share/zx7-studio/velorn"
-          PATH="$studio_env/bin:$PATH" "$studio_env/bin/python" -u engines/velorn/installed-studio-e2e.py \
-            --source "$GITHUB_WORKSPACE/third_party/velorn" \
-            --xvfb-binary /usr/bin/Xvfb
+          source="$studio_env/share/zx7-studio/velorn"
+          bash engines/velorn/prepare-supported-source.sh "$GITHUB_WORKSPACE/third_party/velorn" "$source"
+          test ! -L "$source"
+          test ! -e "$source/.git/objects/info/alternates"
+          echo "ZX7_STUDIO_ENV=$studio_env" >> "$GITHUB_ENV"
+          echo "ZX7_SUPPORTED_EDITOR=$source" >> "$GITHUB_ENV"
+      - name: Build the complete source editor, not a mocked UI
+        run: |
+          cd "$ZX7_SUPPORTED_EDITOR"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
+          npm run build
+          test -s dist/index.html
+      - name: Enable Chromium's intended SUID sandbox rather than disabling it
+        run: |
+          cd "$ZX7_SUPPORTED_EDITOR"
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(stat -c '%u:%a' "$helper")" = "0:4755"
+          actual="$(xvfb-run -a node_modules/electron/dist/electron --version)"
+          test "$actual" = "v45.2.3"
+          echo "ELECTRON $actual SANDBOX: ROOT-OWNED 4755 HELPER VERIFIED"
+      - name: Reproduce and fix actual desktop image sequence selection on Electron 45
+        run: |
+          editor="$ZX7_SUPPORTED_EDITOR/node_modules/electron/dist/electron"
+          xvfb-run -a timeout 40s "$editor" engines/velorn/image-sequence-selection-e2e.cjs \
+            "$GITHUB_WORKSPACE/third_party/velorn" before
+          xvfb-run -a timeout 40s "$editor" engines/velorn/image-sequence-selection-e2e.cjs \
+            "$ZX7_SUPPORTED_EDITOR" after
+      - name: Run original SDK client through owned native Electron app and whole A/V export
+        run: |
+          python -u engines/velorn/mcp-e2e.py \
+            --source "$ZX7_SUPPORTED_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:95
+      - name: Prove installed Studio creates and revises an editable project outside the checkout
+        run: |
+          PATH="$ZX7_STUDIO_ENV/bin:$PATH" "$ZX7_STUDIO_ENV/bin/python" -u engines/velorn/installed-studio-e2e.py \
+            --source "$ZX7_SUPPORTED_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb --live-research
       - name: Diagnose isolated native editor startup without hiding failures
         if: failure()
         run: |

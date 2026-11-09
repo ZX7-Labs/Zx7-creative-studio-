@@ -18,6 +18,13 @@ python -m unittest studio_next.test_body_editor_client studio_next.test_body_edi
 
 When dependencies were installed with `--ignore-scripts`, run the normal Electron, ffmpeg-static and @derhuerst/ffprobe-static install scripts before launching. No model weights, ComfyUI, RIFE or hosted AI API are needed for native editing/export. Upstream `electron:pack`/`electron:build` separately require staged RIFE release inputs; distribution packaging is unresolved.
 
+The Linux desktop proof uses Electron 45 and an independent source checkout
+prepared by `prepare-supported-source.sh`. The checked-in image-selection
+patch is applied to the exact upstream commit and must produce the separate
+approved revision in `studio_next/editor_runtime/source-lock.json`. The proof
+checks actual file selection, image-sequence decoding, and the installed
+Studio's create, export, reopen and revise operations.
+
 ## Connect a local AI client through standard MCP
 
 Install the optional bridge with `python -m pip install '.[editor]'`. Protocol
