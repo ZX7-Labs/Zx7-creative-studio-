@@ -74,6 +74,15 @@ jobs:
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(stat -c '%u:%a' "$helper")" = "0:4755"
+      - name: Fetch and verify the exact pinned local model runtime
+        run: |
+          mkdir -p "$RUNNER_TEMP/zx7-model-runtime"
+          archive="$RUNNER_TEMP/zx7-model-runtime/llama-b12000-bin-ubuntu-x64.tar.gz"
+          curl --fail --silent --show-error --location --retry 2 --max-time 90 \
+            --proto '=https' --proto-redir '=https' \
+            --header 'Accept: application/octet-stream' \
+            --output "$archive" 'https://api.github.com/repos/ggml-org/llama.cpp/releases/assets/690919225?download=1'
+          printf '%s  %s\n' 'c56588b49ed4be846b115188407ea2b601fa3a5c30b8c25ad60e8344dfc7a4fd' "$archive" | sha256sum --check
       - name: Run identified CPU model with real native editor and source-bound observations
         run: |
           # Exact source-pinned model choices only; no arbitrary user-supplied
