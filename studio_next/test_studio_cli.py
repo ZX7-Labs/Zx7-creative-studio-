@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import io
 import json
+from http.client import BadStatusLine
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 from pathlib import Path
@@ -47,10 +48,12 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
 
     def test_doctor_checks_actual_local_server_model_inventory_without_inference(self):
         requests = []
+        models = [{"id": "local-fixture"}]
+
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 requests.append(self.path)
-                raw = json.dumps({"data": [{"id": "local-fixture"}]}).encode()
+                raw = json.dumps({"data": models}).encode()
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
@@ -62,12 +65,46 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
-        self.init(base_url=f"http://127.0.0.1:{server.server_port}")
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        self.init(base_url=base_url, model_id=None)
+        self.assertEqual(studio.load_workspace(self.root)[1]["model_id"], "local-fixture")
         report = studio.doctor(self.root)
         check = next(c for c in report["checks"] if c["name"] == "local_model")
         self.assertTrue(check["ready"])
         self.assertFalse(report["ready"])  # Real editor source/build still absent.
-        self.assertEqual(requests, ["/v1/models"])
+        self.assertEqual(requests, ["/v1/models", "/v1/models"])
+        second = self.base / "second"
+        models.append({"id": "another"})
+        with self.assertRaisesRegex(ValueError, "--model-id"):
+            studio.initialize_workspace(second, source=self.source, base_url=base_url)
+        self.assertFalse(second.exists())
+        models.clear()
+        with self.assertRaisesRegex(ValueError, "no model"):
+            studio.initialize_workspace(second, source=self.source, base_url=base_url)
+        self.assertFalse(second.exists())
+        self.assertEqual(requests, ["/v1/models"] * 4)
+
+    def test_unreadable_local_model_inventory_does_not_create_workspace(self):
+        with patch("studio_next.local_model_http.urlopen", side_effect=BadStatusLine("invalid")):
+            with self.assertRaisesRegex(ValueError, "Could not read model inventory"):
+                studio.initialize_workspace(self.root, source=self.source)
+        self.assertFalse(self.root.exists())
+
+    def test_cli_can_start_with_only_hosted_provider_when_editor_is_installed(self):
+        from studio_next.nvidia_model import NvidiaModelSettings
+
+        source = self.base / "share/zx7-studio/velorn"
+        (source / "dist").mkdir(parents=True)
+        (source / "dist/index.html").touch()
+        (source / "package.json").touch()
+        with patch.object(studio.sys, "prefix", str(self.base)), \
+                patch("studio_next.local_model_http.urlopen", side_effect=AssertionError("local probe")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(studio.main(["init", str(self.root), "--provider", "nvidia"]), 0)
+        _, settings, _ = studio.load_workspace(self.root)
+        self.assertEqual(settings["editor_source"], str(source))
+        self.assertEqual(settings["model_id"], NvidiaModelSettings().model_id)
+        self.assertNotIn("api_key", settings)
 
     def test_run_uses_canonical_native_session_preserves_asset_rights_and_result(self):
         from studio_next import native_editor_session

@@ -9,6 +9,7 @@ import argparse
 import asyncio
 from contextlib import contextmanager
 import hashlib
+from http.client import HTTPException
 from importlib import metadata
 import json
 import os
@@ -137,18 +138,62 @@ def load_workspace(path):
     return root, config, grants
 
 
-def initialize_workspace(path, *, source, model_id, provider="local", base_url="http://127.0.0.1:8080"):
+def _default_editor_source():
+    for source in (Path(sys.prefix) / "share/zx7-studio/velorn",
+                   Path(__file__).resolve().parents[1] / "third_party/velorn"):
+        if (source / "package.json").is_file() and (source / "dist/index.html").is_file():
+            return source
+    raise ValueError("Built Velorn editor was not found. Install it or supply --source.")
+
+
+def _local_model_ids(base_url):
+    from .local_model_http import urlopen
+
+    try:
+        request = Request(base_url.rstrip("/") + "/v1/models")
+        with urlopen(request, timeout=5) as response:
+            raw = response.read(1024 * 1024 + 1)
+        result = _load_json(raw.decode("utf-8")) if len(raw) <= 1024 * 1024 else None
+        models = result.get("data") if isinstance(result, dict) else None
+        if isinstance(models, list):
+            return {model["id"] for model in models if isinstance(model, dict)
+                    and isinstance(model.get("id"), str) and model["id"].strip()}
+    except (OSError, ValueError, HTTPException, RecursionError):
+        pass
+    raise ValueError("Could not read model inventory. Start the local model server or supply --model-id.")
+
+
+def initialize_workspace(path, *, source=None, model_id=None, provider="local",
+                         base_url="http://127.0.0.1:8080"):
     from .native_editor_session import editor_runtime_path
-    LocalModelSettings(base_url=base_url, model_id=model_id)
+
     if provider not in ("local", "nvidia"):
         raise ValueError("Unknown creative model provider")
     if provider == "nvidia" and base_url != "http://127.0.0.1:8080":
         raise ValueError("NVIDIA endpoint is fixed; omit --base-url")
-    source = Path(source).expanduser().resolve(strict=True)
+    root = Path(path).expanduser().absolute()
+    if root.exists() or root.is_symlink():
+        raise FileExistsError(f"Studio workspace already exists: {root}")
+    source = _default_editor_source() if source is None else Path(source)
+    source = source.expanduser().resolve(strict=True)
     if not source.is_dir():
         raise ValueError("Editor source must be a directory")
-    root = Path(path).expanduser().absolute()
-    # Refuse to replace an existing project, config, directory or link.
+    # Validate the local endpoint before attempting an inventory request.
+    if model_id is None:
+        if provider == "nvidia":
+            from .nvidia_model import NvidiaModelSettings
+
+            model_id = NvidiaModelSettings().model_id
+        else:
+            LocalModelSettings(base_url=base_url)
+            models = _local_model_ids(base_url)
+            if not models:
+                raise ValueError("The local server lists no model. Load one and try again.")
+            if len(models) > 1:
+                raise ValueError("The local server lists multiple models. Select one with --model-id.")
+            model_id, = models
+    LocalModelSettings(base_url=base_url, model_id=model_id)
+    # Refuse to replace a workspace created while discovery was in progress.
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     root = root.resolve()
     for name in ("projects", "staging", "outputs", "state", "sessions"):
@@ -217,15 +262,10 @@ def doctor(path, *, check_model=True):
         "The editor requires its own installed ffmpeg-static and ffprobe-static binaries")
     add("ordinary_user", os.geteuid() != 0, "Run editor as an ordinary user with Chromium sandbox enabled")
     if config["provider"] == "local" and check_model:
-        from .local_model_http import urlopen
         try:
-            request = Request(config["base_url"].rstrip("/") + "/v1/models")
-            with urlopen(request, timeout=5) as response:
-                raw = response.read(1024 * 1024 + 1)
-            result = _load_json(raw.decode("utf-8")) if len(raw) <= 1024 * 1024 else None
-            ids = {m.get("id") for m in result.get("data", []) if isinstance(m, dict)} if isinstance(result, dict) else set()
+            ids = _local_model_ids(config["base_url"])
             add("local_model", config["model_id"] in ids, "Configured model must be listed by the actual local server")
-        except (OSError, ValueError, UnicodeError, TypeError):
+        except ValueError:
             add("local_model", False, "Start the configured local OpenAI-compatible model server")
     elif config["provider"] == "nvidia":
         add("provider_credentials", bool(os.environ.get("NVIDIA_API_KEY")), "NVIDIA_API_KEY presence only; no cloud request made")
@@ -420,8 +460,8 @@ def main(argv=None):
     commands = p.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init", help="Create a private studio; never overwrite existing work")
     init.add_argument("workspace", type=Path)
-    init.add_argument("--source", type=Path, required=True)
-    init.add_argument("--model-id", required=True)
+    init.add_argument("--source", type=Path, help="Override the installed editor path")
+    init.add_argument("--model-id", help="Select a local model or override the provider default")
     init.add_argument("--provider", choices=("local", "nvidia"), default="local")
     init.add_argument("--base-url", default="http://127.0.0.1:8080")
     for name in ("doctor", "status"):
