@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify unchanged model identity, approved synthetic-only image consent and hard 40-turn cap
+      - name: Verify unchanged model identity, approved synthetic-only image consent and hard 48-turn cap
         run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
 
   real-model-native-editor-and-export:
@@ -103,11 +103,29 @@ jobs:
         run: |
           test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
           git -C third_party/velorn diff --exit-code HEAD --
-      - name: Preserve redacted source custody, actual project, native journal and real export
+      - name: Preserve only allowed synthetic media, editable native projects and redacted journal
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zx7-real-nvidia-native-creative-${{ github.sha }}
-          path: ${{ runner.temp }}/zx7-nvidia-native-trial/
+          # Never upload the entire Electron profile. Prior public trials
+          # inadvertently retained Chromium Cookies, Cache, GPUCache and local
+          # storage under state/. Those files are not creative evidence and
+          # could contain browsing/session data in a real owner environment.
+          # The only cloud-approved source is this trial's generated footage.
+          path: |
+            ${{ runner.temp }}/zx7-nvidia-native-trial/host-grants.json
+            ${{ runner.temp }}/zx7-nvidia-native-trial/brief.txt
+            ${{ runner.temp }}/zx7-nvidia-native-trial/source-ledger.json
+            ${{ runner.temp }}/zx7-nvidia-native-trial/native-evaluation.json
+            ${{ runner.temp }}/zx7-nvidia-native-trial/native-journal.jsonl
+            ${{ runner.temp }}/zx7-nvidia-native-trial/native-client-stdout.txt
+            ${{ runner.temp }}/zx7-nvidia-native-trial/native-client-stderr.txt
+            ${{ runner.temp }}/zx7-nvidia-native-trial/staging/original-neutral-gradient.mp4
+            ${{ runner.temp }}/zx7-nvidia-native-trial/outputs/*.mp4
+            ${{ runner.temp }}/zx7-nvidia-native-trial/projects/**/*.comfystudio
+            ${{ runner.temp }}/zx7-nvidia-native-trial/projects/**/assets/video/*.mp4
+            ${{ runner.temp }}/zx7-nvidia-native-trial/projects/**/project.thumbnail.webp
+          include-hidden-files: false
           if-no-files-found: warn
           retention-days: 7
