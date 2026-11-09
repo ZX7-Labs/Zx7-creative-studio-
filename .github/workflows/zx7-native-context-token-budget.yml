@@ -9,7 +9,7 @@ permissions:
 jobs:
   paired-local-tokenization:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,11 +61,12 @@ jobs:
           command = [str(runtime / lock["runtime"]["binary_relative_path"]),
                      "--model", str(weight), "--host", "127.0.0.1", "--port", "8080",
                      "--ctx-size", "8192", "--n-gpu-layers", "0", "--parallel", "1",
+                     "--threads", "6", "--threads-batch", "6", "--batch-size", "512", "--ubatch-size", "128",
                      "--chat-template-kwargs", '{"enable_thinking":false}', "--reasoning", "off", "--no-webui"]
-          def post(path, value):
+          def post(path, value, timeout=20):
               request = Request("http://127.0.0.1:8080" + path, data=json.dumps(value).encode(),
                                 headers={"Content-Type": "application/json"}, method="POST")
-              with urlopen(request, timeout=20) as reply:
+              with urlopen(request, timeout=timeout) as reply:
                   return json.load(reply)
           def count(text):
               prompt = post("/apply-template", {"messages": [
@@ -108,6 +109,31 @@ jobs:
                   for key in ("baseline", "compact", "compact_with_receipt_references"):
                       evidence[key + "_total"] = sum(x[key] for x in counts)
                   evidence["baseline_matched_reported"] = sum(x["baseline"] == x["prior_reported"] for x in counts)
+                  context = LocalNativeStructuredCreativeModel._stable_native_context(
+                      {k: v for k, v in records[0]["context"].items() if k != "host_native_tool_contracts"})
+                  text_by_variant = {
+                      "baseline": json.dumps(context, ensure_ascii=False, allow_nan=False),
+                      "compact": json.dumps(context, ensure_ascii=False, allow_nan=False, separators=(",", ":")),
+                  }
+                  expected = {name: count(text) for name, text in text_by_variant.items()}
+                  assert expected["baseline"] == records[0]["server_reported_token_usage"]["prompt_tokens"]
+                  measurements = []
+                  for variant in ("baseline", "compact", "compact", "baseline"):
+                      prompt = post("/apply-template", {"messages": [
+                          {"role": "system", "content": NATIVE_CREATIVE_SYSTEM},
+                          {"role": "user", "content": text_by_variant[variant]}]})["prompt"]
+                      started = time.monotonic()
+                      response = post("/completion", {"prompt": prompt, "cache_prompt": False,
+                          "n_predict": 1, "temperature": 0, "seed": 12345}, timeout=480)
+                      wall_ms = (time.monotonic() - started) * 1000
+                      timings = response["timings"]
+                      assert timings["prompt_n"] == expected[variant], timings
+                      assert timings["prompt_ms"] > 0 and timings["predicted_n"] == 1, timings
+                      measurements.append({"variant": variant, "prefill_tokens": timings["prompt_n"],
+                          "prefill_ms": timings["prompt_ms"], "request_wall_ms": round(wall_ms, 3)})
+                  evidence["cpu_count"] = os.cpu_count()
+                  evidence["cold_prefill_single_prompt_abba"] = measurements
+                  evidence["inference_token_budget_per_sample"] = 1
                   print(json.dumps(evidence, indent=2))
                   (temp / "native-context-token-evidence.json").write_text(json.dumps(evidence, indent=2))
               finally:
