@@ -956,41 +956,79 @@ class NativeCreativeControl:
         self._placement_observations.clear()
         self._last_acknowledged_native_write = item
 
-    def _missing_completion_evidence(self):
-        """Use only accepted native results and current-edit export custody.
+    def _current_export_evidence(self):
+        """Current physical receipts, scoped to the last acknowledged edit.
 
-        An older verified frame cannot certify a later native revision. Each
-        acknowledged write invalidates the session's *completion* proof cache,
-        without discarding historical media/source custody and recovery evidence.
+        A later failed verifier/frame read revokes that destination's positive
+        completion evidence. Historical receipts remain intact for forensics.
         """
-        proven = set()
-        current_verified = set()
-        current_frames = set()
-        saw_verified_frame = False
-        post_observation_write = False
+        by_destination = {}
+        unbound = set()  # Compatible with older, non-reviewed test journals.
+        frames = set()
+        any_write = saw_frame = post_review_write = False
+        verified_receipts = 0
+        distinct_receipts = set()
         for event in self.events:
-            if event.get("kind") != "native_tool_result":
+            kind, tool = event.get("kind"), event.get("tool")
+            destination = event.get(DESTINATION_FIELD)
+            if kind == "native_read_tool_reported_error":
+                if (destination is not None and
+                        (tool == _VERIFIED_EXPORT_TOOL or tool in _VERIFIED_FRAME_TOOLS)):
+                    invalid = by_destination.pop(destination, None)
+                    if invalid is not None:
+                        frames.discard(invalid)
+                continue
+            if kind != "native_tool_result":
                 continue
             if (self.host_tool_access is not None and
-                    self.host_tool_access.get(event.get("tool")) == "write"):
-                proven.add("native_write_acknowledged")
-                if (saw_verified_frame and
-                        event.get("tool") in self.host_content_revision_tools):
-                    post_observation_write = True
-                current_verified.clear()
-                current_frames.clear()
-            verified = event.get("independently_verified_export_sha256")
-            if verified is not None and verified in self._verified_exports:
-                current_verified.add(verified)
+                    self.host_tool_access.get(tool) == "write"):
+                any_write = True
+                if saw_frame and tool in self.host_content_revision_tools:
+                    post_review_write = True
+                by_destination.clear()
+                unbound.clear()
+                frames.clear()
+                verified_receipts = 0
+                distinct_receipts.clear()
+            sha = event.get("independently_verified_export_sha256")
+            if sha is not None and sha in self._verified_exports:
+                verified_receipts += 1
+                distinct_receipts.add((destination, sha))
+                if destination is None:
+                    unbound.add(sha)
+                else:
+                    previous = by_destination.get(destination)
+                    if previous is not None and previous != sha:
+                        frames.discard(previous)
+                    by_destination[destination] = sha
             observed = event.get("observed_export_sha256")
-            if (observed in current_verified and event.get("image_sha256")):
-                current_frames.add(observed)
-                saw_verified_frame = True
-        if post_observation_write:
+            if observed is not None and event.get("image_sha256"):
+                if ((destination is not None and by_destination.get(destination) == observed)
+                        or (destination is None and observed in unbound)):
+                    frames.add(observed)
+                    saw_frame = True
+        current_verified = set(by_destination.values()) | unbound
+        return {
+            "write_acknowledged": any_write,
+            "post_review_write_acknowledged": post_review_write,
+            "current_verified": current_verified,
+            "current_frames": frames,
+            "current_verified_output_count": len(by_destination) + len(unbound),
+            "same_export_reverification_count": max(
+                0, verified_receipts - len(distinct_receipts)),
+        }
+
+    def _missing_completion_evidence(self):
+        """Require still-current export receipts, not superseded or failed reads."""
+        state = self._current_export_evidence()
+        proven = set()
+        if state["write_acknowledged"]:
+            proven.add("native_write_acknowledged")
+        if state["post_review_write_acknowledged"]:
             proven.add("post_observation_native_write_acknowledged")
-        if current_verified:
+        if state["current_verified"]:
             proven.add("physical_export_verified")
-        if current_frames:
+        if state["current_frames"]:
             proven.add("verified_export_frame_observed")
         if (REVIEWED_RENDER_PAIR in self.required_evidence and
                 reviewed_render_pair(self.events, self.host_content_revision_tools)):
@@ -1382,6 +1420,7 @@ class NativeCreativeControl:
                     indexed_actions.append("describe")
                 if visible_selectable:
                     indexed_actions.append("invoke")
+                export_evidence = self._current_export_evidence()
                 context = {
                     "creative_brief": brief,
                     # Expose only actions that the exact current grammar
@@ -1479,6 +1518,23 @@ class NativeCreativeControl:
                             e.get("observed_export_sha256") is not None and
                             bool(e.get("image_sha256"))
                             for e in self.events),
+                        # An export verifier invoked eight times on the same
+                        # bytes is one physical proof, not eight revisions.
+                        # These facts use current host receipts; the model
+                        # still independently chooses its next tool/action.
+                        "current_distinct_verified_output_count":
+                            export_evidence["current_verified_output_count"],
+                        "same_export_reverification_count":
+                            export_evidence["same_export_reverification_count"],
+                        "verified_export_still_needs_model_visible_frame": (
+                            bool(export_evidence["current_verified"]) and
+                            not bool(export_evidence["current_frames"]) and
+                            ("verified_export_frame_observed" in self.required_evidence or
+                             REVIEWED_RENDER_PAIR in self.required_evidence)),
+                        "frame_observation_tools_granted_by_host": [
+                            name for name in sorted(_VERIFIED_FRAME_TOOLS)
+                            if self.host_tool_access is not None and
+                            self.host_tool_access.get(name) == "read"],
                     },
                 }
                 if placement_tracks is not None:
@@ -1992,9 +2048,8 @@ class NativeCreativeControl:
                         # A later verifier failure must revoke earlier reviewed
                         # proof for that file, without recording its raw path.
                         failed_read_binding = {}
-                        if (REVIEWED_RENDER_PAIR in self.required_evidence and
-                                (native_name == _VERIFIED_EXPORT_TOOL or
-                                 native_name in _VERIFIED_FRAME_TOOLS)):
+                        if (native_name == _VERIFIED_EXPORT_TOOL or
+                                native_name in _VERIFIED_FRAME_TOOLS):
                             path_digest = destination_digest(args["inputs"].get("path"))
                             if path_digest is not None:
                                 failed_read_binding[DESTINATION_FIELD] = path_digest
@@ -2330,13 +2385,16 @@ class NativeCreativeControl:
                     else:
                         self._placement_observations.pop(native_name, None)
                 render_binding = {}
-                if REVIEWED_RENDER_PAIR in self.required_evidence:
-                    if native_name == RENDER_TOOL and self.host_tool_access.get(native_name) == "write":
-                        render_binding = native_render_binding(args["inputs"].get("outputPath"), host_response)
-                    elif native_name == _VERIFIED_EXPORT_TOOL or native_name in _VERIFIED_FRAME_TOOLS:
-                        path_digest = destination_digest(args["inputs"].get("path"))
-                        if path_digest is not None:
-                            render_binding[DESTINATION_FIELD] = path_digest
+                if (REVIEWED_RENDER_PAIR in self.required_evidence and
+                        native_name == RENDER_TOOL and
+                        self.host_tool_access.get(native_name) == "write"):
+                    render_binding = native_render_binding(args["inputs"].get("outputPath"), host_response)
+                elif native_name == _VERIFIED_EXPORT_TOOL or native_name in _VERIFIED_FRAME_TOOLS:
+                    # Even the less demanding 'export' evidence profile must
+                    # distinguish two physical files when a later read fails.
+                    path_digest = destination_digest(args["inputs"].get("path"))
+                    if path_digest is not None:
+                        render_binding[DESTINATION_FIELD] = path_digest
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,

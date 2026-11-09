@@ -216,6 +216,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
     # Current-edit proof, distinct from the immutable historical custody ledger.
     fresh_verified = set()
     fresh_frames = set()
+    # Immutable historic verification is not current delivery approval.
+    # Bind only host-originated physical reads to their hashed destination.
+    fresh_verified_by_destination = {}
     saw_verified_frame = False
     post_observation_write = False
     writes = []
@@ -596,6 +599,17 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         ((digest is None) != flag) or
                         (digest is not None and not _sha(digest))):
                     raise NativeJournalError("Untrusted or malformed recoverable read failure")
+                if destination is not None and (
+                        tool == _EXPORT or tool in _FRAME_OBSERVERS):
+                    revoked = fresh_verified_by_destination.pop(destination, None)
+                    if revoked is not None:
+                        # A single stale path cannot erase an independent
+                        # verification of the same bytes at a different path.
+                        if revoked not in fresh_verified_by_destination.values():
+                            fresh_verified.discard(revoked)
+                        # Re-observation is needed after any failed decoder
+                        # read; an older preview cannot certify this file.
+                        fresh_frames.discard(revoked)
                 continue
             if kind == "native_tool_result":
                 path, scope = event.get(DESTINATION_FIELD), event.get(SCOPE_FIELD)
@@ -636,11 +650,20 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         observed_then_written.append((i, tool))
                     fresh_verified.clear()
                     fresh_frames.clear()
+                    fresh_verified_by_destination.clear()
                 if new_sha is not None:
                     if tool != _EXPORT or not _sha(new_sha):
                         raise NativeJournalError("Fake physical export verification attribution")
                     verified.add(new_sha)
                     fresh_verified.add(new_sha)
+                    if path is not None:
+                        previous = fresh_verified_by_destination.get(path)
+                        if previous is not None and previous != new_sha:
+                            if previous not in (digest for dest, digest in
+                                    fresh_verified_by_destination.items() if dest != path):
+                                fresh_verified.discard(previous)
+                            fresh_frames.discard(previous)
+                        fresh_verified_by_destination[path] = new_sha
                 if seen_sha is not None:
                     if tool not in _OBSERVERS or not _sha(seen_sha) or seen_sha not in verified:
                         raise NativeJournalError("Unverified exported media was observed")
