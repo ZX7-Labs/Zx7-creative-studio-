@@ -106,7 +106,10 @@ class LocalNativeStructuredModelTests(unittest.TestCase):
             return BytesIO(decision("search", {"query": "native export"}))
         with patch("studio_next.providers.urlopen", side_effect=serve):
             self.assertEqual(self.model.decide(newer)["action"], "search")
-        supplied = json.loads(captured[0]["messages"][1]["content"])
+        serialized = captured[0]["messages"][1]["content"]
+        self.assertEqual(serialized, json.dumps(pinned_new, ensure_ascii=False,
+                                                allow_nan=False, separators=(",", ":")))
+        supplied = json.loads(serialized)
         self.assertEqual(supplied, newer)
         self.assertEqual(list(supplied), list(pinned_new))
         self.assertEqual(self.model.settings.sampling, {})

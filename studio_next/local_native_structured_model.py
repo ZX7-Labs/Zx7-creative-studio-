@@ -8,6 +8,7 @@ cannot change grants, dispatch tools or certify creative quality.
 from __future__ import annotations
 
 from contextvars import ContextVar
+import json
 
 from .native_action_schema import native_action_schema
 from .providers import LocalCreativeModel, LocalModelSettings
@@ -55,6 +56,10 @@ def _bind_selected_native_inputs(schema, selected, contracts):
 
 class LocalNativeStructuredCreativeModel(LocalCreativeModel):
     requires_indexed_native_function_contracts = True
+
+    @staticmethod
+    def _encode_context(context):
+        return json.dumps(context, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
     def __init__(self, settings: LocalModelSettings, *, system_prompt: str):
         if "response_format" in settings.sampling:
