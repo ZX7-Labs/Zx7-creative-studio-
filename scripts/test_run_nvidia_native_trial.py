@@ -427,35 +427,37 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         """Actual FFmpeg decoder, not a mocked model or a filename assertion."""
         import hashlib
         import shutil
-        from scripts.run_nvidia_native_trial import decoded_video_frames_sha256
-        if shutil.which("ffmpeg") is None:
-            self.skipTest("Physical native-video framehash requires installed FFmpeg")
+        from scripts.run_nvidia_native_trial import (
+            decode_trial_export, decoded_video_frames_sha256, trial_picture_changed,
+        )
+        if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+            self.skipTest("Physical native-video proof requires FFmpeg and FFprobe")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            def make(color, title, filename):
+            def make(color, title, filename, *, size="64x36", sar="1", matrix="bt709", retime=False):
                 destination = root / filename
+                filters = f"setsar={sar}" + (",setpts=2*PTS" if retime else "")
                 subprocess.run(
                     ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
                      "-f", "lavfi", "-i",
-                     f"color=c={color}:s=64x36:r=24:d=0.5",
+                     f"color=c={color}:s={size}:r=24:d=0.5",
+                     "-vf", filters, "-fps_mode", "passthrough",
                      "-metadata", f"title={title}",
                      "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                     "-color_primaries", "bt709", "-color_trc", "bt709",
+                     "-colorspace", matrix, "-color_range", "tv",
                      "-y", str(destination)],
                     check=True, timeout=30)
                 return destination
             original = make("blue", "original", "original.mp4")
             rewrapped = make("blue", "different metadata", "rewrapped.mp4")
             revised = make("red", "revision", "revised.mp4")
+            resized = make("blue", "resized", "resized.mp4", size="128x72")
+            stretched = make("blue", "stretched", "stretched.mp4", sar="4/3")
+            color_tagged = make("blue", "color tagged", "color-tagged.mp4", matrix="smpte170m")
             # A pure retiming edit is a valid editorial revision even when
             # EVERY RGB frame is pixel-identical to the original.
-            retimed = root / "retimed.mp4"
-            subprocess.run(
-                ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
-                 "-f", "lavfi", "-i",
-                 "color=c=blue:s=64x36:r=24:d=0.5",
-                 "-vf", "setpts=2*PTS", "-fps_mode", "passthrough",
-                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                 "-y", str(retimed)], check=True, timeout=30)
+            retimed = make("blue", "retimed", "retimed.mp4", retime=True)
             self.assertNotEqual(
                 hashlib.sha256(original.read_bytes()).digest(),
                 hashlib.sha256(rewrapped.read_bytes()).digest())
@@ -467,6 +469,22 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                              [row[2] for row in changed_timing])
             self.assertNotEqual(first, changed_timing)
             self.assertEqual(len(first), 12)
+            before = decode_trial_export(original)
+            self.assertEqual(before.presentation, first)
+            self.assertFalse(trial_picture_changed(before, decode_trial_export(rewrapped)))
+            self.assertTrue(trial_picture_changed(before, decode_trial_export(revised)))
+            self.assertTrue(trial_picture_changed(before, decode_trial_export(retimed)))
+            resize_result = decode_trial_export(resized)
+            self.assertNotEqual(before.presentation, resize_result.presentation)
+            self.assertEqual(resize_result.picture_profile["width"], 128)
+            self.assertEqual(resize_result.picture_profile["height"], 72)
+            self.assertFalse(trial_picture_changed(before, resize_result))
+            sar_result = decode_trial_export(stretched)
+            self.assertEqual(sar_result.picture_profile["sample_aspect_ratio"], "4:3")
+            self.assertFalse(trial_picture_changed(before, sar_result))
+            color_result = decode_trial_export(color_tagged)
+            self.assertEqual(color_result.picture_profile["color_space"], "smpte170m")
+            self.assertFalse(trial_picture_changed(before, color_result))
             with self.assertRaises((subprocess.CalledProcessError, ValueError)):
                 decoded_video_frames_sha256(root / "missing.mp4")
 
