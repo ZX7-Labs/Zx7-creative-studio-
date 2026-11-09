@@ -1455,8 +1455,7 @@ class NativeCreativeControl:
                 # whether/what/where to create or revise. A native write
                 # invalidates the cached placement inventory.
                 if (content_track_sensing and
-                        (self.catalog_mode == "full" or
-                         bool(_CONTENT_VIDEO_TRACK_WRITES.intersection(visible_selectable)))):
+                        bool(_CONTENT_VIDEO_TRACK_WRITES.intersection(visible_selectable))):
                     inspected = await self._observe_placement_inventory(
                         "get_timeline", {"includeClips": False}, validators["get_timeline"])
                     if inspected is not None:
