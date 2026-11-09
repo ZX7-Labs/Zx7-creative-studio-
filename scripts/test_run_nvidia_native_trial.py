@@ -100,7 +100,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         def git_response(argv, **options):
             witnessed.append((argv, options))
             if "rev-parse" in argv:
-                return subprocess.CompletedProcess(argv, 0, pin + "\n", "")
+                return subprocess.CompletedProcess(argv, 0, f"{source.resolve()}\n{pin}\n", "")
             return subprocess.CompletedProcess(argv, 0, "", "")
 
         with patch("subprocess.run", side_effect=git_response):
@@ -112,14 +112,19 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                             for _, opts in witnessed))
 
         def bad_commit(argv, **_):
-            return subprocess.CompletedProcess(argv, 0, "different-revision\n", "")
+            return subprocess.CompletedProcess(argv, 0, f"{source.resolve()}\ndifferent-revision\n", "")
         with patch("subprocess.run", side_effect=bad_commit):
+            self.assertEqual(method(source, grants), ())
+
+        def parent_checkout(argv, **_):
+            return subprocess.CompletedProcess(argv, 0, f"{source.parent.resolve()}\n{pin}\n", "")
+        with patch("subprocess.run", side_effect=parent_checkout):
             self.assertEqual(method(source, grants), ())
 
         def edited_source(argv, **_):
             return subprocess.CompletedProcess(
                 argv, 0 if "rev-parse" in argv else 1,
-                pin + "\n" if "rev-parse" in argv else "", "")
+                f"{source.resolve()}\n{pin}\n" if "rev-parse" in argv else "", "")
         with patch("subprocess.run", side_effect=edited_source):
             self.assertEqual(method(source, grants), ())
 
@@ -138,7 +143,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         pin = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
         def clean(argv, **_):
             return subprocess.CompletedProcess(
-                argv, 0, pin + "\n" if "rev-parse" in argv else "", "")
+                argv, 0, f"{source.resolve()}\n{pin}\n" if "rev-parse" in argv else "", "")
         grants = {"move_clips": "write", "trim_clips": "write",
                   "delete_clips": "read", "get_project": "read"}
         with patch("subprocess.run", side_effect=clean):
@@ -146,7 +151,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 source, grants), ("move_clips", "trim_clips"))
         with patch("subprocess.run", side_effect=lambda argv, **_: (
                 subprocess.CompletedProcess(
-                    argv, 0, "unknown-revision\n" if "rev-parse" in argv
+                    argv, 0, f"{source.resolve()}\nunknown-revision\n" if "rev-parse" in argv
                     else "", ""))):
             self.assertEqual(pinned_electron_clip_edit_previews(
                 source, grants), ())
@@ -166,7 +171,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
 
         def clean_source(argv, **kwargs):
             if "rev-parse" in argv:
-                return subprocess.CompletedProcess(argv, 0, pin + "\n", "")
+                return subprocess.CompletedProcess(argv, 0, f"{source.resolve()}\n{pin}\n", "")
             return subprocess.CompletedProcess(argv, 0, "", "")
 
         grants = {"inspect_timeline_frame": "read", "get_project": "read"}
@@ -181,7 +186,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         def modified_source(argv, **kwargs):
             return subprocess.CompletedProcess(
                 argv, 0 if "rev-parse" in argv else 1,
-                pin + "\n" if "rev-parse" in argv else "", "")
+                f"{source.resolve()}\n{pin}\n" if "rev-parse" in argv else "", "")
         with patch("subprocess.run", side_effect=modified_source):
             self.assertEqual(pinned_electron_timeline_frame_previews(source, grants), ())
         with self.assertRaises(ValueError):
