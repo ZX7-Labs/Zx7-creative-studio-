@@ -80,8 +80,8 @@ def _check_hidden_file(path: Path, root: Path, relative: PurePosixPath, *,
             type(receipt["bytes"]) is not int or receipt["bytes"] < 100):
         raise ReleaseArtifactIntegrityError("Invalid synthetic publication receipt")
     identity = receipt["identity"]
-    if (not _SHA.fullmatch(identity["project_key"])
-            if type(identity["project_key"]) is str else True):
+    if (type(identity["project_key"]) is not str or
+            not _SHA.fullmatch(identity["project_key"])):
         raise ReleaseArtifactIntegrityError("Invalid host publication project identity")
     if (type(identity["input_key"]) is not str or
             not _SHA.fullmatch(identity["input_key"]) or
