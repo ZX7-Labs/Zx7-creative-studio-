@@ -353,7 +353,7 @@ async def exercise(options):
     audio_rms = math.sqrt(sum(sample * sample for sample in pcm_samples) / len(pcm_samples))
     assert .015 < audio_rms < .2
     receipt = {"success": True, "kind": "scripted official SDK client; no autonomous model evaluation",
-        "transport": "standard MCP stdio; Python SDK 2.3.0", "nativeSchemasUnchanged": True,
+        "transport": "standard MCP stdio; Python SDK 2.3.0", "nativeSchemaContractVerified": True,
         "discoveredGrantedTools": len(tools), "additionalVerifiedBodyTools": len(body_tools), "physicalVisualFrameObserved": True,
         "physicalEditorExportIndependentlyDecoded": True, "realBoundedAudioHeard": True,
         "realFullMinuteAudioContinuity": audio_continuity,

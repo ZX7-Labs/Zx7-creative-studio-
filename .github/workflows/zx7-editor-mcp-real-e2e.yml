@@ -7,6 +7,8 @@ on:
       - "studio_next/body_editor_*.py"
       - "studio_next/test_body_editor_*.py"
       - ".github/workflows/zx7-editor-mcp-real-e2e.yml"
+      - "studio_next/editor_runtime/**"
+      - "studio_next/native_editor_diagnostics.py"
   workflow_dispatch:
 permissions:
   contents: read
