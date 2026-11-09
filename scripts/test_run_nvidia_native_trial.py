@@ -363,6 +363,13 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertNotIn("--indexed-catalog", command)
             self.assertIn("--fresh-trial-project", command)
             self.assertEqual(command[command.index("--max-turns") + 1], "48")
+            # The actual 120B run #42669603529 spent 87.3s on turn 15
+            # (6,616 completion tokens), then hit the previous 90s
+            # transport timeout on turn 16. Give actual reasoning a bounded
+            # 180s read budget, while retaining a strict total process cap.
+            self.assertEqual(command[command.index("--model-timeout") + 1], "180")
+            self.assertEqual(native_call.call_args.kwargs["timeout"], 1500)
+            self.assertEqual(native_call.call_count, 1)
 
     def test_saved_native_trial_requires_active_real_source_clip(self):
         """Only a structural acceptance fixture, not model or video proof."""
