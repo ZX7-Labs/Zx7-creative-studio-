@@ -320,9 +320,13 @@ class CreativeResearchTests(unittest.TestCase):
                      "Optional research MCP SDK is not installed")
 class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
     def test_host_network_permission_is_mandatory(self):
-        from studio_next.creative_research_mcp import create_research_server
+        from studio_next.creative_research_mcp import (
+            create_research_server, CreativeResearchMcpSession)
         with self.assertRaises(PermissionError):
             create_research_server()
+        for count in (None, 0, 9, True, -1):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                CreativeResearchMcpSession(allow_public_research=True, max_calls=count)
 
     async def test_real_mcp_protocol_exposes_only_bounded_readonly_research(self):
         import anyio
@@ -366,6 +370,22 @@ class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(invalid.is_error)
                     self.assertEqual(research.calls,
                                      [("assets", {"query": "light", "media": "video"})])
+                    # The standalone official MCP entry must be no less
+                    # bounded than an opt-in Studio session. Invalid schema
+                    # calls do not consume research budget; successful calls do.
+                    for index in range(7):
+                        good = await session.call_tool(
+                            "research_studies", {"query": f"public-query-{index}"})
+                        self.assertFalse(good.is_error)
+                    denied = await session.call_tool(
+                        "research_studies", {"query": "ninth-outbound-query"})
+                    self.assertFalse(denied.is_error)
+                    status = json.loads(denied.content[0].text)
+                    self.assertEqual(status["status"], "call_budget_exhausted")
+                    self.assertFalse(status["import_authorized"])
+                    self.assertEqual(len(research.calls), 8)
+                    self.assertFalse(any("ninth-outbound-query" in str(call)
+                                         for call in research.calls))
                 group.cancel_scope.cancel()
 
 if __name__ == "__main__":
