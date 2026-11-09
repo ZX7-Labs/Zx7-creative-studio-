@@ -29,7 +29,9 @@ echo 'ZX7: Electron release download returned HTTP 504; trying one bounded alter
 ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/' \
   npm rebuild electron --no-audit --no-fund
 
-# Re-run all pinned native postinstalls after a successful Electron recovery;
-# otherwise a partial first pass might leave other native modules unbuilt.
-# The download is now cached by @electron/get. Any further failure propagates.
-npm rebuild --no-audit --no-fund
+# Re-run every native postinstall after the first pass may have stopped
+# midway. Keep the same mirror, because @electron/get caches by download URL:
+# switching back to GitHub would cause a new Electron network fetch.
+# No checksum or version override is introduced. Any further failure propagates.
+ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/' \
+  npm rebuild --no-audit --no-fund
