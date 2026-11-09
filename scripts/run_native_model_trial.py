@@ -392,7 +392,8 @@ async def trial(args, lock, artifacts, command):
             observed_sources.add(event['observed_export_sha256'])
     # Use the same source custody and timed-picture checks as the hosted trial.
     from scripts.run_nvidia_native_trial import (
-        decode_trial_export, trial_picture_changed, verify_saved_native_trial,
+        decode_trial_export, trial_delivery_profile_compliant,
+        trial_picture_changed, verify_saved_native_trial,
     )
     try:
         saved_native = verify_saved_native_trial(artifacts, source_ledger=source_assets, max_clip_duration=8)
@@ -405,6 +406,7 @@ async def trial(args, lock, artifacts, command):
     # The same observed/exported digest may appear at more than one path. Pick
     # one deterministically and decode it at most once for this comparison.
     changed_presentation = False
+    reviewed_pair_delivery_profile_compliant = False
     presentation_rejection = None
     picture_profiles = None
     pair = audit["reviewed_native_render_pair"]
@@ -419,13 +421,19 @@ async def trial(args, lock, artifacts, command):
                     expected_sha256=item["export_sha256"], max_frames=960)
                     for item, matches in zip(pair, paths, strict=True))
                 picture_profiles = [before.picture_profile, after.picture_profile]
+                reviewed_pair_delivery_profile_compliant = (
+                    trial_delivery_profile_compliant(before, max_seconds=8) and
+                    trial_delivery_profile_compliant(after, max_seconds=8))
                 changed_presentation = trial_picture_changed(before, after)
         except (ValueError, OSError, subprocess.SubprocessError) as exc:
             presentation_rejection = type(exc).__name__
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
-              and bool(revised_exports) and changed_presentation)
+              and bool(revised_exports) and changed_presentation and
+              reviewed_pair_delivery_profile_compliant)
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
+            'reviewed_pair_synthetic_delivery_profile_compliant':
+                reviewed_pair_delivery_profile_compliant,
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
             'decoded_frame_sequence_changed': changed_presentation,
             'decoded_frame_sequence_rejection_type': presentation_rejection,
