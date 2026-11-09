@@ -61,8 +61,12 @@ install an engine or download model weights. A graphical display is required;
 for headless runs supply `--xvfb-binary /path/to/Xvfb` if available.
 
 Revise an existing saved native project using the same command with
-`--project ./my-studio/projects/PROJECT_DIRECTORY` and a new brief. The host opens and verifies that selected project before the model decides
-the editing actions. Each run preserves
+`--project ./my-studio/projects/PROJECT_DIRECTORY` and a new brief. Before opening
+the project for editing, the host keeps a private copy of its exact saved native
+document in the run's session directory. The status records the checkpoint path,
+byte count and SHA-256. The copy references the existing project media and stays
+available after an interrupted revision. The host opens and verifies the selected
+project before the model chooses editing actions. Each run preserves
 private source copies, rights declarations, a native journal and status under
 its workspace. A completed run means the model finished with verified export
 evidence; artistic approval remains separate. An interrupted or failed run is

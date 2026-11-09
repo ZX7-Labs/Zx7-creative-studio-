@@ -10,9 +10,46 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
+import tempfile
 
 from .body_editor_client import _load_json
 from .native_editor_diagnostics import native_content_diagnostics_source_verified
+
+
+def checkpoint_saved_project(project: Path, destination: Path):
+    """Keep the exact saved native document outside the editor's writable roots."""
+    saved = project / "project.comfystudio"
+    if project.resolve(strict=True) != project:
+        raise ValueError("Saved native project directory was redirected")
+    if saved.is_symlink():
+        raise ValueError("Saved native project file must not be a symbolic link")
+
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    digest = hashlib.sha256()
+    size = 0
+    with open(saved, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW | os.O_NONBLOCK)) as source:
+        before = os.fstat(source.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_size == 0:
+            raise ValueError("Saved native project file must be a nonempty regular file")
+        with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".prior-project-") as copy:
+            while chunk := source.read(1024 * 1024):
+                size += len(chunk)
+                if size > before.st_size:
+                    raise ValueError("Saved native project file changed while taking a checkpoint")
+                copy.write(chunk)
+                digest.update(chunk)
+            copy.flush()
+            os.fsync(copy.fileno())
+            if (size != before.st_size or project.resolve(strict=True) != project or
+                    identity(before) != identity(saved.stat(follow_symlinks=False))):
+                raise ValueError("Saved native project file changed while taking a checkpoint")
+            os.link(copy.name, destination)
+
+    return {"path": str(destination), "project": str(project), "bytes": size,
+            "sha256": digest.hexdigest()}
 
 
 def _receipt(result):
