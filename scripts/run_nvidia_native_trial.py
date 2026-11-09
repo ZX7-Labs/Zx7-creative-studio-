@@ -121,24 +121,28 @@ def prepare_trial(workspace: Path, *, source: Path):
 
 
 
-def verify_saved_native_trial(workspace: Path):
-    """Independent structural proof: the CURRENT saved native timeline uses
-    a physically intact copied original video clip. This is NOT a creative
-    quality score and cannot replace export decode/visual inspection.
-    """
+def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_duration=6):
+    """Prove that the active saved timeline uses an intact staged original."""
     workspace = Path(workspace).resolve()
-    ledger_path = workspace / "source-ledger.json"
-    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-    if (type(ledger) is not list or len(ledger) != 1 or
-            type(ledger[0]) is not dict or
-            type(ledger[0].get("path")) is not str or
-            type(ledger[0].get("sha256")) is not str):
-        raise ValueError("Missing unique owner-original source ledger")
-    original = Path(ledger[0]["path"]).resolve(strict=True)
-    if (not original.is_file() or
-            original != (workspace / "staging" / original.name).resolve() or
-            _sha256(original) != ledger[0]["sha256"]):
-        raise ValueError("Original staged video differs from owner SHA ledger")
+    if source_ledger is None:
+        source_ledger = json.loads((workspace / "source-ledger.json").read_text(encoding="utf-8"))
+        if type(source_ledger) is not list or len(source_ledger) != 1:
+            raise ValueError("Missing unique owner-original source ledger")
+    if type(source_ledger) is not list or not 1 <= len(source_ledger) <= 32:
+        raise ValueError("Missing bounded owner-original source ledger")
+    source_hashes = {}
+    staging = (workspace / "staging").resolve(strict=True)
+    for entry in source_ledger:
+        if (type(entry) is not dict or type(entry.get("path")) is not str or
+                type(entry.get("sha256")) is not str):
+            raise ValueError("Malformed owner-original source ledger")
+        candidate = Path(entry["path"])
+        original = candidate.resolve(strict=True)
+        if (candidate.is_symlink() or original.parent != staging or
+                str(original) in source_hashes or not original.is_file() or
+                _sha256(original) != entry["sha256"]):
+            raise ValueError("Original staged video differs from owner SHA ledger")
+        source_hashes[str(original)] = entry["sha256"]
     root = workspace / "projects"
     candidates = list(root.glob("*/project.comfystudio"))
     if len(candidates) != 1:
@@ -170,7 +174,7 @@ def verify_saved_native_trial(workspace: Path):
             sum(type(t) is dict and t.get("id") == active_id
                 for t in timelines) != 1):
         raise ValueError("No single saved active native timeline")
-    active = next(t for t in timelines if t.get("id") == active_id)
+    active = next(t for t in timelines if type(t) is dict and t.get("id") == active_id)
     clips, tracks, assets = (active.get("clips"), active.get("tracks"),
                             native.get("assets"))
     if (type(clips) is not list or not clips or
@@ -208,8 +212,8 @@ def verify_saved_native_trial(workspace: Path):
         if not asset or asset.get("type") != "video":
             continue
         metadata = asset.get("settings")
-        if (type(metadata) is not dict or
-                metadata.get("sourcePath") != str(original)):
+        source_path = metadata.get("sourcePath") if type(metadata) is dict else None
+        if type(source_path) is not str or source_path not in source_hashes:
             continue
         relative = asset.get("path")
         if (type(relative) is not str or not relative or
@@ -218,11 +222,11 @@ def verify_saved_native_trial(workspace: Path):
         project_dir = project_file.parent.resolve(strict=True)
         copied = (project_dir / relative).resolve(strict=True)
         if (not copied.is_relative_to(project_dir) or
-                not copied.is_file() or _sha256(copied) != ledger[0]["sha256"]):
+                not copied.is_file() or _sha256(copied) != source_hashes[source_path]):
             raise ValueError("Native original source bytes differ from ledger")
         duration = clip.get("duration")
         if (type(duration) not in (int, float) or
-                not 0 < duration <= 6):
+                not 0 < duration <= max_clip_duration):
             raise ValueError("Invalid placed original video duration")
         real_original_clips += 1
     if not real_original_clips:
@@ -235,7 +239,7 @@ def verify_saved_native_trial(workspace: Path):
         "artistic_quality_approved": False,
     }
 
-def decoded_video_frames_sha256(path: Path):
+def decoded_video_frames_sha256(path: Path, *, max_frames=240):
     """Hash exact-time presented decoded RGB frames, not container metadata.
 
     Genuine native retiming changes physical presentation even when RGB frames
@@ -244,9 +248,10 @@ def decoded_video_frames_sha256(path: Path):
     Human artistic approval is a separate judgment.
     """
     result = subprocess.run(
-        ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+        ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-xerror",
          "-i", str(path), "-map", "0:v:0",
          "-vf", "format=rgb24", "-fps_mode", "passthrough",
+         "-frames:v", str(max_frames + 1),
          "-f", "framehash", "-hash", "SHA256", "-"],
         check=True, capture_output=True, text=True, timeout=90,
         env=_no_cloud_credentials())
@@ -285,7 +290,7 @@ def decoded_video_frames_sha256(path: Path):
             raise ValueError("Native output has nonpositive frame duration")
         presentations.append((
             str(pts * timebase), str(duration * timebase), fields[5]))
-        if len(presentations) > 240:
+        if len(presentations) > max_frames:
             raise ValueError("Synthetic trial exceeds bounded decoded video frames")
     if not presentations:
         raise ValueError("Native output contains no decoded video frames")

@@ -363,10 +363,11 @@ async def trial(args, lock, artifacts, command):
     movies = {}
     for path in outputs.glob('*.mp4'):
         movies.setdefault(sha(path), set()).add(path.resolve())
-    decisions = {record['context']['turn']: record['decision']
+    inference = {record['context']['turn']: record
         for record in map(json.loads, (artifacts / 'inference-transcript.jsonl').read_text().splitlines())
         if 'decision' in record}
     observed_sources, revisions, last_revision, last_save, revised_exports = set(), 0, -1, -1, []
+    sources_before_revision = set()
     exported_after_revision = set()
     for index, event in enumerate(outcome['events']):
         if event.get('kind') != 'native_tool_result':
@@ -376,34 +377,57 @@ async def trial(args, lock, artifacts, command):
         if observed_sources and event.get('tool') in content_tools:
             revisions += 1
             last_revision = index
+            sources_before_revision = observed_sources.copy()
             revised_exports = []
             exported_after_revision = set()
         if last_revision >= 0 and event.get('tool') == 'export_timeline':
-            output_path = decisions[event['turn']]['arguments']['inputs'].get('outputPath')
+            output_path = inference[event['turn']]['decision']['arguments']['inputs'].get('outputPath')
             if isinstance(output_path, str):
                 exported_after_revision.add(Path(output_path).resolve())
         verified = event.get('independently_verified_export_sha256')
         if (last_revision >= 0 and verified and verified not in observed_sources
                 and movies.get(verified, set()) & exported_after_revision):
             revised_exports.append(verified)
-        if event.get('image_sha256') and event.get('observed_export_sha256'):
+        delivered_images = inference.get(event['turn'] + 1, {}).get('image_sha256', [])
+        if (event.get('observed_export_sha256') and
+                any(digest in delivered_images for digest in event.get('image_sha256', []))):
             observed_sources.add(event['observed_export_sha256'])
-    native_projects = [path for path in projects.glob('*/project.comfystudio')
-        if any(timeline.get('clips') for timeline in json.loads(path.read_text()).get('timelines', []))]
-    def decoded_frames(path):
-        raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(path),
-            '-map', '0:v:0', '-f', 'framemd5', '-'], timeout=60).decode()
-        return [line.split(',')[-1].strip() for line in raw.splitlines() if line and not line.startswith('#')]
-    changed_pixels = any(decoded_frames(next(iter(movies[before]))) != decoded_frames(next(iter(movies[after])))
-        for before in observed_sources for after in revised_exports if before in movies and after in movies)
+    # Use the same source custody and timed-picture checks as the hosted trial.
+    from scripts.run_nvidia_native_trial import decoded_video_frames_sha256, verify_saved_native_trial
+    try:
+        saved_native = verify_saved_native_trial(artifacts, source_ledger=source_assets, max_clip_duration=8)
+    except (ValueError, OSError) as exc:
+        saved_native = {"native_saved_project_verified": False,
+                        "native_saved_project_rejection_type": type(exc).__name__}
+    else:
+        saved_native["native_saved_project_verified"] = True
+    native_projects = list(projects.glob('*/project.comfystudio')) if saved_native["native_saved_project_verified"] else []
+    # The same observed/exported digest may appear at more than one path. Pick
+    # one deterministically and decode it at most once for this comparison.
+    changed_presentation = False
+    presentation_rejection = None
+    if sources_before_revision and revised_exports:
+        try:
+            presentations = {
+                digest: decoded_video_frames_sha256(min(movies[digest]), max_frames=960)
+                for digest in (sources_before_revision | set(revised_exports)) & movies.keys()
+            }
+            changed_presentation = any(
+                presentations[before] != presentations[after]
+                for before in sources_before_revision & presentations.keys()
+                for after in revised_exports if after in presentations)
+        except (ValueError, OSError, subprocess.SubprocessError) as exc:
+            presentation_rejection = type(exc).__name__
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
               and revisions > 0 and last_save > last_revision and bool(native_projects)
-              and bool(revised_exports) and changed_pixels)
+              and bool(revised_exports) and changed_presentation)
     return {'technical_trial_completed': passed, 'model_status': outcome['status'],
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
-            'decoded_frame_sequence_changed': changed_pixels,
+            'decoded_frame_sequence_changed': changed_presentation,
+            'decoded_frame_sequence_rejection_type': presentation_rejection,
             'verified_exports_after_final_revision': revised_exports,
-            'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects], 'audit': audit,
+            'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects],
+            'saved_native_source_evidence': saved_native, 'audit': audit,
             'acceptance_note': 'Source-chain and model-operation evidence only, not artistic acceptance'}
 
 

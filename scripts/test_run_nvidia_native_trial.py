@@ -372,6 +372,18 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertEqual(result["native_project_sha256"], hashlib.sha256(
                 saved.read_bytes()).hexdigest())
 
+            # Local trials stage two originals. A valid placed source must be
+            # resolved by its ledger identity, independently of ledger order.
+            second = staging / "second.mp4"
+            second.write_bytes(b"another authorized test original")
+            sources = [{"path": str(second), "sha256": hashlib.sha256(second.read_bytes()).hexdigest()},
+                       {"path": str(source), "sha256": sha}]
+            self.assertEqual(verify_saved_native_trial(workspace, source_ledger=sources,
+                                                       max_clip_duration=8), result)
+            second.write_bytes(b"changed staged source")
+            with self.assertRaisesRegex(ValueError, "differs from owner SHA ledger"):
+                verify_saved_native_trial(workspace, source_ledger=sources, max_clip_duration=8)
+
             for change in (
                 {"timelines": [{**timeline, "clips": []}]},
                 {"currentTimelineId": "nonexistent"},
