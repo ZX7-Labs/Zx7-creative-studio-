@@ -24,7 +24,7 @@ from studio_next.native_render_evidence import REVIEWED_NATIVE_EVIDENCE, REVIEWE
 from studio_next.native_editor_source_pin import (pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.capability_gateway import CapabilityGateway
-from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+from studio_next.capability_mcp_session import CapabilityGatewayMcpSession, CombinedCapabilityMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
 
 
@@ -140,6 +140,10 @@ def native_decision_model(args):
     Hosted NVIDIA function calling is opt-in until a real provider protocol
     check succeeds. BODY continues to validate every actual editor operation.
     """
+    research_instructions = ""
+    if getattr(args, "allow_public_research", False):
+        from studio_next.creative_research_mcp import PUBLIC_RESEARCH_SYSTEM
+        research_instructions = "\n\n" + PUBLIC_RESEARCH_SYSTEM
     if args.provider == "nvidia":
         if args.base_url != "http://127.0.0.1:8080":
             raise ValueError("NVIDIA endpoint is fixed, not overridden by --base-url")
@@ -172,7 +176,7 @@ def native_decision_model(args):
         model = model_type(
             nvidia_settings,
             system_prompt=(NATIVE_DIRECT_TOOL_SYSTEM if args.structured_actions
-                           else NATIVE_CREATIVE_SYSTEM),
+                           else NATIVE_CREATIVE_SYSTEM) + research_instructions,
             allow_image_upload=args.allow_cloud_image_upload)
         model.verify_host_credentials()
         return model
@@ -189,7 +193,7 @@ def native_decision_model(args):
     return local_type(
         LocalModelSettings(base_url=args.base_url, model_id=args.model_id,
                            timeout_seconds=args.model_timeout),
-        system_prompt=NATIVE_CREATIVE_SYSTEM)
+        system_prompt=NATIVE_CREATIVE_SYSTEM + research_instructions)
 
 
 async def run_native_session(args):
@@ -216,6 +220,14 @@ async def run_native_session(args):
         params.append("--software-gpu")
     if args.no_sandbox:
         raise ValueError("Do not disable Chromium sandbox in live-model creative sessions")
+    research = None
+    searxng_url = getattr(args, "searxng_url", None)
+    if getattr(args, "allow_public_research", False):
+        from studio_next.creative_research_mcp import CreativeResearchMcpSession
+        research = CreativeResearchMcpSession(allow_public_research=True,
+            searxng_url=searxng_url, max_calls=8)
+    elif searxng_url is not None:
+        raise ValueError("A SearXNG endpoint requires explicit --allow-public-research")
     model = native_decision_model(args)
     configuration = json.loads(args.config.read_text(encoding="utf-8"))
     host_grants = native_session_grants(configuration, args.source)
@@ -269,10 +281,15 @@ async def run_native_session(args):
             # into NativeCreativeControl. Local and NVIDIA are interchangeable.
             budget = CapabilitySessionBudget(
                 max_calls=args.max_turns * 12, max_writes=args.max_turns)
-            gateway = CapabilityGateway(
-                {"editor": (session, host_grants)}, session_budget=budget)
+            bindings = {"editor": (session, host_grants)}
+            if research is not None:
+                bindings["research"] = (research, research.grants)
+            gateway = CapabilityGateway(bindings, session_budget=budget)
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
+            model_session = (CombinedCapabilityMcpSession(gateway, "editor", "research")
+                             if research is not None else admitted)
+            model_grants = host_grants if research is None else {**host_grants, **research.grants}
             selected_project_setup = None
             if getattr(args, "project", None) is not None:
                 from .native_editor_project import open_selected_native_project
@@ -283,8 +300,8 @@ async def run_native_session(args):
             preconditions, machine_effects = trial_machine_contracts(
                 host_grants, fresh=fresh)
             outcome = await NativeCreativeControl(
-                admitted, model, max_turns=args.max_turns,
-                host_tool_access=host_grants,
+                model_session, model, max_turns=args.max_turns,
+                host_tool_access=model_grants,
                 host_pre_dispatch_rejections=True,
                 catalog_mode=("indexed" if args.indexed_catalog else "full"),
                 host_preconditions=preconditions,
@@ -299,7 +316,7 @@ async def run_native_session(args):
                 receipt_path=args.receipt).run(brief)
     pair_report = {}
     if REVIEWED_RENDER_PAIR in required:
-        audit = audit_native_journal(outcome["events"], host_tool_access=host_grants,
+        audit = audit_native_journal(outcome["events"], host_tool_access=model_grants,
             expected_required_evidence=required, host_content_revision_tools=host_revisions,
             host_pre_dispatch_rejections=True, host_verified_preview_error_tools=preview_tools)
         pair_report["reviewed_native_render_pair"] = audit["reviewed_native_render_pair"]
@@ -328,6 +345,7 @@ async def run_native_session(args):
         "measured_native_mcp_wall_ms_total": outcome["measured_native_mcp_wall_ms_total"],
         "token_usage_independently_verified": False,
         "cloud_media_upload_permitted_by_host": args.allow_cloud_image_upload,
+        "public_research_permitted_by_host": research is not None,
         "receipt": str(args.receipt),
         "native_editing_capability_complete": False,
         "artistic_quality_independently_approved": False,
@@ -356,6 +374,9 @@ def build_parser():
     p.add_argument("--model-id", type=str, required=True)
     p.add_argument("--allow-cloud-image-upload", action="store_true",
                    help="Explicitly consent to sending private observed frames to NVIDIA")
+    p.add_argument("--allow-public-research", action="store_true",
+                   help="Allow model-written public queries to external research services")
+    p.add_argument("--searxng-url", help="Optional owner-configured loopback SearXNG base URL")
     p.add_argument("--base-url", default="http://127.0.0.1:8080")
     p.add_argument("--model-timeout", type=int, default=480)
     p.add_argument("--max-turns", type=int, default=32)
