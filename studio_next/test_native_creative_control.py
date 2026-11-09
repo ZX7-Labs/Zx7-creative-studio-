@@ -671,7 +671,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             host_tool_access=grants, required_evidence=required).run(
                 "Choose how to review the verified physical export")
         self.assertEqual(result["status"], "model_finished_unverified")
-        self.assertEqual(len(model.observed), 5)
+        # After the model-chosen decoded-frame observation, the next
+        # decision is sent via the genuine image-aware model protocol.
+        # Counting text-only observations as all decisions would miss that.
+        self.assertEqual(len(model.observed), 4)
+        self.assertEqual(len(model.images_observed), 1)
+        self.assertEqual(len(model.observed) + len(model.images_observed), 5)
+        self.assertTrue(model.images_observed[0][1])
         before = model.observed[1]["host_verified_execution_progress"]
         self.assertFalse(before["verified_export_still_needs_model_visible_frame"])
         self.assertEqual(before["current_frame_observation_read_selectable"], [])
@@ -689,7 +695,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             ("zx7_verify_native_export", {"path": export}),
             ("zx7_observe_verified_export_frame", {"path": export}),
         ])
-        next_progress = model.observed[4]["host_verified_execution_progress"]
+        next_progress = model.images_observed[0][0]["host_verified_execution_progress"]
         self.assertEqual(next_progress["current_frame_observation_read_selectable"], [])
         self.assertEqual(next_progress["verified_export_frame_observations"], 1)
         self.assertNotIn("/private/", json.dumps(result["events"]))
