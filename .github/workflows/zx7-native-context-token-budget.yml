@@ -1,0 +1,122 @@
+name: ZX7 local native context token measurement
+on:
+  push:
+    branches: [evaluation/native-context-token-budget-20261109]
+    paths: [.github/workflows/zx7-native-context-token-budget.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  paired-local-tokenization:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0bb0425e6d2effdf8313d5444264ccc7e8918fe0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify the exact previous synthetic-only evidence archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/ZX7-Labs/Zx7-creative-studio-/actions/artifacts/13643654784/zip > "$RUNNER_TEMP/native-context-trial.zip"
+          printf '%s  %s\n' '1e2141fe8d1e240914307a74fe952da5f4728367da8c623857ced955ef5875fa' "$RUNNER_TEMP/native-context-trial.zip" | sha256sum --check
+      - name: Download and verify the pinned runtime
+        run: |
+          mkdir -p "$RUNNER_TEMP/zx7-token-bench"
+          curl --fail --silent --show-error --location --retry 2 --max-time 90 \
+            --proto '=https' --proto-redir '=https' \
+            --header 'Accept: application/octet-stream' \
+            --output "$RUNNER_TEMP/zx7-token-bench/llama-b12000-bin-ubuntu-x64.tar.gz" \
+            'https://api.github.com/repos/ggml-org/llama.cpp/releases/assets/690919225?download=1'
+          printf '%s  %s\n' 'c56588b49ed4be846b115188407ea2b601fa3a5c30b8c25ad60e8344dfc7a4fd' "$RUNNER_TEMP/zx7-token-bench/llama-b12000-bin-ubuntu-x64.tar.gz" | sha256sum --check
+      - name: Compare text tokens using the pinned local model and chat template
+        run: |
+          python - <<'PY'
+          import copy
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import tarfile
+          import time
+          from urllib.request import Request, urlopen
+          import zipfile
+          from scripts.run_native_model_trial import download, sha
+          from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
+          from studio_next.native_creative_control import NATIVE_CREATIVE_SYSTEM
+          temp = Path(os.environ["RUNNER_TEMP"])
+          runtime = temp / "zx7-token-bench"
+          lock = json.loads(Path("engines/velorn/local-model-trial-4b.candidate.json").read_text())
+          archive = download(lock["runtime"]["archive"], runtime)
+          weight = download(next(x for x in lock["model"]["files"] if x["kind"] == "model"), runtime)
+          with tarfile.open(archive) as bundle:
+              bundle.extractall(runtime, filter="data")
+          with zipfile.ZipFile(temp / "native-context-trial.zip") as bundle:
+              records = [json.loads(line) for line in bundle.read("inference-transcript.jsonl").splitlines()]
+          assert len(records) == 6 and all(r["image_sha256"] == [] for r in records)
+          command = [str(runtime / lock["runtime"]["binary_relative_path"]),
+                     "--model", str(weight), "--host", "127.0.0.1", "--port", "8080",
+                     "--ctx-size", "8192", "--n-gpu-layers", "0", "--parallel", "1",
+                     "--chat-template-kwargs", '{"enable_thinking":false}', "--reasoning", "off", "--no-webui"]
+          def post(path, value):
+              request = Request("http://127.0.0.1:8080" + path, data=json.dumps(value).encode(),
+                                headers={"Content-Type": "application/json"}, method="POST")
+              with urlopen(request, timeout=20) as reply:
+                  return json.load(reply)
+          def count(text):
+              prompt = post("/apply-template", {"messages": [
+                  {"role": "system", "content": NATIVE_CREATIVE_SYSTEM},
+                  {"role": "user", "content": text}]} )["prompt"]
+              return len(post("/tokenize", {"content": prompt, "add_special": True, "parse_special": True})["tokens"])
+          with (runtime / "server.log").open("w") as log:
+              server = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+              try:
+                  for _ in range(90):
+                      assert server.poll() is None
+                      try:
+                          with urlopen("http://127.0.0.1:8080/health", timeout=2) as ready:
+                              if ready.status == 200:
+                                  break
+                      except OSError:
+                          time.sleep(1)
+                  else:
+                      raise TimeoutError("Pinned tokenizer server did not become ready")
+                  counts = []
+                  for rec in records:
+                      context = LocalNativeStructuredCreativeModel._stable_native_context(
+                          {k: v for k, v in rec["context"].items() if k != "host_native_tool_contracts"})
+                      baseline = json.dumps(context, ensure_ascii=False, allow_nan=False)
+                      compact = json.dumps(context, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+                      assert json.loads(baseline) == json.loads(compact)
+                      dedup = copy.deepcopy(context)
+                      for snapshot in dedup["native_read_snapshot_cache"]:
+                          if snapshot["result_texts"] == dedup["last_native_result_texts"]:
+                              snapshot.pop("result_texts")
+                              snapshot["result_texts_ref"] = "last_native_result_texts"
+                      projected = json.dumps(dedup, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+                      counts.append({"turn": rec["turn"], "prior_reported": rec["server_reported_token_usage"]["prompt_tokens"],
+                                     "baseline": count(baseline), "compact": count(compact),
+                                     "compact_with_receipt_references": count(projected)})
+                  evidence = {"model_sha256": sha(weight), "runtime_sha256": sha(archive),
+                              "archive_run": 42545785849, "counts": counts,
+                              "same_context_values_in_compact_variant": True,
+                              "creative_model_inference_calls": 0, "measured_latency_or_quality": False}
+                  for key in ("baseline", "compact", "compact_with_receipt_references"):
+                      evidence[key + "_total"] = sum(x[key] for x in counts)
+                  evidence["baseline_matched_reported"] = sum(x["baseline"] == x["prior_reported"] for x in counts)
+                  print(json.dumps(evidence, indent=2))
+                  (temp / "native-context-token-evidence.json").write_text(json.dumps(evidence, indent=2))
+              finally:
+                  server.terminate()
+                  server.wait(timeout=15)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zx7-native-context-token-evidence
+          path: ${{ runner.temp }}/native-context-token-evidence.json
+          if-no-files-found: error
+          retention-days: 14
