@@ -262,7 +262,7 @@ def _stage_asset(path, destination, rights):
 
 def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                   max_turns=32, model_timeout=480, allow_cloud_image_upload=False,
-                  xvfb_binary=None, display=None):
+                  reviewed_revision=False, xvfb_binary=None, display=None):
     from .native_editor_session import build_parser, run_native_session
     root, config, grants = load_workspace(path)
     if not isinstance(brief, str) or not 1 <= len(brief.strip()) <= 24000:
@@ -275,6 +275,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
         raise ValueError("Model turn budget must be between 1 and 128")
     if config["provider"] == "local" and allow_cloud_image_upload:
         raise ValueError("Cloud media permission is only applicable to NVIDIA")
+    if reviewed_revision and config["provider"] == "nvidia" and not allow_cloud_image_upload:
+        raise ValueError("NVIDIA reviewed revisions require explicit --allow-cloud-image-upload")
     project_path = None
     if project is not None:
         project_path = Path(project).expanduser().resolve(strict=True)
@@ -326,7 +328,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                         "--receipt", str(session / "native-journal.jsonl"), "--provider", config["provider"],
                         "--model-id", config["model_id"], "--base-url", config["base_url"],
                         "--max-turns", str(max_turns), "--model-timeout", str(model_timeout),
-                        "--structured-actions", "--evaluation-evidence", "export"]
+                        "--structured-actions", "--evaluation-evidence",
+                        "reviewed-revision" if reviewed_revision else "export"]
                 for flag, value in (("--xvfb-binary", xvfb_binary), ("--display", display)):
                     if value:
                         argv.extend([flag, str(value)])
@@ -424,6 +427,8 @@ def main(argv=None):
     run.add_argument("--max-turns", type=int, default=32)
     run.add_argument("--model-timeout", type=int, default=480)
     run.add_argument("--allow-cloud-image-upload", action="store_true")
+    run.add_argument("--reviewed-revision", action="store_true",
+                     help="Require observed native renders before and after a revision")
     run.add_argument("--xvfb-binary")
     run.add_argument("--display")
     args = p.parse_args(argv)
@@ -444,6 +449,7 @@ def main(argv=None):
             result = run_workspace(args.workspace, brief=brief, assets=args.asset, rights=args.rights,
                 project=args.project, max_turns=args.max_turns, model_timeout=args.model_timeout,
                 allow_cloud_image_upload=args.allow_cloud_image_upload,
+                reviewed_revision=args.reviewed_revision,
                 xvfb_binary=args.xvfb_binary, display=args.display)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.command == "doctor":

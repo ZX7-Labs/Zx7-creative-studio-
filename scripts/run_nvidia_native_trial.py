@@ -14,6 +14,9 @@ from pathlib import Path
 import subprocess
 import sys
 
+from studio_next.native_render_evidence import destination_digest, timeline_scope_digest
+from studio_next.body_editor_export import native_export_file_identity
+
 ROOT = Path(__file__).resolve().parents[1]
 _SOURCE_EDITOR = ROOT / "third_party" / "velorn"
 _EDITOR_CLIENT = ROOT / "engines" / "velorn" / "native-model-client.py"
@@ -234,6 +237,7 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
     return {
         "native_project_sha256": _sha256(project_file),
         "active_native_timeline_id": active_id,
+        "saved_native_timeline_sha256": timeline_scope_digest(str(project_file.parent), active_id),
         "saved_active_clip_count": len(clips),
         "verified_source_backed_video_clips": real_original_clips,
         "artistic_quality_approved": False,
@@ -297,6 +301,20 @@ def decoded_video_frames_sha256(path: Path, *, max_frames=240):
     return tuple(presentations)
 
 
+def decode_trial_export(path, *, expected_sha256=None, max_frames=240):
+    """Independently decode the same physical bytes as the earlier receipt."""
+    identity = native_export_file_identity(path)
+    if expected_sha256 is not None and identity[-1] != expected_sha256:
+        raise ValueError("Native trial export differs from its verification receipt")
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-xerror", "-i", str(path), "-f", "null", "-"],
+        check=True, timeout=90, env=_no_cloud_credentials())
+    presentation = decoded_video_frames_sha256(path, max_frames=max_frames)
+    if native_export_file_identity(path) != identity:
+        raise ValueError("Native trial export changed during decoding")
+    return identity, presentation
+
+
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):
     if model_id != _ALLOWED_MODEL:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
@@ -348,12 +366,10 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     media = []
     decoded_frame_sequences = []
     for path in mp4s:
-        subprocess.run(
-            ["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"],
-            check=True, timeout=90, env=_no_cloud_credentials())
-        decoded_frame_sequences.append(decoded_video_frames_sha256(path))
-        media.append({"path": str(path), "sha256": _sha256(path),
-                      "bytes": path.stat().st_size,
+        identity, presentation = decode_trial_export(path)
+        decoded_frame_sequences.append(presentation)
+        media.append({"path": str(path), "sha256": identity[-1],
+                      "bytes": identity[2],
                       "decoded_video_frames": len(decoded_frame_sequences[-1]),
                       "decoded_rgb_frame_sequence_sha256": hashlib.sha256(
                           json.dumps(decoded_frame_sequences[-1],
@@ -378,12 +394,24 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         }
     export_variants = len({entry["sha256"] for entry in media})
     independently_different_picture_exports = len(set(decoded_frame_sequences))
+    decoded_by_receipt = {
+        (destination_digest(entry["path"]), entry["sha256"]): presentation
+        for entry, presentation in zip(media, decoded_frame_sequences, strict=True)
+    }
+    pair = summary.get("reviewed_native_render_pair")
+    changed_reviewed_picture = False
+    if pair and pair[1]["timeline_sha256"] == saved_native.get("saved_native_timeline_sha256"):
+        before, after = (decoded_by_receipt.get((item["destination_sha256"], item["export_sha256"]))
+                         for item in pair)
+        changed_reviewed_picture = before is not None and after is not None and before != after
     evaluated = {
         **saved_native,
         "different_decoded_export_count": export_variants,
         "different_decoded_picture_sequence_count": independently_different_picture_exports,
         "status": summary.get("status"),
         "host_evidence_satisfied": summary.get("evaluation_evidence_satisfied") is True,
+        "reviewed_native_render_pair": pair,
+        "decoded_reviewed_picture_changed": changed_reviewed_picture,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
         "physical_export_verify_receipts": summary.get("independently_verified_export_receipts"),
         "decoded_real_exports": media,
@@ -396,9 +424,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     print(json.dumps(evaluated, ensure_ascii=False))
     if (summary.get("status") != "model_finished_unverified" or
             summary.get("evaluation_evidence_satisfied") is not True or
-            len(media) < 2 or
-            export_variants < 2 or
-            independently_different_picture_exports < 2 or
+            not changed_reviewed_picture or
             saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
     return evaluated

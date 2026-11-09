@@ -19,6 +19,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
+from studio_next.native_creative_audit import audit_native_journal
+from studio_next.native_render_evidence import REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR
 from studio_next.native_editor_source_pin import (pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.capability_gateway import CapabilityGateway
@@ -220,10 +222,7 @@ async def run_native_session(args):
     evidence_profiles = {
         "none": (),
         "export": ("native_write_acknowledged", "physical_export_verified"),
-        "reviewed-revision": (
-            "native_write_acknowledged", "physical_export_verified",
-            "verified_export_frame_observed",
-            "post_observation_native_write_acknowledged"),
+        "reviewed-revision": REVIEWED_NATIVE_EVIDENCE,
     }
     required = evidence_profiles[args.evaluation_evidence]
     fresh = bool(args.fresh_trial_project)
@@ -237,10 +236,13 @@ async def run_native_session(args):
         "add_asset_to_timeline", "add_assets_to_timeline",
         "add_text_clip", "update_text_clip", "add_shape_clip",
         "update_shape_clip", "set_clip_style", "set_clip_mask",
-        "move_clips", "trim_clips", "delete_clips",
+        "move_clips", "trim_clips", "delete_clips", "add_track", "update_track", "remove_track",
     )
     host_revisions = tuple(
         name for name in revision_roles if host_grants.get(name) == "write")
+    preview_tools = (pinned_electron_marker_previews(args.source, host_grants) +
+                     pinned_electron_asset_placement_previews(args.source, host_grants) +
+                     pinned_electron_clip_edit_previews(args.source, host_grants))
     if (args.provider == "nvidia" and
             args.evaluation_evidence == "reviewed-revision" and
             not args.allow_cloud_image_upload):
@@ -289,16 +291,20 @@ async def run_native_session(args):
                 host_possible_effects=machine_effects,
                 host_once_after_acknowledged_write=(
                     ("create_project",) if fresh else ()),
-                host_verified_top_level_preview_tools=(
-                    pinned_electron_marker_previews(args.source, host_grants) +
-                    pinned_electron_asset_placement_previews(args.source, host_grants) +
-                    pinned_electron_clip_edit_previews(args.source, host_grants)),
+                host_verified_top_level_preview_tools=preview_tools,
                 host_verified_timeline_preview_tools=(
                     pinned_electron_timeline_frame_previews(args.source, host_grants)),
                 required_evidence=required,
                 host_content_revision_tools=host_revisions,
                 receipt_path=args.receipt).run(brief)
+    pair_report = {}
+    if REVIEWED_RENDER_PAIR in required:
+        audit = audit_native_journal(outcome["events"], host_tool_access=host_grants,
+            expected_required_evidence=required, host_content_revision_tools=host_revisions,
+            host_pre_dispatch_rejections=True, host_verified_preview_error_tools=preview_tools)
+        pair_report["reviewed_native_render_pair"] = audit["reviewed_native_render_pair"]
     return {
+        **pair_report,
         "status": outcome["status"],
         "model_id_reported": outcome["actual_model_id_reported"],
         "selected_provider": args.provider,

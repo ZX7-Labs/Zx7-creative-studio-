@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.native_editor_source_pin import (pinned_electron_marker_previews, pinned_electron_asset_placement_previews, pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews)
 from studio_next.native_creative_audit import audit_native_journal, read_native_journal
+from studio_next.native_render_evidence import REVIEWED_NATIVE_EVIDENCE, destination_digest
 from studio_next.providers import LocalModelSettings
 from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
 from studio_next.capability_gateway import CapabilityGateway
@@ -277,12 +278,7 @@ async def trial(args, lock, artifacts, command):
     # save/export create files but are not artistic content revisions.
     host_content_revision_tools = tuple(sorted(
         name for name in content_tools if host.get(name) == "write"))
-    completion_evidence = (
-        "native_write_acknowledged",
-        "physical_export_verified",
-        "post_observation_native_write_acknowledged",
-        "verified_export_frame_observed",
-    )
+    completion_evidence = REVIEWED_NATIVE_EVIDENCE
     with (artifacts / 'editor-stderr.log').open('w') as log:
         async with stdio_client(StdioServerParameters(command='node', args=params, cwd=ROOT), errlog=log) as (read, write):
             async with ClientSession(read, write, read_timeout_seconds=180) as session:
@@ -394,7 +390,7 @@ async def trial(args, lock, artifacts, command):
                 any(digest in delivered_images for digest in event.get('image_sha256', []))):
             observed_sources.add(event['observed_export_sha256'])
     # Use the same source custody and timed-picture checks as the hosted trial.
-    from scripts.run_nvidia_native_trial import decoded_video_frames_sha256, verify_saved_native_trial
+    from scripts.run_nvidia_native_trial import decode_trial_export, verify_saved_native_trial
     try:
         saved_native = verify_saved_native_trial(artifacts, source_ledger=source_assets, max_clip_duration=8)
     except (ValueError, OSError) as exc:
@@ -407,16 +403,18 @@ async def trial(args, lock, artifacts, command):
     # one deterministically and decode it at most once for this comparison.
     changed_presentation = False
     presentation_rejection = None
-    if sources_before_revision and revised_exports:
+    pair = audit["reviewed_native_render_pair"]
+    if (pair and pair[1]["timeline_sha256"] == saved_native.get("saved_native_timeline_sha256") and
+            pair[0]["export_sha256"] in sources_before_revision and pair[1]["export_sha256"] in revised_exports):
         try:
-            presentations = {
-                digest: decoded_video_frames_sha256(min(movies[digest]), max_frames=960)
-                for digest in (sources_before_revision | set(revised_exports)) & movies.keys()
-            }
-            changed_presentation = any(
-                presentations[before] != presentations[after]
-                for before in sources_before_revision & presentations.keys()
-                for after in revised_exports if after in presentations)
+            paths = [{path for path in movies.get(item["export_sha256"], ())
+                      if destination_digest(str(path)) == item["destination_sha256"]}
+                     for item in pair]
+            if all(len(matches) == 1 for matches in paths):
+                before, after = (decode_trial_export(next(iter(matches)),
+                    expected_sha256=item["export_sha256"], max_frames=960)[1]
+                    for item, matches in zip(pair, paths, strict=True))
+                changed_presentation = before != after
         except (ValueError, OSError, subprocess.SubprocessError) as exc:
             presentation_rejection = type(exc).__name__
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0

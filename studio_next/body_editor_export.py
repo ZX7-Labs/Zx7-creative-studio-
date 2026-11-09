@@ -19,11 +19,11 @@ from .production_qc import full_decode_inspection
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm"})
 
 
-def _file_identity(path: Path):
+def native_export_file_identity(path: Path):
     info = path.stat()
     if not stat.S_ISREG(info.st_mode) or info.st_size < 512:
         raise ValueError("Native export must be an actual nonempty regular video file")
-    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, sha256_file(path))
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, sha256_file(path))
 
 
 def _no_path_symlinks(path: Path, roots: tuple[Path, ...]) -> bool:
@@ -62,9 +62,9 @@ def verify_native_editor_export(path: str, *, policy: EditorPathPolicy,
         raise ValueError("Expected a supported native video export")
     if not _no_path_symlinks(source, (policy.outputs_root,)):
         raise EditorAccessError("Export observation refuses symbolic-link indirection")
-    before = _file_identity(source)
+    before = native_export_file_identity(source)
     report = inspector(source, expected=expected, max_seconds=max_seconds)
-    after = _file_identity(source)
+    after = native_export_file_identity(source)
     if before != after or report.get("sha256") != before[-1]:
         raise ValueError("Native export changed during independent decoding")
     if not report.get("technical_delivery_verified"):
