@@ -557,6 +557,69 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NativeJournalError):
             audit_native_journal(tampered, **audit_args)
 
+    async def test_same_physical_export_reverification_is_not_a_new_review(self):
+        """Real Qwen run repeated verification eight times without viewing pixels.
+
+        Show current file evidence rather than conflating repeated verification
+        receipts with independent creative versions. The model still decides
+        whether to observe; nothing is dispatched by this progress view.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        path = "/private/native/outputs/one.mp4"
+        digest = "a" * 64
+        image = b"\x89PNG\r\n\x1a\n" + b"synthetic-frame"
+        image_digest = hashlib.sha256(image).hexdigest()
+
+        class TwoReads(FakeSession):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "zx7_verify_native_export":
+                    body = {"physical_export_verified": True, "native_export_sha256": digest}
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text=json.dumps(body))])
+                body = {"export_sha256": digest, "png_sha256": image_digest}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(body)),
+                    SimpleNamespace(type="image", mime_type="image/png",
+                                    data=base64.b64encode(image).decode())])
+
+        session = TwoReads()
+        session.tools = [
+            SimpleNamespace(name="zx7_verify_native_export", description="Verify output",
+                            input_schema={"type": "object", "properties": {
+                                "path": {"type": "string"}}, "required": ["path"]}),
+            SimpleNamespace(name="zx7_observe_verified_export_frame", description="Read picture",
+                            input_schema={"type": "object", "properties": {
+                                "path": {"type": "string"}}, "required": ["path"]}),
+        ]
+        grants = {tool.name: "read" for tool in session.tools}
+        required = ("physical_export_verified", "verified_export_frame_observed")
+        model = ScriptedModel([
+            decision("invoke", tool="zx7_verify_native_export", inputs={"path": path}),
+            decision("invoke", tool="zx7_verify_native_export", inputs={"path": path}),
+            decision("invoke", tool="zx7_observe_verified_export_frame", inputs={"path": path}),
+            decision("finish", summary="The model actually saw one fixture frame"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=4,
+            host_tool_access=grants, required_evidence=required).run("Verify and view one movie")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        checkpoint = model.observed[2]["host_verified_execution_progress"]
+        self.assertEqual(checkpoint["verified_export_receipts"], 2)
+        self.assertEqual(checkpoint["current_distinct_verified_output_count"], 1)
+        self.assertEqual(checkpoint["same_export_reverification_count"], 1)
+        self.assertTrue(checkpoint["verified_export_still_needs_model_visible_frame"])
+        self.assertEqual(checkpoint["frame_observation_tools_granted_by_host"],
+                         ["zx7_observe_verified_export_frame"])
+        self.assertEqual([x[0] for x in session.calls],
+                         ["zx7_verify_native_export"] * 2 +
+                         ["zx7_observe_verified_export_frame"])
+        self.assertNotIn("/private/", json.dumps(result["events"]))
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants,
+            expected_required_evidence=required)["journal_chain_structurally_valid"])
+
     async def test_failed_later_export_verification_revokes_reviewed_pair(self):
         """A later failed read must not leave an earlier delivery approved.
 
