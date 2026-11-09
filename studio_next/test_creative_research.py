@@ -3,6 +3,7 @@ import json
 import importlib.util
 import tempfile
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -19,9 +20,12 @@ class FakePublicAPIs:
     def __init__(self):
         self.calls = []
         self.response = {}
+        self.site_matrix = {}
 
     def __call__(self, url):
         self.calls.append(url)
+        if urlsplit(url).hostname == "meta.wikimedia.org":
+            return self.site_matrix
         return self.response
 
 
@@ -45,6 +49,14 @@ class CreativeResearchTests(unittest.TestCase):
 
     def test_default_web_uses_builtin_wikipedia_without_host_setup(self):
         provider = FakePublicAPIs()
+        provider.site_matrix = {"sitematrix": {
+            "count": 5,
+            "0": {"code": "hi", "site": [{"code": "wiki", "url": "https://hi.wikipedia.org"}]},
+            "1": {"code": "en", "site": [{"code": "wiki", "url": "https://en.wikipedia.org"}]},
+            "2": {"code": "ja", "site": [{"code": "wiki", "url": "https://ja.wikipedia.org"}]},
+            "3": {"code": "nan", "site": [{"code": "wiki", "url": "https://zh-min-nan.wikipedia.org"}]},
+            "4": {"code": "zh", "site": [{"code": "wiki", "url": "https://zh.wikipedia.org"}]},
+        }}
         provider.response = {"query": {"search": [
             {"pageid": True, "title": "Invalid identity"},
             {"pageid": -1, "title": "Invalid identity"},
@@ -67,7 +79,9 @@ class CreativeResearchTests(unittest.TestCase):
         self.assertFalse(response["source_pages_reviewed"])
         self.assertFalse(response["rights_verified"])
         self.assertFalse(response["import_authorized"])
-        requested, = map(urlsplit, provider.calls)
+        registry, requested = map(urlsplit, provider.calls)
+        self.assertEqual(registry.netloc, "meta.wikimedia.org")
+        self.assertNotIn("srsearch", parse_qs(registry.query))
         self.assertEqual((requested.scheme, requested.netloc, requested.path),
                          ("https", "hi.wikipedia.org", "/w/api.php"))
         self.assertEqual(parse_qs(requested.query), {
@@ -77,11 +91,49 @@ class CreativeResearchTests(unittest.TestCase):
         })
         with self.assertRaises(CreativeResearchError):
             research.web(query="light", language="example.org")
-        self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(len(provider.calls), 2)
+        for locale, expected in (("JA", "ja"), ("zh-Hant-TW", "zh"), ("nan", "zh-min-nan")):
+            with self.subTest(locale=locale):
+                result = research.web(query="international cinema", language=locale)
+                self.assertTrue(result["results"][0]["source_page"].startswith(
+                    f"https://{expected}.wikipedia.org/"))
+        self.assertEqual(len(provider.calls), 5)
+        self.assertEqual(sum(urlsplit(url).hostname == "meta.wikimedia.org" for url in provider.calls), 1)
         provider.response = {"query": {"search": {}}}
         with self.assertRaises(CreativeResearchError):
             research.web(query="light")
         self.assertEqual(urlsplit(provider.calls[-1]).hostname, "en.wikipedia.org")
+
+    def test_builtin_lookup_rejects_unknown_closed_and_untrusted_catalog_hosts(self):
+        provider = FakePublicAPIs()
+        provider.site_matrix = {"sitematrix": {
+            "0": {"code": "aa", "site": [{"code": "wiki", "url": "https://aa.wikipedia.org", "closed": ""}]},
+            "1": {"code": "bb", "site": [{"code": "wiki", "url": "https://bb.wikipedia.org", "private": ""}]},
+            "2": {"code": "cc", "site": [{"code": "wiki", "url": "https://cc.wikipedia.org:8443"}]},
+            "3": {"code": "dd", "site": [{"code": "wiki", "url": "https://dd.wikipedia.org.evil.test"}]},
+            "4": {"code": "ee", "site": [{"code": "wiktionary", "url": "https://ee.wikipedia.org"}]},
+            "5": {"code": "fr", "site": [{"code": "wiki", "url": "https://fr.wikipedia.org"}]},
+        }}
+        research = CreativeResearch(provider)
+        for language in ("aa", "bb", "cc", "dd", "ee", "unknown"):
+            with self.subTest(language=language), self.assertRaises(CreativeResearchError):
+                research.web(query="public topic", language=language)
+        request, = map(urlsplit, provider.calls)
+        self.assertEqual(request.hostname, "meta.wikimedia.org")
+        self.assertNotIn("public", request.query)
+
+    def test_public_transport_accepts_only_exact_wikipedia_api_authority(self):
+        with patch("studio_next.creative_research._bounded_json_get", return_value={}) as fetch:
+            for unsafe in ("http://ja.wikipedia.org/w/api.php",
+                           "https://ja.wikipedia.org.evil.test/w/api.php",
+                           "https://user@ja.wikipedia.org/w/api.php",
+                           "https://ja.wikipedia.org:8443/w/api.php",
+                           "https://ja.wikipedia.org/another-path",
+                           "https://meta.wikimedia.org/another-path"):
+                with self.subTest(url=unsafe), self.assertRaises(CreativeResearchError):
+                    _public_api_json(unsafe)
+            self.assertEqual(_public_api_json("https://ja.wikipedia.org/w/api.php"), {})
+            fetch.assert_called_once_with("https://ja.wikipedia.org/w/api.php")
 
     def test_optional_searxng_keeps_references_unverified(self):
         provider = FakePublicAPIs()
@@ -110,6 +162,12 @@ class CreativeResearchTests(unittest.TestCase):
         requested = urlsplit(provider.calls[0])
         self.assertEqual((requested.hostname, requested.port, requested.path), ("::1", 8080, "/search"))
         self.assertEqual(parse_qs(requested.query), {"q": ["देसी lighting & design"], "format": ["json"]})
+        result = research.web(query="creative", language="pt-BR")
+        self.assertEqual(result["provider"], "searxng")
+        result = research.web(query="creative", language="all")
+        self.assertEqual(result["provider"], "searxng")
+        self.assertEqual([parse_qs(urlsplit(url).query)["language"] for url in provider.calls[1:]],
+                         [["pt-BR"], ["all"]])
         provider.response = {"results": {}}
         with self.assertRaises(CreativeResearchError):
             research.web(query="design")
