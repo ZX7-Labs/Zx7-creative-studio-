@@ -40,7 +40,7 @@ from studio_next.capability_session_budget import CapabilitySessionBudget
 # NOT an authorization to publish user/session state.
 _ALLOWED_EDITOR_DIAGNOSTICS = (
     "launcher.log", "velorn/app.log", "velorn/export-worker.log")
-_SESSION_NAME = re.compile(r"session-[A-Za-z0-9_-]{1,64}\\Z")
+_SESSION_NAME = re.compile(r"session-[A-Za-z0-9_-]{1,64}\Z")
 _MAX_RETAINED_LOG_BYTES = 1024 * 1024
 
 
