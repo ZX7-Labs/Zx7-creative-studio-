@@ -357,6 +357,38 @@ def trial_picture_changed(before, after):
             before.presentation != after.presentation)
 
 
+def trial_delivery_profile_compliant(
+        decoded, *, width=640, height=360, fps=24, max_seconds=6):
+    """Independently enforce this *experiment's* declared resource profile.
+
+    This is NOT a ZX7 product-wide resolution, duration or aesthetic limit.
+    Comparable but identically mis-sized renders cannot pass a trial that
+    explicitly required 640x360, 24 fps and a bounded physical duration.
+    """
+    if (not isinstance(decoded, DecodedTrialExport) or
+            decoded.picture_profile.get("width") != width or
+            decoded.picture_profile.get("height") != height or
+            decoded.picture_profile.get("codec_name") != "h264" or
+            # The actual pinned Velorn 640x360 H.264 export omits SAR
+            # metadata (the ordinary implicit-square presentation); explicit
+            # anamorphic SAR is not acceptable for this fixed-format trial.
+            decoded.picture_profile.get("sample_aspect_ratio") not in (None, "1:1") or
+            not isinstance(decoded.presentation, tuple) or
+            not 0 < len(decoded.presentation) <= max_seconds * fps):
+        return False
+    frame_duration = Fraction(1, fps)
+    for index, frame in enumerate(decoded.presentation):
+        if not isinstance(frame, tuple) or len(frame) != 3:
+            return False
+        try:
+            pts, duration = Fraction(frame[0]), Fraction(frame[1])
+        except (ValueError, TypeError, ZeroDivisionError):
+            return False
+        if pts != index * frame_duration or duration != frame_duration:
+            return False
+    return True
+
+
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):
     if model_id != _ALLOWED_MODEL:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
@@ -414,6 +446,8 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         media.append({"path": str(path), "sha256": identity[-1],
                       "bytes": identity[2],
                       "decoded_picture_profile": decoded.picture_profile,
+                      "synthetic_trial_delivery_profile_compliant":
+                          trial_delivery_profile_compliant(decoded),
                       "decoded_video_frames": len(decoded.presentation),
                       "decoded_rgb_frame_sequence_sha256": hashlib.sha256(
                           json.dumps(decoded.presentation,
@@ -441,10 +475,14 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         item.presentation for item in decoded_exports.values()})
     pair = summary.get("reviewed_native_render_pair")
     changed_reviewed_picture = False
+    reviewed_pair_delivery_profile_compliant = False
     if pair and pair[1]["timeline_sha256"] == saved_native.get("saved_native_timeline_sha256"):
         before, after = (decoded_exports.get((item["destination_sha256"], item["export_sha256"]))
                          for item in pair)
         changed_reviewed_picture = trial_picture_changed(before, after)
+        reviewed_pair_delivery_profile_compliant = (
+            trial_delivery_profile_compliant(before) and
+            trial_delivery_profile_compliant(after))
     evaluated = {
         **saved_native,
         "different_decoded_export_count": export_variants,
@@ -453,6 +491,8 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         "host_evidence_satisfied": summary.get("evaluation_evidence_satisfied") is True,
         "reviewed_native_render_pair": pair,
         "decoded_reviewed_picture_changed": changed_reviewed_picture,
+        "reviewed_pair_synthetic_delivery_profile_compliant":
+            reviewed_pair_delivery_profile_compliant,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
         "physical_export_verify_receipts": summary.get("independently_verified_export_receipts"),
         "decoded_real_exports": media,
@@ -466,6 +506,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     if (summary.get("status") != "model_finished_unverified" or
             summary.get("evaluation_evidence_satisfied") is not True or
             not changed_reviewed_picture or
+            not reviewed_pair_delivery_profile_compliant or
             saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
     return evaluated

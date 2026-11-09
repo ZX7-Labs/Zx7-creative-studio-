@@ -428,19 +428,21 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         import hashlib
         import shutil
         from scripts.run_nvidia_native_trial import (
-            decode_trial_export, decoded_video_frames_sha256, trial_picture_changed,
+            decode_trial_export, decoded_video_frames_sha256,
+            trial_delivery_profile_compliant, trial_picture_changed,
         )
         if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
             self.skipTest("Physical native-video proof requires FFmpeg and FFprobe")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            def make(color, title, filename, *, size="64x36", sar="1", matrix="bt709", retime=False):
+            def make(color, title, filename, *, size="64x36", sar="1", matrix="bt709",
+                     retime=False, rate=24, seconds=0.5):
                 destination = root / filename
                 filters = f"setsar={sar}" + (",setpts=2*PTS" if retime else "")
                 subprocess.run(
                     ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
                      "-f", "lavfi", "-i",
-                     f"color=c={color}:s={size}:r=24:d=0.5",
+                     f"color=c={color}:s={size}:r={rate}:d={seconds}",
                      "-vf", filters, "-fps_mode", "passthrough",
                      "-metadata", f"title={title}",
                      "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -458,6 +460,8 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             # A pure retiming edit is a valid editorial revision even when
             # EVERY RGB frame is pixel-identical to the original.
             retimed = make("blue", "retimed", "retimed.mp4", retime=True)
+            longer = make("blue", "longer", "longer.mp4", seconds=1.0)
+            faster = make("blue", "faster", "faster.mp4", rate=30)
             self.assertNotEqual(
                 hashlib.sha256(original.read_bytes()).digest(),
                 hashlib.sha256(rewrapped.read_bytes()).digest())
@@ -474,14 +478,30 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertFalse(trial_picture_changed(before, decode_trial_export(rewrapped)))
             self.assertTrue(trial_picture_changed(before, decode_trial_export(revised)))
             self.assertTrue(trial_picture_changed(before, decode_trial_export(retimed)))
+            # This is a synthetic resource-limit gate, NOT a product video
+            # size restriction. Actual decoder timestamps must also comply.
+            trial = lambda item: trial_delivery_profile_compliant(
+                item, width=64, height=36, fps=24, max_seconds=0.5)
+            self.assertTrue(trial(before))
+            # The actual pinned 60-second Velorn H.264 proof has no SAR
+            # metadata. It must not fail an otherwise sound 640x360 export.
+            self.assertTrue(trial(before._replace(picture_profile={
+                **before.picture_profile, "sample_aspect_ratio": None})))
+            self.assertTrue(trial(decode_trial_export(revised)))
+            self.assertFalse(trial_delivery_profile_compliant(before))
+            self.assertFalse(trial(decode_trial_export(retimed)))
+            self.assertFalse(trial(decode_trial_export(longer)))
+            self.assertFalse(trial(decode_trial_export(faster)))
             resize_result = decode_trial_export(resized)
             self.assertNotEqual(before.presentation, resize_result.presentation)
             self.assertEqual(resize_result.picture_profile["width"], 128)
             self.assertEqual(resize_result.picture_profile["height"], 72)
             self.assertFalse(trial_picture_changed(before, resize_result))
+            self.assertFalse(trial(resize_result))
             sar_result = decode_trial_export(stretched)
             self.assertEqual(sar_result.picture_profile["sample_aspect_ratio"], "4:3")
             self.assertFalse(trial_picture_changed(before, sar_result))
+            self.assertFalse(trial(sar_result))
             color_result = decode_trial_export(color_tagged)
             self.assertEqual(color_result.picture_profile["color_space"], "smpte170m")
             self.assertFalse(trial_picture_changed(before, color_result))
