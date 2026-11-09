@@ -238,8 +238,8 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
             raise ValueError("Native original source bytes differ from ledger")
         duration = clip.get("duration")
         if (type(duration) not in (int, float) or
-                not math.isfinite(duration) or
-                not 0 < duration <= max_clip_duration):
+                not 0 < duration <= max_clip_duration or
+                (type(duration) is float and not math.isfinite(duration))):
             raise ValueError("Invalid placed original video duration")
         # Structural source custody alone is not proof that owner footage
         # contributes to this bounded synthetic export. The pinned editor
@@ -248,8 +248,8 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
         # This gates only the 6/8-second evaluation interval, not arbitrary
         # durations or layouts in the production editor.
         start = clip.get("startTime")
-        if (type(start) not in (int, float) or
-                not math.isfinite(start) or start < 0):
+        if (type(start) not in (int, float) or start < 0 or
+                (type(start) is float and not math.isfinite(start))):
             raise ValueError("Invalid native source clip timeline placement")
         if start >= max_clip_duration:
             continue
