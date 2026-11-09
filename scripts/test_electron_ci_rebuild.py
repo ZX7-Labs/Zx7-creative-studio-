@@ -77,7 +77,7 @@ class NativeElectronDownloadRecoveryTests(unittest.TestCase):
             ["rebuild", "electron", "--no-audit", "--no-fund"],
             ["rebuild", "--no-audit", "--no-fund"]])
         self.assertEqual(calls[1]["mirror"], "https://npmmirror.com/mirrors/electron/")
-        self.assertIsNone(calls[2]["mirror"])
+        self.assertEqual(calls[2]["mirror"], "https://npmmirror.com/mirrors/electron/")
         self.assertIn("HTTP 504", result.stdout)
 
     def test_integrity_or_other_build_failure_is_not_retried(self):
