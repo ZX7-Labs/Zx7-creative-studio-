@@ -73,11 +73,15 @@ class ReleaseArtifactUploadIntegrityTests(unittest.TestCase):
         digest = hashlib.sha256(media.read_bytes()).hexdigest()
         receipt_dir = media.parent / ".zx7-publications"
         receipt_dir.mkdir()
-        receipt = receipt_dir / ("a" * 64 + ".json")
+        identity = {"project_key": "1" * 64, "node_id": "render",
+                    "input_key": "2" * 64, "tool_id": "body.render"}
+        canonical = hashlib.sha256(json.dumps(
+            {"identity": identity, "output": str(media.absolute())},
+            sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+        receipt = receipt_dir / (canonical + ".json")
         record = {
             "schema": 1,
-            "identity": {"project_key": "test", "node_id": "render",
-                         "input_key": "source", "tool_id": "body.render"},
+            "identity": identity,
             "output": str(media.absolute()),
             "stage": ".zx7-uncommitted-" + "b" * 32 + ".mp4",
             "sha256": digest, "bytes": media.stat().st_size,
@@ -179,6 +183,51 @@ class ReleaseArtifactUploadIntegrityTests(unittest.TestCase):
             evidence_file.write_text(json.dumps(record))
             with self.assertRaisesRegex(ReleaseArtifactIntegrityError, "Duplicated"):
                 verify_release_tree(root)
+
+    def test_forged_publication_receipts_cannot_pass_rewritten_manifest(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            media, receipt = self.fixture(root)
+            fake_name = receipt.with_name("0" * 64 + ".json")
+            receipt.rename(fake_name)
+            self.write_manifest(root)
+            with self.assertRaisesRegex(ReleaseArtifactIntegrityError, "identity filename"):
+                verify_release_tree(root)
+            fake_name.rename(receipt)
+
+            original = json.loads(receipt.read_text())
+            changed_identity = json.loads(json.dumps(original))
+            changed_identity["identity"]["node_id"] = "other-render"
+            receipt.write_text(json.dumps(changed_identity))
+            self.write_manifest(root)
+            with self.assertRaisesRegex(ReleaseArtifactIntegrityError, "identity filename"):
+                verify_release_tree(root)
+
+            changed_digest = json.loads(json.dumps(original))
+            changed_digest["sha256"] = "f" * 64
+            receipt.write_text(json.dumps(changed_digest))
+            self.write_manifest(root)
+            with self.assertRaisesRegex(ReleaseArtifactIntegrityError, "media digest"):
+                verify_release_tree(root)
+
+            changed_bytes = json.loads(json.dumps(original))
+            changed_bytes["bytes"] += 1
+            receipt.write_text(json.dumps(changed_bytes))
+            self.write_manifest(root)
+            with self.assertRaisesRegex(ReleaseArtifactIntegrityError, "media digest"):
+                verify_release_tree(root)
+
+            dangerous_tool = json.loads(json.dumps(original))
+            dangerous_tool["identity"]["tool_id"] = "body.render\nSECRET=never-publish"
+            receipt.write_text(json.dumps(dangerous_tool))
+            self.write_manifest(root)
+            with self.assertRaisesRegex(ReleaseArtifactIntegrityError, "attempt identity"):
+                verify_release_tree(root)
+
+            receipt.write_text(json.dumps(original))
+            self.write_manifest(root)
+            self.assertEqual(verify_release_tree(root)["source_bound_publication_receipts"], 1)
+
 
 
 if __name__ == "__main__":
