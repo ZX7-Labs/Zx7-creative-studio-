@@ -250,6 +250,7 @@ async def trial(args, lock, artifacts, command):
         'Deliver an actual native project and MP4 in the dedicated output folder. '
         'Inspect a physically verified frame of your export, independently identify an improvement, '
         'make that editable change and deliver a new verified export. Save your native work. '
+        'Keep the export settings identical for both versions so the editorial change can be compared. '
         'This is a CPU technical trial: keep the film at most eight seconds and 640x360, '
         'with small bounded state queries. Those are trial resource bounds, not product/style limits. '
         'Your model supports text and images, not native WAV listening; do not claim hearing. '
@@ -390,7 +391,9 @@ async def trial(args, lock, artifacts, command):
                 any(digest in delivered_images for digest in event.get('image_sha256', []))):
             observed_sources.add(event['observed_export_sha256'])
     # Use the same source custody and timed-picture checks as the hosted trial.
-    from scripts.run_nvidia_native_trial import decode_trial_export, verify_saved_native_trial
+    from scripts.run_nvidia_native_trial import (
+        decode_trial_export, trial_picture_changed, verify_saved_native_trial,
+    )
     try:
         saved_native = verify_saved_native_trial(artifacts, source_ledger=source_assets, max_clip_duration=8)
     except (ValueError, OSError) as exc:
@@ -403,6 +406,7 @@ async def trial(args, lock, artifacts, command):
     # one deterministically and decode it at most once for this comparison.
     changed_presentation = False
     presentation_rejection = None
+    picture_profiles = None
     pair = audit["reviewed_native_render_pair"]
     if (pair and pair[1]["timeline_sha256"] == saved_native.get("saved_native_timeline_sha256") and
             pair[0]["export_sha256"] in sources_before_revision and pair[1]["export_sha256"] in revised_exports):
@@ -412,9 +416,10 @@ async def trial(args, lock, artifacts, command):
                      for item in pair]
             if all(len(matches) == 1 for matches in paths):
                 before, after = (decode_trial_export(next(iter(matches)),
-                    expected_sha256=item["export_sha256"], max_frames=960)[1]
+                    expected_sha256=item["export_sha256"], max_frames=960)
                     for item, matches in zip(pair, paths, strict=True))
-                changed_presentation = before != after
+                picture_profiles = [before.picture_profile, after.picture_profile]
+                changed_presentation = trial_picture_changed(before, after)
         except (ValueError, OSError, subprocess.SubprocessError) as exc:
             presentation_rejection = type(exc).__name__
     passed = (outcome['status'] == 'model_finished_unverified' and actual_images > 0
@@ -424,6 +429,7 @@ async def trial(args, lock, artifacts, command):
             'image_inputs_actually_sent': actual_images, 'content_mutations_after_observation': revisions,
             'decoded_frame_sequence_changed': changed_presentation,
             'decoded_frame_sequence_rejection_type': presentation_rejection,
+            'decoded_reviewed_picture_profiles': picture_profiles,
             'verified_exports_after_final_revision': revised_exports,
             'saved_native_projects': [str(path.relative_to(artifacts)) for path in native_projects],
             'saved_native_source_evidence': saved_native, 'audit': audit,

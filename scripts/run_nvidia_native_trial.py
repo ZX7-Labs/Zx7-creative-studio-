@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import NamedTuple
 
 from studio_next.native_render_evidence import destination_digest, timeline_scope_digest
 from studio_next.body_editor_export import native_export_file_identity
@@ -23,6 +24,11 @@ _EDITOR_CLIENT = ROOT / "engines" / "velorn" / "native-model-client.py"
 _EXAMPLE = ROOT / "engines" / "velorn" / "editor.example.json"
 _PINNED_EDITOR = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
 _ALLOWED_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+_PICTURE_PROFILE_FIELDS = (
+    "width", "height", "sample_aspect_ratio", "codec_name", "pix_fmt",
+    "color_range", "color_space", "color_transfer", "color_primaries",
+    "chroma_location", "field_order",
+)
 _HOST_ALLOWED = frozenset({
     "get_project", "get_timeline", "get_assets", "check_export_readiness",
     "inspect_export_file", "inspect_timeline_frame", "find_timeline_items",
@@ -108,7 +114,9 @@ def prepare_trial(workspace: Path, *, source: Path):
         "inspect at least one genuine export frame. After seeing the frame, "
         "choose a meaningful editable creative improvement yourself, apply "
         "that native revision, export to a NEW file and physically verify the "
-        "revised export. Do not repeat an uncertain native write. "
+        "revised export. Keep the export settings identical to the first "
+        "export so the editorial change can be compared. "
+        "Do not repeat an uncertain native write. "
         "This is a bounded synthetic engineering trial: video up to six "
         "seconds, resolution 640x360, 24 fps. No model-generated footage, "
         "external sources, downloaded media or private user assets are needed. "
@@ -301,18 +309,52 @@ def decoded_video_frames_sha256(path: Path, *, max_frames=240):
     return tuple(presentations)
 
 
+class DecodedTrialExport(NamedTuple):
+    identity: tuple
+    presentation: tuple
+    picture_profile: dict
+
+
+def _probe_trial_picture_profile(path):
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=" + ",".join(_PICTURE_PROFILE_FIELDS),
+         "-of", "json", str(path)],
+        check=True, capture_output=True, timeout=30, env=_no_cloud_credentials())
+    if len(result.stdout) > 8192:
+        raise ValueError("Native video picture profile exceeds safe output budget")
+    streams = json.loads(result.stdout).get("streams")
+    if not isinstance(streams, list) or len(streams) != 1 or not isinstance(streams[0], dict):
+        raise ValueError("Native video needs one probed primary picture stream")
+    profile = {field: streams[0].get(field) for field in _PICTURE_PROFILE_FIELDS}
+    if (any(type(profile[field]) is not int or profile[field] <= 0
+            for field in ("width", "height")) or
+            any(not isinstance(profile[field], str) or not profile[field]
+                for field in ("codec_name", "pix_fmt"))):
+        raise ValueError("Native video has no valid primary picture profile")
+    return profile
+
+
 def decode_trial_export(path, *, expected_sha256=None, max_frames=240):
     """Independently decode the same physical bytes as the earlier receipt."""
     identity = native_export_file_identity(path)
     if expected_sha256 is not None and identity[-1] != expected_sha256:
         raise ValueError("Native trial export differs from its verification receipt")
+    picture_profile = _probe_trial_picture_profile(path)
     subprocess.run(
         ["ffmpeg", "-v", "error", "-xerror", "-i", str(path), "-f", "null", "-"],
         check=True, timeout=90, env=_no_cloud_credentials())
     presentation = decoded_video_frames_sha256(path, max_frames=max_frames)
     if native_export_file_identity(path) != identity:
         raise ValueError("Native trial export changed during decoding")
-    return identity, presentation
+    return DecodedTrialExport(identity, presentation, picture_profile)
+
+
+def trial_picture_changed(before, after):
+    """Compare presented picture or timing only across matching export profiles."""
+    return (before is not None and after is not None and
+            before.picture_profile == after.picture_profile and
+            before.presentation != after.presentation)
 
 
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):
@@ -364,15 +406,17 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         raise RuntimeError("Real native client has no final structured status") from None
     mp4s = sorted(roots["outputs"].rglob("*.mp4"))
     media = []
-    decoded_frame_sequences = []
+    decoded_exports = {}
     for path in mp4s:
-        identity, presentation = decode_trial_export(path)
-        decoded_frame_sequences.append(presentation)
+        decoded = decode_trial_export(path)
+        identity = decoded.identity
+        decoded_exports[(destination_digest(str(path)), identity[-1])] = decoded
         media.append({"path": str(path), "sha256": identity[-1],
                       "bytes": identity[2],
-                      "decoded_video_frames": len(decoded_frame_sequences[-1]),
+                      "decoded_picture_profile": decoded.picture_profile,
+                      "decoded_video_frames": len(decoded.presentation),
                       "decoded_rgb_frame_sequence_sha256": hashlib.sha256(
-                          json.dumps(decoded_frame_sequences[-1],
+                          json.dumps(decoded.presentation,
                                      separators=(",", ":")).encode()).hexdigest()})
     # Preserve forensic evidence even when final native state fails acceptance.
     # Never let an empty timeline disappear behind an early RuntimeError.
@@ -393,17 +437,14 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
             "native_project_rejection_type": type(exc).__name__,
         }
     export_variants = len({entry["sha256"] for entry in media})
-    independently_different_picture_exports = len(set(decoded_frame_sequences))
-    decoded_by_receipt = {
-        (destination_digest(entry["path"]), entry["sha256"]): presentation
-        for entry, presentation in zip(media, decoded_frame_sequences, strict=True)
-    }
+    independently_different_picture_exports = len({
+        item.presentation for item in decoded_exports.values()})
     pair = summary.get("reviewed_native_render_pair")
     changed_reviewed_picture = False
     if pair and pair[1]["timeline_sha256"] == saved_native.get("saved_native_timeline_sha256"):
-        before, after = (decoded_by_receipt.get((item["destination_sha256"], item["export_sha256"]))
+        before, after = (decoded_exports.get((item["destination_sha256"], item["export_sha256"]))
                          for item in pair)
-        changed_reviewed_picture = before is not None and after is not None and before != after
+        changed_reviewed_picture = trial_picture_changed(before, after)
     evaluated = {
         **saved_native,
         "different_decoded_export_count": export_variants,
