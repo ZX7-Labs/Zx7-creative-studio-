@@ -370,6 +370,14 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertEqual(command[command.index("--model-timeout") + 1], "180")
             self.assertEqual(native_call.call_args.kwargs["timeout"], 1500)
             self.assertEqual(native_call.call_count, 1)
+            workflow = (Path(__file__).resolve().parents[1] /
+                        ".github/workflows/zx7-nvidia-native-editor-trial.yml").read_text()
+            self.assertIn("    timeout-minutes: 35", workflow)
+            # Leave at least five minutes in the already approved job for
+            # pinned-editor setup, post-exit custody checks and safe artifact
+            # retention. No per-turn timeout may exceed the total process cap.
+            self.assertLessEqual(180, native_call.call_args.kwargs["timeout"])
+            self.assertLessEqual(native_call.call_args.kwargs["timeout"], 35 * 60 - 5 * 60)
 
     def test_saved_native_trial_requires_active_real_source_clip(self):
         """Only a structural acceptance fixture, not model or video proof."""
