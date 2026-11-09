@@ -404,9 +404,13 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 {"timelines": [{**timeline, "clips": [
                     {**clip, "duration": float("inf")}]}]},
                 {"timelines": [{**timeline, "clips": [
+                    {**clip, "duration": 10 ** 400}]}]},
+                {"timelines": [{**timeline, "clips": [
                     {**clip, "startTime": 6.0}]}]},
                 {"timelines": [{**timeline, "clips": [
                     {**clip, "startTime": 60.0}]}]},
+                {"timelines": [{**timeline, "clips": [
+                    {**clip, "startTime": 10 ** 400}]}]},
                 {"timelines": [{**timeline, "clips": [
                     {**clip, "startTime": -0.25}]}]},
                 {"timelines": [{**timeline, "clips": [
