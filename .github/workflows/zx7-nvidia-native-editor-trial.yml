@@ -74,7 +74,7 @@ jobs:
       - name: Build actual existing source editor with no provider credential available
         working-directory: third_party/velorn
         run: |
-          npm ci --no-audit --no-fund
+          bash ../../engines/velorn/install-ci-dependencies.sh
           npm run build
           test -s dist/index.html
       - name: Preserve real Chromium sandbox

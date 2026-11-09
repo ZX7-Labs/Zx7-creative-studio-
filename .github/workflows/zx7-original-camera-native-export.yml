@@ -99,7 +99,7 @@ jobs:
       - name: Build real complete Velorn/Electron application
         working-directory: third_party/velorn
         run: |
-          npm ci --no-audit --no-fund
+          bash ../../engines/velorn/install-ci-dependencies.sh
           npm run build
           test -s dist/index.html
           helper="$PWD/node_modules/electron/dist/chrome-sandbox"

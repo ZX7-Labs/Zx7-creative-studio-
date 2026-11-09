@@ -160,7 +160,7 @@ jobs:
       - name: Build existing production editor from its pinned source
         working-directory: third_party/velorn
         run: |
-          npm ci --no-audit --no-fund
+          bash ../../engines/velorn/install-ci-dependencies.sh
           npm run build
           test -s dist/index.html
       - name: Enable the intended Chromium sandbox helper
