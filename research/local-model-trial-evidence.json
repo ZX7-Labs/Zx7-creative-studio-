@@ -714,6 +714,56 @@
       "failure": "The first Qwen3.5-4B/native run to pass source import and actual timeline placement. Real model created project, imported an original synthetic H.264 video into Velorn, model-previewed add_assets_to_timeline without mutation and then explicitly committed the batch placement. The saved editable .comfystudio contained one enabled four-second video clip referencing a real project asset on visible unlocked Video Feed track. The seventh model decision exceeded the existing 300s per-request limit: model-server logs independently show 5,678 prompt tokens processed in 258.51s, then response generation started but was aborted at 300s. Model could not proceed to an actual export, physical frame observation, or independent revision. CPU-only free-runner latency, repeated prompt reprocessing and poor KV-prefix continuity are now the primary measured bottleneck, not failure to import or place native video.",
       "next_falsification": "Reorder otherwise identical host-current local prompt fields to preserve a reusable static prefix for llama.cpp; do not remove schemas, editorial evidence or model-selected actions. Exact HEAD regression passes 211 Python and 3 actual native Electron tests in GitHub #42434963443. Reevaluate end-to-end with a faster stronger preexisting NVIDIA Nemotron 3.5 Super VL 120B agent under synthetic-only cloud consent; the original CPU 4B would need a significantly larger time budget to finish 48 decisions.",
       "evidence_source": "Downloaded actual GitHub Actions artifact ZIP, verified its SHA256 and inspected full inference-transcript.jsonl, native-journal.jsonl, evidence.json, saved Velorn project.comfystudio, video source bytes and original llama-server timing logs. No manual timeline editing, no owner private media or remote hosted inference in this run."
+    },
+    {
+      "body_commit": "19a609b23337b991871cf168a884aa48fc501680",
+      "workflow_commit": "e2424acd6ea1205c9e959921c3e56714036aebfa",
+      "workflow_run": 42495404691,
+      "artifact_id": 13624161518,
+      "artifact_zip_sha256": "76e6d86ed5ab113f5b1f1ae09cf4b03c790c6474f33525544927a867d5624f55",
+      "model": "unsloth/Qwen3.5-4B-GGUF",
+      "revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+      "quantization": "Q4_K_M",
+      "cpu_only": true,
+      "cpu_count": 4,
+      "ordinary_nonroot_chromium_sandbox": true,
+      "actual_inference_turns": 5,
+      "measured_inference_wall_seconds": [
+        185.15,
+        165.91,
+        224.72,
+        275.5,
+        242.01
+      ],
+      "model_server_peak_rss_bytes": 6495379456,
+      "model_ram_measurement_scope": "Linux /proc of owned model-server PID only; not editor/OS total",
+      "native_project_created": true,
+      "imported_original_video_assets": 1,
+      "saved_enabled_visible_footage_clips": 1,
+      "saved_clip_duration_seconds": 4,
+      "saved_clip_start_seconds": 0.5,
+      "original_source_sha256": "082aeb7dc55e51cd07b44785e0d8d6d9131d5e2d7a0d4b9d5219293b3354e64d",
+      "imported_copy_sha256_matches_original": true,
+      "independent_original_video_full_decode": true,
+      "original_source_frames": 96,
+      "original_source_fps": "24/1",
+      "physical_exports": 0,
+      "verified_frame_observations": 0,
+      "technical_trial_completed": false,
+      "artistic_quality_approved": false,
+      "native_field_complete": false,
+      "failure": {
+        "model_status": "native_error_requires_state_reconciliation",
+        "tool": "add_asset_to_timeline",
+        "previewOnly_omitted": true,
+        "native_error": "No placeable asset matched \"raw-gradient-1.mp4\".",
+        "independently_matched_error_digest": "a54899fd571c245b0f6c65fdae195a03ec8b007508311017c19cbd9f3f0b1b22",
+        "model_requested_unimported_asset": true,
+        "source_contract": "Pinned electron/mcpServer.js addAssetToTimeline resolves the plan and returns missing-asset errors before performAction; default preview mode never applies the edit.",
+        "controller_misclassified_nonmutating_preview_error_as_uncertain_write": true
+      },
+      "fixed_source_experiment_changed_product_code": false,
+      "model_inference_not_replaced_with_script": true
     }
   ]
 }

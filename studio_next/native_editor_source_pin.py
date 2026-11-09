@@ -23,6 +23,27 @@ _PINNED_CLIP_EDIT_PREVIEWS = (
 )
 
 
+
+def source_verified_preview_intent(tool, inputs, attested_tools) -> bool:
+    """Recognize only the pinned MCP no-renderer-write request branches.
+
+    The caller supplies independently source-attested, host-granted tools.
+    Marker methods require an explicit true; placement and clip-edit methods
+    default to preview. No tool name, text receipt or truthy nonboolean can
+    establish this contract on its own.
+    """
+    if (not isinstance(tool, str) or not isinstance(inputs, dict) or
+            not isinstance(attested_tools, (tuple, list, set, frozenset)) or
+            any(not isinstance(name, str) or not name for name in attested_tools) or
+            len(set(attested_tools)) != len(attested_tools) or tool not in attested_tools):
+        return False
+    if tool in _PINNED_MARKER_PREVIEWS:
+        return inputs.get("previewOnly") is True
+    if tool in (*_PINNED_ASSET_PLACEMENT_PREVIEWS, *_PINNED_CLIP_EDIT_PREVIEWS):
+        return inputs.get("previewOnly", True) is True
+    return False
+
+
 def _verified_editor_grants(grants: dict) -> bool:
     return (isinstance(grants, dict) and
             all(isinstance(name, str) and name and

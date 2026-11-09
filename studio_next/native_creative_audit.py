@@ -109,7 +109,8 @@ def read_native_journal(path: Path):
 
 
 def audit_native_journal(events, *, host_tool_access, expected_required_evidence=None,
-                         host_content_revision_tools=(), host_pre_dispatch_rejections=False):
+                         host_content_revision_tools=(), host_pre_dispatch_rejections=False,
+                         host_verified_preview_error_tools=()):
     """Check every transition and trace real export-to-observation identity.
 
     host_tool_access comes from the trusted owner grants, not from model text.
@@ -126,6 +127,15 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
         raise NativeJournalError("Journal lacks a session identity")
     if type(host_pre_dispatch_rejections) is not bool:
         raise NativeJournalError("Invalid independent host rejection policy")
+    from .native_editor_source_pin import source_verified_preview_intent
+    if (not isinstance(host_verified_preview_error_tools, (tuple, list, frozenset)) or
+            any(not isinstance(name, str) or host_tool_access.get(name) != "write"
+                for name in host_verified_preview_error_tools) or
+            len(set(host_verified_preview_error_tools)) != len(host_verified_preview_error_tools) or
+            any(not source_verified_preview_intent(name, {"previewOnly": True},
+                    host_verified_preview_error_tools) for name in host_verified_preview_error_tools)):
+        raise NativeJournalError("Invalid independent source-preview failure policy")
+    preview_error_tools = frozenset(host_verified_preview_error_tools)
     required = events[0].get("required_completion_evidence", [])
     if (not isinstance(required, list) or
             any(not isinstance(item, str) or item not in _COMPLETION_EVIDENCE_TYPES
@@ -499,8 +509,21 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 # to advance artistic/export/source-completion counters.
                 digest = event.get("error_sha256")
                 flag = event.get("error_text_exceeded_evidence_budget")
-                if (access != "read" or
-                        event.get("host_attested_read_only") is not True or
+                preview_failure = event.get("host_source_attested_preview_only") is True
+                if preview_failure:
+                    if (access != "write" or tool not in preview_error_tools or
+                            flag is not False or not _sha(digest) or
+                            events[i - 1].get("kind") != "native_tool_submitted" or
+                            events[i - 1].get("host_source_attested_preview_only") is not True or
+                            event.get("no_automatic_retry") is not True or
+                            event.get("no_accepted_write_evidence") is not True or
+                            any(event.get(key) for key in (
+                                "host_application_write_acknowledged",
+                                "independently_verified_export_sha256", "observed_export_sha256"))):
+                        raise NativeJournalError("Recoverable preview failure lacks independent source/intent proof")
+                elif access != "read":
+                    raise NativeJournalError("Write error cannot be audited as a failed read")
+                if (event.get("host_attested_read_only") is not True or
                         event.get("no_successful_native_observation") is not True or
                         type(flag) is not bool or
                         ((digest is None) != flag) or
@@ -653,15 +676,24 @@ def main():
         if any(name in grants for name in extras):
             raise NativeJournalError("Namespaced BODY sensors collide with native grants")
         grants.update({name: "read" for name in extras})
+    preview_error_tools = ()
     if args.native_source is not None:
         from .native_editor_diagnostics import native_content_diagnostics_source_verified
         if not native_content_diagnostics_source_verified(args.native_source):
             raise NativeJournalError("Native diagnostics source cannot be independently attested")
+        from .native_editor_source_pin import (
+            pinned_electron_marker_previews, pinned_electron_asset_placement_previews,
+            pinned_electron_clip_edit_previews,
+        )
+        preview_error_tools = (pinned_electron_marker_previews(args.native_source, grants) +
+            pinned_electron_asset_placement_previews(args.native_source, grants) +
+            pinned_electron_clip_edit_previews(args.native_source, grants))
         if "read" in config.allowed_access and grants.get("get_timeline") == "read":
             grants["zx7_inspect_native_content"] = "read"
     outcome = audit_native_journal(read_native_journal(args.journal),
                                    host_tool_access=grants,
-                                   host_pre_dispatch_rejections=args.trust_host_pre_dispatch_rejections)
+                                   host_pre_dispatch_rejections=args.trust_host_pre_dispatch_rejections,
+                                   host_verified_preview_error_tools=preview_error_tools)
     print(json.dumps(outcome, indent=2, sort_keys=True))
     return 0
 

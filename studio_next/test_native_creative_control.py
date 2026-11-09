@@ -76,6 +76,124 @@ class FakeSession:
 
 
 class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def preview_failure_session(tool="add_asset_to_timeline"):
+        session = FakeSession()
+        session.tools = [SimpleNamespace(name=tool, description="Actual native preview tool",
+            input_schema={"type": "object", "properties": {
+                "assetName": {"type": "string"}, "previewOnly": {"type": "boolean"}}})]
+        session.custom_response = SimpleNamespace(is_error=True, content=[
+            SimpleNamespace(type="text", text='No placeable asset matched "not-imported.mp4".')])
+        return session
+
+    async def test_source_attested_failed_preview_allows_only_a_new_model_decision(self):
+        for preview in (None, True):
+            with self.subTest(preview=preview):
+                session = self.preview_failure_session()
+                inputs = {"assetName": "not-imported.mp4"}
+                if preview is not None:
+                    inputs["previewOnly"] = preview
+                model = ScriptedModel([
+                    decision("invoke", tool="add_asset_to_timeline", inputs=inputs),
+                    decision("finish", summary="The preview failed; no edit was applied")])
+                with tempfile.TemporaryDirectory() as root:
+                    path = Path(root) / "preview-error.jsonl"
+                    result = await NativeCreativeControl(session, model, max_turns=2,
+                        receipt_path=path, host_tool_access={"add_asset_to_timeline": "write"},
+                        host_verified_top_level_preview_tools=("add_asset_to_timeline",)).run("Inspect available footage")
+                    self.assertEqual(result["status"], "model_finished_unverified")
+                    self.assertEqual(session.calls, [("add_asset_to_timeline", inputs)])
+                    self.assertEqual(len(model.observed), 2)
+                    submitted = next(e for e in result["events"] if e["kind"] == "native_tool_submitted")
+                    self.assertTrue(submitted["host_source_attested_preview_only"])
+                    error = next(e for e in result["events"] if e["kind"] == "native_read_tool_reported_error")
+                    for field in ("host_source_attested_preview_only", "host_attested_read_only",
+                                  "no_successful_native_observation", "no_automatic_retry",
+                                  "no_accepted_write_evidence"):
+                        self.assertIs(error[field], True)
+                    summary = model.observed[1]["latest_events"][-1]
+                    self.assertTrue(summary["host_source_attested_preview_only"])
+                    self.assertTrue(summary["no_accepted_write_evidence"])
+                    self.assertTrue(summary["no_automatic_retry"])
+                    feedback = model.observed[1]["last_rejected_native_action_feedback"]
+                    self.assertIn("not-imported.mp4", feedback["untrusted_native_error_text"])
+                    self.assertTrue(feedback["no_renderer_write_dispatch"])
+                    self.assertFalse(any(e["kind"] == "native_tool_result" for e in result["events"]))
+                    self.assertNotIn("not-imported.mp4", path.read_text())
+
+    async def test_failed_preview_cannot_satisfy_required_native_write_evidence(self):
+        session = self.preview_failure_session()
+        result = await NativeCreativeControl(session, ScriptedModel([
+            decision("invoke", tool="add_asset_to_timeline", inputs={}),
+            decision("finish", summary="A failed preview is not a committed edit")]),
+            max_turns=2, host_tool_access={"add_asset_to_timeline": "write"},
+            host_verified_top_level_preview_tools=("add_asset_to_timeline",),
+            required_evidence=("native_write_acknowledged",)).run("Create actual editable work")
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+        rejected = next(e for e in result["events"] if e["kind"] == "model_finish_rejected")
+        self.assertEqual(rejected["missing_completion_evidence"], ["native_write_acknowledged"])
+        self.assertEqual(len(session.calls), 1)
+
+    async def test_preview_failure_without_attestation_or_with_apply_intent_remains_uncertain(self):
+        for tool, attested, inputs in (
+                ("add_asset_to_timeline", (), {"assetName": "missing"}),
+                ("add_asset_to_timeline", ("add_asset_to_timeline",), {"previewOnly": False}),
+                ("set_timeline_marker_properties", ("set_timeline_marker_properties",), {}),
+                ("unknown_native_tool", ("unknown_native_tool",), {"previewOnly": True})):
+            with self.subTest(tool=tool, attested=attested, inputs=inputs):
+                session = self.preview_failure_session(tool)
+                model = ScriptedModel([decision("invoke", tool=tool, inputs=inputs),
+                    decision("finish", summary="Must not run")])
+                result = await NativeCreativeControl(session, model, max_turns=2,
+                    host_tool_access={tool: "write"},
+                    host_verified_top_level_preview_tools=attested).run("Inspect")
+                self.assertEqual(result["status"], "native_error_requires_state_reconciliation")
+                self.assertEqual(len(model.observed), 1)
+                self.assertEqual(result["events"][-1]["kind"], "native_tool_reported_error")
+                self.assertNotIn("host_source_attested_preview_only", result["events"][1])
+
+    async def test_attested_preview_does_not_recover_malformed_status_or_error_content(self):
+        malformed = (
+            {"isError": True, "is_error": False, "content": []},
+            {"isError": "true", "content": []},
+            {"isError": True, "content": [{"type": "image", "data": "ignored"}]},
+            {"isError": True, "content": [{"type": "text", "text": "x" * 64001}]},
+        )
+        for response in malformed:
+            with self.subTest(response_type=str(type(response))):
+                session = self.preview_failure_session()
+                session.custom_response = response
+                model = ScriptedModel([decision("invoke", tool="add_asset_to_timeline", inputs={}),
+                    decision("finish", summary="Must not run")])
+                result = await NativeCreativeControl(session, model, max_turns=2,
+                    host_tool_access={"add_asset_to_timeline": "write"},
+                    host_verified_top_level_preview_tools=("add_asset_to_timeline",)).run("Inspect")
+                self.assertEqual(result["status"], "native_error_requires_state_reconciliation")
+                self.assertEqual(len(model.observed), 1)
+        session = self.preview_failure_session()
+        session.raise_on_call = TimeoutError("Unknown transport outcome")
+        with self.assertRaises(TimeoutError):
+            await NativeCreativeControl(session, ScriptedModel([
+                decision("invoke", tool="add_asset_to_timeline", inputs={})]), max_turns=1,
+                host_tool_access={"add_asset_to_timeline": "write"},
+                host_verified_top_level_preview_tools=("add_asset_to_timeline",)).run("Inspect")
+
+    def test_pinned_preview_intent_is_strict_and_tool_specific(self):
+        from studio_next.native_editor_source_pin import source_verified_preview_intent
+        defaults = ("add_asset_to_timeline", "add_assets_to_timeline", "move_clips", "trim_clips", "delete_clips")
+        markers = ("add_timeline_markers", "remove_timeline_markers", "set_timeline_marker_properties")
+        tools = defaults + markers
+        for tool in tools:
+            self.assertEqual(source_verified_preview_intent(tool, {}, tools), tool in defaults)
+            self.assertTrue(source_verified_preview_intent(tool, {"previewOnly": True}, tools))
+            for value in (False, 1, 0, "true", None, [], {}):
+                self.assertFalse(source_verified_preview_intent(tool, {"previewOnly": value}, tools))
+        for attestation in (None, "move_clips", {"move_clips": "write"}, ([],), ("move_clips", "move_clips")):
+            self.assertFalse(source_verified_preview_intent("move_clips", {}, attestation))
+        for inputs in (None, [], "previewOnly", True):
+            self.assertFalse(source_verified_preview_intent("move_clips", inputs, tools))
+        self.assertFalse(source_verified_preview_intent("unrecognized", {"previewOnly": True}, ("unrecognized",)))
+
     async def test_untrusted_or_mismatched_host_rejections_remain_uncertain_writes(self):
         from studio_next.body_editor_client import HOST_PRE_DISPATCH_META, native_input_digest
         import copy

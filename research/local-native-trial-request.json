@@ -6,5 +6,5 @@
   "hosted_model_api": false,
   "private_media": false,
   "max_model_turns": 48,
-  "request_id": "20261107-local-native-branch-integrated-context-eval"
+  "request_id": "20261107-real-local-native-model-after-pr226"
 }

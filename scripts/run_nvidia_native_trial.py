@@ -176,9 +176,18 @@ def verify_saved_native_trial(workspace: Path):
     if (type(clips) is not list or not clips or
             type(tracks) is not list or type(assets) is not list):
         raise ValueError("Native saved active timeline has no editable clips")
-    video_tracks = {t["id"] for t in tracks if
-                    type(t) is dict and type(t.get("id")) is str and
-                    t.get("type") == "video"}
+    # A copied source on a hidden track or disabled clip is not active
+    # picture evidence. Reject ambiguous IDs before associating source clips.
+    track_ids = set()
+    video_tracks = set()
+    for track in tracks:
+        if (type(track) is not dict or
+                type(track.get("id")) is not str or not track["id"] or
+                track["id"] in track_ids):
+            raise ValueError("Ambiguous native timeline track identities")
+        track_ids.add(track["id"])
+        if track.get("type") == "video" and track.get("visible") is not False:
+            video_tracks.add(track["id"])
     valid_assets = {}
     for asset in assets:
         if type(asset) is not dict:
@@ -191,7 +200,8 @@ def verify_saved_native_trial(workspace: Path):
     for clip in clips:
         if type(clip) is not dict:
             raise ValueError("Malformed native project clip")
-        if (clip.get("trackId") not in video_tracks or
+        if (clip.get("enabled") is False or
+                clip.get("trackId") not in video_tracks or
                 type(clip.get("assetId")) is not str):
             continue
         asset = valid_assets.get(clip["assetId"])

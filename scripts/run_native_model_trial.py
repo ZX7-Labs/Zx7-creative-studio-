@@ -151,6 +151,10 @@ class RecordedModel:
         self.turn = 0
 
     @property
+    def requires_indexed_native_function_contracts(self):
+        return getattr(self.model, "requires_indexed_native_function_contracts", False)
+
+    @property
     def last_call_usage(self):
         return self.model.last_call_usage
 
@@ -348,6 +352,10 @@ async def trial(args, lock, artifacts, command):
     audit = audit_native_journal(
         read_native_journal(artifacts / 'native-journal.jsonl'),
         host_pre_dispatch_rejections=True,
+        host_verified_preview_error_tools=(
+            pinned_electron_marker_previews(args.source, host) +
+            pinned_electron_asset_placement_previews(args.source, host) +
+            pinned_electron_clip_edit_previews(args.source, host)),
         host_tool_access=host, expected_required_evidence=completion_evidence,
         host_content_revision_tools=host_content_revision_tools)
     (artifacts / 'journal-audit.json').write_text(json.dumps(audit, indent=2))

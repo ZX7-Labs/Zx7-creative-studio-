@@ -102,6 +102,92 @@ class NativeCreativeAuditTests(unittest.TestCase):
             with patch("sys.argv", argv), self.assertRaisesRegex(NativeJournalError, "host grant"):
                 main()
 
+    def preview_failure_trace(self):
+        return [
+            {"sequence": 0, "kind": "session_started", "brief_sha256": A,
+             "model_id_reported": "scripted-fixture-NOT-NEURAL",
+             "neural_autonomy_or_artistic_quality_verified": False},
+            {"sequence": 1, "kind": "native_tool_submitted", "turn": 0,
+             "tool": "add_asset_to_timeline", "inputs_sha256": B,
+             "model_reason": "Model requested a native preview",
+             "host_source_attested_preview_only": True},
+            {"sequence": 2, "kind": "native_read_tool_reported_error", "turn": 0,
+             "tool": "add_asset_to_timeline", "error_sha256": C,
+             "error_text_exceeded_evidence_budget": False,
+             "host_attested_read_only": True, "host_source_attested_preview_only": True,
+             "no_successful_native_observation": True, "no_automatic_retry": True,
+             "no_accepted_write_evidence": True},
+            {"sequence": 3, "kind": "model_finished", "turn": 1,
+             "summary": "Fixture finished without editing evidence",
+             "creative_quality_independently_approved": False},
+        ]
+
+    def test_failed_preview_requires_independent_source_policy_and_mints_no_write(self):
+        events = self.preview_failure_trace()
+        kwargs = {"host_tool_access": {"add_asset_to_timeline": "write"}}
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(events, **kwargs)
+        report = audit_native_journal(events, **kwargs,
+            host_verified_preview_error_tools=("add_asset_to_timeline",))
+        self.assertEqual(report["recorded_native_write_result_count"], 0)
+        self.assertEqual(report["export_digests_independently_reported_by_native_host"], [])
+        self.assertEqual(report["model_selected_writes_after_first_verified_observation"], 0)
+        self.assertFalse(report["video_editing_capability_complete"])
+
+    def test_failed_preview_cannot_forge_intent_acknowledgement_or_export(self):
+        original = self.preview_failure_trace()
+        variants = []
+        for field in ("host_source_attested_preview_only", "no_automatic_retry",
+                      "no_accepted_write_evidence", "host_attested_read_only"):
+            broken = copy.deepcopy(original)
+            broken[2][field] = False
+            variants.append(broken)
+        broken = copy.deepcopy(original)
+        del broken[1]["host_source_attested_preview_only"]
+        variants.append(broken)
+        for field, value in (("host_application_write_acknowledged", True),
+                             ("independently_verified_export_sha256", A)):
+            broken = copy.deepcopy(original)
+            broken[2][field] = value
+            variants.append(broken)
+        broken = copy.deepcopy(original)
+        broken[2]["error_text_exceeded_evidence_budget"] = True
+        broken[2]["error_sha256"] = None
+        variants.append(broken)
+        for index, broken in enumerate(variants):
+            with self.subTest(index=index), self.assertRaises(NativeJournalError):
+                audit_native_journal(broken,
+                    host_tool_access={"add_asset_to_timeline": "write"},
+                    host_verified_preview_error_tools=("add_asset_to_timeline",))
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(original,
+                host_tool_access={"add_asset_to_timeline": "write", "invented_write": "write"},
+                host_verified_preview_error_tools=("invented_write",))
+
+    def test_preview_failure_cli_needs_independently_attested_source(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from studio_next.native_creative_audit import main
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            journal, config = root / "journal.jsonl", root / "host.json"
+            journal.write_text("\n".join(json.dumps(e) for e in self.preview_failure_trace()) + "\n")
+            config.write_text(json.dumps({"endpoint": "http://127.0.0.1:19790/mcp",
+                **{n + "_root": str(root / n) for n in ("projects", "staging", "outputs")},
+                "allowed_access": ["read", "write"],
+                "allowed_tools": {"add_asset_to_timeline": "write"}}))
+            argv = ["audit", "--journal", str(journal), "--host-editor-config", str(config)]
+            with patch("sys.argv", argv), self.assertRaises(NativeJournalError):
+                main()
+            with patch("sys.argv", [*argv, "--native-source", str(root / "source")]), \
+                    patch("studio_next.native_editor_diagnostics.native_content_diagnostics_source_verified", return_value=True), \
+                    patch("studio_next.native_editor_source_pin.pinned_electron_marker_previews", return_value=()), \
+                    patch("studio_next.native_editor_source_pin.pinned_electron_asset_placement_previews", return_value=("add_asset_to_timeline",)), \
+                    patch("studio_next.native_editor_source_pin.pinned_electron_clip_edit_previews", return_value=()), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(), 0)
+
     def test_audit_cli_requires_independent_trusted_bridge_opt_in(self):
         import contextlib
         import io

@@ -230,3 +230,22 @@ test('Real pinned Electron native clip move/trim/delete defaults are no-write pl
   assert.equal(applied.length, 1)
   assert.equal(applied[0].action, 'move_clips')
 })
+
+
+test('Pinned native default preview failures dispatch zero renderer edits', async () => {
+  const { server, applied } = nativeSession()
+  for (const [tool, args] of [
+    ['add_asset_to_timeline', { assetName: 'not-imported.mp4' }],
+    ['add_assets_to_timeline', { assetNames: ['not-imported.mp4'] }],
+    ['move_clips', { clipId: 'nonexistent-clip', startSeconds: 1 }],
+    ['trim_clips', { clipId: 'nonexistent-clip', durationSeconds: 1 }],
+  ]) {
+    for (const input of [args, { ...args, previewOnly: true }]) {
+      const receipt = await server.callTool(tool, input)
+      assert.equal(receipt.isError, true, tool + ': native error expected')
+      assert.equal(receipt.content.length, 1)
+      assert.equal(receipt.content[0].type, 'text')
+      assert.deepEqual(applied, [], tool + ': failed preview MUST NOT dispatch a renderer edit')
+    }
+  }
+})

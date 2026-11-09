@@ -80,6 +80,7 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
             self.assertEqual(config["projects_root"], str(self.root / "projects"))
             self.assertEqual(args.evaluation_evidence, "export")
             self.assertTrue(args.structured_actions)
+            self.assertTrue(args.indexed_catalog)
             brief = args.brief_file.read_text()
             self.assertIn("मेरी फिल्म बनाओ", brief)
             self.assertNotIn("scene 1", brief)
@@ -112,6 +113,19 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(model.await_args.args[0].project, selected)
         self.assertEqual(report["state"], "needs_attention")
         self.assertTrue(Path(report["outputs_directory"]).is_dir())
+
+    def test_hosted_transport_uses_the_same_bounded_catalog_as_local(self):
+        from studio_next import native_editor_session
+        self.init(provider="nvidia", model_id="hosted-fixture")
+        model = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", model):
+            studio.run_workspace(self.root, brief="An explicitly mocked transport fixture")
+        args = model.await_args.args[0]
+        self.assertEqual(args.provider, "nvidia")
+        self.assertTrue(args.indexed_catalog)
+        self.assertFalse(args.allow_cloud_image_upload)
+        self.assertTrue(args.structured_actions)
 
     def test_uncertain_native_failure_is_retained_without_second_submission(self):
         from studio_next import native_editor_session

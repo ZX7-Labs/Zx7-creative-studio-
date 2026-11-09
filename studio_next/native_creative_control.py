@@ -22,6 +22,7 @@ from typing import Any
 
 from .providers import LocalModelOutputError
 from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK
+from .native_editor_source_pin import source_verified_preview_intent
 
 
 _MAX_MODEL_OUTPUT_RECOVERIES = 2  # host protocol budget, never a creative action
@@ -536,6 +537,8 @@ def _model_event_window(events):
                           "native_timeline_preview_unverified_export",
                           "must_reconcile_native_state",
                           "host_attested_read_only", "no_successful_native_observation",
+                          "host_source_attested_preview_only", "no_automatic_retry",
+                          "no_accepted_write_evidence",
                           "error_text_exceeded_evidence_budget"):
                 if event.get(field) is not None:
                     item[field] = event[field]
@@ -1348,8 +1351,9 @@ class NativeCreativeControl:
                 # Optional provider-neutral native tool contracts. They are
                 # derived from the *current actual MCP list* AND BODY grants,
                 # never from model text, a canned manifest or another agent.
-                # The ordinary local structured-JSON backend is unchanged.
-                if getattr(self.model, "requires_native_function_contracts", False):
+                local_indexed_contracts = (self.catalog_mode == "indexed" and
+                    getattr(self.model, "requires_indexed_native_function_contracts", False))
+                if local_indexed_contracts or getattr(self.model, "requires_native_function_contracts", False):
                     visible_names = (visible_selectable
                                      if self.catalog_mode == "indexed"
                                      else list(self.tools))
@@ -1360,11 +1364,11 @@ class NativeCreativeControl:
                                 self.host_tool_access.get(candidate) not in ("read", "write")):
                             raise NativeCreativeControlError(
                                 "Native provider tool contract lacks an actual host grant")
-                        if self._host_write_already_acknowledged(candidate):
+                        if not local_indexed_contracts and self._host_write_already_acknowledged(candidate):
                             continue
                         item = self.tools[candidate]
-                        schema = _field(item, "input_schema",
-                                        _field(item, "inputSchema"))
+                        schema = (validators[candidate].schema if local_indexed_contracts else
+                                  _field(item, "input_schema", _field(item, "inputSchema")))
                         if not isinstance(schema, dict) or schema.get("type") != "object":
                             raise NativeCreativeControlError(
                                 "Native function signature is not an object schema")
@@ -1697,7 +1701,11 @@ class NativeCreativeControl:
                                       "no_native_dispatch": True})
                         continue
                 self._last_preflight_feedback = None
+                source_preview_only = source_verified_preview_intent(
+                    native_name, args["inputs"], self._host_verified_top_level_previews)
                 self._append({"kind": "native_tool_submitted", "turn": turn,
+                              **({"host_source_attested_preview_only": True}
+                                 if source_preview_only else {}),
                               **timing,
                               "tool": native_name,
                               "inputs_sha256": hashlib.sha256(_wire(args["inputs"]).encode()).hexdigest(),
@@ -1755,6 +1763,36 @@ class NativeCreativeControl:
                             "no_native_dispatch": True, "no_automatic_retry": True})
                         continue
                     digest, out_of_budget = _bounded_error_digest(result)
+                    error_blocks = _field(result, "content", ())
+                    # This policy depends on the actual pinned MCP branch,
+                    # validated model inputs and a well-formed error receipt.
+                    # It never treats an applied/unknown write or transport
+                    # failure as safe merely because it contains preview text.
+                    if (source_preview_only and not out_of_budget and
+                            isinstance(error_blocks, (tuple, list)) and len(error_blocks) == 1
+                            and _field(error_blocks[0], "type") == "text"
+                            and isinstance(_field(error_blocks[0], "text"), str)):
+                        raw_error = _field(error_blocks[0], "text")
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "source_attested_native_preview",
+                            "host_source_attested_preview_only": True,
+                            "no_renderer_write_dispatch": True,
+                            "no_successful_native_observation": True,
+                            "untrusted_native_error_text": raw_error.encode("utf-8")[:2048].decode("utf-8", "ignore"),
+                            "correction": "Preview failed without applying an edit. Inspect actual native state and independently choose the next action; no call was automatically retried."}
+                        self._append({
+                            "kind": "native_read_tool_reported_error", "turn": turn,
+                            "tool": native_name,
+                            "measured_native_mcp_wall_ms": native_ms,
+                            "error_sha256": digest,
+                            "error_text_exceeded_evidence_budget": False,
+                            "host_attested_read_only": True,
+                            "host_source_attested_preview_only": True,
+                            "no_successful_native_observation": True,
+                            "no_automatic_retry": True,
+                            "no_accepted_write_evidence": True})
+                        continue
                     if (self.host_tool_access is not None and
                             self.host_tool_access[native_name] == "read"):
                         # The explicit host-owned grant proves this call is

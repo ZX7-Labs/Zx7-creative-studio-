@@ -13,7 +13,49 @@ from .native_action_schema import native_action_schema
 from .providers import LocalCreativeModel, LocalModelSettings
 
 
+def _relocate_input_schema(value, location):
+    """Keep native local JSON pointers scoped to the embedded input schema."""
+    if isinstance(value, list):
+        return [_relocate_input_schema(item, location) for item in value]
+    if not isinstance(value, dict):
+        return value
+    annotations = {"const", "enum", "default", "examples"}
+    copied = {key: item if key in annotations else _relocate_input_schema(item, location)
+              for key, item in value.items()}
+    if "$ref" in copied and isinstance(copied["$ref"], str):
+        ref = copied["$ref"]
+        if ref != "#" and not ref.startswith("#/"):
+            raise ValueError("Native input schema references must be local JSON pointers")
+        copied["$ref"] = location + ref[1:]
+    return copied
+
+
+def _bind_selected_native_inputs(schema, selected, contracts):
+    if not isinstance(contracts, list) or len(contracts) != len(selected):
+        raise ValueError("Native input contracts must match the live tool frontier")
+    inputs_by_name = {}
+    for spec in contracts:
+        if (not isinstance(spec, dict) or not isinstance(spec.get("name"), str)
+                or spec["name"] not in selected or spec["name"] in inputs_by_name
+                or not isinstance(spec.get("input_schema"), dict)
+                or spec["input_schema"].get("type") != "object"):
+            raise ValueError("Invalid current native input contract")
+        inputs_by_name[spec["name"]] = spec["input_schema"]
+    for index, action in enumerate(schema["oneOf"]):
+        if action["properties"]["action"]["const"] == "invoke":
+            action["properties"]["arguments"] = {"oneOf": [
+                {"type": "object", "properties": {
+                    "tool": {"const": name},
+                    "inputs": _relocate_input_schema(inputs_by_name[name],
+                        f"#/oneOf/{index}/properties/arguments/oneOf/{branch}/properties/inputs"),
+                }, "required": ["tool", "inputs"], "additionalProperties": False}
+                for branch, name in enumerate(selected)
+            ]}
+
+
 class LocalNativeStructuredCreativeModel(LocalCreativeModel):
+    requires_indexed_native_function_contracts = True
+
     def __init__(self, settings: LocalModelSettings, *, system_prompt: str):
         if "response_format" in settings.sampling:
             raise ValueError("Native structured model owns its per-turn schema")
@@ -38,6 +80,8 @@ class LocalNativeStructuredCreativeModel(LocalCreativeModel):
             schema = native_action_schema(
                 [], compact_catalog=True, selected_tools=selected,
                 inspectable_tools=inspectable, allow_finish="finish" in actions)
+            if "host_native_tool_contracts" in context:
+                _bind_selected_native_inputs(schema, selected, context["host_native_tool_contracts"])
         else:
             tools = context.get("actual_granted_native_tools")
             if not isinstance(tools, list):
@@ -100,6 +144,10 @@ class LocalNativeStructuredCreativeModel(LocalCreativeModel):
 
     def _choose(self, context, *, images=(), audio=()):
         schema = self._current_host_schema(context)
+        # The decoder receives full selected schemas through response_format.
+        # Keep the existing concise native hints in the model prompt.
+        context = {key: value for key, value in context.items()
+                   if key != "host_native_tool_contracts"}
         token = self._active_schema.set(schema)
         try:
             return self._invoke(

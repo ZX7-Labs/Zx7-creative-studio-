@@ -54,7 +54,9 @@ zx7-studio status ./my-studio
 ```
 
 `doctor` checks installed runtime files, the source pin, editor build and actual
-local model inventory before inference. It reports missing setup; it does not
+local model inventory before inference. Sessions discover the granted native
+capabilities in bounded groups to fit the current tool request. It reports
+missing setup; it does not
 install an engine or download model weights. A graphical display is required;
 for headless runs supply `--xvfb-binary /path/to/Xvfb` if available.
 

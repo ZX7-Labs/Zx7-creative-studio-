@@ -330,6 +330,10 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 for flag, value in (("--xvfb-binary", xvfb_binary), ("--display", display)):
                     if value:
                         argv.extend([flag, str(value)])
+                # A full studio grants more native tools than a single direct
+                # function request admits. Both providers discover the same
+                # current schemas in bounded groups, without reducing grants.
+                argv.append("--indexed-catalog")
                 if project_path is not None:
                     argv.extend(["--project", str(project_path)])
                 if allow_cloud_image_upload:

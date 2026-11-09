@@ -190,6 +190,7 @@ class LocalNativeStructuredModelTests(unittest.TestCase):
         from scripts.run_native_model_trial import RecordedModel
         with tempfile.TemporaryDirectory() as temp:
             recorder = RecordedModel(self.model, Path(temp))
+            self.assertTrue(recorder.requires_indexed_native_function_contracts)
             context = {"compact_tool_catalog": True,
                        "available_actions": ["search"],
                        "selectable_native_tools": [],
@@ -212,6 +213,35 @@ class LocalNativeStructuredModelTests(unittest.TestCase):
             self.assertEqual(record["context"], context)
             self.assertEqual(record["decision"], answer)
             self.assertEqual(record["server_reported_token_usage"]["total_tokens"], 11)
+
+    def test_compact_decoder_binds_inputs_to_the_selected_native_operation(self):
+        from jsonschema import Draft202012Validator
+        single = {"type": "object", "properties": {"assetName": {"type": "string"}},
+                  "required": ["assetName"], "additionalProperties": False}
+        batch = {"type": "object", "$defs": {"name": {"type": "string"}},
+                 "properties": {"assetNames": {"type": "array", "items": {"$ref": "#/$defs/name"}}},
+                 "required": ["assetNames"], "additionalProperties": False}
+        context = {"compact_tool_catalog": True,
+                   "available_actions": ["search", "describe", "invoke"],
+                   "selectable_native_tools": ["add_asset_to_timeline", "add_assets_to_timeline"],
+                   "inspectable_native_tools": [],
+                   "host_native_tool_contracts": [
+                       {"name": "add_asset_to_timeline", "input_schema": single},
+                       {"name": "add_assets_to_timeline", "input_schema": batch}]}
+        accepted = {"action": "invoke", "reason": "Place the selected original",
+                    "arguments": {"tool": "add_assets_to_timeline", "inputs": {"assetNames": ["raw.mp4"]}}}
+        grammar = self._sample(context, accepted["action"], accepted["arguments"])
+        validator = Draft202012Validator(grammar)
+        self.assertTrue(validator.is_valid(accepted))
+        for tool, inputs in (("add_assets_to_timeline", {"assetNames": [12]}),
+                             ("add_assets_to_timeline", {"assetNames": ["raw.mp4"], "createTrack": True}),
+                             ("add_asset_to_timeline", {"assetNames": ["raw.mp4"]}),
+                             ("ungranted_tool", {"assetNames": ["raw.mp4"]})):
+            with self.subTest(tool=tool, inputs=inputs):
+                self.assertFalse(validator.is_valid({**accepted, "arguments": {"tool": tool, "inputs": inputs}}))
+        self.assertEqual(batch["properties"]["assetNames"]["items"]["$ref"], "#/$defs/name")
+        with self.assertRaises(ValueError):
+            self.model._current_host_schema({**context, "host_native_tool_contracts": []})
 
     def test_no_schema_leaks_to_configuration_or_separate_model_turn(self):
         first = {"compact_tool_catalog": True, "available_actions": ["search"],
