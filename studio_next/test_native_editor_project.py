@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from .native_editor_project import open_selected_native_project
+from studio_next.native_editor_project import open_selected_native_project
 
 
 def result(value):
@@ -82,7 +82,7 @@ class SelectedProjectTests(unittest.TestCase):
     def test_native_session_never_starts_controller_when_selected_identity_fails(self):
         from contextlib import asynccontextmanager
         from unittest.mock import MagicMock
-        from . import native_editor_session as native
+        from studio_next import native_editor_session as native
         config = self.root / "host.json"
         config.write_text(json.dumps({"projects_root": str(self.root),
             "allowed_tools": self.grants, "allowed_access": ["read", "write"]}))

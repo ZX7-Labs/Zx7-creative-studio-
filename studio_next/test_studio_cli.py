@@ -14,7 +14,7 @@ import threading
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from . import studio_cli as studio
+from studio_next import studio_cli as studio
 
 
 class StudioOwnerWorkflowTests(unittest.TestCase):

@@ -51,6 +51,7 @@ HOST_PRE_DISPATCH_META = "zx7.host/pre-dispatch-rejection"
 HOST_REJECTION_FEEDBACK = MappingProxyType({
     "output_exists": "Native export cannot overwrite an existing destination; choose a new outputPath",
     "output_path_required": "Native export requires an explicit new outputPath",
+    "export_readiness_unconfirmed": "Native export was not started. Inspect check_export_readiness before requesting a new export",
     "host_policy_denied": "Native tool rejected by host policy; choose authorized arguments",
 })
 

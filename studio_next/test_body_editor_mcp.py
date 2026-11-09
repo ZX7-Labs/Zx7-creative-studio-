@@ -187,6 +187,39 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(self.requests), before)
         await self.with_session(check, native_source=source)
 
+    async def test_pinned_export_does_not_dispatch_before_native_readiness(self):
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        self.tools = [
+            {"name": "check_export_readiness", "inputSchema": {"type": "object",
+                "properties": {"endSeconds": {"type": "number"}}}},
+            {"name": "export_timeline", "inputSchema": {"type": "object",
+                "properties": {"endSeconds": {"type": "number"},
+                               "outputPath": {"type": "string"}}}},
+        ]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={
+            "check_export_readiness": "read", "export_timeline": "write"})
+        args = {"outputPath": "/authorized/new.mp4", "endSeconds": 2}
+
+        async def check(session):
+            for reply in ('{"ready": false, "blockers": ["Empty"]}',
+                          '{"ready": true, "blockers": ["Contradiction"]}',
+                          'not a readiness receipt'):
+                self.native_text = reply
+                result = await session.call_tool("export_timeline", args)
+                self.assertTrue(result.is_error)
+                self.assertEqual(result.meta["zx7.host/pre-dispatch-rejection"]["code"],
+                                 "export_readiness_unconfirmed")
+                self.assertEqual(self.requests[-1]["params"], {
+                    "name": "check_export_readiness", "arguments": {"endSeconds": 2}})
+            before = [r["params"]["name"] for r in self.requests if r["method"] == "tools/call"]
+            self.assertEqual(before, ["check_export_readiness"] * 3)
+            self.native_text = '{"ready": true, "blockers": []}'
+            result = await session.call_tool("export_timeline", args)
+            self.assertFalse(result.is_error)
+            self.assertEqual(self.requests[-1]["params"], {"name": "export_timeline", "arguments": args})
+
+        await self.with_session(check, native_source=source)
+
     async def test_rejected_export_path_can_be_corrected_without_replaying_a_write(self):
         """Run #42444331745 stopped after a legitimate no-overwrite refusal.
 

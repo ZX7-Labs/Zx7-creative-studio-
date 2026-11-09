@@ -210,6 +210,13 @@ async def exercise(options):
             "human_or_artistic_quality_approved": False,
         }, sort_keys=True), flush=True)
         project = Path(state["project"]["path"])
+        blocked_output = outputs / "no-source.mp4"
+        unready = await session.call_tool("export_timeline", {
+            "outputPath": str(blocked_output), "target": "h264_project",
+            "range": "custom", "startSeconds": 0, "endSeconds": 2,
+            "previewOnly": False})
+        assert unready.is_error and not blocked_output.exists(), unready
+        assert unready.meta["zx7.host/pre-dispatch-rejection"]["code"] == "export_readiness_unconfirmed"
         assert (await session.call_tool("import_asset_from_path", {"path": "/etc/passwd", "previewOnly": False})).is_error
         for name, count in (("source.mp4", 1), ("tone.wav", 2)):
             await call(session, "import_asset_from_path", {"path": str(staging / name), "previewOnly": False})

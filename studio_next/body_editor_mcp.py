@@ -19,7 +19,7 @@ import sys
 
 from .body_editor_client import (
     EditorAccessError, EditorClientError, EditorToolError, _access_modes,
-    EditorPreDispatchError, HOST_PRE_DISPATCH_META, native_input_digest,
+    EditorPreDispatchError, HOST_PRE_DISPATCH_META, native_input_digest, _load_json,
 )
 from .body_editor_policy import EditorPathPolicy
 
@@ -120,6 +120,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     verified_exports = {}
     content_diagnostics = (semantic_source and "read" in access and
                            grants.get("get_timeline") == "read")
+    export_readiness = (semantic_source and "read" in access and
+                        grants.get("check_export_readiness") == "read")
     if CONTENT_DIAGNOSTICS_TOOL in native:
         raise ValueError("Native editor tool name collides with BODY content diagnostics")
     if content_diagnostics:
@@ -240,6 +242,30 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
 
     async def list_tools(_ctx, _params):
         return types.ListToolsResult(tools=list(tools.values()))
+
+    def call_native(name, arguments):
+        # The pinned exporter and this read use the same native readiness
+        # function. A newly written clip may be saved before the published
+        # snapshot contains it. Decline an unready render before submitting
+        # its write, so the model can inspect or correct the current edit.
+        if (export_readiness and name == "export_timeline" and
+                arguments.get("previewOnly") is not True):
+            fields = native["check_export_readiness"]["inputSchema"]["properties"]
+            read_args = {key: value for key, value in arguments.items() if key in fields}
+            try:
+                observed = client.call("check_export_readiness", read_args, allowed_access=access)
+                blocks = observed["content"]
+                if (len(blocks) != 1 or not isinstance(blocks[0], dict) or
+                        blocks[0].get("type") != "text" or
+                        not isinstance(blocks[0].get("text"), str) or
+                        len(blocks[0]["text"]) > 131072):
+                    raise ValueError("Native readiness did not return one bounded receipt")
+                state = _load_json(blocks[0]["text"])
+                if not isinstance(state, dict) or state.get("ready") is not True or state.get("blockers") != []:
+                    raise ValueError("Native readiness was not established")
+            except (EditorClientError, EditorAccessError, ValueError):
+                raise EditorPreDispatchError("export_readiness_unconfirmed") from None
+        return client.call(name, arguments, allowed_access=access)
 
     async def call_tool(_ctx, params):
         name = params.name
@@ -401,7 +427,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             async with lock:
                 with anyio.CancelScope(shield=True):
                     result = await anyio.to_thread.run_sync(
-                        lambda: client.call(name, arguments, allowed_access=access),
+                        lambda: call_native(name, arguments),
                         abandon_on_cancel=False)
             return types.CallToolResult.model_validate(result)
         except EditorToolError as exc:

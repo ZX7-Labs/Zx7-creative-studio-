@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -40,7 +42,7 @@ jobs:
           # preflight, so install its declared editor extra. Without this,
           # 40 tests errored on missing jsonschema before testing behavior.
           # Keep the other verified native/production extensions installed.
-          python -m pip install --no-cache-dir ".[editor,production]" "OpenEXR>=3.3,<4" "opencolorio>=2.5,<2.6" "opencv-python-headless>=4.10,<5"
+          python -m pip install --no-cache-dir ".[editor,production]" "OpenEXR>=3.3,<4" "opencolorio>=2.5,<2.6" "opencv-python-headless>=4.10,<5" "setuptools>=77"
           python -c 'import jsonschema, mcp; print("Native schema-preflight and MCP dependencies available")'
       - name: Run every existing and new studio application contract on this exact branch
         run: |
