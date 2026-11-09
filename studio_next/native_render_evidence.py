@@ -60,9 +60,22 @@ def reviewed_render_pair(events, revision_tools):
     first_verification = {}
     last_review = before_revision = pair = None
     for event in events:
+        tool, path = event.get("tool"), event.get(DESTINATION_FIELD)
+        if event.get("kind") == "native_read_tool_reported_error":
+            # A failed trusted verifier/decoder observation contradicts any
+            # older acceptance of this destination until fresh evidence is
+            # obtained. Its raw path/error text is never placed in the journal.
+            if path is not None and (tool == VERIFY_TOOL or tool in FRAME_TOOLS):
+                verified.pop(path, None)
+                if last_review is not None and last_review[1] == path:
+                    last_review = None
+                if before_revision is not None and before_revision[1] == path:
+                    before_revision = None
+                if pair is not None and any(item["destination_sha256"] == path for item in pair):
+                    pair = None
+            continue
         if event.get("kind") != "native_tool_result":
             continue
-        tool, path = event.get("tool"), event.get(DESTINATION_FIELD)
         if event.get("host_application_write_acknowledged") is True:
             pair = None
             verified.clear()
