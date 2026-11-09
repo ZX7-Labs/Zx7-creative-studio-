@@ -20,7 +20,9 @@ export async function launchVelorn({ source, profileRoot, projectsRoot, stagingR
   signal?.throwIfAborted()
   for (const [key, value] of Object.entries({ source, profileRoot, projectsRoot, stagingRoot, outputRoot }))
     if (!value || !path.isAbsolute(value)) throw Error(`${key} must be an explicit absolute path.`)
-  const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim()
+  const [gitRoot, revision] = execFileSync('git', ['rev-parse', '--show-toplevel', 'HEAD'],
+    { cwd: source, encoding: 'utf8' }).trimEnd().split(/\r?\n/)
+  if (gitRoot !== await fs.realpath(source)) throw Error('Editor source must be the root of the approved checkout.')
   if (!trustedRevisions.has(revision)) throw Error(`Expected upstream ${UPSTREAM_COMMIT} or its approved desktop revision; found ${revision}`)
   execFileSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: source })
   await fs.access(path.join(source, 'dist', 'index.html'))

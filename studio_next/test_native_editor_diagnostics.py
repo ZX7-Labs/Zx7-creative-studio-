@@ -129,6 +129,7 @@ class NativeContentDiagnosticsTests(unittest.TestCase):
     def test_source_attestation_checks_real_pin_and_rejects_arbitrary_paths(self):
         source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
         self.assertTrue(native_content_diagnostics_source_verified(source))
+        self.assertFalse(native_content_diagnostics_source_verified(source / "electron"))
         with tempfile.TemporaryDirectory() as scratch:
             self.assertFalse(native_content_diagnostics_source_verified(Path(scratch)))
         self.assertFalse(native_content_diagnostics_source_verified(str(source)))

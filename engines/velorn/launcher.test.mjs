@@ -40,7 +40,7 @@ test(`${mode}: SIGTERM during startup stops owned processes and frees ports`, { 
   await fs.writeFile(path.join(source, 'package.json'), '{}')
   await fs.writeFile(path.join(source, 'dist', 'index.html'), 'synthetic lifecycle fixture')
   // Only setup is simulated. Real child processes and real TCP ports prove cleanup.
-  await fs.writeFile(path.join(bins, 'git'), `#!/bin/sh\nif [ "$1" = rev-parse ]; then echo ${UPSTREAM_COMMIT}; fi\n`, { mode: 0o755 })
+  await fs.writeFile(path.join(bins, 'git'), `#!/bin/sh\nif [ "$1" = rev-parse ]; then pwd -P; echo ${UPSTREAM_COMMIT}; fi\n`, { mode: 0o755 })
   await fs.writeFile(path.join(source, 'node_modules', 'electron', 'index.js'), `module.exports = ${JSON.stringify(process.execPath)}\n`)
   await fs.writeFile(path.join(source, 'node_modules', 'vite', 'package.json'), '{"name":"vite"}')
   const pidFile = path.join(fixture, 'owned-pids')

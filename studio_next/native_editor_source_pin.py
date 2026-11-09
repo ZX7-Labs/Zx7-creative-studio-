@@ -67,10 +67,11 @@ def _source_matches_pinned_electron_mcp(source: Path) -> bool:
     try:
         resolved = str(source.resolve(strict=True))
         revision = subprocess.run(
-            ["git", "-C", resolved, "rev-parse", "HEAD"],
+            ["git", "-C", resolved, "rev-parse", "--show-toplevel", "HEAD"],
             capture_output=True, text=True, timeout=5, env=safe_env)
-        if (revision.returncode != 0 or
-                revision.stdout.strip() not in TRUSTED_VELORN_REVISIONS):
+        identity = revision.stdout.splitlines()
+        if (revision.returncode != 0 or len(identity) != 2 or
+                identity[0] != resolved or identity[1] not in TRUSTED_VELORN_REVISIONS):
             return False
         clean = subprocess.run(
             ["git", "-C", resolved, "diff", "--quiet", "HEAD", "--",

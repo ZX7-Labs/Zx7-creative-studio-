@@ -233,8 +233,12 @@ def doctor(path, *, check_model=True):
         try:
             options = dict(capture_output=True, text=True, timeout=10,
                            env=native_editor_child_environment())
-            rev = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], **options)
-            pinned = rev.returncode == 0 and rev.stdout.strip() in TRUSTED_VELORN_REVISIONS
+            resolved = str(source.resolve(strict=True))
+            rev = subprocess.run(
+                ["git", "-C", resolved, "rev-parse", "--show-toplevel", "HEAD"], **options)
+            identity = rev.stdout.splitlines()
+            pinned = (rev.returncode == 0 and len(identity) == 2 and
+                      identity[0] == resolved and identity[1] in TRUSTED_VELORN_REVISIONS)
             diff = subprocess.run(["git", "-C", str(source), "diff", "--quiet", "HEAD", "--"], **options)
             clean = diff.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
