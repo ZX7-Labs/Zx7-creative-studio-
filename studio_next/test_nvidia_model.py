@@ -6,7 +6,7 @@ import json
 import os
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from studio_next.nvidia_model import (
     NvidiaConfigurationError, NvidiaCreativeModel, NvidiaModelSettings,
@@ -169,6 +169,34 @@ class NvidiaProviderContractTest(unittest.TestCase):
                 NvidiaCreativeModel().decide({"secret": "private-media"})
         self.assertNotIn(credential, str(observed.exception))
         self.assertNotIn("private-media", str(observed.exception))
+
+    def test_hosted_inference_timeout_is_distinct_and_never_retried(self):
+        # A timed-out POST may still have been served/billed. Report a stable,
+        # redacted fault category to the host, never retry or dispatch writes.
+        secret = "nvapi-" + "Q" * 32
+        for error, expected in (
+            (URLError(TimeoutError("private prompt " + secret)), "transport timed out"),
+            (TimeoutError("private prompt " + secret), "transport timed out"),
+            (URLError("private network " + secret), "connection failed"),
+        ):
+            with self.subTest(category=expected):
+                class Opener:
+                    calls = 0
+                    def open(self, req, timeout):
+                        self.calls += 1
+                        self.last_timeout = timeout
+                        raise error
+                opener = Opener()
+                with patch.dict(os.environ, {"NVIDIA_API_KEY": secret}), patch(
+                        "studio_next.nvidia_model.build_opener", return_value=opener):
+                    with self.assertRaisesRegex(NvidiaTransportError, expected) as caught:
+                        NvidiaCreativeModel(
+                            NvidiaModelSettings(timeout_seconds=180)
+                        ).decide({"brief": "private prompt"})
+                self.assertEqual(opener.calls, 1)
+                self.assertEqual(opener.last_timeout, 180)
+                self.assertNotIn(secret, str(caught.exception))
+                self.assertNotIn("private prompt", str(caught.exception))
 
     def test_untrusted_response_envelope_never_echoes_private_fields(self):
         credential = "nvapi-" + "Z" * 32
