@@ -25,7 +25,7 @@ def decode(path):
     ], stderr=subprocess.PIPE, timeout=20)
 
 
-def exercise(source, xvfb):
+def exercise(source, xvfb, *, live_research=False):
     executable = shutil.which("zx7-studio")
     assert executable, "Install the BODY package before this proof"
     with tempfile.TemporaryDirectory(prefix="zx7-installed-editor-") as temporary:
@@ -40,6 +40,8 @@ def exercise(source, xvfb):
         errors = []
         readiness = []
         observed_frame_requests = []
+        research_observations = []
+        public_topic = "映画"
 
         class Fixture(BaseHTTPRequestHandler):
             def send_json(self, value, status=200):
@@ -66,6 +68,10 @@ def exercise(source, xvfb):
                         content = content[0]["text"]
                     context = json.loads(content)
                     owner = json.loads(context["creative_brief"].split("\n\n", 1)[1].split("\n", 1)[1])
+                    if live_research and not research_observations and selected_steps[0][0] == "create_project":
+                        latest = json.loads(context["last_native_result_texts"][0])
+                        assert latest["kind"] == "research_web_references"
+                        research_observations.append(latest)
                     output = Path(owner["outputs_root"]) / "fixture.mp4"
                     tool, args = selected_steps[0]
                     if tool == "check_export_readiness" and context["last_native_result_texts"]:
@@ -157,7 +163,9 @@ def exercise(source, xvfb):
                 assert studio_command("doctor", studio)["ready"]
                 runner = ("run", studio, "--xvfb-binary", xvfb, "--display", "127.0.0.1:95",
                           "--model-timeout", "90")
+                research_steps = [("research_web", {"query": public_topic, "language": "ja", "limit": 2})]
                 selected_steps[:] = [
+                    *(research_steps if live_research else ()),
                     ("create_project", {"name": "Installed project proof", "width": 320,
                         "height": 180, "fps": 24, "previewOnly": False}),
                     ("import_asset_from_path", lambda owner, _: {
@@ -167,9 +175,21 @@ def exercise(source, xvfb):
                         "startSeconds": 0, "includeAudio": False, "previewOnly": False}),
                     *delivery("fixture.mp4"), (None, None),
                 ]
-                first = studio_command(*runner, "--brief", "एक नया project बनाओ।",
+                research_flags = ("--allow-public-research",) if live_research else ()
+                first = studio_command(*runner, *research_flags, "--brief", "एक नया project बनाओ।",
                                        "--asset", original, "--rights", "Generated installation fixture")
                 assert not selected_steps and first["state"] == "completed"
+                if live_research:
+                    reference, = research_observations
+                    assert reference["provider"] == "wikipedia" and reference["language"] == "ja"
+                    assert reference["result_content_untrusted"] and not reference["import_authorized"]
+                    assert reference["results"] and all(
+                        item["source_page"].startswith("https://ja.wikipedia.org/?curid=")
+                        for item in reference["results"]
+                    )
+                    journal = Path(first["result"]["receipt"]).read_text(encoding="utf-8")
+                    assert public_topic not in journal
+                    print("Live Japanese public references reached the installed model route", flush=True)
                 saved, = (studio / "projects").glob("*/project.comfystudio")
                 initial = json.loads(saved.read_text())
                 initial_sha = digest(saved)
@@ -208,7 +228,10 @@ def exercise(source, xvfb):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--live-research", action="store_true",
+                        help="Send a fixed synthetic creative query to Wikimedia")
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--xvfb-binary", type=Path, required=True)
     options = parser.parse_args()
-    exercise(options.source.resolve(strict=True), options.xvfb_binary.resolve(strict=True))
+    exercise(options.source.resolve(strict=True), options.xvfb_binary.resolve(strict=True),
+             live_research=options.live_research)
