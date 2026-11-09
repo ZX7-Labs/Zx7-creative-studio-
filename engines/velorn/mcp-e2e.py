@@ -225,6 +225,10 @@ async def exercise(options):
             "assetNames": ["source.mp4", "not-imported.mp4"], "previewOnly": False})
         assert unimported.is_error, unimported
         assert unimported.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
+        missing = await session.call_tool("add_asset_to_timeline", {
+            "assetName": "not-imported.mp4", "previewOnly": False})
+        assert missing.is_error, missing
+        assert missing.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
         assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
         timeline = await call(session, "get_timeline", {"includeClips": False})
         picture_track = next(track["id"] for track in timeline["tracks"] if track["type"] == "video")

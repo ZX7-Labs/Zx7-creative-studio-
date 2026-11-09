@@ -204,7 +204,11 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             async def call_tool(self, name, arguments):
                 self.calls.append((name, arguments))
                 if name == "get_project":
-                    value = {"project": {"currentTimelineId": "current"},
+                    external_switch = self.calls.count(("get_project", {})) == 3
+                    if external_switch:
+                        self.track_id = "video-external"
+                    value = {"project": {"currentTimelineId": "current",
+                                         "path": "/project-2" if external_switch else "/project-1"},
                              "currentTimeline": {"id": "current", "clipCount": 0},
                              "mcp": {"hasProject": True}}
                 elif name == "get_timeline":
@@ -219,17 +223,21 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         guessed = decision("invoke", tool=placement, inputs={"trackId": "track-1", "previewOnly": False})
         selected = decision("invoke", tool=placement, inputs={"trackId": "video-1", "previewOnly": False})
         model = ScriptedModel([decision("search", query=placement, limit=1), guessed, selected,
+                               decision("search", query="get_project", limit=1),
+                               decision("invoke", tool="get_project", inputs={}),
+                               decision("search", query=placement, limit=1),
                                decision("finish", summary="Placed real track fixture")])
         model.requires_indexed_native_function_contracts = True
         grants = {"get_project": "read", "get_timeline": "read", placement: "write"}
-        result = await NativeCreativeControl(session, model, max_turns=4,
+        result = await NativeCreativeControl(session, model, max_turns=7,
             catalog_mode="indexed", host_tool_access=grants,
             host_verified_top_level_preview_tools=(placement,)).run("Place footage on an observed track")
         self.assertEqual(result["status"], "model_finished_unverified")
         self.assertEqual(session.calls, [("get_project", {}), ("get_timeline", {"includeClips": False}),
             (placement, selected["arguments"]["inputs"]), ("get_project", {}),
+            ("get_timeline", {"includeClips": False}), ("get_project", {}),
             ("get_timeline", {"includeClips": False})])
-        for index, identity in ((1, "video-1"), (2, "video-1"), (3, "video-current")):
+        for index, identity in ((1, "video-1"), (2, "video-1"), (3, "video-current"), (6, "video-external")):
             self.assertEqual(model.observed[index]["native_placement_tracks"]["tracks"][0]["id"], identity)
         grammar = Draft202012Validator(LocalNativeStructuredCreativeModel._current_host_schema(model.observed[1]))
         self.assertFalse(grammar.is_valid(guessed))

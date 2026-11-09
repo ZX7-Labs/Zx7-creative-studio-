@@ -2256,7 +2256,12 @@ class NativeCreativeControl:
                 elif not images and not audio:
                     self._remember_native_read(native_name, args["inputs"], texts,
                                                origin="model_selected")
-                    self._placement_observations.pop(native_name, None)
+                    if native_name == "get_project":
+                        # Two projects can use the same native timeline ID.
+                        # An explicit project refresh invalidates both inventories.
+                        self._placement_observations.clear()
+                    else:
+                        self._placement_observations.pop(native_name, None)
                 self._append({"kind": "native_tool_result", "turn": turn,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,

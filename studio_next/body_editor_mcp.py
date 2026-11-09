@@ -122,8 +122,9 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                            grants.get("get_timeline") == "read")
     export_readiness = (semantic_source and "read" in access and
                         grants.get("check_export_readiness") == "read")
-    batch_placement = (semantic_source and "write" in access and
-                       grants.get("add_assets_to_timeline") == "write")
+    from .native_editor_source_pin import pinned_electron_asset_placement_previews
+    placement_preflight = (pinned_electron_asset_placement_previews(native_source, grants)
+                           if semantic_source and "write" in access else ())
     if CONTENT_DIAGNOSTICS_TOOL in native:
         raise ValueError("Native editor tool name collides with BODY content diagnostics")
     if content_diagnostics:
@@ -273,8 +274,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                     raise ValueError("Native readiness was not established")
             except (EditorClientError, EditorAccessError, ValueError):
                 raise EditorPreDispatchError("export_readiness_unconfirmed") from None
-        if batch_placement and name == "add_assets_to_timeline" and arguments.get("previewOnly") is False:
-            # The pinned Electron handler resolves the whole batch and exits
+        if name in placement_preflight and arguments.get("previewOnly") is False:
+            # The pinned Electron handlers resolve the placement and exit
             # before performAction when previewOnly is true. Ask that same
             # resolver before passing on the original, model-selected edit.
             try:
@@ -284,7 +285,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 if (state.get("action") != name or state.get("previewOnly") is not True or
                         "success" in state or not isinstance(plan, dict) or
                         plan.get("previewOnly") is not True):
-                    raise ValueError("Native batch placement preview was not established")
+                    raise ValueError("Native placement preview was not established")
             except (EditorClientError, EditorAccessError, ValueError):
                 raise EditorPreDispatchError("placement_plan_unconfirmed") from None
         return client.call(name, arguments, allowed_access=access)
