@@ -4205,6 +4205,67 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                         max_turns=len(actions)).run("Do not guess native tool rights")
                 self.assertEqual(fresh.calls, [])
 
+    async def test_acknowledged_write_invalidates_previous_tied_search_authority(self):
+        """Regression from real Qwen 4B run 42621894429, journal 30-36.
+
+        The auditor correctly invalidated tied candidates after a write, but
+        the controller still offered them to describe. No actual neural model
+        or creative-quality proof is claimed by this scripted fixture.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class ProjectSession(FakeSession):
+            project_open = False
+
+            async def call_tool(self, name, arguments):
+                if name == "get_project":
+                    self.calls.append((name, arguments))
+                    project = {"id": "genuine-project"} if self.project_open else None
+                    return SimpleNamespace(is_error=False, content=[SimpleNamespace(
+                        type="text", text=json.dumps({
+                            "project": project,
+                            "mcp": {"hasProject": self.project_open}}))])
+                if name == "create_project":
+                    self.project_open = True
+                return await super().call_tool(name, arguments)
+
+        session = ProjectSession()
+        session.tools = [
+            SimpleNamespace(name="get_project", description="Read project presence",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="create_project", description="Create a project",
+                            input_schema={"type": "object", "properties": {
+                                "name": {"type": "string"}}}),
+            *[SimpleNamespace(name=name, description="Edit native project content",
+                             input_schema={"type": "object", "properties": {}})
+              for name in ("edit_alpha", "edit_beta")],
+        ]
+        grants = {"get_project": "read", "create_project": "write",
+                  "edit_alpha": "write", "edit_beta": "write"}
+        model = ScriptedModel([
+            decision("search", query="edit", limit=1),
+            decision("invoke", tool="create_project", inputs={"name": "Independent project"}),
+            decision("finish", summary="Host-owned search binding checked"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, catalog_mode="indexed", host_tool_access=grants,
+            host_possible_effects={"create_project": ["project_open"]},
+            max_turns=3).run("Create an editable project; inspect only current permissions")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(len(model.observed), 3)
+        self.assertIn("create_project", model.observed[1]["selectable_native_tools"])
+        self.assertEqual(set(model.observed[1]["inspectable_native_tools"]),
+                         {"edit_alpha", "edit_beta"})
+        self.assertEqual(model.observed[2]["inspectable_native_tools"], [])
+        self.assertIsNone(model.observed[2]["last_capability_search_result"])
+        self.assertEqual([name for name, _ in session.calls
+                          if name == "create_project"], ["create_project"])
+        self.assertEqual(sum(event["kind"] == "native_tool_schema"
+                             for event in result["events"]), 0)
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)
+            ["journal_chain_structurally_valid"])
+
     async def test_fresh_real_project_trial_does_not_offer_open_nonexistent_project(self):
         """A failed 2B run attempted open_project on an empty projects root."""
         from scripts.run_native_model_trial import fresh_trial_project_open_effects

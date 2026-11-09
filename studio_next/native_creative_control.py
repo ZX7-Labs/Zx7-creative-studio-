@@ -2388,6 +2388,19 @@ class NativeCreativeControl:
                 reobserve_project = (
                     self.host_tool_access is not None and
                     self.host_tool_access.get(native_name) == "write")
+                if reobserve_project and self.catalog_mode == "indexed":
+                    # A successful native write changes the factual state
+                    # against which ambiguous search examples were surfaced.
+                    # The independent journal auditor already revokes tied
+                    # candidate authority on ANY acknowledged write. Match it
+                    # here before another model decision; do not allow stale
+                    # inspectable suggestions to reach a later describe.
+                    # The model can choose a fresh search, but no tool or
+                    # native write is selected or retried on its behalf.
+                    self._inspectable_tied_candidates = []
+                    self._last_search_result = None
+                    self._previous_search_signature = None
+                    self._identical_search_repetitions = 0
                 if (reobserve_project and
                         self.host_tool_access is not None and
                         self.host_tool_access.get("get_project") == "read" and
