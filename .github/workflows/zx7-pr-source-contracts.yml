@@ -127,7 +127,10 @@ jobs:
       - name: Install original-audio source inspection and real decoders
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          # The cancelled public run spent its bounded budget fetching optional
+          # speech datasets (pocketsphinx-en-us) from Ubuntu mirrors. FFmpeg
+          # codecs are mandatory; apt *recommended* content is not a test ABI.
+          sudo apt-get install -y --no-install-recommends ffmpeg
           python -m pip install --no-cache-dir '.[production]'
       - name: Prove interpreter-independent original PCM and unchanged 5.1 safety
         run: |
