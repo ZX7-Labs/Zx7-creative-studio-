@@ -38,6 +38,24 @@ roots. Models remain separate and no hosted AI API is required.
 The [SDK-client execution record](research/editor-mcp-evidence.json) preserves
 the measured scope and exact tested source digests.
 
+## Install Studio from source on Ubuntu
+
+From this checkout on Ubuntu 24.04 x86-64, run the source installer as your
+normal user. It uses `sudo` for Ubuntu packages and the Chromium sandbox
+helper. The installed Studio, editor, and bundled Node run under your account.
+
+```sh
+bash scripts/install-zx7-linux.sh
+export PATH="$HOME/.local/opt/zx7-studio/bin:$PATH"
+zx7-studio init ./my-studio
+zx7-studio doctor ./my-studio
+```
+
+Start your local OpenAI-compatible model server before `init` or choose the
+hosted NVIDIA route explicitly. An alternative install prefix can be passed as
+the installer argument. An existing prefix is refused. The install builds
+the pinned editor and downloads its public build dependencies.
+
 ## Create and revise a native project
 
 On Linux, install Python 3.11+, Node, FFmpeg/FFprobe and the pinned editor's
