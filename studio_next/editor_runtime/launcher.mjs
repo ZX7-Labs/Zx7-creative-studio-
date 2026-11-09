@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import fs from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import net from 'node:net'
 import { spawn, execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { VelornClient } from './client.mjs'
-export const UPSTREAM_COMMIT = 'b3c02adbd5c0779feb8abf34978299e9502cc0e7'
+const sourceLock = JSON.parse(readFileSync(new URL('./source-lock.json', import.meta.url), 'utf8'))
+export const UPSTREAM_COMMIT = sourceLock.upstream_revision
+const trustedRevisions = new Set([UPSTREAM_COMMIT, sourceLock.desktop_revision])
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
 async function assertFree(port) {
   const server = net.createServer()
@@ -18,7 +21,7 @@ export async function launchVelorn({ source, profileRoot, projectsRoot, stagingR
   for (const [key, value] of Object.entries({ source, profileRoot, projectsRoot, stagingRoot, outputRoot }))
     if (!value || !path.isAbsolute(value)) throw Error(`${key} must be an explicit absolute path.`)
   const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim()
-  if (revision !== UPSTREAM_COMMIT) throw Error(`Expected upstream ${UPSTREAM_COMMIT}; found ${revision}`)
+  if (!trustedRevisions.has(revision)) throw Error(`Expected upstream ${UPSTREAM_COMMIT} or its approved desktop revision; found ${revision}`)
   execFileSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: source })
   await fs.access(path.join(source, 'dist', 'index.html'))
   const require = createRequire(path.join(source, 'package.json'))

@@ -50,7 +50,7 @@ class InstalledNativeRuntimeTests(unittest.TestCase):
         required = {
             "studio_next/native_editor_session.py",
             *{"studio_next/editor_runtime/" + name for name in (
-                "mcp.mjs", "launcher.mjs", "client.mjs", "editor.example.json",
+                "mcp.mjs", "launcher.mjs", "client.mjs", "editor.example.json", "source-lock.json",
                 "LICENSE", "NOTICE")},
         }
         with zipfile.ZipFile(self.wheel) as source:

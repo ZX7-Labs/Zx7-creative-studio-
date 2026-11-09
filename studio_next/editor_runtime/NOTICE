@@ -2,6 +2,9 @@ Velorn adapter source in this directory: GPL-3.0-only.
 Upstream: https://github.com/VelornLabs/velorn
 Pinned source revision: b3c02adbd5c0779feb8abf34978299e9502cc0e7
 Upstream package version: 0.3.37
+Approved desktop source revision: 58361e3810e8f5c459bf656d14a0832dbc0c7e7a
+ZX7 desktop change: resolve selected image sequence paths through Electron webUtils.
+Corresponding patch: engines/velorn/electron-file-path.patch in this repository.
 Upstream license: GPL-3.0-only (upstream LICENSE contains GNU GPL version 3).
 Copyright: Velorn contributors; preserve upstream notices and source.
 

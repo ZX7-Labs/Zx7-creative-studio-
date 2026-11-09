@@ -23,7 +23,7 @@ from urllib.request import Request
 
 from .body_editor_client import _load_json
 from .body_editor_policy import load_editor_config
-from .native_editor_source_pin import PINNED_VELORN_MCP_REVISION
+from .native_editor_source_pin import PINNED_VELORN_MCP_REVISION, TRUSTED_VELORN_REVISIONS
 from .providers import LocalModelSettings
 
 
@@ -234,12 +234,13 @@ def doctor(path, *, check_model=True):
             options = dict(capture_output=True, text=True, timeout=10,
                            env=native_editor_child_environment())
             rev = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], **options)
-            pinned = rev.returncode == 0 and rev.stdout.strip() == PINNED_VELORN_MCP_REVISION
+            pinned = rev.returncode == 0 and rev.stdout.strip() in TRUSTED_VELORN_REVISIONS
             diff = subprocess.run(["git", "-C", str(source), "diff", "--quiet", "HEAD", "--"], **options)
             clean = diff.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
             pass
-    add("editor_source_pin", pinned and clean, "Requires clean Velorn " + PINNED_VELORN_MCP_REVISION)
+    add("editor_source_pin", pinned and clean,
+        "Requires clean Velorn " + PINNED_VELORN_MCP_REVISION + " or its approved desktop revision")
     add("editor_build", (source / "dist/index.html").is_file(), "Build pinned editor with npm ci && npm run build")
     electron = source / "node_modules/electron/dist/electron"
     add("electron", electron.is_file() and os.access(electron, os.X_OK), "Install pinned editor dependencies")

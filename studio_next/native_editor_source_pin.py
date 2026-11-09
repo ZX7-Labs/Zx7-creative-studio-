@@ -6,11 +6,15 @@ and never installs models, accesses the network or authorizes a mutation.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import os
 import subprocess
 
-PINNED_VELORN_MCP_REVISION = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+_SOURCE_LOCK = json.loads((Path(__file__).parent / "editor_runtime/source-lock.json").read_text(encoding="utf-8"))
+PINNED_VELORN_MCP_REVISION = _SOURCE_LOCK["upstream_revision"]
+PINNED_VELORN_DESKTOP_REVISION = _SOURCE_LOCK["desktop_revision"]
+TRUSTED_VELORN_REVISIONS = frozenset((PINNED_VELORN_MCP_REVISION, PINNED_VELORN_DESKTOP_REVISION))
 _PINNED_MARKER_PREVIEWS = (
     "add_timeline_markers", "remove_timeline_markers",
     "set_timeline_marker_properties",
@@ -66,7 +70,7 @@ def _source_matches_pinned_electron_mcp(source: Path) -> bool:
             ["git", "-C", resolved, "rev-parse", "HEAD"],
             capture_output=True, text=True, timeout=5, env=safe_env)
         if (revision.returncode != 0 or
-                revision.stdout.strip() != PINNED_VELORN_MCP_REVISION):
+                revision.stdout.strip() not in TRUSTED_VELORN_REVISIONS):
             return False
         clean = subprocess.run(
             ["git", "-C", resolved, "diff", "--quiet", "HEAD", "--",
