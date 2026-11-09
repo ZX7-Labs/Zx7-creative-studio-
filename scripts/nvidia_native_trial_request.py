@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 
 from scripts.nvidia_smoke_request import _unique_json, SmokeRequestError
-from scripts.run_nvidia_native_trial import _ALLOWED_MODEL
+from scripts.run_nvidia_native_trial import _ALLOWED_MODEL, _TRIAL_MAX_TURNS
 
 
 _FIELDS = frozenset({"schema", "kind", "model_id", "synthetic_only",
@@ -31,7 +31,7 @@ def validate_native_trial_request(path: Path) -> str:
             value["model_id"] != _ALLOWED_MODEL or
             value["synthetic_only"] is not True or
             value["cloud_synthetic_frames_allowed"] is not True or
-            type(value["max_turns"]) is not int or value["max_turns"] != 40 or
+            type(value["max_turns"]) is not int or value["max_turns"] != _TRIAL_MAX_TURNS or
             type(value["request_id"]) is not str or not
             re.fullmatch(r"[A-Za-z0-9_-]{8,80}", value["request_id"])):
         raise SmokeRequestError("Unapproved model, media egress or unbounded native trial")
