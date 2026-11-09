@@ -379,6 +379,75 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 result["events"], host_tool_access=grants
             )["journal_chain_structurally_valid"])
 
+    async def test_content_write_rechecks_external_track_changes_before_dispatch(self):
+        # An external editor may replace track IDs WITHOUT a write by this
+        # model. Cached preflight hints are observations, not live authority.
+        # A fresh host read at actual content write admission prevents both
+        # false acceptance and false rejection of changed native tracks.
+        tool = "add_text_clip"
+        class ExternalTrackSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.track_id = "video-1"
+                self.tools = [
+                    SimpleNamespace(name="get_project", description="Read project",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_timeline", description="Read real tracks",
+                        input_schema={"type": "object", "properties": {
+                            "includeClips": {"type": "boolean"}}}),
+                    SimpleNamespace(name=tool, description="Add editable type",
+                        input_schema={"type": "object", "properties": {
+                            "trackId": {"type": "string"}, "text": {"type": "string"}}}),
+                ]
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                data = (
+                    {"project": {"currentTimelineId": "timeline-1"},
+                     "currentTimeline": {"id": "timeline-1", "clipCount": 1},
+                     "mcp": {"hasProject": True}} if name == "get_project" else
+                    {"id": "timeline-1", "tracks": [{
+                        "id": self.track_id, "type": "video"}]} if name == "get_timeline"
+                    else {"success": True})
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(data))])
+
+        session = ExternalTrackSession()
+        stale = decision("invoke", tool=tool,
+                         inputs={"trackId": "video-1", "text": "Updated"})
+        fresh = decision("invoke", tool=tool,
+                         inputs={"trackId": "video-2", "text": "Updated"})
+        class ModelWithExternalEdit(ScriptedModel):
+            def decide(self, context):
+                action = super().decide(context)
+                if len(self.observed) == 2:
+                    # The model saw video-1 in the previous host snapshot,
+                    # but an independently acting editor removes that track.
+                    session.track_id = "video-2"
+                return action
+
+        model = ModelWithExternalEdit([
+            decision("search", query=tool, limit=1), stale, fresh,
+            decision("finish", summary="Chosen current native video track")])
+        model.requires_indexed_native_function_contracts = True
+        grants = {"get_project": "read", "get_timeline": "read", tool: "write"}
+        result = await NativeCreativeControl(
+            session, model, max_turns=4, catalog_mode="indexed",
+            host_tool_access=grants).run("Retain exact current editor track identity")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(model.observed[1][
+            "host_observed_content_video_tracks"]["tracks"][0]["id"], "video-1")
+        self.assertEqual(model.observed[2][
+            "last_rejected_native_action_feedback"]["verified_active_video_track_ids"],
+                         ["video-2"])
+        self.assertEqual([call for call in session.calls if call[0] == tool],
+                         [(tool, fresh["arguments"]["inputs"])])
+        reads = [call for call in session.calls if call[0] == "get_timeline"]
+        self.assertGreaterEqual(len(reads), 3)
+        self.assertEqual(
+            len([event for event in result["events"]
+                 if event.get("validation_keyword") == "host_observed_video_track_id"]), 1)
+
     async def test_content_track_validation_preserves_new_track_and_missing_read_grant(self):
         # A model may deliberately create a new track. No fixed list of
         # allowable creative layers and no fabricated read authority.
