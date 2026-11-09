@@ -137,9 +137,13 @@ class LocalCreativeModel:
                     data=data,headers={"Content-Type":"application/json"},method="POST")
         return urlopen(req,timeout=self.settings.timeout_seconds)
 
+    @staticmethod
+    def _encode_context(context):
+        return json.dumps(context,ensure_ascii=False,allow_nan=False)
+
     def _invoke(self,role,context,*,images=(),audio=()):
         self.last_call_usage = None
-        user_content=json.dumps(context,ensure_ascii=False,allow_nan=False)
+        user_content=self._encode_context(context)
         if images or audio:
             content=[{"type":"text","text":user_content}]
             evidence=context.get("picture_evidence") if isinstance(context,dict) else None
