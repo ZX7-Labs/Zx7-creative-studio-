@@ -1947,26 +1947,42 @@ class NativeCreativeControl:
                     if (self.host_tool_access is not None and
                             self.host_tool_access[native_name] == "read"):
                         # The bridge's arbitrary error text is untrusted and
-                        # stays out of the prompt and journal. When no prior
-                        # independent export receipt exists, the missing
-                        # prerequisite is a host-proven fact, not a guess
-                        # about the native decoder's failure.
+                        # stays out of the prompt and journal. A verified frame
+                        # requires a receipt for THIS physical export, not merely
+                        # for some older output on another destination.
                         if (native_name in _VERIFIED_FRAME_TOOLS and
-                                self.host_tool_access.get(_VERIFIED_EXPORT_TOOL) == "read" and
-                                not any(
+                                self.host_tool_access.get(_VERIFIED_EXPORT_TOOL) == "read"):
+                            if REVIEWED_RENDER_PAIR in self.required_evidence:
+                                destination = destination_digest(args["inputs"].get("path"))
+                                latest = next((
+                                    event for event in reversed(self.events)
+                                    if destination is not None and
+                                    event.get("tool") == _VERIFIED_EXPORT_TOOL and
+                                    event.get(DESTINATION_FIELD) == destination and
+                                    event.get("kind") in (
+                                        "native_tool_result",
+                                        "native_read_tool_reported_error")), None)
+                                verified_this_export = bool(
+                                    latest and latest.get("kind") == "native_tool_result" and
+                                    latest.get("independently_verified_export_sha256"))
+                            else:
+                                # Older unbound evidence profiles preserve their
+                                # established behavior and audit schema.
+                                verified_this_export = any(
                                     event.get("kind") == "native_tool_result" and
                                     event.get("tool") == _VERIFIED_EXPORT_TOOL and
                                     event.get("independently_verified_export_sha256")
-                                    for event in self.events)):
-                            self._last_preflight_feedback = {
-                                "tool": native_name,
-                                "validation_keyword": "no_verified_export_receipt",
-                                "required_before_frame_observation": _VERIFIED_EXPORT_TOOL,
-                                "same_physical_export_required": True,
-                                "host_attested_read_only": True,
-                                "no_successful_native_observation": True,
-                                "no_native_write_dispatch": True,
-                                "no_automatic_retry": True}
+                                    for event in self.events)
+                            if not verified_this_export:
+                                self._last_preflight_feedback = {
+                                    "tool": native_name,
+                                    "validation_keyword": "no_verified_export_receipt",
+                                    "required_before_frame_observation": _VERIFIED_EXPORT_TOOL,
+                                    "same_physical_export_required": True,
+                                    "host_attested_read_only": True,
+                                    "no_successful_native_observation": True,
+                                    "no_native_write_dispatch": True,
+                                    "no_automatic_retry": True}
                         # The explicit host-owned grant proves this call is
                         # read-only, not a write whose outcome is uncertain.
                         # Record bounded, private evidence and let the MODEL
