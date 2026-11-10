@@ -182,6 +182,11 @@ class NvidiaCreativeModel(LocalCreativeModel):
             raise NvidiaTransportError("NVIDIA rejected inference request (HTTP %d)" %
                                        exc.code) from None
         except (URLError, OSError, ssl.SSLError) as exc:
+            # A timed-out POST may have been processed and consume quota.
+            # Classify without retrying, exposing the request or leaking keys.
+            reason = exc.reason if isinstance(exc, URLError) else exc
+            if isinstance(reason, TimeoutError):
+                raise NvidiaTransportError("NVIDIA inference transport timed out") from None
             raise NvidiaTransportError("NVIDIA inference connection failed") from None
 
     def _invoke(self, role, context, *, images=(), audio=()):
