@@ -60,6 +60,32 @@ class EditorPolicyTests(unittest.TestCase):
                     ValueError, "explicitly enabled"):
                 self.config(verify_native_exports=invalid)
 
+    def test_optional_owner_delivery_is_bounded_and_immutable(self):
+        self.assertIsNone(self.config().required_export_delivery)
+        approved = {"width": 640, "height": 360, "fps": 24,
+                    "max_duration": 6, "video_codec": "h264"}
+        cfg = self.config(required_export_delivery=approved)
+        self.assertEqual(dict(cfg.required_export_delivery), approved)
+        approved["width"] = 1920
+        self.assertEqual(cfg.required_export_delivery["width"], 640)
+        with self.assertRaises(TypeError):
+            cfg.required_export_delivery["width"] = 1920
+        for invalid in (
+            {}, [], {"width": 640},
+            {**dict(cfg.required_export_delivery), "unknown": "permission"},
+            {**dict(cfg.required_export_delivery), "width": True},
+            {**dict(cfg.required_export_delivery), "width": 639},
+            {**dict(cfg.required_export_delivery), "height": -360},
+            {**dict(cfg.required_export_delivery), "fps": True},
+            {**dict(cfg.required_export_delivery), "fps": float("nan")},
+            {**dict(cfg.required_export_delivery), "fps": 0},
+            {**dict(cfg.required_export_delivery), "max_duration": float("inf")},
+            {**dict(cfg.required_export_delivery), "max_duration": -1},
+            {**dict(cfg.required_export_delivery), "video_codec": "invented_codec"},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.config(required_export_delivery=invalid)
+
     def test_constructor_also_copies_grants_and_access(self):
         grants = {"get_project": "read"}
         access = ["read"]
