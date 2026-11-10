@@ -30,10 +30,15 @@ def digest(path):
 
 
 async def exercise(options):
+    from studio_next.native_editor_project import capture_render_project
+    from studio_next.native_render_evidence import native_render_binding
+
     fixture = Path(tempfile.mkdtemp(prefix="zx7-editor-mcp-"))
     projects, staging, outputs = (fixture / name for name in ("projects", "staging", "outputs"))
     for path in (projects, staging, outputs):
         path.mkdir()
+    snapshots = fixture / "saved-render-projects"
+    snapshots.mkdir(mode=0o700)
     # Exercise the shipped host profile, including every advertised schema.
     # Actual edits below cover a narrower, explicitly measured workflow.
     tools = json.loads((ROOT / "engines/velorn/editor.example.json").read_text())["allowed_tools"]
@@ -74,11 +79,15 @@ async def exercise(options):
         assert data.get("success") is not False or (arguments or {}).get("previewOnly") is True, (name, data)
         return data
 
-    async def render_and_verify(session, output):
+    async def render_and_verify(session, output, save_receipt):
         rendered = await call(session, "export_timeline", {
             "outputPath": str(output), "target": "h264_project", "width": 320,
             "height": 180, "range": "custom", "startSeconds": 0, "endSeconds": 2,
             "fps": 24, "includeAudio": True, "previewOnly": False})
+        save = save_receipt["result"]["project"]
+        binding = native_render_binding(str(output), rendered)
+        captured = capture_render_project(
+            projects, snapshots, rendered, binding, (save["path"], save["modified"]))
         deadline = time.monotonic() + 90
         while True:
             logs = (fixture / "state").glob("session-*/velorn/export-worker.log")
@@ -108,7 +117,7 @@ async def exercise(options):
         audio, = (stream for stream in profile if stream["codec_type"] == "audio")
         assert (video["width"], video["height"], video["r_frame_rate"], video["codec_name"]) == (
             320, 180, "24/1", "h264"), video
-        return rendered["timeline"]["id"], proof["native_export_sha256"], (video, audio)
+        return rendered["timeline"]["id"], proof["native_export_sha256"], (video, audio), captured
 
     async def observe_samples(session, output, export_sha):
         # Real independent samples give sparse visual temporal evidence.
@@ -317,15 +326,16 @@ async def exercise(options):
         await call(session, "set_clip_keyframes", {"clipId": title_id, "keyframes": [
             {"property": "opacity", "timeSeconds": 0, "value": 20, "easing": "cubicBezier(0.2,0,0.8,1)"},
             {"property": "opacity", "timeSeconds": 1, "value": 100, "easing": "linear"}], "previewOnly": False})
-        await call(session, "save_project", {"previewOnly": False})
+        saved_first = await call(session, "save_project", {"previewOnly": False})
         native_path = project / "project.comfystudio"
         shutil.copy2(native_path, fixture / "revision-1.comfystudio")
         first_output = outputs / "mcp-export-first.mp4"
-        first_timeline, first_sha, first_profile = await render_and_verify(session, first_output)
+        first_timeline, first_sha, first_profile, first_capture = await render_and_verify(
+            session, first_output, saved_first)
         first_frames = await observe_samples(session, first_output, first_sha)
         first_audio = await observe_audio_envelope(session, first_output, first_sha)
         await call(session, "update_text_clip", {"clipId": title_id, "text": "MCP revised", "previewOnly": False})
-        await call(session, "save_project", {"previewOnly": False})
+        saved_second = await call(session, "save_project", {"previewOnly": False})
         shutil.copy2(native_path, fixture / "revision-2.comfystudio")
         assert digest(fixture / "revision-1.comfystudio") != digest(fixture / "revision-2.comfystudio")
         saved = json.loads(native_path.read_text())
@@ -340,12 +350,16 @@ async def exercise(options):
         (linked_project / "project.comfystudio").symlink_to(private_document)
         assert (await session.call_tool("open_project", {"projectPath": str(linked_project), "previewOnly": False})).is_error
         output = outputs / "mcp-export.mp4"
-        second_timeline, second_sha, second_profile = await render_and_verify(session, output)
+        second_timeline, second_sha, second_profile, second_capture = await render_and_verify(
+            session, output, saved_second)
         second_frames = await observe_samples(session, output, second_sha)
         second_audio = await observe_audio_envelope(session, output, second_sha)
         assert first_timeline and first_timeline == second_timeline
         assert first_sha != second_sha and digest(first_output) == first_sha
         assert first_profile == second_profile
+        assert first_capture[0] == digest(fixture / "revision-1.comfystudio")
+        assert second_capture[0] == digest(fixture / "revision-2.comfystudio")
+        assert first_capture[1] == second_capture[1]
         assert first_frames != second_frames, "The saved title edit did not change paired decoded frames"
         # Title-only edits must retain this fixture's measured soundtrack.
         assert first_audio["preview_pcm_sha256"] == second_audio["preview_pcm_sha256"]
@@ -354,6 +368,7 @@ async def exercise(options):
             "matching_physical_video_and_audio_profiles": True,
             "decoded_frames_changed_at_equal_requested_times": True,
             "decoded_mono_sound_preserved": True,
+            "exact_saved_render_snapshots_and_matching_options": True,
             "artistic_quality_approved": False,
             "real_neural_model_inference_attested": False,
         }, sort_keys=True), flush=True)

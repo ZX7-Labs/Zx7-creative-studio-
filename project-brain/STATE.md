@@ -44,6 +44,6 @@ Local Qwen 4B run #42711402879 was also a **failure** (46 decisions, 9,068 token
 
 Local benchmark checks: `python -m unittest scripts.test_audit_native_av_trial scripts.test_run_nvidia_native_trial -q` passed 20 tests with pinned Velorn source and MCP 2.3.0. Physical fixtures verified picture and gain changes and rejected unchanged decoded media, silent audio, mislabeled QuickTime and malformed or metadata-only project changes. The NVIDIA job on #297 ran request admission only.
 
-Snapshot-binding regression checks exercise the controller and independent journal reducer with local fixtures, including rejected swapped exports, altered settings, an incorrect save version and a mismatched snapshot checksum. Native capture and reopen in one installed run are still unverified. The synthetic grant excludes master-bus changes because the pinned MCP renderer worker payload omits master-bus state.
+The final focused local suite passed 271 tests and the three Project Brain checks. Snapshot regressions rejected swapped exports, altered settings, an incorrect save version and a mismatched snapshot checksum. The native Electron proof now checks exact snapshots and matching worker options around its real paired render and reopen. The updated physical CI remains pending. The synthetic grant excludes master-bus changes because the pinned MCP renderer worker payload omits master-bus state.
 
 See [EVIDENCE/2026-11-10-NVIDIA-ONE-SHOT.md](EVIDENCE/2026-11-10-NVIDIA-ONE-SHOT.md), [BRIEF.md](BRIEF.md), [DECISIONS.md](DECISIONS.md) and [RISKS.md](RISKS.md).
