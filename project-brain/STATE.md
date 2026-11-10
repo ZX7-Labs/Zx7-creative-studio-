@@ -1,14 +1,16 @@
 # ZX7 — current engineering STATE
 
-Checkpoint: **2026-11-10 IST**, GitHub source read and evidence artifact inspected. This file is a **snapshot**, not continuously updated telemetry. Always refresh current `main`, PRs and Actions runs on entry.
+Checkpoint: **2026-11-10 IST**, exact GitHub main tree reconstructed and verified against the remote tree hash before testing. This file is a snapshot. Refresh current `main`, PRs and Actions runs on entry.
 
 ## Integrated verified code
 
 - Repo: https://github.com/ZX7-Labs/Zx7-creative-studio-
-- Baseline at this checkpoint: `5d78ddd9f91614321c0c470f24e823aac0f237c4`. The memory checkpoint merge itself will change `main`; **do not** assume this SHA is always current.
+- Baseline at this checkpoint: `d76ab91972ce255ee6717f33314d9a68dea62b50` (tree `f669f7bdbffc2188325f81118fcb2ad50cbe9662`).
 - #285 source-pinned Electron compatibility, #286 native Ubuntu 24.04 install and scripted create/export/reopen/revise; #287 archive checkpoint; #290 bounded NVIDIA 120B transport (180s per call, 1500s whole trial, no uncertain POST replay); #291 Git-versioned project brain / offline integrity checks.
 - **#292 MERGED** at `c41a705...`: the finite NVIDIA provider output-error classification and strict independent native journal auditor now agree. Source/native/controller and MLT editorial checks passed; one unrelated layered-render job was cancelled due CI concurrency and was not counted green.
-- **#293 MERGED** [owner delivery gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/293) at `5d78ddd9f91614321c0c470f24e823aac0f237c4`: generic optional trusted host delivery profile, native read-only export plan inspection before export, fail-closed no-write wrong dimensions/FPS/codec/duration, trial-only owner profile. No cloud trial triggered. **Verification caveat:** pinned native clients, physical render, original camera, core/source-custody tests passed; latest source-and-native-project CI was cancelled during FFmpeg install and real MLT remained incomplete at merge. Those are NOT green/complete native release acceptance.
+- **#293 MERGED** [owner delivery gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/293) at `5d78ddd9f91614321c0c470f24e823aac0f237c4`. Its exact-head [real Ubuntu MLT suite](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42759433152) completed successfully after the previous checkpoint. The integrated [installed original-media BODY job](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42761207227) also passed. The exact-head [source-and-native-project job](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42759433093/job/129641383806) was cancelled during FFmpeg setup. The passing model-named PR workflow ran request admission only.
+- **Follow-up under review.** Pinned Velorn honored undocumented export aliases that BODY dropped from the readiness request but still forwarded to the writer. The native planner confirmed `codec` and `aspect` could change 640×360 H.264 into 1080×1920 H.265. The follow-up rejects undeclared arguments for owner-profile exports before native calls. Four MCP regression cases reproduced the issue on baseline and pass with the patch. A declared export still dispatches and an unconstrained session retains its native arguments.
+- **Local environment limit.** Native editor transport and audit (288 tests), installed runtime and owner workflow (43 tests), and native adapter checks (13 tests) passed. The Debian MLT run did not pass. This image lacks the Cairo blend plugin, and its FFmpeg omitted two requested BT.709 tags. The BT.709 rejection reproduced on unmodified main in both timecode and a physical MLT case. Exact-head Ubuntu CI for the follow-up is the release verification target.
 - **Open #289** local prompt-evidence dedup, lower priority under founder's NVIDIA-first development instruction; #288 historical failed CPU trial PR, do not rerun by merging its request.
 
 ## One authorized NVIDIA live run: FAILED, no retry
@@ -24,7 +26,7 @@ Local Qwen 4B run #42711402879 was also a **failure** (46 decisions, 9,068 token
 
 ## Immediate next work, in dependency order
 
-1. Review #293 integrated owner-delivery gate against the exact combined `main`; secure profile is private host state, mismatch blocks native write, normal unconstrained exports remain intact. Reconcile the cancelled source-and-native and incomplete MLT checks before any professional release claim; do not rerun the cloud model automatically.
+1. Verify and review the export-argument follow-up on exact-head Ubuntu CI. The new regression must preserve zero native calls for undeclared options and normal dispatch for declared options. Reconcile the cancelled source gate before a professional release claim.
 2. Keep the source-native gate's full release-suite verification as an open acceptance item. Use the strong NVIDIA API **only for separately approved, bounded, high-information tests**, never repeated blindly. Original single-run consent has already been consumed. No new NVIDIA run authorized in this checkpoint.
 3. Independently audit saved project, timed picture/audio quality, original custody and native editor control depth; close actual errors offline. Future hosted success can prove shared BODY behavior, **not** local model artistic parity.
 4. Deliver genuine verified observed-and-revised paired media, professionally acceptable audiovisual creative quality, and remaining A–L capabilities; do not call the system launch-ready until release gates and explicit deployment authorization pass.

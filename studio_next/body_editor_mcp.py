@@ -66,6 +66,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     grants = dict(client.allowed_tools)
     if set(grants) - set(native):
         raise ValueError("Host-granted native editor tool is absent from discovery")
+    required_export_delivery = admitted_owner_delivery(required_export_delivery)
     tools = {}
     validators = {}
     for name, mode in grants.items():
@@ -108,6 +109,11 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 "workspace, never an existing destination. The owner's "
                 "creative brief supplies the actual permitted root.")
             schema["properties"]["outputPath"]["minLength"] = 1
+        if required_export_delivery is not None and name == "export_timeline":
+            # Velorn accepts undocumented aliases such as codec and aspect.
+            # Readiness projects onto declared fields, so reject extras before
+            # the export can see an option that its preflight did not inspect.
+            schema = {**schema, "additionalProperties": False}
         _local_schema_references(schema)
         validator = jsonschema.validators.validator_for(schema)
         validator.check_schema(schema)
@@ -124,7 +130,6 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                            grants.get("get_timeline") == "read")
     export_readiness = (semantic_source and "read" in access and
                         grants.get("check_export_readiness") == "read")
-    required_export_delivery = admitted_owner_delivery(required_export_delivery)
     # The trusted owner contract cannot be enforced unless the exact native
     # source offers a granted read-only delivery preflight.
     if required_export_delivery is not None and (
