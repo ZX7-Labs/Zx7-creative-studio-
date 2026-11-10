@@ -26,11 +26,12 @@ class RenderSnapshotTests(unittest.TestCase):
             original = b'{"currentTimelineId":"film-timeline","modified":"version-1"}'
             (project / "project.comfystudio").write_bytes(original)
             response = {"projectPath": str(project),
+                        "settings": {"bitrateKbps": 8000, "audioBitrateKbps": 192, "preset": "medium"},
                         "result": {"options": {"rangeStart": 0, "rangeEnd": 6, "crf": 18}}}
             binding = {DESTINATION_FIELD: "a" * 64,
                        SCOPE_FIELD: timeline_scope_digest(str(project), "film-timeline")}
             identity = (str(project), "version-1")
-            digest, _ = capture_render_project(projects, snapshots, response, binding, identity)
+            digest, options = capture_render_project(projects, snapshots, response, binding, identity)
             self.assertEqual(digest, hashlib.sha256(original).hexdigest())
             snapshot = snapshots / ("a" * 64 + ".comfystudio")
             self.assertEqual(snapshot.read_bytes(), original)
@@ -44,6 +45,10 @@ class RenderSnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "last acknowledged save"):
                 capture_render_project(projects, snapshots, response, {
                     **binding, DESTINATION_FIELD: "d" * 64}, (str(project), "wrong-version"))
+            changed = {**response, "settings": {**response["settings"], "bitrateKbps": 4000}}
+            _, changed_options = capture_render_project(projects, snapshots, changed, {
+                **binding, DESTINATION_FIELD: "e" * 64}, identity)
+            self.assertNotEqual(options, changed_options)
 
 
 class SelectedProjectTests(unittest.TestCase):
