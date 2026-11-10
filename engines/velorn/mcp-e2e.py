@@ -30,10 +30,15 @@ def digest(path):
 
 
 async def exercise(options):
+    from studio_next.native_editor_project import capture_render_project
+    from studio_next.native_render_evidence import native_render_binding
+
     fixture = Path(tempfile.mkdtemp(prefix="zx7-editor-mcp-"))
     projects, staging, outputs = (fixture / name for name in ("projects", "staging", "outputs"))
     for path in (projects, staging, outputs):
         path.mkdir()
+    snapshots = fixture / "saved-render-projects"
+    snapshots.mkdir(mode=0o700)
     # Exercise the shipped host profile, including every advertised schema.
     # Actual edits below cover a narrower, explicitly measured workflow.
     tools = json.loads((ROOT / "engines/velorn/editor.example.json").read_text())["allowed_tools"]
@@ -73,6 +78,80 @@ async def exercise(options):
         data = json.loads(texts[0])
         assert data.get("success") is not False or (arguments or {}).get("previewOnly") is True, (name, data)
         return data
+
+    async def render_and_verify(session, output, save_receipt):
+        rendered = await call(session, "export_timeline", {
+            "outputPath": str(output), "target": "h264_project", "width": 320,
+            "height": 180, "range": "custom", "startSeconds": 0, "endSeconds": 2,
+            "fps": 24, "includeAudio": True, "previewOnly": False})
+        save = save_receipt["result"]["project"]
+        binding = native_render_binding(str(output), rendered)
+        captured = capture_render_project(
+            projects, snapshots, rendered, binding, (save["path"], save["modified"]))
+        deadline = time.monotonic() + 90
+        while True:
+            logs = (fixture / "state").glob("session-*/velorn/export-worker.log")
+            if any("[ExportWorker] Export complete" in line and
+                   json.dumps(str(output)) in line
+                   for log in logs for line in log.read_text().splitlines()):
+                break
+            assert time.monotonic() < deadline, "Native export worker did not finish this export"
+            await asyncio.sleep(.2)
+        inspection = await call(session, "inspect_export_file", {
+            "path": str(output), "width": 320, "height": 180, "durationSeconds": 2})
+        assert inspection["ready"], inspection
+        assert (await session.call_tool("zx7_observe_verified_export_frame", {
+            "path": str(output), "at_seconds": 0.5})).is_error
+        proof = await call(session, "zx7_verify_native_export", {
+            "path": str(output),
+            "expected": {"width": 320, "height": 180,
+                         "duration_seconds": 2, "require_audio": True}})
+        assert proof["physical_export_verified"] and not proof["artistic_quality_approved"], proof
+        assert proof["native_export_sha256"] == digest(output), proof
+        assert proof["observation"]["audio_present"] is True
+        assert proof["observation"]["full_picture_and_sound_decoder_completed"] is True
+        profile = json.loads(run([ffprobe, "-v", "error", "-show_entries",
+            "stream=codec_type,codec_name,width,height,r_frame_rate,channels,sample_rate",
+            "-of", "json", str(output)]))["streams"]
+        video, = (stream for stream in profile if stream["codec_type"] == "video")
+        audio, = (stream for stream in profile if stream["codec_type"] == "audio")
+        assert (video["width"], video["height"], video["r_frame_rate"], video["codec_name"]) == (
+            320, 180, "24/1", "h264"), video
+        return rendered["timeline"]["id"], proof["native_export_sha256"], (video, audio), captured
+
+    async def observe_samples(session, output, export_sha):
+        # Real independent samples give sparse visual temporal evidence.
+        times = [0.25, 1.25]
+        sampled = await session.call_tool("zx7_observe_verified_export_samples", {
+            "path": str(output), "at_seconds": times})
+        assert not sampled.is_error and len(sampled.content) == 3, sampled
+        receipt = json.loads(sampled.content[0].text)
+        assert receipt["kind"] == "verified_native_editor_selected_frames"
+        assert receipt["export_sha256"] == export_sha
+        assert receipt["continuous_motion_or_audio_proven"] is False
+        assert [item["sampled_video_seconds_requested"] for item in receipt["samples"]] == times
+        hashes = []
+        for block, evidence in zip(sampled.content[1:], receipt["samples"], strict=True):
+            assert block.type == "image" and block.mime_type == "image/png"
+            png = base64.b64decode(block.data, validate=True)
+            assert png.startswith(bytes.fromhex("89504e470d0a1a0a"))
+            hashes.append(hashlib.sha256(png).hexdigest())
+            assert hashes[-1] == evidence["png_sha256"]
+        return hashes
+
+    async def observe_audio_envelope(session, output, export_sha):
+        overview = await call(session, "zx7_observe_verified_export_audio_timeline", {
+            "path": str(output), "start_seconds": 0, "duration_seconds": 2,
+            "bins": 8})
+        assert overview["kind"] == "verified_native_editor_audio_temporal_envelope"
+        assert overview["export_sha256"] == export_sha
+        assert (overview["requested_start_seconds"], overview["requested_duration_seconds"]) == (0, 2)
+        assert len(overview["intervals"]) == 8
+        assert overview["observed_pcm_samples"] >= 15840
+        assert all((entry["rms_dbfs"] is not None and entry["rms_dbfs"] > -55)
+                   for entry in overview["intervals"])
+        assert not overview["human_or_artistic_quality_approved"]
+        return overview
 
     async def wait(session, predicate, seconds=20, *, read_observations=None):
         deadline = time.monotonic() + seconds
@@ -247,11 +326,16 @@ async def exercise(options):
         await call(session, "set_clip_keyframes", {"clipId": title_id, "keyframes": [
             {"property": "opacity", "timeSeconds": 0, "value": 20, "easing": "cubicBezier(0.2,0,0.8,1)"},
             {"property": "opacity", "timeSeconds": 1, "value": 100, "easing": "linear"}], "previewOnly": False})
-        await call(session, "save_project", {"previewOnly": False})
+        saved_first = await call(session, "save_project", {"previewOnly": False})
         native_path = project / "project.comfystudio"
         shutil.copy2(native_path, fixture / "revision-1.comfystudio")
+        first_output = outputs / "mcp-export-first.mp4"
+        first_timeline, first_sha, first_profile, first_capture = await render_and_verify(
+            session, first_output, saved_first)
+        first_frames = await observe_samples(session, first_output, first_sha)
+        first_audio = await observe_audio_envelope(session, first_output, first_sha)
         await call(session, "update_text_clip", {"clipId": title_id, "text": "MCP revised", "previewOnly": False})
-        await call(session, "save_project", {"previewOnly": False})
+        saved_second = await call(session, "save_project", {"previewOnly": False})
         shutil.copy2(native_path, fixture / "revision-2.comfystudio")
         assert digest(fixture / "revision-1.comfystudio") != digest(fixture / "revision-2.comfystudio")
         saved = json.loads(native_path.read_text())
@@ -266,26 +350,28 @@ async def exercise(options):
         (linked_project / "project.comfystudio").symlink_to(private_document)
         assert (await session.call_tool("open_project", {"projectPath": str(linked_project), "previewOnly": False})).is_error
         output = outputs / "mcp-export.mp4"
-        await call(session, "export_timeline", {"outputPath": str(output), "target": "h264_project", "width": 320,
-            "height": 180, "range": "custom", "startSeconds": 0, "endSeconds": 2, "fps": 24,
-            "includeAudio": True, "previewOnly": False})
-        deadline = time.monotonic() + 90
-        while True:
-            logs = list((fixture / "state").glob("session-*/velorn/export-worker.log"))
-            if any("[ExportWorker] Export complete" in log.read_text() for log in logs):
-                break
-            assert time.monotonic() < deadline, "Native export worker did not finish"
-            await asyncio.sleep(.2)
-        inspection = await call(session, "inspect_export_file", {"path": str(output), "width": 320, "height": 180, "durationSeconds": 2})
-        assert inspection["ready"], inspection
-        assert (await session.call_tool("zx7_observe_verified_export_frame", {
-            "path": str(output), "at_seconds": 0.5})).is_error
-        proof = await call(session, "zx7_verify_native_export", {
-            "path": str(output),
-            "expected": {"width": 320, "height": 180,
-                         "duration_seconds": 2, "require_audio": True}})
-        assert proof["physical_export_verified"] and not proof["artistic_quality_approved"], proof
-        assert proof["native_export_sha256"] == digest(output), proof
+        second_timeline, second_sha, second_profile, second_capture = await render_and_verify(
+            session, output, saved_second)
+        second_frames = await observe_samples(session, output, second_sha)
+        second_audio = await observe_audio_envelope(session, output, second_sha)
+        assert first_timeline and first_timeline == second_timeline
+        assert first_sha != second_sha and digest(first_output) == first_sha
+        assert first_profile == second_profile
+        assert first_capture[0] == digest(fixture / "revision-1.comfystudio")
+        assert second_capture[0] == digest(fixture / "revision-2.comfystudio")
+        assert first_capture[1] == second_capture[1]
+        assert first_frames != second_frames, "The saved title edit did not change paired decoded frames"
+        # Title-only edits must retain this fixture's measured soundtrack.
+        assert first_audio["preview_pcm_sha256"] == second_audio["preview_pcm_sha256"]
+        print("ACTUAL_NATIVE_PAIRED_AV_REVISION " + json.dumps({
+            "native_editable_revision": True,
+            "matching_physical_video_and_audio_profiles": True,
+            "decoded_frames_changed_at_equal_requested_times": True,
+            "decoded_mono_sound_preserved": True,
+            "exact_saved_render_snapshots_and_matching_options": True,
+            "artistic_quality_approved": False,
+            "real_neural_model_inference_attested": False,
+        }, sort_keys=True), flush=True)
         observed = await session.call_tool("zx7_observe_verified_export_frame", {
             "path": str(output), "at_seconds": 0.5})
         assert not observed.is_error and len(observed.content) == 2, observed
@@ -296,21 +382,6 @@ async def exercise(options):
         assert frame_receipt["export_sha256"] == digest(output)
         assert frame_receipt["png_sha256"] == hashlib.sha256(frame).hexdigest()
         assert frame_receipt["human_or_artistic_quality_approved"] is False
-        # Real independent samples provide sparse visual temporal evidence.
-        # They do not assert animation/motion continuity or audio understanding.
-        sampled = await session.call_tool("zx7_observe_verified_export_samples", {
-            "path": str(output), "at_seconds": [0.25, 1.25]})
-        assert not sampled.is_error and len(sampled.content) == 3, sampled
-        multi_receipt = json.loads(sampled.content[0].text)
-        assert multi_receipt["kind"] == "verified_native_editor_selected_frames"
-        assert multi_receipt["export_sha256"] == digest(output)
-        assert multi_receipt["continuous_motion_or_audio_proven"] is False
-        assert [x["sampled_video_seconds_requested"] for x in multi_receipt["samples"]] == [0.25, 1.25]
-        for block, evidence in zip(sampled.content[1:], multi_receipt["samples"]):
-            assert block.type == "image" and block.mime_type == "image/png"
-            png = base64.b64decode(block.data, validate=True)
-            assert png.startswith(bytes.fromhex("89504e470d0a1a0a"))
-            assert hashlib.sha256(png).hexdigest() == evidence["png_sha256"]
         # Expose an actual short WAV payload for compatible audio-capable brains.
         audio_observed = await session.call_tool("zx7_observe_verified_export_audio", {
             "path": str(output), "start_seconds": 0.25, "duration_seconds": 1.0})
@@ -323,16 +394,6 @@ async def exercise(options):
         assert audio_receipt["wav_sha256"] == hashlib.sha256(wav_bytes).hexdigest()
         assert audio_receipt["export_sha256"] == digest(output)
         assert audio_receipt["full_film_listening_or_spatial_mix_verified"] is False
-        overview = await call(session, "zx7_observe_verified_export_audio_timeline", {
-            "path": str(output), "start_seconds": 0, "duration_seconds": 2,
-            "bins": 8})
-        assert overview["kind"] == "verified_native_editor_audio_temporal_envelope"
-        assert overview["export_sha256"] == digest(output)
-        assert len(overview["intervals"]) == 8
-        assert overview["observed_pcm_samples"] >= 15840
-        assert all((entry["rms_dbfs"] is not None and entry["rms_dbfs"] > -55)
-                   for entry in overview["intervals"])
-        assert not overview["human_or_artistic_quality_approved"]
         import io
         import wave
         with wave.open(io.BytesIO(wav_bytes), "rb") as decoded:

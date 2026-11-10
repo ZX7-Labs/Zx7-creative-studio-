@@ -18,7 +18,10 @@ import stat
 from .body_editor_client import HOST_REJECTION_FEEDBACK
 from .providers import MODEL_OUTPUT_REJECTION_CODES
 from .native_render_evidence import (
-    DESTINATION_FIELD, RENDER_TOOL, REVIEWED_RENDER_PAIR, SCOPE_FIELD, reviewed_render_pair,
+    AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
+    SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES, reviewed_render_pair,
+    valid_av_review_values,
 )
 
 
@@ -38,7 +41,7 @@ _COMPLETION_EVIDENCE_TYPES = frozenset({
     "native_write_acknowledged", "physical_export_verified",
     "post_observation_native_write_acknowledged",
     "verified_export_frame_observed",
-    REVIEWED_RENDER_PAIR,
+    REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR,
 })
 _AUDIO = "zx7_observe_verified_export_audio"
 _CRITICAL_END = frozenset({
@@ -189,6 +192,12 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             any(not isinstance(item, str) or item not in _COMPLETION_EVIDENCE_TYPES
                 for item in required) or required != sorted(set(required))):
         raise NativeJournalError("Unknown or malformed host completion requirements")
+    requires_av_review = REVIEWED_AV_PAIR in required
+    if requires_av_review and REVIEWED_RENDER_PAIR not in required:
+        raise NativeJournalError("Audiovisual proof requires a reviewed native render pair")
+    destination_reads = {_EXPORT} | _FRAME_OBSERVERS
+    if requires_av_review:
+        destination_reads |= {AUDIO_ENVELOPE}
     # Independent policy witness is supplied by the trusted host caller, not
     # copied from the journal being evaluated. Existing callers may omit it,
     # but that omission cannot certify the configured completion policy.
@@ -245,6 +254,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
         if (REVIEWED_RENDER_PAIR in required and
                 reviewed_render_pair(prior_events, host_content_revision_tools)):
             proven.add(REVIEWED_RENDER_PAIR)
+        if requires_av_review and reviewed_render_pair(
+                prior_events, host_content_revision_tools, audiovisual=True):
+            proven.add(REVIEWED_AV_PAIR)
         return sorted(set(required) - proven)
 
     for i, event in enumerate(events):
@@ -572,7 +584,7 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 destination = event.get(DESTINATION_FIELD)
                 if (destination is not None and (
                         not _sha(destination) or access != "read" or
-                        tool not in ({_EXPORT} | _FRAME_OBSERVERS))):
+                        tool not in destination_reads)):
                     raise NativeJournalError("Invalid failed native export read binding")
                 # This branch is only valid for a host-attested READ. Failed
                 # reads are not positive native evidence and grant no ability
@@ -614,10 +626,32 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
             if kind == "native_tool_result":
                 path, scope = event.get(DESTINATION_FIELD), event.get(SCOPE_FIELD)
                 if ((path is not None and (not _sha(path) or
-                        tool not in ({RENDER_TOOL, _EXPORT} | _FRAME_OBSERVERS))) or
+                        tool not in ({RENDER_TOOL} | destination_reads))) or
                         (scope is not None and (not _sha(scope) or path is None or tool != RENDER_TOOL)) or
                         (tool == RENDER_TOOL and path is not None and (scope is None or access != "write"))):
                     raise NativeJournalError("Invalid native render destination or timeline binding")
+                if AV_REVIEW_FIELD in event and (not requires_av_review or path is None or
+                        access != "read" or not valid_av_review_values(tool, event[AV_REVIEW_FIELD])):
+                    raise NativeJournalError("Invalid native audiovisual review evidence")
+                if ((AV_PCM_FIELD in event) !=
+                        (tool == AUDIO_ENVELOPE and AV_REVIEW_FIELD in event) or
+                        (AV_PCM_FIELD in event and not _sha(event[AV_PCM_FIELD]))):
+                    raise NativeJournalError("Invalid decoded audio checksum")
+                if (SAVED_RENDER_FIELD in event) != (SAVED_RENDER_OPTIONS_FIELD in event):
+                    raise NativeJournalError("Invalid saved project render binding")
+                if {SAVED_RENDER_FIELD, SAVED_RENDER_FAILURE} & event.keys():
+                    if (not requires_av_review or tool != RENDER_TOOL or scope is None
+                            or next((name for _, name in reversed(writes) if name != RENDER_TOOL),
+                                    None) != "save_project"):
+                        raise NativeJournalError("Invalid saved project render binding")
+                    if SAVED_RENDER_FAILURE in event:
+                        if (event[SAVED_RENDER_FAILURE] is not True or SAVED_RENDER_FIELD in event
+                                or i != len(events) - 1):
+                            raise NativeJournalError("Invalid or nonterminal render snapshot failure")
+                        terminal = "native_render_snapshot_failed"
+                        finished = True
+                    elif not (_sha(event[SAVED_RENDER_FIELD]) and _sha(event[SAVED_RENDER_OPTIONS_FIELD])):
+                        raise NativeJournalError("Invalid saved project render binding")
                 if event.get("human_or_artistic_quality_approved") is not False:
                     raise NativeJournalError("Technical tool output cannot assert artistic approval")
                 if (not isinstance(event.get("text_sha256"), list) or
@@ -625,6 +659,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         not isinstance(event.get("image_sha256"), list) or
                         any(not _sha(d) for d in event["image_sha256"])):
                     raise NativeJournalError("Native data has malformed source checksums")
+                if (tool == TIMED_FRAMES and AV_REVIEW_FIELD in event and
+                        len(event["image_sha256"]) != len(event[AV_REVIEW_FIELD])):
+                    raise NativeJournalError("Timed audiovisual evidence does not match frame count")
                 new_sha = event.get("independently_verified_export_sha256")
                 seen_sha = event.get("observed_export_sha256")
                 if access == "write":
@@ -751,6 +788,9 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
     }
     if REVIEWED_RENDER_PAIR in required:
         report["reviewed_native_render_pair"] = reviewed_render_pair(events, host_content_revision_tools)
+    if requires_av_review:
+        report["reviewed_native_audiovisual_pair"] = reviewed_render_pair(
+            events, host_content_revision_tools, audiovisual=True)
     return report
 
 
