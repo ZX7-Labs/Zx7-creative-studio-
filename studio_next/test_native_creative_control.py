@@ -4751,6 +4751,43 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             "journal_chain_structurally_valid"])
         self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_nvidia_truncated_tool_call_recovery_matches_independent_auditor(self):
+        """Bridge the real NVIDIA #42754872382 failure from provider class
+        through controller recovery into the independent journal validator.
+        The malformed provider function result is NEVER a native action.
+        """
+        from studio_next.providers import LocalModelOutputError
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class TruncatedOnce(ScriptedModel):
+            def decide(self, context):
+                self.observed.append(context)
+                if len(self.observed) == 2:
+                    raise LocalModelOutputError("truncated_tool_decision")
+                return next(self.actions)
+
+        session = FakeSession()
+        grants = {item.name: ("write" if item.name == "update_text_clip" else "read")
+                  for item in session.tools}
+        model = TruncatedOnce([
+            decision("invoke", tool="get_timeline", inputs={}),
+            decision("finish", summary="Technical read only, no verified creative work"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=3, host_tool_access=grants
+        ).run("Inspect native project without replaying malformed model calls")
+        self.assertEqual(session.calls, [("get_timeline", {})])
+        rejections = [e for e in result["events"]
+                      if e["kind"] == "model_protocol_response_rejected"]
+        self.assertEqual(len(rejections), 1)
+        self.assertEqual(rejections[0]["reason_code"], "truncated_tool_decision")
+        self.assertTrue(rejections[0]["no_native_dispatch"])
+        self.assertEqual(model.observed[2]["last_rejected_model_output_feedback"][
+            "reason_code"], "truncated_tool_decision")
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+        self.assertFalse(result["native_editing_capability_complete"])
+
     async def test_malformed_model_after_acknowledged_write_does_not_repeat_write(self):
         from studio_next.providers import LocalModelOutputError
         from studio_next.native_creative_audit import audit_native_journal
