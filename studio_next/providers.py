@@ -55,7 +55,7 @@ class LocalModelOutputError(ValueError):
     """
 
     def __init__(self, code: str):
-        if code not in MODEL_OUTPUT_REJECTION_CODES:
+        if type(code) is not str or code not in MODEL_OUTPUT_REJECTION_CODES:
             raise ValueError("Unknown model output failure classification")
         self.code = code
         message = ("Duplicate local model JSON field" if code == "duplicate_json_field"
