@@ -11,6 +11,20 @@ Checkpoint: **2026-11-10 IST**, exact GitHub main tree reconstructed and verifie
 - **#293 MERGED** [owner delivery gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/293) at `5d78ddd9f91614321c0c470f24e823aac0f237c4`. Its exact-head [real Ubuntu MLT suite](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42759433152) completed successfully after the previous checkpoint. The integrated [installed original-media BODY job](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42761207227) also passed. The exact-head [source-and-native-project job](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42759433093/job/129641383806) was cancelled during FFmpeg setup. The passing model-named PR workflow ran request admission only.
 - **Follow-up under review.** Pinned Velorn honored undocumented export aliases that BODY dropped from the readiness request but still forwarded to the writer. The native planner confirmed `codec` and `aspect` could change 640×360 H.264 into 1080×1920 H.265. The follow-up rejects undeclared arguments for owner-profile exports before native calls. Four MCP regression cases reproduced the issue on baseline and pass with the patch. A declared export still dispatches and an unconstrained session retains its native arguments.
 - **Local environment limit.** Native editor transport and audit (288 tests), installed runtime and owner workflow (43 tests), and native adapter checks (13 tests) passed. The Debian MLT run did not pass. This image lacks the Cairo blend plugin, and its FFmpeg omitted two requested BT.709 tags. The BT.709 rejection reproduced on unmodified main in both timecode and a physical MLT case. Exact-head Ubuntu CI for the follow-up is the release verification target.
+- **Owner export follow-up #296.** Exact-head [Ubuntu source and native project](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42763872358), [real Electron A/V and installed revision](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42763872403), and [layered MLT rendering](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42763872737) passed. [The full MLT editorial run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42763872420) was still running when this snapshot was written.
+
+## First video release
+
+**Technical candidate checkpoint: 11 November 2026 at 18:00 IST.** Target the Ubuntu installer and the paired audiovisual test on the pinned editor. **Release decision target: 13 November 2026 at 18:00 IST**, conditional on access to one separately authorized bounded model run and independent creative review. A failed gate yields a no-go and a named blocker. The wider A–L roadmap remains in CAPABILITIES.
+
+| Gate | Status at checkpoint | Required result |
+|---|---|---|
+| Installed editor, ownership and recovery | PASS on previous Ubuntu fixtures | Clean install, native editable project save/reopen, and original media preserved |
+| Paired audiovisual technical proof | PASS on local controller/auditor checks, pending physical Ubuntu CI | Both exports independently verify picture and real nonzero sound. Model interface receives separated frame samples and full-window audio diagnostics for each exact export. A revision occurs between the two. |
+| Genuine model, physical delivery and saved editable revision | NOT RUN with new profile | Bounded synthetic run produces two conforming files and an intentional, independently verified picture or sound edit. Reopen and validate the delivered project and source custody. |
+| Creative and sound review | NOT RUN | Independent reviewer evaluates pacing, audiovisual coherence, actual listening, and usefulness of the editable result against the brief. |
+
+The proposed `reviewed-av-revision` session profile binds both audio diagnostics and timed frames to the destination and bytes independently decoded for each export. NVIDIA needs separate opt-in for numerical audio data. Its original WAV path stays unavailable in this mode. An offline test for the pinned editor exercises a real title revision with preserved decoded sound. Neither the test nor the new profile starts the old visual-only trial.
 - **Open #289** local prompt-evidence dedup, lower priority under founder's NVIDIA-first development instruction; #288 historical failed CPU trial PR, do not rerun by merging its request.
 
 ## One authorized NVIDIA live run: FAILED, no retry
@@ -26,9 +40,8 @@ Local Qwen 4B run #42711402879 was also a **failure** (46 decisions, 9,068 token
 
 ## Immediate next work, in dependency order
 
-1. Verify and review the export-argument follow-up on exact-head Ubuntu CI. The new regression must preserve zero native calls for undeclared options and normal dispatch for declared options. Reconcile the cancelled source gate before a professional release claim.
-2. Keep the source-native gate's full release-suite verification as an open acceptance item. Use the strong NVIDIA API **only for separately approved, bounded, high-information tests**, never repeated blindly. Original single-run consent has already been consumed. No new NVIDIA run authorized in this checkpoint.
-3. Independently audit saved project, timed picture/audio quality, original custody and native editor control depth; close actual errors offline. Future hosted success can prove shared BODY behavior, **not** local model artistic parity.
-4. Deliver genuine verified observed-and-revised paired media, professionally acceptable audiovisual creative quality, and remaining A–L capabilities; do not call the system launch-ready until release gates and explicit deployment authorization pass.
+1. Complete exact-head Ubuntu CI for the export guard and the paired physical audiovisual fixture.
+2. Prepare a separately scoped synthetic brief, exact source, finite model budget, physical delivery checker and artifact policy. The old visual-only request is spent. Obtain explicit consent for a new hosted run and its synthetic frame/audio diagnostic egress before running it.
+3. Independently review the delivered editable project and audiovisual work. Expand the accepted workflow to more video briefs and use the same gates for subsequent creative domains.
 
 See [EVIDENCE/2026-11-10-NVIDIA-ONE-SHOT.md](EVIDENCE/2026-11-10-NVIDIA-ONE-SHOT.md), [BRIEF.md](BRIEF.md), [DECISIONS.md](DECISIONS.md) and [RISKS.md](RISKS.md).

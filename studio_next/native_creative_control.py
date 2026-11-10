@@ -25,7 +25,8 @@ from .providers import LocalModelOutputError
 from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK
 from .native_editor_source_pin import source_verified_preview_intent
 from .native_render_evidence import (
-    DESTINATION_FIELD, RENDER_TOOL, REVIEWED_RENDER_PAIR,
+    AUDIO_ENVELOPE, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
 )
 
@@ -58,12 +59,12 @@ _VERIFIED_FRAME_TOOLS = frozenset({
     "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples"})
 _VERIFIED_AUDIO_TOOLS = frozenset({"zx7_observe_verified_export_audio"})
 _VERIFIED_EXPORT_TOOL = "zx7_verify_native_export"
-_VERIFIED_ENVELOPE_TOOL = "zx7_observe_verified_export_audio_timeline"
+_VERIFIED_ENVELOPE_TOOL = AUDIO_ENVELOPE
 _COMPLETION_EVIDENCE_TYPES = frozenset({
     "native_write_acknowledged", "physical_export_verified",
     "post_observation_native_write_acknowledged",
     "verified_export_frame_observed",
-    REVIEWED_RENDER_PAIR,
+    REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR,
 })
 
 
@@ -746,6 +747,9 @@ class NativeCreativeControl:
             raise NativeCreativeControlError(
                 "Completion evidence must be a unique trusted host requirement")
         self.required_evidence = frozenset(required_evidence)
+        self._requires_av_review = REVIEWED_AV_PAIR in self.required_evidence
+        if self._requires_av_review and REVIEWED_RENDER_PAIR not in self.required_evidence:
+            raise NativeCreativeControlError("Audiovisual proof requires a reviewed native render pair")
         if (not isinstance(host_content_revision_tools, (list, tuple, frozenset)) or
                 any(not isinstance(name, str) or not name
                     for name in host_content_revision_tools) or
@@ -1041,6 +1045,9 @@ class NativeCreativeControl:
         if (REVIEWED_RENDER_PAIR in self.required_evidence and
                 reviewed_render_pair(self.events, self.host_content_revision_tools)):
             proven.add(REVIEWED_RENDER_PAIR)
+        if self._requires_av_review and reviewed_render_pair(
+                self.events, self.host_content_revision_tools, audiovisual=True):
+            proven.add(REVIEWED_AV_PAIR)
         return sorted(self.required_evidence - proven)
 
     def _append(self, event: dict):
@@ -1183,7 +1190,9 @@ class NativeCreativeControl:
                 not any(grants.get(name) == "read" for name in
                         _VERIFIED_FRAME_TOOLS))
             missing_render = REVIEWED_RENDER_PAIR in self.required_evidence and grants.get(RENDER_TOOL) != "write"
-            if missing_write or missing_export or missing_frame or missing_render:
+            missing_av = self._requires_av_review and any(
+                grants.get(name) != "read" for name in (TIMED_FRAMES, AUDIO_ENVELOPE))
+            if missing_write or missing_export or missing_frame or missing_render or missing_av:
                 raise NativeCreativeControlError(
                     "Host requires completion evidence unsupported by granted native tools")
         if (self.host_tool_access is not None and
@@ -2168,7 +2177,8 @@ class NativeCreativeControl:
                         # proof for that file, without recording its raw path.
                         failed_read_binding = {}
                         if (native_name == _VERIFIED_EXPORT_TOOL or
-                                native_name in _VERIFIED_FRAME_TOOLS):
+                                native_name in _VERIFIED_FRAME_TOOLS or
+                                (self._requires_av_review and native_name == AUDIO_ENVELOPE)):
                             path_digest = destination_digest(args["inputs"].get("path"))
                             if path_digest is not None:
                                 failed_read_binding[DESTINATION_FIELD] = path_digest
@@ -2424,8 +2434,11 @@ class NativeCreativeControl:
                         if live_timeline_image else
                         _source_bound_images(texts, images))
                     audio_evidence = _source_bound_audio(texts, audio)
+                    av_values = None
                     new_export_sha = None
                     observed_export_sha = None
+                    if self._requires_av_review and native_name == TIMED_FRAMES and not images:
+                        raise NativeCreativeControlError("Timed audiovisual review requires decoded frames")
                     if native_name == _VERIFIED_EXPORT_TOOL:
                         p = _strict_receipt(texts, "verified native export")
                         if p.get("physical_export_verified") is not True or not _digest(
@@ -2448,6 +2461,9 @@ class NativeCreativeControl:
                     if (observed_export_sha is not None and
                             observed_export_sha not in self._verified_exports):
                         raise NativeCreativeControlError("No earlier independently verified export matches this media observation")
+                    if self._requires_av_review and native_name in (
+                            _VERIFIED_EXPORT_TOOL, TIMED_FRAMES, AUDIO_ENVELOPE):
+                        av_values = av_review_values(native_name, p)
                 except NativeCreativeControlError as exc:
                     self._append({"kind": "native_observation_rejected", "turn": turn,
                                   "tool": native_name, "error": str(exc),
@@ -2508,12 +2524,15 @@ class NativeCreativeControl:
                         native_name == RENDER_TOOL and
                         self.host_tool_access.get(native_name) == "write"):
                     render_binding = native_render_binding(args["inputs"].get("outputPath"), host_response)
-                elif native_name == _VERIFIED_EXPORT_TOOL or native_name in _VERIFIED_FRAME_TOOLS:
+                elif (native_name == _VERIFIED_EXPORT_TOOL or native_name in _VERIFIED_FRAME_TOOLS or
+                        (self._requires_av_review and native_name == AUDIO_ENVELOPE)):
                     # Even the less demanding 'export' evidence profile must
                     # distinguish two physical files when a later read fails.
                     path_digest = destination_digest(args["inputs"].get("path"))
                     if path_digest is not None:
                         render_binding[DESTINATION_FIELD] = path_digest
+                if av_values is not None:
+                    render_binding[AV_REVIEW_FIELD] = av_values
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,

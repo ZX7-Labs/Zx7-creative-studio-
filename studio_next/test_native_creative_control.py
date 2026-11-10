@@ -1049,6 +1049,121 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NativeJournalError):
             audit_native_journal(forged, **kwargs)
 
+    async def test_audiovisual_finish_requires_complete_observation_of_both_renders(self):
+        from studio_next.native_creative_audit import NativeJournalError, audit_native_journal
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, AV_REVIEW_FIELD, REVIEWED_AV_PAIR,
+            REVIEWED_NATIVE_EVIDENCE, TIMED_FRAMES,
+        )
+
+        before, after = "/private/exports/before.mp4", "/private/exports/after.mp4"
+        digests = {before: "a" * 64, after: "b" * 64}
+        pictures = [b"\x89PNG\r\n\x1a\nfixture-one", b"\x89PNG\r\n\x1a\nfixture-two"]
+        sample_hashes = [hashlib.sha256(picture).hexdigest() for picture in pictures]
+
+        class AVSession(FakeSession):
+            async def call_tool(self, name, arguments):
+                path = arguments.get("outputPath") or arguments.get("path")
+                if name == "export_timeline":
+                    receipt = {"success": True, "action": name, "outputPath": path,
+                               "projectPath": "/private/native", "timeline": {"id": "film"},
+                               "result": {"started": True, "outputPath": path}}
+                elif name == "zx7_verify_native_export":
+                    receipt = {"physical_export_verified": True, "native_export_sha256": digests[path],
+                               "observation": {"duration_seconds": 6, "audio_present": True,
+                                               "full_picture_and_sound_decoder_completed": True}}
+                elif name == TIMED_FRAMES:
+                    receipt = {"export_sha256": digests[path], "samples": [
+                        {"sampled_video_seconds_requested": timestamp, "png_sha256": digest}
+                        for timestamp, digest in zip(arguments["at_seconds"], sample_hashes, strict=True)]}
+                elif name == AUDIO_ENVELOPE:
+                    receipt = {"kind": "verified_native_editor_audio_temporal_envelope",
+                               "export_sha256": digests[path], "requested_start_seconds": 0,
+                               "requested_duration_seconds": arguments["duration_seconds"],
+                               "observed_pcm_samples": int(8000 * arguments["duration_seconds"]),
+                               "preview_sample_rate": 8000,
+                               "intervals": [{"no_nonzero_mono_samples": False}
+                                             for _ in range(arguments["bins"])]}
+                else:
+                    return await super().call_tool(name, arguments)
+                self.calls.append((name, arguments))
+                blocks = [SimpleNamespace(type="text", text=json.dumps(receipt))]
+                if name == TIMED_FRAMES:
+                    blocks.extend(SimpleNamespace(
+                        type="image", mime_type="image/png", data=base64.b64encode(picture).decode())
+                        for picture in pictures)
+                return SimpleNamespace(is_error=False, content=blocks)
+
+        def invoke(tool, **inputs):
+            return decision("invoke", tool=tool, inputs=inputs)
+
+        finish = decision("finish", summary="Editable revised fixture")
+        required = (*REVIEWED_NATIVE_EVIDENCE, REVIEWED_AV_PAIR)
+        for scenario in ("full", "short-first-audio", "clustered-second-picture"):
+            with self.subTest(scenario=scenario):
+                session = AVSession()
+                session.tools.extend(SimpleNamespace(
+                    name=name, description="Native fixture tool", input_schema={"type": "object"})
+                    for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE))
+                grants = {tool.name: ("write" if tool.name in
+                    {"export_timeline", "update_text_clip"} else "read") for tool in session.tools}
+                revisions = ("update_text_clip",)
+                actions = [
+                    invoke("export_timeline", outputPath=before),
+                    invoke("zx7_verify_native_export", path=before),
+                    invoke(TIMED_FRAMES, path=before, at_seconds=[1, 4]),
+                    invoke(AUDIO_ENVELOPE, path=before, start_seconds=0, bins=2,
+                           duration_seconds=1 if scenario == "short-first-audio" else 6),
+                    invoke("update_text_clip", clipId="title", text="Revised"),
+                    invoke("export_timeline", outputPath=after),
+                    invoke("zx7_verify_native_export", path=after),
+                    invoke(TIMED_FRAMES, path=after,
+                           at_seconds=[1, 1.1] if scenario == "clustered-second-picture" else [1, 4]),
+                    finish,
+                    invoke(AUDIO_ENVELOPE, path=after, start_seconds=0, bins=2, duration_seconds=6),
+                    finish,
+                ]
+                model = ScriptedModel(actions)
+                result = await NativeCreativeControl(
+                    session, model, max_turns=len(actions), host_tool_access=grants,
+                    required_evidence=required, host_content_revision_tools=revisions,
+                ).run("Review and revise independently verified audiovisual exports")
+                events = result["events"]
+                rejected = [event["missing_completion_evidence"] for event in events
+                            if event["kind"] == "model_finish_rejected"]
+                kwargs = dict(host_tool_access=grants, expected_required_evidence=required,
+                              host_content_revision_tools=revisions)
+                report = audit_native_journal(events, **kwargs)
+                expected_pair = [digests[before], digests[after]]
+                self.assertEqual([item["export_sha256"] for item in
+                                  report["reviewed_native_render_pair"]], expected_pair)
+                self.assertEqual(rejected, [[REVIEWED_AV_PAIR]] * (1 if scenario == "full" else 2))
+                if scenario != "full":
+                    self.assertEqual(result["status"], "turn_budget_exhausted")
+                    self.assertIsNone(report["reviewed_native_audiovisual_pair"])
+                    continue
+
+                self.assertEqual(result["status"], "model_finished_unverified")
+                self.assertEqual([item["export_sha256"] for item in
+                                  report["reviewed_native_audiovisual_pair"]], expected_pair)
+                audio_receipts = [
+                    payload for context in model.observed
+                    for payload in map(json.loads, context["last_native_result_texts"])
+                    if payload.get("kind") == "verified_native_editor_audio_temporal_envelope"
+                ]
+                self.assertEqual([receipt["export_sha256"] for receipt in audio_receipts],
+                                 expected_pair)
+                self.assertFalse(report["human_or_artistic_quality_approved"])
+                self.assertNotIn("/private/", json.dumps(events))
+                for tampered_range in ([0, 1], [False, 6]):
+                    forged = [dict(event) for event in events]
+                    last_audio = next(event for event in reversed(forged)
+                                      if event["kind"] == "native_tool_result" and
+                                      event["tool"] == AUDIO_ENVELOPE)
+                    last_audio[AV_REVIEW_FIELD] = tampered_range
+                    with self.assertRaises(NativeJournalError):
+                        audit_native_journal(forged, **kwargs)
+
     async def test_failed_review_frame_uses_same_export_verification_not_another_export(self):
         """A verified first movie must not bless an unverified second movie."""
         from studio_next.native_render_evidence import DESTINATION_FIELD, destination_digest

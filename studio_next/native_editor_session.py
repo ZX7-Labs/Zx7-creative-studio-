@@ -19,7 +19,9 @@ from mcp.client.stdio import stdio_client
 
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.native_creative_audit import audit_native_journal
-from studio_next.native_render_evidence import REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR
+from studio_next.native_render_evidence import (
+    REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
+)
 from studio_next.native_editor_source_pin import (
     PINNED_VELORN_MCP_REVISION as _PINNED_MCP_PREVIEW_COMMIT,
     _PINNED_MARKER_PREVIEWS,
@@ -202,6 +204,7 @@ async def run_native_session(args):
         "none": (),
         "export": ("native_write_acknowledged", "physical_export_verified"),
         "reviewed-revision": REVIEWED_NATIVE_EVIDENCE,
+        "reviewed-av-revision": (*REVIEWED_NATIVE_EVIDENCE, REVIEWED_AV_PAIR),
     }
     required = evidence_profiles[args.evaluation_evidence]
     fresh = bool(args.fresh_trial_project)
@@ -217,16 +220,35 @@ async def run_native_session(args):
         "update_shape_clip", "set_clip_style", "set_clip_mask",
         "move_clips", "trim_clips", "delete_clips", "add_track", "update_track", "remove_track",
     )
+    if REVIEWED_AV_PAIR in required:
+        revision_roles += ("set_clip_audio", "set_master_audio")
     host_revisions = tuple(
         name for name in revision_roles if host_grants.get(name) == "write")
     preview_tools = (pinned_electron_marker_previews(args.source, host_grants) +
                      pinned_electron_asset_placement_previews(args.source, host_grants) +
                      pinned_electron_clip_edit_previews(args.source, host_grants))
-    if (args.provider == "nvidia" and
-            args.evaluation_evidence == "reviewed-revision" and
-            not args.allow_cloud_image_upload):
+    cloud_diagnostics = getattr(args, "allow_cloud_audio_diagnostics", False)
+    if cloud_diagnostics and (args.provider != "nvidia" or REVIEWED_AV_PAIR not in required):
+        raise ValueError("Cloud audio diagnostics require NVIDIA audiovisual review mode")
+    if (args.provider == "nvidia" and REVIEWED_RENDER_PAIR in required
+            and not args.allow_cloud_image_upload):
         raise ValueError("Observed cloud trial requires explicit synthetic image upload permission")
+    if args.provider == "nvidia" and REVIEWED_AV_PAIR in required:
+        if not cloud_diagnostics:
+            raise ValueError("Cloud audiovisual review requires explicit audio diagnostics consent")
+        # This endpoint has no validated WAV input. Its opted-in audio review
+        # uses only the independently decoded numerical timeline.
+        host_grants.pop("zx7_observe_verified_export_audio", None)
     brief = args.brief_file.read_text(encoding="utf-8")
+    if REVIEWED_AV_PAIR in required:
+        brief += (
+            "\n\nHost audiovisual review requirement. Independently verify the physical "
+            "first export with sound (up to 300 seconds in this evidence mode), "
+            "view two to four frames covering separated moments "
+            "at least a third of its duration apart, and inspect the decoded audio "
+            "timeline from zero through the measured export duration. Then choose and "
+            "save an editable revision and perform the same checks on a new export. "
+            "The audio timeline contains numerical observations only.")
     # NVIDIA_API_KEY must stay solely in the trusted Python Brain process.
     # The native editor, Electron children, FFmpeg, and arbitrary editor plugins
     # must never inherit a hosted-provider credential even for synthetic trials.
@@ -287,6 +309,8 @@ async def run_native_session(args):
             expected_required_evidence=required, host_content_revision_tools=host_revisions,
             host_pre_dispatch_rejections=True, host_verified_preview_error_tools=preview_tools)
         pair_report["reviewed_native_render_pair"] = audit["reviewed_native_render_pair"]
+        if REVIEWED_AV_PAIR in required:
+            pair_report["reviewed_native_audiovisual_pair"] = audit["reviewed_native_audiovisual_pair"]
     return {
         **pair_report,
         "status": outcome["status"],
@@ -341,6 +365,8 @@ def build_parser():
     p.add_argument("--model-id", type=str, required=True)
     p.add_argument("--allow-cloud-image-upload", action="store_true",
                    help="Explicitly consent to sending private observed frames to NVIDIA")
+    p.add_argument("--allow-cloud-audio-diagnostics", action="store_true",
+                   help="Explicitly consent to sending numerical audio timeline diagnostics to NVIDIA")
     p.add_argument("--allow-public-research", action="store_true",
                    help="Allow model-written public queries to external research services")
     p.add_argument("--searxng-url", help="Optional owner-configured loopback SearXNG base URL")
@@ -352,7 +378,8 @@ def build_parser():
     p.add_argument("--fresh-trial-project", action="store_true",
                    help="Require an empty isolated root and prevent repeated project creation")
     p.add_argument("--evaluation-evidence",
-                   choices=("none", "export", "reviewed-revision"), default="none",
+                   choices=("none", "export", "reviewed-revision", "reviewed-av-revision"),
+                   default="none",
                    help="Host-required physical proof before the model can finish")
     p.add_argument("--structured-actions", action="store_true",
                    help="Use local JSON Schema or opt-in NVIDIA forced function calling (host validates every native action)")

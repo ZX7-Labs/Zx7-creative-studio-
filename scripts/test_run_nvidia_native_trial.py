@@ -300,18 +300,25 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 xvfb_lib_dir=None, display=None, software_gpu=False,
                 no_sandbox=False, base_url="http://127.0.0.1:8080",
                 model_id=_ALLOWED_MODEL, model_timeout=15,
-                structured_actions=True, fresh_trial_project=False,
-                evaluation_evidence="reviewed-revision")
+                structured_actions=True, fresh_trial_project=False)
             cases = (
-                ("local", False, None),
-                ("nvidia", False, "explicit synthetic image upload permission"),
-                ("local", True, "Cloud-media consent requires --provider nvidia"),
-                ("nvidia", True, None),
+                ("reviewed-revision", "local", False, False, None),
+                ("reviewed-revision", "nvidia", False, False, "explicit synthetic image upload permission"),
+                ("reviewed-revision", "local", True, False, "Cloud-media consent requires --provider nvidia"),
+                ("reviewed-revision", "nvidia", True, False, None),
+                ("reviewed-av-revision", "local", False, False, None),
+                ("reviewed-av-revision", "nvidia", True, False, "explicit audio diagnostics consent"),
+                ("reviewed-av-revision", "nvidia", False, True, "explicit synthetic image upload permission"),
+                ("reviewed-av-revision", "nvidia", True, True, None),
+                ("reviewed-revision", "nvidia", True, True, "require NVIDIA audiovisual review mode"),
             )
-            for provider, cloud_consent, refusal in cases:
+            for profile, provider, cloud_consent, audio_consent, refusal in cases:
                 args = SimpleNamespace(**common, provider=provider,
-                                       allow_cloud_image_upload=cloud_consent)
-                with self.subTest(provider=provider, consent=cloud_consent), patch(
+                                       evaluation_evidence=profile,
+                                       allow_cloud_image_upload=cloud_consent,
+                                       allow_cloud_audio_diagnostics=audio_consent)
+                with self.subTest(profile=profile, provider=provider, image=cloud_consent,
+                                  audio=audio_consent), patch(
                         "studio_next.nvidia_model.NvidiaCreativeModel.verify_host_credentials"
                         ) as credentials, patch.dict(entry.__globals__, {
                             "stdio_client": unittest.mock.Mock(
