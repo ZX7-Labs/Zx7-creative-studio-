@@ -17,6 +17,36 @@ from .local_model_http import urlopen
 from typing import Any
 
 
+# Model-originated protocol failures only. They are untrusted output, not
+# native operations; keep this finite allowlist shared by provider and auditor.
+# Every accepted recovery MUST still be bounded, no-dispatch, and authenticated
+# by the host journal. Transport/credential/native errors are not in this list.
+MODEL_OUTPUT_REJECTION_CODES = frozenset({
+    "duplicate_json_field",
+    "invalid_json",
+    "truncated_response",
+    "empty_response",
+    "non_object_json",
+    "oversize_tool_envelope",
+    "tool_choice_count",
+    "truncated_tool_decision",
+    "missing_or_multiple_function_calls",
+    "unexpected_native_function",
+    "invalid_native_function_arguments",
+    "invalid_tool_response_envelope",
+    "missing_native_tool_message",
+    "missing_or_multiple_native_tool_calls",
+    "unknown_or_ungranted_native_function",
+    "invalid_native_function_json",
+    "native_function_missing_reason",
+    "native_function_inputs_shape",
+    "native_metadata_search_shape",
+    "native_metadata_describe_shape",
+    "native_finish_shape",
+    "unrecognized_native_host_action",
+    "invalid_native_tool_envelope",
+})
+
 class LocalModelOutputError(ValueError):
     """Only model-authored content failed strict decoding; no native action.
 
@@ -25,28 +55,7 @@ class LocalModelOutputError(ValueError):
     """
 
     def __init__(self, code: str):
-        if code not in (
-                "duplicate_json_field", "invalid_json", "truncated_response",
-                "empty_response", "non_object_json",
-                # Hosted function-call grammar is model-originated data.
-                # None of these conditions grants or replays a native edit.
-                "oversize_tool_envelope", "tool_choice_count",
-                "truncated_tool_decision", "missing_or_multiple_function_calls",
-                "unexpected_native_function", "invalid_native_function_arguments",
-                "invalid_tool_response_envelope",
-                # Provider-native host signature selection. Failure labels
-                # are finite, non-sensitive and are *never* raw provider text.
-                "missing_native_tool_message",
-                "missing_or_multiple_native_tool_calls",
-                "unknown_or_ungranted_native_function",
-                "invalid_native_function_json",
-                "native_function_missing_reason",
-                "native_function_inputs_shape",
-                "native_metadata_search_shape",
-                "native_metadata_describe_shape",
-                "native_finish_shape",
-                "unrecognized_native_host_action",
-                "invalid_native_tool_envelope"):
+        if code not in MODEL_OUTPUT_REJECTION_CODES:
             raise ValueError("Unknown model output failure classification")
         self.code = code
         message = ("Duplicate local model JSON field" if code == "duplicate_json_field"
