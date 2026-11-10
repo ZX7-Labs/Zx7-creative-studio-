@@ -5,10 +5,10 @@ Checkpoint: **2026-11-10 IST**, GitHub source read and evidence artifact inspect
 ## Integrated verified code
 
 - Repo: https://github.com/ZX7-Labs/Zx7-creative-studio-
-- Baseline at this checkpoint: `c41a705f7e199e57a573ce28ee486b822af5a05d`. The memory checkpoint merge itself will change `main`; **do not** assume this SHA is always current.
+- Baseline at this checkpoint: `5d78ddd9f91614321c0c470f24e823aac0f237c4`. The memory checkpoint merge itself will change `main`; **do not** assume this SHA is always current.
 - #285 source-pinned Electron compatibility, #286 native Ubuntu 24.04 install and scripted create/export/reopen/revise; #287 archive checkpoint; #290 bounded NVIDIA 120B transport (180s per call, 1500s whole trial, no uncertain POST replay); #291 Git-versioned project brain / offline integrity checks.
 - **#292 MERGED** at `c41a705...`: the finite NVIDIA provider output-error classification and strict independent native journal auditor now agree. Source/native/controller and MLT editorial checks passed; one unrelated layered-render job was cancelled due CI concurrency and was not counted green.
-- **Open proposed #293** [owner delivery gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/293): generic optional trusted host delivery profile, native read-only export plan inspection before export, no model-authored dimensions injected, synthetic trial contract; **not on main** at this checkpoint, CI running. No cloud trial triggered by its PR.
+- **#293 MERGED** [owner delivery gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/293) at `5d78ddd9f91614321c0c470f24e823aac0f237c4`: generic optional trusted host delivery profile, native read-only export plan inspection before export, fail-closed no-write wrong dimensions/FPS/codec/duration, trial-only owner profile. No cloud trial triggered. **Verification caveat:** pinned native clients, physical render, original camera, core/source-custody tests passed; latest source-and-native-project CI was cancelled during FFmpeg install and real MLT remained incomplete at merge. Those are NOT green/complete native release acceptance.
 - **Open #289** local prompt-evidence dedup, lower priority under founder's NVIDIA-first development instruction; #288 historical failed CPU trial PR, do not rerun by merging its request.
 
 ## One authorized NVIDIA live run: FAILED, no retry
@@ -24,8 +24,8 @@ Local Qwen 4B run #42711402879 was also a **failure** (46 decisions, 9,068 token
 
 ## Immediate next work, in dependency order
 
-1. Require #293's exact-head native/client/security CI and independent scope review before merging. Verify owner profile is truly private host state; mismatch blocks a native write; clean source preflight and normal unconstrained commercial deliveries remain intact.
-2. Persist evidence and new decisions, then use the strong NVIDIA API **only for separately approved, bounded, high-information tests**, never repeated blindly. Original single-run consent has already been consumed. No new NVIDIA run authorized in this checkpoint.
+1. Review #293 integrated owner-delivery gate against the exact combined `main`; secure profile is private host state, mismatch blocks native write, normal unconstrained exports remain intact. Reconcile the cancelled source-and-native and incomplete MLT checks before any professional release claim; do not rerun the cloud model automatically.
+2. Keep the source-native gate's full release-suite verification as an open acceptance item. Use the strong NVIDIA API **only for separately approved, bounded, high-information tests**, never repeated blindly. Original single-run consent has already been consumed. No new NVIDIA run authorized in this checkpoint.
 3. Independently audit saved project, timed picture/audio quality, original custody and native editor control depth; close actual errors offline. Future hosted success can prove shared BODY behavior, **not** local model artistic parity.
 4. Deliver genuine verified observed-and-revised paired media, professionally acceptable audiovisual creative quality, and remaining A–L capabilities; do not call the system launch-ready until release gates and explicit deployment authorization pass.
 
