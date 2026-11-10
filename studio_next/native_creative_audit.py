@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import stat
 from .body_editor_client import HOST_REJECTION_FEEDBACK
+from .providers import MODEL_OUTPUT_REJECTION_CODES
 from .native_render_evidence import (
     DESTINATION_FIELD, RENDER_TOOL, REVIEWED_RENDER_PAIR, SCOPE_FIELD, reviewed_render_pair,
 )
@@ -425,9 +426,7 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     type(turn) is not int or turn <= last_model_protocol_rejection_turn or
                     type(duration) not in (int, float) or
                     not math.isfinite(duration) or duration < 0 or
-                    event.get("reason_code") not in (
-                        "duplicate_json_field", "invalid_json", "truncated_response",
-                        "empty_response", "non_object_json") or
+                    event.get("reason_code") not in MODEL_OUTPUT_REJECTION_CODES or
                     event.get("no_native_dispatch") is not True or
                     event.get("remaining_model_output_corrections") != (
                         2 - model_protocol_rejections) or
