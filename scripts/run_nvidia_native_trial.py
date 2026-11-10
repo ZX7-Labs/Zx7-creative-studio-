@@ -75,7 +75,7 @@ def _sha256(path):
     return digest.hexdigest()
 
 
-def prepare_trial(workspace: Path, *, source: Path):
+def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
     """Private, non-overwriting real media and host grants; no user footage."""
     workspace = Path(workspace).resolve()
     source = Path(source).resolve()
@@ -94,11 +94,12 @@ def prepare_trial(workspace: Path, *, source: Path):
     for location in roots.values():
         location.mkdir(mode=0o700)
     image_path = roots["staging"] / "original-neutral-gradient.mp4"
+    source_seconds = _TRIAL_MAX_SECONDS if audiovisual else 4
     # This is source footage, not a shot plan, a generated finished film,
     # a model response, or an authorized creative editing decision.
     subprocess.run(
         ["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
-         "gradients=s=640x360:r=24:d=4:c0=0x20364c:c1=0x85bbc1:seed=13",
+         f"gradients=s=640x360:r=24:d={source_seconds}:c0=0x20364c:c1=0x85bbc1:seed=13",
          "-c:v", "libx264", "-pix_fmt", "yuv420p", str(image_path)],
         check=True, timeout=90, env=_no_cloud_credentials())
     source_ledger = [{
@@ -107,14 +108,29 @@ def prepare_trial(workspace: Path, *, source: Path):
         "rights": "original locally generated neutral creative test source",
         "preauthored_timeline": False,
     }]
+    if audiovisual:
+        audio_path = roots["staging"] / "original-synthetic-sound.wav"
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i",
+             "aevalsrc=0.18*sin(2*PI*(440+25*t)*t)*(0.55+0.4*sin(2*PI*t))"
+             f":s=48000:d={source_seconds}",
+             "-c:a", "pcm_s16le", str(audio_path)],
+            check=True, timeout=30, env=_no_cloud_credentials())
+        source_ledger.append({
+            "path": str(audio_path),
+            "sha256": _sha256(audio_path),
+            "rights": "original locally generated synthetic audio test source",
+            "preauthored_timeline": False,
+        })
     (workspace / "source-ledger.json").write_text(
         json.dumps(source_ledger, indent=2), encoding="utf-8")
     config = json.loads(_EXAMPLE.read_text(encoding="utf-8"))
     installed = config.get("allowed_tools")
     if not isinstance(installed, dict):
         raise ValueError("Native editor host grant catalog missing")
-    grant = {k: v for k, v in installed.items() if k in _HOST_ALLOWED}
-    if set(grant) != _HOST_ALLOWED or grant.get("create_project") != "write":
+    allowed = _HOST_ALLOWED | {"set_clip_audio", "set_master_audio"} if audiovisual else _HOST_ALLOWED
+    grant = {k: v for k, v in installed.items() if k in allowed}
+    if set(grant) != allowed or grant.get("create_project") != "write":
         raise ValueError("Pinned native host grant inventory changed")
     config.update(
         projects_root=str(roots["projects"]),
@@ -160,6 +176,22 @@ def prepare_trial(workspace: Path, *, source: Path):
         f"Authorized output root: {roots['outputs']}. "
         "Actual original available source assets: " + json.dumps(source_ledger)
     )
+    if audiovisual:
+        brief = (
+            "Create an original editable six-second piece that turns a hesitation "
+            "into momentum. Use the generated footage and audible generated sound as "
+            "source materials. Independently choose the composition, sequence, type, "
+            "and relationship of movement and sound. Save and export the first cut. "
+            "Inspect decoded frames and timed sound diagnostics, then choose and save "
+            "a meaningful editable revision. Export to a new path with the same "
+            "zero-to-six-second range and encoding settings. Both files must be "
+            "640x360 H.264 MP4 at exactly 24 fps with audible sound. Independently "
+            "verify both files and observe matching frame times and the full sound "
+            "window for each. "
+            f"Native projects root: {roots['projects']}. "
+            f"Authorized output root: {roots['outputs']}. "
+            "Generated originals: " + json.dumps(source_ledger)
+        )
     (workspace / "brief.txt").write_text(brief, encoding="utf-8")
     return roots, cfg
 
@@ -565,7 +597,12 @@ def main(argv=None):
     parser.add_argument("--model-id", default=_ALLOWED_MODEL)
     parser.add_argument("--xvfb-binary", default="/usr/bin/Xvfb")
     parser.add_argument("--display", default="127.0.0.1:95")
+    parser.add_argument("--prepare-audiovisual-only", action="store_true",
+                        help="Stage generated picture and sound without launching any model")
     args = parser.parse_args(argv)
+    if args.prepare_audiovisual_only:
+        prepare_trial(args.workspace, source=_SOURCE_EDITOR, audiovisual=True)
+        return
     run_trial(args.workspace, model_id=args.model_id,
               xvfb_binary=args.xvfb_binary, display=args.display)
 
