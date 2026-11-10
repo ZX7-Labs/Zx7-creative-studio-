@@ -281,15 +281,14 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 state = bounded_native_receipt(observed)
                 if state.get("ready") is not True or state.get("blockers") != []:
                     raise ValueError("Native readiness was not established")
-                if (required_export_delivery is not None and
-                        not native_delivery_matches(state, required_export_delivery)):
-                    # This is a READ-only source-computed plan, not a heuristic
-                    # interpretation of filename/project name or model prose.
-                    # No write has been submitted. The model can choose a new
-                    # target/resolution without replaying an uncertain write.
-                    raise EditorPreDispatchError("export_delivery_mismatch")
             except (EditorClientError, EditorAccessError, ValueError):
                 raise EditorPreDispatchError("export_readiness_unconfirmed") from None
+            if (required_export_delivery is not None and
+                    not native_delivery_matches(state, required_export_delivery)):
+                # Outside the broad readiness-exception handler: preserve the
+                # distinct trusted mismatch category for model correction.
+                # No write has been submitted or automatically replayed.
+                raise EditorPreDispatchError("export_delivery_mismatch")
         if name in placement_preflight and arguments.get("previewOnly") is False:
             # The pinned Electron handlers resolve the placement and exit
             # before performAction when previewOnly is true. Ask that same
