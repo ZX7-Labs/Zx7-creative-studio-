@@ -45,7 +45,7 @@ class LocalNativePromptViewTests(unittest.TestCase):
         self.assertTrue(reference["complete_native_texts_preserved_in_snapshot"])
         self.assertEqual(compact["native_read_snapshot_cache"][0]["result_texts"],
                          original["last_native_result_texts"])
-        self.assertEqual(json.dumps(compact).count(native_text), 1)
+        self.assertEqual(json.dumps(compact).count("original-native-clip-499"), 1)
         self.assertLess(len(json.dumps(compact)), len(json.dumps(original)) - 5000)
 
     def test_live_source_schema_is_deduplicated_only_against_current_bound_grammar(self):
