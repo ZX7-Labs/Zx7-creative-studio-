@@ -29,3 +29,7 @@ The owner's synthetic brief specified H.264 **640×360**, 24 fps, ≤6s. Filenam
 ## Evidence integrity limits
 
 GitHub retained artifact may expire. Public source logs redact the API credential. This record preserves SHA references and negative technical facts, **not** model quality certification. Revalidate exact PR status and source against current GitHub; do not infer implementation/merges from a proposed patch.
+
+## Later integrated corrective source (same day)
+
+[#293](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/293) merged at `5d78ddd9f91614321c0c470f24e823aac0f237c4` with opt-in host-owned delivery-plan gate. It was tested without any hosted model call. Its source-native and MLT full-suite CI remain incompletely certified as described in [current STATE](../STATE.md). This later change cannot retroactively convert failed real run #42754872382 into a success.
