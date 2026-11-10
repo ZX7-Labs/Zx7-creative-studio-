@@ -30,6 +30,12 @@ _ALLOWED_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 # could not independently verify that final output. The 48-turn experiment is
 # still strictly bounded, synthetic-only and host-permissioned.
 _TRIAL_MAX_TURNS = 48
+# A genuine Super-VL 120B request in #42669603529 generated 6,616
+# completion tokens in 87.3 seconds; turn 16 exceeded the 90-second
+# HTTP limit. Keep ONE non-retried request per model decision and a
+# strict whole-session cap inside the 35-minute CI job.
+_TRIAL_MODEL_TIMEOUT_SECONDS = 180
+_TRIAL_PROCESS_TIMEOUT_SECONDS = 1500
 _TRIAL_WIDTH = 640
 _TRIAL_HEIGHT = 360
 _TRIAL_FPS = 24
@@ -441,7 +447,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         "--fresh-trial-project",
         "--evaluation-evidence", "reviewed-revision",
         "--max-turns", str(_TRIAL_MAX_TURNS),
-        "--model-timeout", "90",
+        "--model-timeout", str(_TRIAL_MODEL_TIMEOUT_SECONDS),
         "--source", str(_SOURCE_EDITOR),
         "--config", str(cfg),
         "--state", str(roots["state"]),
@@ -453,7 +459,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     try:
         completed = subprocess.run(
             command, check=False, capture_output=True, text=True,
-            cwd=ROOT, timeout=960)
+            cwd=ROOT, timeout=_TRIAL_PROCESS_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         raise RuntimeError("Native creative evaluation exceeded bounded host wall time") from None
     # Synthetic-only paths and redacted native events may be preserved
