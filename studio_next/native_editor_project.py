@@ -15,9 +15,10 @@ import tempfile
 
 from .body_editor_client import _load_json
 from .native_editor_diagnostics import native_content_diagnostics_source_verified
+from .native_render_evidence import DESTINATION_FIELD, SCOPE_FIELD, timeline_scope_digest
 
 
-def checkpoint_saved_project(project: Path, destination: Path):
+def checkpoint_saved_project(project: Path, destination: Path, *, max_bytes=None):
     """Keep the exact saved native document outside the editor's writable roots."""
     saved = project / "project.comfystudio"
     if project.resolve(strict=True) != project:
@@ -34,6 +35,8 @@ def checkpoint_saved_project(project: Path, destination: Path):
         before = os.fstat(source.fileno())
         if not stat.S_ISREG(before.st_mode) or before.st_size == 0:
             raise ValueError("Saved native project file must be a nonempty regular file")
+        if max_bytes is not None and before.st_size > max_bytes:
+            raise ValueError("Saved native project exceeds the snapshot byte budget")
         with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".prior-project-") as copy:
             while chunk := source.read(1024 * 1024):
                 size += len(chunk)
@@ -50,6 +53,28 @@ def checkpoint_saved_project(project: Path, destination: Path):
 
     return {"path": str(destination), "project": str(project), "bytes": size,
             "sha256": digest.hexdigest()}
+
+
+def capture_render_project(projects_root, snapshots_root, response, binding, save_identity):
+    """Preserve the saved document for an acknowledged, source-bound render."""
+    project = Path(response["projectPath"])
+    if not project.is_absolute() or not project.is_relative_to(projects_root):
+        raise ValueError("Render project is outside the host-owned root")
+    destination = snapshots_root / (binding[DESTINATION_FIELD] + ".comfystudio")
+    saved = checkpoint_saved_project(project, destination, max_bytes=16 * 1024 * 1024)
+    document = _load_json(destination.read_text(encoding="utf-8"))
+    timeline = document.get("currentTimelineId") if isinstance(document, dict) else None
+    if (not isinstance(document, dict) or save_identity != (str(project), document.get("modified"))
+            or document.get("modified") is None):
+        raise ValueError("Render snapshot differs from the last acknowledged save")
+    if timeline_scope_digest(str(project), timeline) != binding[SCOPE_FIELD]:
+        raise ValueError("Saved active timeline differs from the render receipt")
+    options = response["result"].get("options")
+    if not isinstance(options, dict) or not {"rangeStart", "rangeEnd", "crf"}.issubset(options):
+        raise ValueError("Native worker render options are missing")
+    comparable = {key: value for key, value in options.items() if key != "filename"}
+    settings = json.dumps(comparable, sort_keys=True, allow_nan=False).encode("utf-8")
+    return saved["sha256"], hashlib.sha256(settings).hexdigest()
 
 
 def _receipt(result):

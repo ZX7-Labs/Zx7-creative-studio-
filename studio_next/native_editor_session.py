@@ -9,6 +9,7 @@ OpenAI-compatible inference service, not a scripted test fixture.
 """
 import argparse
 import asyncio
+from functools import partial
 import json
 import os
 from pathlib import Path
@@ -241,6 +242,14 @@ async def run_native_session(args):
         host_grants.pop("zx7_observe_verified_export_audio", None)
         if not cloud_diagnostics:
             host_grants.pop(AUDIO_ENVELOPE, None)
+    capture_render_project = None
+    if getattr(args, "record_av_project_snapshots", False):
+        if not fresh or REVIEWED_AV_PAIR not in required or host_grants.get("save_project") != "write":
+            raise ValueError("Render snapshots require a fresh audiovisual trial with a save grant")
+        from .native_editor_project import capture_render_project as capture
+        snapshots_root = args.state.resolve() / "av-project-snapshots"
+        snapshots_root.mkdir(mode=0o700)
+        capture_render_project = partial(capture, project_root.resolve(strict=True), snapshots_root)
     brief = args.brief_file.read_text(encoding="utf-8")
     if REVIEWED_AV_PAIR in required:
         brief += (
@@ -305,6 +314,7 @@ async def run_native_session(args):
                     pinned_electron_timeline_frame_previews(args.source, host_grants)),
                 required_evidence=required,
                 host_content_revision_tools=host_revisions,
+            host_capture_render_project=capture_render_project,
                 receipt_path=args.receipt).run(brief)
     pair_report = {}
     if REVIEWED_RENDER_PAIR in required:
@@ -381,6 +391,8 @@ def build_parser():
                    help="Use true host-granted compact capability search rather than the full prompt")
     p.add_argument("--fresh-trial-project", action="store_true",
                    help="Require an empty isolated root and prevent repeated project creation")
+    p.add_argument("--record-av-project-snapshots", action="store_true",
+                   help="Record the last explicitly saved project at each acknowledged trial render")
     p.add_argument("--evaluation-evidence",
                    choices=("none", "export", "reviewed-revision", "reviewed-av-revision"),
                    default="none",

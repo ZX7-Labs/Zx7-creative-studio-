@@ -53,6 +53,10 @@ _HOST_ALLOWED = frozenset({
     "add_shape_clip", "update_shape_clip", "set_clip_style",
     "save_project", "export_timeline", "move_clips",
 })
+AV_TRIAL_REVISION_TOOLS = frozenset({
+    "add_asset_to_timeline", "add_text_clip", "update_text_clip", "add_shape_clip",
+    "update_shape_clip", "set_clip_style", "move_clips", "set_clip_audio",
+})
 
 
 def synthetic_trial_delivery_requirement(*, max_seconds):
@@ -128,7 +132,7 @@ def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
     installed = config.get("allowed_tools")
     if not isinstance(installed, dict):
         raise ValueError("Native editor host grant catalog missing")
-    allowed = _HOST_ALLOWED | {"set_clip_audio", "set_master_audio"} if audiovisual else _HOST_ALLOWED
+    allowed = _HOST_ALLOWED | AV_TRIAL_REVISION_TOOLS if audiovisual else _HOST_ALLOWED
     grant = {k: v for k, v in installed.items() if k in allowed}
     if set(grant) != allowed or grant.get("create_project") != "write":
         raise ValueError("Pinned native host grant inventory changed")

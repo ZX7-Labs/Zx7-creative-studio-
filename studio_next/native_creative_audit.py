@@ -19,7 +19,8 @@ from .body_editor_client import HOST_REJECTION_FEEDBACK
 from .providers import MODEL_OUTPUT_REJECTION_CODES
 from .native_render_evidence import (
     AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
-    REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SCOPE_FIELD, TIMED_FRAMES, reviewed_render_pair,
+    REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
+    SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES, reviewed_render_pair,
     valid_av_review_values,
 )
 
@@ -636,6 +637,21 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         (tool == AUDIO_ENVELOPE and AV_REVIEW_FIELD in event) or
                         (AV_PCM_FIELD in event and not _sha(event[AV_PCM_FIELD]))):
                     raise NativeJournalError("Invalid decoded audio checksum")
+                if (SAVED_RENDER_FIELD in event) != (SAVED_RENDER_OPTIONS_FIELD in event):
+                    raise NativeJournalError("Invalid saved project render binding")
+                if {SAVED_RENDER_FIELD, SAVED_RENDER_FAILURE} & event.keys():
+                    if (not requires_av_review or tool != RENDER_TOOL or scope is None
+                            or next((name for _, name in reversed(writes) if name != RENDER_TOOL),
+                                    None) != "save_project"):
+                        raise NativeJournalError("Invalid saved project render binding")
+                    if SAVED_RENDER_FAILURE in event:
+                        if (event[SAVED_RENDER_FAILURE] is not True or SAVED_RENDER_FIELD in event
+                                or i != len(events) - 1):
+                            raise NativeJournalError("Invalid or nonterminal render snapshot failure")
+                        terminal = "native_render_snapshot_failed"
+                        finished = True
+                    elif not (_sha(event[SAVED_RENDER_FIELD]) and _sha(event[SAVED_RENDER_OPTIONS_FIELD])):
+                        raise NativeJournalError("Invalid saved project render binding")
                 if event.get("human_or_artistic_quality_approved") is not False:
                     raise NativeJournalError("Technical tool output cannot assert artistic approval")
                 if (not isinstance(event.get("text_sha256"), list) or

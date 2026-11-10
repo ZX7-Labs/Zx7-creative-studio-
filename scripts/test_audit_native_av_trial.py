@@ -10,6 +10,10 @@ import wave
 
 from scripts.audit_native_av_trial import audit_pair
 from scripts.run_nvidia_native_trial import main as stage_trial
+from studio_next.native_render_evidence import (
+    AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, SAVED_RENDER_FIELD,
+    SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES,
+)
 
 
 class NativeAVTrialTests(unittest.TestCase):
@@ -75,6 +79,52 @@ class NativeAVTrialTests(unittest.TestCase):
         self.assertTrue(self.assert_container_changed)
         with self.assertRaisesRegex(ValueError, "No decoded"):
             audit_pair(self.before, self.remux, self.first, self.edited)
+
+    def test_binds_relocated_exports_and_project_snapshots_to_host_receipts(self):
+        def digest(path):
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+
+        events = []
+        for index, (export, project, destination) in enumerate((
+                (self.before, self.first, "a" * 64),
+                (self.after_picture, self.edited, "b" * 64))):
+            if index:
+                events.append({"kind": "native_tool_result", "tool": "update_text_clip",
+                               "host_application_write_acknowledged": True})
+            export_sha = digest(export)
+            common = {"kind": "native_tool_result", DESTINATION_FIELD: destination}
+            events.extend((
+                {**common, "tool": "export_timeline",
+                 "host_application_write_acknowledged": True,
+                 SCOPE_FIELD: "c" * 64, SAVED_RENDER_OPTIONS_FIELD: "d" * 64,
+                 SAVED_RENDER_FIELD: digest(project)},
+                {**common, "tool": "zx7_verify_native_export",
+                 "independently_verified_export_sha256": export_sha, AV_REVIEW_FIELD: [6]},
+                {**common, "tool": TIMED_FRAMES, "observed_export_sha256": export_sha,
+                 "image_sha256": [destination, "e" * 64], AV_REVIEW_FIELD: [1, 4]},
+                {**common, "tool": AUDIO_ENVELOPE, "observed_export_sha256": export_sha,
+                 AV_REVIEW_FIELD: [0, 6], AV_PCM_FIELD: "f" * 64},
+            ))
+        with tempfile.TemporaryDirectory() as scratch:
+            journal = Path(scratch) / "journal.jsonl"
+            journal.write_text("\n".join(map(json.dumps, events)), encoding="utf-8")
+            result = audit_pair(self.before, self.after_picture, self.first, self.edited,
+                                journal=journal)
+            self.assertTrue(result["host_journal_bound"])
+            with self.assertRaisesRegex(ValueError, "accepted ordered"):
+                audit_pair(self.after_picture, self.before, self.edited, self.first,
+                           journal=journal)
+            events[5][SAVED_RENDER_OPTIONS_FIELD] = "a" * 64
+            journal.write_text("\n".join(map(json.dumps, events)), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "matching render settings"):
+                audit_pair(self.before, self.after_picture, self.first, self.edited,
+                           journal=journal)
+            events[5][SAVED_RENDER_OPTIONS_FIELD] = "d" * 64
+            events[5][SAVED_RENDER_FIELD] = digest(self.metadata_only)
+            journal.write_text("\n".join(map(json.dumps, events)), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "differs from the bound"):
+                audit_pair(self.before, self.after_picture, self.first, self.edited,
+                           journal=journal)
 
     def test_rejects_metadata_only_invalid_project_and_silent_audio(self):
         with self.assertRaisesRegex(ValueError, "lacks a comparable editorial change"):

@@ -1053,7 +1053,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         from studio_next.native_creative_audit import NativeJournalError, audit_native_journal
         from studio_next.native_render_evidence import (
             AUDIO_ENVELOPE, AV_REVIEW_FIELD, REVIEWED_AV_PAIR,
-            REVIEWED_NATIVE_EVIDENCE, TIMED_FRAMES,
+            REVIEWED_NATIVE_EVIDENCE, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD, TIMED_FRAMES,
         )
 
         before, after = "/private/exports/before.mp4", "/private/exports/after.mp4"
@@ -1068,6 +1068,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     receipt = {"success": True, "action": name, "outputPath": path,
                                "projectPath": "/private/native", "timeline": {"id": "film"},
                                "result": {"started": True, "outputPath": path}}
+                elif name == "save_project":
+                    receipt = {"success": True, "action": name}
                 elif name == "zx7_verify_native_export":
                     receipt = {"physical_export_verified": True, "native_export_sha256": digests[path],
                                "observation": {"duration_seconds": 6, "audio_present": True,
@@ -1104,22 +1106,25 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         finish = decision("finish", summary="Editable revised fixture")
         required = (*REVIEWED_NATIVE_EVIDENCE, REVIEWED_AV_PAIR)
         for scenario in ("full", "short-first-audio", "clustered-second-picture",
-                         "same-decoded-media"):
+                         "same-decoded-media", "capture-failed"):
             with self.subTest(scenario=scenario):
                 session = AVSession()
                 session.tools.extend(SimpleNamespace(
                     name=name, description="Native fixture tool", input_schema={"type": "object"})
-                    for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE))
+                    for name in ("export_timeline", "save_project", TIMED_FRAMES, AUDIO_ENVELOPE))
                 grants = {tool.name: ("write" if tool.name in
-                    {"export_timeline", "update_text_clip"} else "read") for tool in session.tools}
+                    {"export_timeline", "save_project", "update_text_clip"} else "read")
+                          for tool in session.tools}
                 revisions = ("update_text_clip",)
                 actions = [
+                    invoke("save_project", previewOnly=False),
                     invoke("export_timeline", outputPath=before),
                     invoke("zx7_verify_native_export", path=before),
                     invoke(TIMED_FRAMES, path=before, at_seconds=[1, 4]),
                     invoke(AUDIO_ENVELOPE, path=before, start_seconds=0, bins=2,
                            duration_seconds=1 if scenario == "short-first-audio" else 6),
                     invoke("update_text_clip", clipId="title", text="Revised"),
+                    invoke("save_project", previewOnly=False),
                     invoke("export_timeline", outputPath=after),
                     invoke("zx7_verify_native_export", path=after),
                     invoke(TIMED_FRAMES, path=after,
@@ -1129,9 +1134,15 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     finish,
                 ]
                 model = ScriptedModel(actions)
+                def capture(_receipt, _binding, _save):
+                    if scenario == "capture-failed":
+                        raise OSError("private path must not enter the journal")
+                    return "f" * 64, "e" * 64
+
                 result = await NativeCreativeControl(
                     session, model, max_turns=len(actions), host_tool_access=grants,
                     required_evidence=required, host_content_revision_tools=revisions,
+                    host_capture_render_project=capture,
                 ).run("Review and revise independently verified audiovisual exports")
                 events = result["events"]
                 rejected = [event["missing_completion_evidence"] for event in events
@@ -1139,6 +1150,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 kwargs = dict(host_tool_access=grants, expected_required_evidence=required,
                               host_content_revision_tools=revisions)
                 report = audit_native_journal(events, **kwargs)
+                if scenario == "capture-failed":
+                    self.assertEqual(result["status"], "native_render_snapshot_failed")
+                    self.assertTrue(events[-1]["host_application_write_acknowledged"])
+                    self.assertTrue(events[-1][SAVED_RENDER_FAILURE])
+                    self.assertNotIn("private path", json.dumps(events))
+                    self.assertIsNone(report["reviewed_native_audiovisual_pair"])
+                    continue
                 expected_pair = [digests[before], digests[after]]
                 self.assertEqual([item["export_sha256"] for item in
                                   report["reviewed_native_render_pair"]], expected_pair)
@@ -1151,6 +1169,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result["status"], "model_finished_unverified")
                 self.assertEqual([item["export_sha256"] for item in
                                   report["reviewed_native_audiovisual_pair"]], expected_pair)
+                self.assertEqual(
+                    [event[SAVED_RENDER_FIELD] for event in events if SAVED_RENDER_FIELD in event],
+                    ["f" * 64, "f" * 64])
                 audio_receipts = [
                     payload for context in model.observed
                     for payload in map(json.loads, context["last_native_result_texts"])

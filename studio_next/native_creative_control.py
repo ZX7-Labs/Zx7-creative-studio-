@@ -26,7 +26,8 @@ from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEED
 from .native_editor_source_pin import source_verified_preview_intent
 from .native_render_evidence import (
     AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
-    REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES, av_review_values,
+    REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
+    SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
 )
 
@@ -718,7 +719,8 @@ class NativeCreativeControl:
                  host_verified_top_level_preview_tools: tuple[str, ...] = (),
                  host_verified_timeline_preview_tools: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
-                 host_content_revision_tools: tuple[str, ...] = ()):
+                 host_content_revision_tools: tuple[str, ...] = (),
+                 host_capture_render_project=None):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
             raise NativeCreativeControlError("Native model session requires finite turn budget")
         if not callable(getattr(model, "decide", None)):
@@ -750,6 +752,12 @@ class NativeCreativeControl:
         self._requires_av_review = REVIEWED_AV_PAIR in self.required_evidence
         if self._requires_av_review and REVIEWED_RENDER_PAIR not in self.required_evidence:
             raise NativeCreativeControlError("Audiovisual proof requires a reviewed native render pair")
+        if host_capture_render_project is not None and (
+                not callable(host_capture_render_project) or not self._requires_av_review
+                or host_tool_access.get("save_project") != "write"):
+            raise NativeCreativeControlError("Render snapshots require a trusted A/V session and save grant")
+        self._capture_render_project = host_capture_render_project
+        self._explicit_render_save_identity = None
         if (not isinstance(host_content_revision_tools, (list, tuple, frozenset)) or
                 any(not isinstance(name, str) or not name
                     for name in host_content_revision_tools) or
@@ -2535,6 +2543,28 @@ class NativeCreativeControl:
                     render_binding[AV_REVIEW_FIELD] = av_values
                     if native_name == AUDIO_ENVELOPE:
                         render_binding[AV_PCM_FIELD] = p["preview_pcm_sha256"]
+                if self._capture_render_project is not None and native_name == "save_project":
+                    save_result = host_response.get("result")
+                    saved = save_result.get("project") if isinstance(save_result, dict) else None
+                    self._explicit_render_save_identity = (
+                        (saved.get("path"), saved.get("modified")) if isinstance(saved, dict) else None)
+                if self._capture_render_project is not None and native_name == RENDER_TOOL and render_binding:
+                    previous_write = next(
+                        (event.get("tool") for event in reversed(self.events)
+                         if event.get("host_application_write_acknowledged") is True
+                         and event.get("tool") != RENDER_TOOL), None)
+                    if previous_write == "save_project":
+                        try:
+                            project_sha, options_sha = await asyncio.to_thread(
+                                self._capture_render_project, host_response, render_binding,
+                                self._explicit_render_save_identity)
+                            if not _digest(project_sha) or not _digest(options_sha):
+                                raise ValueError("Render snapshot lacks trusted digests")
+                        except (OSError, ValueError):
+                            render_binding[SAVED_RENDER_FAILURE] = True
+                        else:
+                            render_binding[SAVED_RENDER_FIELD] = project_sha
+                            render_binding[SAVED_RENDER_OPTIONS_FIELD] = options_sha
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
@@ -2563,6 +2593,9 @@ class NativeCreativeControl:
                               "audio_sent_to_model_for_next_decision": bool(audio),
                               "audio_semantically_heard": False,
                               "human_or_artistic_quality_approved": False})
+                if render_binding.get(SAVED_RENDER_FAILURE):
+                    outcome = "native_render_snapshot_failed"
+                    break
                 if native_name in self._host_once_after_ack and self.catalog_mode == "indexed":
                     # A one-time host operation has already been acknowledged.
                     # Its old search result is no longer an actionable frontier;

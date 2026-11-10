@@ -6,14 +6,20 @@ from fractions import Fraction
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 
 from scripts.run_nvidia_native_trial import (
-    _TRIAL_FPS, _TRIAL_MAX_SECONDS, _no_cloud_credentials, decode_trial_export,
+    AV_TRIAL_REVISION_TOOLS, _TRIAL_FPS, _TRIAL_MAX_SECONDS, _no_cloud_credentials, decode_trial_export,
     trial_delivery_profile_compliant,
 )
 from studio_next.body_editor_client import _load_json
 from studio_next.body_editor_export import native_export_file_identity
+from studio_next.native_creative_audit import read_native_journal
+from studio_next.native_render_evidence import (
+    DESTINATION_FIELD, RENDER_TOOL, SAVED_RENDER_FIELD, SAVED_RENDER_OPTIONS_FIELD,
+    SCOPE_FIELD, VERIFY_TOOL, reviewed_render_pair,
+)
 
 
 _CLIP_FIELDS = (
@@ -27,9 +33,14 @@ _TIMELINE_FIELDS = ("transitions", "masterAudioVolume", "masterAudioInserts")
 
 
 def _editorial_fields(path):
-    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 16 * 1024 * 1024:
+    limit = 16 * 1024 * 1024
+    if path.is_symlink() or not path.is_file():
         raise ValueError("Invalid saved native snapshot")
-    data = _load_json(path.read_text(encoding="utf-8"))
+    with path.open("rb") as source:
+        raw = source.read(limit + 1)
+    if not 0 < len(raw) <= limit:
+        raise ValueError("Invalid saved native snapshot")
+    data = _load_json(raw.decode("utf-8"))
     active_id = data.get("currentTimelineId") if isinstance(data, dict) else None
     timelines = data.get("timelines") if isinstance(data, dict) else None
     if not isinstance(active_id, str) or not active_id or not isinstance(timelines, list):
@@ -48,7 +59,7 @@ def _editorial_fields(path):
         if len({item["id"] for item in items}) != len(items):
             raise ValueError("Ambiguous editable native timeline items")
         fields[name] = [{key: item.get(key) for key in names} for item in items]
-    return active_id, fields
+    return active_id, fields, hashlib.sha256(raw).hexdigest()
 
 
 def _decode_sound(path):
@@ -82,9 +93,36 @@ def _decode_sound(path):
     return audio, samples, hashlib.sha256(pcm).hexdigest()
 
 
-def audit_pair(before_export, after_export, before_project, after_project):
-    before_timeline, before_edit = _editorial_fields(before_project)
-    after_timeline, after_edit = _editorial_fields(after_project)
+def _journal_bound_render(events, snapshot_sha, export_sha):
+    checks = [(index, event.get(DESTINATION_FIELD)) for index, event in enumerate(events)
+              if event.get("kind") == "native_tool_result" and event.get("tool") == VERIFY_TOOL
+              and event.get("independently_verified_export_sha256") == export_sha]
+    targets = {target for _, target in checks
+               if isinstance(target, str) and re.fullmatch(r"[0-9a-f]{64}", target)}
+    if len(targets) != 1:
+        raise ValueError("Physical export lacks a unique verification destination")
+    target, = targets
+    matching = [(index, event) for index, event in enumerate(events)
+                if event.get("kind") == "native_tool_result" and event.get("tool") == RENDER_TOOL
+                and event.get(DESTINATION_FIELD) == target]
+    if len(matching) != 1:
+        raise ValueError("Export lacks a unique native render receipt")
+    index, render = matching[0]
+    options_sha = render.get(SAVED_RENDER_OPTIONS_FIELD)
+    if (render.get("host_application_write_acknowledged") is not True
+            or render.get(SAVED_RENDER_FIELD) != snapshot_sha
+            or not isinstance(render.get(SCOPE_FIELD), str)
+            or not isinstance(options_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", options_sha)):
+        raise ValueError("Saved snapshot differs from the bound native render receipt")
+    if not any(offset > index and destination == target for offset, destination in checks):
+        raise ValueError("Physical export bytes differ from the verification receipt")
+    return {"destination_sha256": target, "export_sha256": export_sha,
+            "timeline_sha256": render[SCOPE_FIELD]}, options_sha
+
+
+def audit_pair(before_export, after_export, before_project, after_project, *, journal=None):
+    before_timeline, before_edit, before_project_sha = _editorial_fields(before_project)
+    after_timeline, after_edit, after_project_sha = _editorial_fields(after_project)
     if before_timeline != after_timeline or before_edit == after_edit:
         raise ValueError("Saved project lacks a comparable editorial change")
 
@@ -106,11 +144,19 @@ def audit_pair(before_export, after_export, before_project, after_project):
     sound_changed = before_sound[2] != after_sound[2]
     if not (picture_changed or sound_changed):
         raise ValueError("No decoded picture or sound changed")
+    if journal is not None:
+        events = read_native_journal(journal)
+        first, first_options = _journal_bound_render(events, before_project_sha, before.identity[-1])
+        second, second_options = _journal_bound_render(events, after_project_sha, after.identity[-1])
+        accepted = reviewed_render_pair(events, AV_TRIAL_REVISION_TOOLS, audiovisual=True)
+        if accepted != [first, second] or first_options != second_options:
+            raise ValueError("Artifacts lack the accepted ordered A/V pair with matching render settings")
     return {
         "same_saved_active_timeline": True,
         "saved_editorial_fields_changed": True,
         "decoded_picture_changed": picture_changed,
         "decoded_sound_changed": sound_changed,
+        "host_journal_bound": journal is not None,
         "export_sha256": [before.identity[-1], after.identity[-1]],
     }
 
@@ -121,6 +167,7 @@ def main():
     parser.add_argument("after_export", type=Path)
     parser.add_argument("before_project", type=Path)
     parser.add_argument("after_project", type=Path)
+    parser.add_argument("--journal", type=Path)
     args = parser.parse_args()
     print(json.dumps(audit_pair(**vars(args))))
 

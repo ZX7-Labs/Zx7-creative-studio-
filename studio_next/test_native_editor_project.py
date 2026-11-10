@@ -1,16 +1,49 @@
 """Project-selection isolation and failure custody; no neural claims."""
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from studio_next.native_editor_project import open_selected_native_project
+from studio_next.native_editor_project import capture_render_project, open_selected_native_project
+from studio_next.native_render_evidence import DESTINATION_FIELD, SCOPE_FIELD, timeline_scope_digest
 
 
 def result(value):
     return {'isError': False, 'content': [{'type': 'text', 'text': json.dumps(value)}]}
+
+
+class RenderSnapshotTests(unittest.TestCase):
+    def test_captures_exact_saved_bytes_inside_the_owner_root_without_replacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            projects, snapshots = root / "projects", root / "snapshots"
+            project = projects / "film"
+            project.mkdir(parents=True)
+            snapshots.mkdir()
+            original = b'{"currentTimelineId":"film-timeline","modified":"version-1"}'
+            (project / "project.comfystudio").write_bytes(original)
+            response = {"projectPath": str(project),
+                        "result": {"options": {"rangeStart": 0, "rangeEnd": 6, "crf": 18}}}
+            binding = {DESTINATION_FIELD: "a" * 64,
+                       SCOPE_FIELD: timeline_scope_digest(str(project), "film-timeline")}
+            identity = (str(project), "version-1")
+            digest, _ = capture_render_project(projects, snapshots, response, binding, identity)
+            self.assertEqual(digest, hashlib.sha256(original).hexdigest())
+            snapshot = snapshots / ("a" * 64 + ".comfystudio")
+            self.assertEqual(snapshot.read_bytes(), original)
+            with self.assertRaises(FileExistsError):
+                capture_render_project(projects, snapshots, response, binding, identity)
+            with self.assertRaisesRegex(ValueError, "outside"):
+                capture_render_project(projects, snapshots, {"projectPath": str(root)}, binding, identity)
+            with self.assertRaisesRegex(ValueError, "timeline differs"):
+                capture_render_project(projects, snapshots, response, {
+                    DESTINATION_FIELD: "b" * 64, SCOPE_FIELD: "c" * 64}, identity)
+            with self.assertRaisesRegex(ValueError, "last acknowledged save"):
+                capture_render_project(projects, snapshots, response, {
+                    **binding, DESTINATION_FIELD: "d" * 64}, (str(project), "wrong-version"))
 
 
 class SelectedProjectTests(unittest.TestCase):

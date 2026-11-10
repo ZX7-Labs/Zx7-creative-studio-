@@ -23,6 +23,9 @@ DESTINATION_FIELD = "native_export_destination_sha256"
 SCOPE_FIELD = "native_export_timeline_sha256"
 AV_REVIEW_FIELD = "native_av_review"
 AV_PCM_FIELD = "native_av_pcm_sha256"
+SAVED_RENDER_FIELD = "native_render_saved_project_sha256"
+SAVED_RENDER_OPTIONS_FIELD = "native_render_options_sha256"
+SAVED_RENDER_FAILURE = "native_render_saved_project_capture_failed"
 
 
 def valid_av_review_values(tool, values):
