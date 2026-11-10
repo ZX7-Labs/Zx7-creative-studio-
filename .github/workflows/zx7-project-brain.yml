@@ -1,0 +1,32 @@
+name: ZX7 Canonical Project Brain — Offline Integrity
+on:
+  pull_request:
+    paths:
+      - "project-brain/**"
+      - ".github/workflows/zx7-project-brain.yml"
+      - "AGENTS.md"
+      - "docs/continuity/**"
+  push:
+    branches: [main]
+    paths:
+      - "project-brain/**"
+      - ".github/workflows/zx7-project-brain.yml"
+      - "AGENTS.md"
+      - "docs/continuity/**"
+permissions:
+  contents: read
+jobs:
+  offline-continuity-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify canonical memory files, links and redacted contents
+        run: python project-brain/check.py
+      - name: Independently attack missing, symlink and secret cases
+        run: python -m unittest discover -s project-brain -p 'test_check.py' -v

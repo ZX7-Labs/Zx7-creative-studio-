@@ -13,6 +13,10 @@ materials, cameras, lighting, CGI, simulation, VFX, compositing, color and sound
 Advertisements, films and educational videos are outputs assembled from these
 capabilities; they do not define a fixed project structure or visual style.
 
+# Persistent session memory (required for all engineering agents)
+
+The canonical cross-session project memory is [project-brain/README.md](project-brain/README.md). At every session start, read its [BRIEF](project-brain/BRIEF.md), [STATE](project-brain/STATE.md), [DECISIONS](project-brain/DECISIONS.md), [RISKS](project-brain/RISKS.md) and [PROJECT_MAP](project-brain/PROJECT_MAP.md), then refresh actual GitHub main/PRs/runs before acting. At each meaningful work checkpoint update the same current STATE and relevant decisions/evidence in a reviewed commit. Historical [docs/continuity/STATUS.md](docs/continuity/STATUS.md) is no longer the current state source. Do not rely on ephemeral sandbox files or automatic chat memory; never copy credentials or owner-private uploads into public Git. Owner's latest model-development choice is NVIDIA API first while preserving a future provider-neutral, locally hostable product.
+
 # Accountable engineering ownership
 
 To resume across chats, read the [working agreement](docs/continuity/WORKING_AGREEMENT.md)

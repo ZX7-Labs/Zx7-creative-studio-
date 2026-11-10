@@ -1,6 +1,6 @@
 # How to work on ZX7 Creative Studio
 
-ZX7 is one local-first creative workspace for the work of a multidisciplinary studio. A replaceable AI chooses original creative direction and uses native tools to author, inspect, revise, preserve, and deliver editable projects. Motion design, graphics, ads, video, CGI, VFX, and sound are examples of its range. The [capability and acceptance contract](../../CAPABILITIES.md) defines the full scope. The [engineering standard](../../ENGINEERING_STANDARD.md) sets the quality bar. The [status page](STATUS.md) records the current evidence and priorities.
+ZX7 is one local-first creative workspace for the work of a multidisciplinary studio. A replaceable AI chooses original creative direction and uses native tools to author, inspect, revise, preserve, and deliver editable projects. Motion design, graphics, ads, video, CGI, VFX, and sound are examples of its range. The [capability and acceptance contract](../../CAPABILITIES.md) defines the full scope. The [engineering standard](../../ENGINEERING_STANDARD.md) sets the quality bar. The canonical [project brain](../../project-brain/README.md), especially its [current STATE](../../project-brain/STATE.md), records latest work and priorities. The former [status page](STATUS.md) is retained as historical evidence.
 
 ## Make and verify decisions
 
@@ -15,7 +15,7 @@ The owner delegates routine research, architecture, implementation, testing, and
 
 ## Start and end a session
 
-Use the [resume prompt](RESUME_PROMPT.md) in a fresh chat. A useful engineering prompt states the goal, constraints, where to recover state, what success must demonstrate, and what decisions the agent owns. Plain headings and paths are sufficient. Keep durable requirements in the repository and put changing facts in the status page. Replace that snapshot at a meaningful checkpoint rather than adding a diary. Leave a verified baseline, exact links to work in progress, unresolved failures, and the next useful check.
+Use the [resume prompt](RESUME_PROMPT.md) in a fresh chat. A useful engineering prompt states the goal, constraints, where to recover state, what success must demonstrate, and what decisions the agent owns. Plain headings and paths are sufficient. Keep durable requirements in the repo's CAPABILITIES/ENGINEERING_STANDARD/AGENTS and project-brain/BRIEF. Replace [project-brain/STATE.md](../../project-brain/STATE.md) at each meaningful checkpoint; append only real decisions to project-brain/DECISIONS and preserve negative evidence in EVIDENCE. The historic STATUS is not another live journal. Leave a verified baseline, exact links to work in progress, unresolved failures, and the next useful check.
 
 The Anthropic reference means applying published engineering methods, including resumable checkpoints and independent evaluation against a concrete contract. Scope the planning and reviewer roles to the risk. [Long-running agent harnesses](https://www.anthropic.com/research/effective-harnesses-for-long-running-agents) · [Harness design for long-running applications](https://www.anthropic.com/research/harness-design-long-running-apps)
 
