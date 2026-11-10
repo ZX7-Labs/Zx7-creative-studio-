@@ -18,6 +18,10 @@ On a failed model run retain the earliest causal error category, exact model/pro
 
 When an artifact expires, say its bytes are no longer independently available; never invent fresh media verification. Do not commit private artifacts or auth headers to this index.
 
+## 2026-11-10 source-audited NVIDIA follow-up
+
+| Case | Evidence | Outcome / independent limit |
+|---|---|---|
 | One-shot NVIDIA 48-turn forensic review | [Run #42754872382](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42754872382), [durable report](2026-11-10-NVIDIA-ONE-SHOT.md), artifact #13735184585 | **FAILED:** real native project, 5 MP4 paths = only 2 SHA-256 hashes; every export 1920×1080 not owner 640×360, 24 fps/6s, no audio; one invalid provider tool-call recovery misclassified by auditor |
 | Strict NVIDIA audit parity | [#292](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/292), merge `c41a705f7e199e57a573ce28ee486b822af5a05d` | Merged bounded no-dispatch provider error audit; source/controller and MLT checks passed; unrelated render check cancelled |
 | Host-owned delivery mismatch gate | [#293](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/293) | **Proposed, not integrated at this evidence snapshot:** source-derived read-only profile check prevents wrong resolution render and preserves generic native flexibility; no new NVIDIA run |
