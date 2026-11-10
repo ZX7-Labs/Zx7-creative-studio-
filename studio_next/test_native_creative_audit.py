@@ -565,6 +565,84 @@ class NativeCreativeAuditTests(unittest.TestCase):
                 audit_native_journal(bad, host_tool_access=HOST)
 
 
+    def test_nvidia_truncated_tool_response_is_bounded_no_dispatch(self):
+        """Real NVIDIA run #42754872382: turn 21 returned a truncated
+        provider-native function call. No native action was accepted, and a
+        two-turn correction must be auditable but never confer write evidence.
+        """
+        from studio_next.providers import (
+            LocalModelOutputError, MODEL_OUTPUT_REJECTION_CODES)
+        self.assertIn("truncated_tool_decision", MODEL_OUTPUT_REJECTION_CODES)
+        self.assertIn("duplicate_json_field", MODEL_OUTPUT_REJECTION_CODES)
+        self.assertRaises(ValueError, LocalModelOutputError, ["invalid_json"])
+        base = trace()
+        rejection = {
+            "kind": "model_protocol_response_rejected", "turn": 1,
+            "measured_model_wall_ms": 54384.816,
+            "reason_code": "truncated_tool_decision",
+            "no_native_dispatch": True,
+            "remaining_model_output_corrections": 1,
+            "creative_quality_independently_approved": False,
+        }
+        base.insert(3, rejection)
+        for index, event in enumerate(base):
+            event["sequence"] = index
+        valid = audit_native_journal(base, host_tool_access=HOST)
+        self.assertTrue(valid["journal_chain_structurally_valid"])
+        self.assertEqual(sum(e["kind"] == "native_tool_submitted" for e in base),
+                         sum(e["kind"] == "native_tool_submitted" for e in trace()))
+        # All finite model-originated provider/tool errors are classified
+        # consistently. This is not proof of any successful neural edit.
+        for code in MODEL_OUTPUT_REJECTION_CODES:
+            copied = copy.deepcopy(base)
+            copied[3]["reason_code"] = code
+            with self.subTest(code=code):
+                self.assertTrue(audit_native_journal(
+                    copied, host_tool_access=HOST)["journal_chain_structurally_valid"])
+        for corrupted in (
+            {"reason_code": "forged_native_tool_success"},
+            {"reason_code": ["truncated_tool_decision"]},
+            {"no_native_dispatch": False},
+            {"remaining_model_output_corrections": 2},
+            {"creative_quality_independently_approved": True},
+            {"measured_model_wall_ms": -1},
+        ):
+            copied = copy.deepcopy(base)
+            copied[3].update(corrupted)
+            with self.subTest(corrupted=corrupted), self.assertRaises(NativeJournalError):
+                audit_native_journal(copied, host_tool_access=HOST)
+
+    def test_provider_recovery_never_interleaves_with_pending_native_write(self):
+        base = trace()
+        # An unfinished write is uncertain. A model recovery event cannot
+        # silently erase it or certify its effect.
+        base.insert(2, {
+            "kind": "model_protocol_response_rejected", "turn": 0,
+            "measured_model_wall_ms": 1.0,
+            "reason_code": "truncated_tool_decision", "no_native_dispatch": True,
+            "remaining_model_output_corrections": 1,
+            "creative_quality_independently_approved": False,
+        })
+        for index, event in enumerate(base):
+            event["sequence"] = index
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(base, host_tool_access=HOST)
+
+    def test_third_protocol_recovery_never_passes_audit(self):
+        base = trace()
+        for turn in (1, 2, 3):
+            base.insert(3 + turn - 1, {
+                "kind": "model_protocol_response_rejected", "turn": turn,
+                "measured_model_wall_ms": 1.0,
+                "reason_code": "truncated_tool_decision", "no_native_dispatch": True,
+                "remaining_model_output_corrections": max(0, 2 - turn),
+                "creative_quality_independently_approved": False,
+            })
+        for index, event in enumerate(base):
+            event["sequence"] = index
+        with self.assertRaises(NativeJournalError):
+            audit_native_journal(base, host_tool_access=HOST)
+
     def test_initial_project_read_requires_real_host_read_grant_and_sequence(self):
         events = trace()
         read = {"kind": "host_project_bootstrap_observation", "sequence": 1,
