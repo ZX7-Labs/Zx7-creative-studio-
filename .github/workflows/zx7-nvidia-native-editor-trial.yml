@@ -12,12 +12,19 @@ on:
     paths:
       - "research/nvidia-native-trial-request.json"
       - ".github/workflows/zx7-nvidia-native-editor-trial.yml"
+      - "scripts/run_nvidia_native_trial.py"
+      - "scripts/nvidia_native_trial_request.py"
+      - "scripts/test_run_nvidia_native_trial.py"
+      - "studio_next/nvidia_model.py"
+      - "studio_next/nvidia_native_tool_model.py"
+      - "studio_next/test_nvidia_model.py"
 
 permissions:
   contents: read
 
 concurrency:
-  group: zx7-nvidia-native-creative-acceptance
+  # Offline PR admission never waits on or preempts the one real cloud slot.
+  group: ${{ github.event_name == 'pull_request' && format('zx7-nvidia-offline-{0}', github.ref) || 'zx7-nvidia-native-creative-acceptance' }}
   cancel-in-progress: false
 
 jobs:

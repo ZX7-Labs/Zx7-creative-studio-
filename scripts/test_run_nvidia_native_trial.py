@@ -350,6 +350,17 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertNotIn("zx7-nvidia-native-trial/\n", upload)
         self.assertTrue(all(not p.startswith("state/") for p in suffixes))
 
+    def test_offline_pr_admission_is_separate_from_single_hosted_api_lane(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/zx7-nvidia-native-editor-trial.yml").read_text()
+        group = workflow.split("concurrency:", 1)[1].split("jobs:", 1)[0]
+        self.assertIn("github.event_name == 'pull_request'", group)
+        self.assertIn("zx7-nvidia-offline-{0}", group)
+        self.assertIn("'zx7-nvidia-native-creative-acceptance'", group)
+        self.assertIn("cancel-in-progress: false", group)
+        self.assertIn("if: github.event_name == 'pull_request'", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+
     def test_native_trial_actually_requests_structured_actions(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "trial"
@@ -368,6 +379,14 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             self.assertNotIn("--indexed-catalog", command)
             self.assertIn("--fresh-trial-project", command)
             self.assertEqual(command[command.index("--max-turns") + 1], "48")
+            # Last verified remote 120B call timed out at 90s while reasoning.
+            # Use bounded 180s patience, no extra model turns or retries.
+            self.assertEqual(command[command.index("--model-timeout") + 1], "180")
+            self.assertEqual(native_call.call_args.kwargs["timeout"], 1500)
+            self.assertEqual(native_call.call_count, 1)
+            self.assertLessEqual(
+                native_call.call_args.kwargs["timeout"], 35 * 60 - 5 * 60)
+
 
     def test_saved_native_trial_requires_active_real_source_clip(self):
         """Only a structural acceptance fixture, not model or video proof."""
