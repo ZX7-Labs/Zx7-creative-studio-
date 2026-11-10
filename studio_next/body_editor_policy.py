@@ -14,6 +14,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from .body_editor_client import EditorAccessError, EditorPreDispatchError, LocalEditorClient, _load_json
+from .body_editor_delivery import admitted_owner_delivery
 
 
 _CONFIG_LIMIT = 1024 * 1024
@@ -162,6 +163,7 @@ class EditorConfig:
     allowed_access: frozenset[str] = frozenset({"read"})
     timeout: float = 30.0
     verify_native_exports: bool = False
+    required_export_delivery: Mapping[str, object] | None = None
     _policy: EditorPathPolicy = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -177,6 +179,9 @@ class EditorConfig:
             raise ValueError("Editor timeout must be positive and finite")
         if type(self.verify_native_exports) is not bool:
             raise ValueError("Native export verification must be explicitly enabled by the host")
+        # Trusted host's deliverable, not model-authored mutable state.
+        object.__setattr__(self, "required_export_delivery",
+                           admitted_owner_delivery(self.required_export_delivery))
         # Reuse the transport's endpoint/grant validation without connecting.
         LocalEditorClient(self.endpoint, allowed_tools=self.allowed_tools, timeout=self.timeout)
         object.__setattr__(self, "_policy", EditorPathPolicy(
@@ -198,7 +203,7 @@ def load_editor_config(path) -> EditorConfig:
     except (UnicodeError, RecursionError) as exc:
         raise ValueError("Editor config must be finite UTF-8 JSON") from exc
     required = {"endpoint", "projects_root", "staging_root", "outputs_root", "allowed_tools"}
-    if (not isinstance(value, dict) or set(value) - required - {"allowed_access", "timeout", "verify_native_exports"}
+    if (not isinstance(value, dict) or set(value) - required - {"allowed_access", "timeout", "verify_native_exports", "required_export_delivery"}
             or required - set(value)):
         raise ValueError("Editor config has missing or unknown fields")
     return EditorConfig(**value)

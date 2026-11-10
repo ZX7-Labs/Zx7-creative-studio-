@@ -121,6 +121,15 @@ def prepare_trial(workspace: Path, *, source: Path):
         staging_root=str(roots["staging"]),
         outputs_root=str(roots["outputs"]),
         verify_native_exports=True,
+        # Owner's synthetic delivery acceptance, NOT an artistic action plan.
+        # This contract is private to BODY; the model still chooses the native
+        # target and editing steps. The source-native preflight prevents bad
+        # 1080p default exports before any write is attempted.
+        required_export_delivery={
+            "width": _TRIAL_WIDTH, "height": _TRIAL_HEIGHT,
+            "fps": _TRIAL_FPS, "max_duration": _TRIAL_MAX_SECONDS,
+            "video_codec": "h264",
+        },
         allowed_tools=grant,
     )
     cfg = workspace / "host-grants.json"
