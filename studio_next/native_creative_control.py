@@ -25,7 +25,7 @@ from .providers import LocalModelOutputError
 from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK
 from .native_editor_source_pin import source_verified_preview_intent
 from .native_render_evidence import (
-    AUDIO_ENVELOPE, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
 )
@@ -2533,6 +2533,8 @@ class NativeCreativeControl:
                         render_binding[DESTINATION_FIELD] = path_digest
                 if av_values is not None:
                     render_binding[AV_REVIEW_FIELD] = av_values
+                    if native_name == AUDIO_ENVELOPE:
+                        render_binding[AV_PCM_FIELD] = p["preview_pcm_sha256"]
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,

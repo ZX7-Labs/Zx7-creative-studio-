@@ -18,7 +18,7 @@ import stat
 from .body_editor_client import HOST_REJECTION_FEEDBACK
 from .providers import MODEL_OUTPUT_REJECTION_CODES
 from .native_render_evidence import (
-    AUDIO_ENVELOPE, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SCOPE_FIELD, TIMED_FRAMES, reviewed_render_pair,
     valid_av_review_values,
 )
@@ -632,6 +632,10 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if AV_REVIEW_FIELD in event and (not requires_av_review or path is None or
                         access != "read" or not valid_av_review_values(tool, event[AV_REVIEW_FIELD])):
                     raise NativeJournalError("Invalid native audiovisual review evidence")
+                if ((AV_PCM_FIELD in event) !=
+                        (tool == AUDIO_ENVELOPE and AV_REVIEW_FIELD in event) or
+                        (AV_PCM_FIELD in event and not _sha(event[AV_PCM_FIELD]))):
+                    raise NativeJournalError("Invalid decoded audio checksum")
                 if event.get("human_or_artistic_quality_approved") is not False:
                     raise NativeJournalError("Technical tool output cannot assert artistic approval")
                 if (not isinstance(event.get("text_sha256"), list) or

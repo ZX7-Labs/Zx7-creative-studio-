@@ -22,6 +22,7 @@ VERIFY_TOOL = "zx7_verify_native_export"
 DESTINATION_FIELD = "native_export_destination_sha256"
 SCOPE_FIELD = "native_export_timeline_sha256"
 AV_REVIEW_FIELD = "native_av_review"
+AV_PCM_FIELD = "native_av_pcm_sha256"
 
 
 def valid_av_review_values(tool, values):
@@ -58,12 +59,14 @@ def av_review_values(tool, receipt):
         start = receipt.get("requested_start_seconds")
         count = receipt.get("observed_pcm_samples")
         rate = receipt.get("preview_sample_rate")
+        pcm_sha = receipt.get("preview_pcm_sha256")
         if (not isinstance(intervals, list) or
                 not any(isinstance(item, dict) and item.get("no_nonzero_mono_samples") is False
                         for item in intervals) or
                 type(start) not in (int, float) or not 0 <= start <= 300 or
                 type(count) is not int or not 0 < count <= 2_400_160 or
-                type(rate) is not int or rate != 8000):
+                type(rate) is not int or rate != 8000 or
+                not isinstance(pcm_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", pcm_sha)):
             return None
         values = [start, start + count / rate]
     else:
@@ -103,6 +106,16 @@ def native_render_binding(requested, receipt):
     if scope is None:
         return {}
     return {DESTINATION_FIELD: destination, SCOPE_FIELD: scope}
+
+
+def _decoded_review_changed(before, after):
+    before_frames, before_audio = before
+    after_frames, after_audio = after
+    return (
+        any(before_frames[time] != after_frames[time]
+            for time in before_frames.keys() & after_frames.keys()) or
+        (before_audio[:2] == after_audio[:2] and before_audio[2] != after_audio[2])
+    )
 
 
 def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
@@ -175,28 +188,40 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
             digest = event.get("observed_export_sha256")
             if digest != verified[path] or (tool in FRAME_TOOLS and not event.get("image_sha256")):
                 continue
+            decoded = None
             if audiovisual:
                 values = event.get(AV_REVIEW_FIELD)
                 if not valid_av_review_values(tool, values):
                     continue
                 review = av_reviews.setdefault(path, {})
-                review[tool] = values
+                if tool == TIMED_FRAMES:
+                    hashes = event["image_sha256"]
+                    if len(hashes) != len(values):
+                        continue
+                    review[tool] = dict(zip(values, hashes))
+                else:
+                    pcm_sha = event.get(AV_PCM_FIELD)
+                    if not isinstance(pcm_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", pcm_sha):
+                        continue
+                    review[tool] = (*values, pcm_sha)
                 if not {VERIFY_TOOL, TIMED_FRAMES, AUDIO_ENVELOPE}.issubset(review):
                     continue
                 duration, = review[VERIFY_TOOL]
-                times = review[TIMED_FRAMES]
-                start, end = review[AUDIO_ENVELOPE]
+                times = list(review[TIMED_FRAMES])
+                start, end, _ = review[AUDIO_ENVELOPE]
                 # Cover separated moments and the full soundtrack, allowing
                 # 20 ms at the audio tail for bounded decoder rounding.
                 if (times[-1] >= duration or times[-1] - times[0] < duration / 3 or
                         start != 0 or abs(end - duration) > 0.02):
                     continue
-            last_review = (rendered[path], path, digest)
+                decoded = (review[TIMED_FRAMES], review[AUDIO_ENVELOPE])
+            last_review = (rendered[path], path, digest, decoded)
             if (before_revision is not None and before_revision[0] == rendered[path] and
-                    before_revision[1] != path and before_revision[2] != digest):
+                    before_revision[1] != path and before_revision[2] != digest and
+                    (not audiovisual or _decoded_review_changed(before_revision[3], decoded))):
                 pair = [
                     {"destination_sha256": output_path, "export_sha256": output_digest,
                      "timeline_sha256": scope}
-                    for scope, output_path, output_digest in (before_revision, last_review)
+                    for scope, output_path, output_digest, _ in (before_revision, last_review)
                 ]
     return pair

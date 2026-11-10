@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from scripts.nvidia_native_trial_request import validate_native_trial_request
 from scripts.nvidia_smoke_request import SmokeRequestError
@@ -290,8 +290,10 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             state = root / "state"
             state.mkdir()
             config = root / "host.json"
-            config.write_text(json.dumps({"allowed_tools": {
-                "get_project": "read", "update_text_clip": "write"}}))
+            config.write_text(json.dumps({
+                "verify_native_exports": True,
+                "allowed_tools": {"get_project": "read", "update_text_clip": "write"},
+            }))
             brief = root / "brief.txt"
             brief.write_text("Revise the editable project after observing its export.")
             common = dict(
@@ -300,12 +302,14 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 xvfb_lib_dir=None, display=None, software_gpu=False,
                 no_sandbox=False, base_url="http://127.0.0.1:8080",
                 model_id=_ALLOWED_MODEL, model_timeout=15,
-                structured_actions=True, fresh_trial_project=False)
+                structured_actions=True, fresh_trial_project=False, max_turns=4)
             cases = (
                 ("reviewed-revision", "local", False, False, None),
                 ("reviewed-revision", "nvidia", False, False, "explicit synthetic image upload permission"),
                 ("reviewed-revision", "local", True, False, "Cloud-media consent requires --provider nvidia"),
                 ("reviewed-revision", "nvidia", True, False, None),
+                ("none", "nvidia", False, False, None),
+                ("export", "nvidia", False, False, None),
                 ("reviewed-av-revision", "local", False, False, None),
                 ("reviewed-av-revision", "nvidia", True, False, "explicit audio diagnostics consent"),
                 ("reviewed-av-revision", "nvidia", False, True, "explicit synthetic image upload permission"),
@@ -321,18 +325,30 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                                   audio=audio_consent), patch(
                         "studio_next.nvidia_model.NvidiaCreativeModel.verify_host_credentials"
                         ) as credentials, patch.dict(entry.__globals__, {
-                            "stdio_client": unittest.mock.Mock(
-                                side_effect=ReachedNativeLaunch)
+                            "stdio_client": MagicMock(),
+                            "ClientSession": MagicMock(),
+                            "CapabilityGateway": MagicMock(side_effect=ReachedNativeLaunch),
                         }):
                     launch = entry.__globals__["stdio_client"]
+                    launch.return_value.__aenter__.return_value = (None, None)
+                    session = entry.__globals__["ClientSession"]
+                    session.return_value.__aenter__.return_value = SimpleNamespace(
+                        initialize=AsyncMock())
+                    gateway = entry.__globals__["CapabilityGateway"]
                     if refusal is None:
                         with self.assertRaises(ReachedNativeLaunch):
                             asyncio.run(entry(args))
                         launch.assert_called_once()
+                        grants = gateway.call_args.args[0]["editor"][1]
+                        self.assertEqual("zx7_observe_verified_export_audio" in grants,
+                                         provider == "local")
+                        self.assertEqual("zx7_observe_verified_export_audio_timeline" in grants,
+                                         provider == "local" or audio_consent)
                     else:
                         with self.assertRaisesRegex(ValueError, refusal):
                             asyncio.run(entry(args))
                         launch.assert_not_called()
+                        gateway.assert_not_called()
                     self.assertEqual(credentials.call_count,
                                      1 if provider == "nvidia" else 0)
 

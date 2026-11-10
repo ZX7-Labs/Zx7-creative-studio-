@@ -1059,7 +1059,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         before, after = "/private/exports/before.mp4", "/private/exports/after.mp4"
         digests = {before: "a" * 64, after: "b" * 64}
         pictures = [b"\x89PNG\r\n\x1a\nfixture-one", b"\x89PNG\r\n\x1a\nfixture-two"]
-        sample_hashes = [hashlib.sha256(picture).hexdigest() for picture in pictures]
+        revised_pictures = [b"\x89PNG\r\n\x1a\nfixture-revised", pictures[1]]
 
         class AVSession(FakeSession):
             async def call_tool(self, name, arguments):
@@ -1073,15 +1073,19 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                "observation": {"duration_seconds": 6, "audio_present": True,
                                                "full_picture_and_sound_decoder_completed": True}}
                 elif name == TIMED_FRAMES:
+                    frames = (pictures if path == before or scenario == "same-decoded-media"
+                              else revised_pictures)
                     receipt = {"export_sha256": digests[path], "samples": [
-                        {"sampled_video_seconds_requested": timestamp, "png_sha256": digest}
-                        for timestamp, digest in zip(arguments["at_seconds"], sample_hashes, strict=True)]}
+                        {"sampled_video_seconds_requested": timestamp,
+                         "png_sha256": hashlib.sha256(frame).hexdigest()}
+                        for timestamp, frame in zip(arguments["at_seconds"], frames, strict=True)]}
                 elif name == AUDIO_ENVELOPE:
                     receipt = {"kind": "verified_native_editor_audio_temporal_envelope",
                                "export_sha256": digests[path], "requested_start_seconds": 0,
                                "requested_duration_seconds": arguments["duration_seconds"],
                                "observed_pcm_samples": int(8000 * arguments["duration_seconds"]),
                                "preview_sample_rate": 8000,
+                               "preview_pcm_sha256": "c" * 64,
                                "intervals": [{"no_nonzero_mono_samples": False}
                                              for _ in range(arguments["bins"])]}
                 else:
@@ -1091,7 +1095,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 if name == TIMED_FRAMES:
                     blocks.extend(SimpleNamespace(
                         type="image", mime_type="image/png", data=base64.b64encode(picture).decode())
-                        for picture in pictures)
+                        for picture in frames)
                 return SimpleNamespace(is_error=False, content=blocks)
 
         def invoke(tool, **inputs):
@@ -1099,7 +1103,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
 
         finish = decision("finish", summary="Editable revised fixture")
         required = (*REVIEWED_NATIVE_EVIDENCE, REVIEWED_AV_PAIR)
-        for scenario in ("full", "short-first-audio", "clustered-second-picture"):
+        for scenario in ("full", "short-first-audio", "clustered-second-picture",
+                         "same-decoded-media"):
             with self.subTest(scenario=scenario):
                 session = AVSession()
                 session.tools.extend(SimpleNamespace(
@@ -1163,6 +1168,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     last_audio[AV_REVIEW_FIELD] = tampered_range
                     with self.assertRaises(NativeJournalError):
                         audit_native_journal(forged, **kwargs)
+                forged = [dict(event) for event in events]
+                last_audio = next(event for event in reversed(forged)
+                                  if event["kind"] == "native_tool_result"
+                                  and event["tool"] == AUDIO_ENVELOPE)
+                del last_audio["native_av_pcm_sha256"]
+                with self.assertRaises(NativeJournalError):
+                    audit_native_journal(forged, **kwargs)
 
     async def test_failed_review_frame_uses_same_export_verification_not_another_export(self):
         """A verified first movie must not bless an unverified second movie."""

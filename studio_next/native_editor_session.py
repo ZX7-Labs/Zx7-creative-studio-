@@ -20,7 +20,7 @@ from mcp.client.stdio import stdio_client
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.native_creative_audit import audit_native_journal
 from studio_next.native_render_evidence import (
-    REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
+    AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
 )
 from studio_next.native_editor_source_pin import (
     PINNED_VELORN_MCP_REVISION as _PINNED_MCP_PREVIEW_COMMIT,
@@ -233,12 +233,14 @@ async def run_native_session(args):
     if (args.provider == "nvidia" and REVIEWED_RENDER_PAIR in required
             and not args.allow_cloud_image_upload):
         raise ValueError("Observed cloud trial requires explicit synthetic image upload permission")
-    if args.provider == "nvidia" and REVIEWED_AV_PAIR in required:
-        if not cloud_diagnostics:
+    if args.provider == "nvidia":
+        if REVIEWED_AV_PAIR in required and not cloud_diagnostics:
             raise ValueError("Cloud audiovisual review requires explicit audio diagnostics consent")
-        # This endpoint has no validated WAV input. Its opted-in audio review
-        # uses only the independently decoded numerical timeline.
+        # WAV has no validated NVIDIA input contract. Numerical diagnostics
+        # are text and must also be excluded from unconsented hosted sessions.
         host_grants.pop("zx7_observe_verified_export_audio", None)
+        if not cloud_diagnostics:
+            host_grants.pop(AUDIO_ENVELOPE, None)
     brief = args.brief_file.read_text(encoding="utf-8")
     if REVIEWED_AV_PAIR in required:
         brief += (
@@ -247,7 +249,8 @@ async def run_native_session(args):
             "view two to four frames covering separated moments "
             "at least a third of its duration apart, and inspect the decoded audio "
             "timeline from zero through the measured export duration. Then choose and "
-            "save an editable revision and perform the same checks on a new export. "
+            "save an editable revision and check the same timestamps and audio window "
+            "on a new export so the decoded picture or sound change can be verified. "
             "The audio timeline contains numerical observations only.")
     # NVIDIA_API_KEY must stay solely in the trusted Python Brain process.
     # The native editor, Electron children, FFmpeg, and arbitrary editor plugins
@@ -336,6 +339,7 @@ async def run_native_session(args):
         "measured_native_mcp_wall_ms_total": outcome["measured_native_mcp_wall_ms_total"],
         "token_usage_independently_verified": False,
         "cloud_media_upload_permitted_by_host": args.allow_cloud_image_upload,
+        "cloud_audio_diagnostics_permitted_by_host": cloud_diagnostics,
         "public_research_permitted_by_host": research is not None,
         "receipt": str(args.receipt),
         "native_editing_capability_complete": False,
