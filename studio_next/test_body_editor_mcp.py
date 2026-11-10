@@ -286,6 +286,16 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                                       if r["method"] == "tools/call"],
                                      ["check_export_readiness"])
                 self.native_text = receipt()
+                # Velorn's resolver honors undeclared aliases. The read-side
+                # projection drops them, so they must never reach a write.
+                for alias, value in (("codec", "h265"), ("aspect", "vertical"),
+                                     ("size", 720), ("preset", "h264_hd")):
+                    with self.subTest(alias=alias):
+                        before = len(self.requests)
+                        rejected = await session.call_tool(
+                            "export_timeline", {**args, alias: value})
+                        self.assertTrue(rejected.is_error)
+                        self.assertEqual(self.requests[before:], [])
                 before = len(self.requests)
                 result = await session.call_tool("export_timeline", args)
                 self.assertFalse(result.is_error)
@@ -305,9 +315,11 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                     "container": "mp4", "videoCodec": "h264",
                     "width": 1920, "height": 1080, "fps": 24, "duration": 6}})
             async def no_constraint(session):
-                accepted = await session.call_tool("export_timeline", args)
+                unconstrained_args = {**args, "codec": "h265"}
+                accepted = await session.call_tool("export_timeline", unconstrained_args)
                 self.assertFalse(accepted.is_error)
-                self.assertEqual(self.requests[-1]["params"]["name"], "export_timeline")
+                self.assertEqual(self.requests[-1]["params"], {
+                    "name": "export_timeline", "arguments": unconstrained_args})
             await self.with_session(no_constraint, native_source=source)
 
     async def test_owner_delivery_fails_closed_without_native_readiness_authority(self):
