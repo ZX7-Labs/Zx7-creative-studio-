@@ -1,3 +1,5 @@
+> **Historical status archive — no longer the live checkpoint.** The maintained canonical session state is [project-brain/STATE.md](../../project-brain/STATE.md), with [brief](../../project-brain/BRIEF.md), [decisions](../../project-brain/DECISIONS.md), [risks](../../project-brain/RISKS.md) and [evidence](../../project-brain/EVIDENCE/INDEX.md). Entries below intentionally retain older SHA/PR states and MUST NOT be taken as current without live verification.
+
 # ZX7 continuation checkpoint
 
 ## Latest verified integration — 10 November 2026
