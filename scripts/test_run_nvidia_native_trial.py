@@ -33,6 +33,14 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             config = json.loads(cfg.read_text())
             self.assertEqual(set(config["allowed_tools"]), _HOST_ALLOWED)
             self.assertTrue(config["verify_native_exports"])
+            self.assertEqual(config["required_export_delivery"], {
+                "width": 640, "height": 360, "fps": 24,
+                "max_duration": 6, "video_codec": "h264",
+            })
+            from studio_next.body_editor_policy import load_editor_config
+            admitted = load_editor_config(cfg)
+            self.assertEqual(dict(admitted.required_export_delivery),
+                             config["required_export_delivery"])
             self.assertEqual(config["projects_root"], str(roots["projects"]))
             self.assertFalse("get_ai_review_passes" in config["allowed_tools"])
             src = roots["staging"] / "original-neutral-gradient.mp4"
