@@ -40,7 +40,8 @@ def _local_schema_references(schema):
 def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                          export_verifier=None, frame_observer=None,
                          audio_observer=None, audio_timeline_observer=None,
-                         native_source: Path | None = None):
+                         native_source: Path | None = None,
+                         required_export_delivery=None):
     """Return the official SDK server; discovery never expands host grants.
 
     Dependencies are imported here so the stdlib BODY remains usable without
@@ -49,6 +50,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     """
     import anyio
     import jsonschema
+    from .body_editor_delivery import admitted_owner_delivery, native_delivery_matches
     from mcp.server import Server
     from mcp import types
 
@@ -122,6 +124,13 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                            grants.get("get_timeline") == "read")
     export_readiness = (semantic_source and "read" in access and
                         grants.get("check_export_readiness") == "read")
+    required_export_delivery = admitted_owner_delivery(required_export_delivery)
+    # The trusted owner contract cannot be enforced unless the exact native
+    # source offers a granted read-only delivery preflight.
+    if required_export_delivery is not None and (
+            not export_readiness or grants.get("export_timeline") != "write" or
+            "write" not in access):
+        raise ValueError("Owner delivery gate requires native export write and attested readiness read")
     from .native_editor_source_pin import pinned_electron_asset_placement_previews
     placement_preflight = (pinned_electron_asset_placement_previews(native_source, grants)
                            if semantic_source and "write" in access else ())
@@ -272,6 +281,13 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 state = bounded_native_receipt(observed)
                 if state.get("ready") is not True or state.get("blockers") != []:
                     raise ValueError("Native readiness was not established")
+                if (required_export_delivery is not None and
+                        not native_delivery_matches(state, required_export_delivery)):
+                    # This is a READ-only source-computed plan, not a heuristic
+                    # interpretation of filename/project name or model prose.
+                    # No write has been submitted. The model can choose a new
+                    # target/resolution without replaying an uncertain write.
+                    raise EditorPreDispatchError("export_delivery_mismatch")
             except (EditorClientError, EditorAccessError, ValueError):
                 raise EditorPreDispatchError("export_readiness_unconfirmed") from None
         if name in placement_preflight and arguments.get("previewOnly") is False:
@@ -515,7 +531,8 @@ def main(argv=None):
                                       export_verifier=export_verifier, frame_observer=frame_observer,
                                       audio_observer=audio_observer,
                                       audio_timeline_observer=audio_timeline_observer,
-                                      native_source=options.native_source)
+                                      native_source=options.native_source,
+                                      required_export_delivery=config.required_export_delivery)
 
         async def serve():
             from mcp.server.stdio import stdio_server
