@@ -94,13 +94,15 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
 
     async def with_session(self, check, *, access=frozenset({"read", "write"}),
                            export_verifier=None, frame_observer=None, audio_observer=None,
-                           audio_timeline_observer=None, native_source=None):
+                           audio_timeline_observer=None, native_source=None,
+                           required_export_delivery=None):
         server = create_editor_server(self.client, allowed_access=access,
                                       export_verifier=export_verifier,
                                       frame_observer=frame_observer,
                                       audio_observer=audio_observer,
                                       audio_timeline_observer=audio_timeline_observer,
-                                      native_source=native_source)
+                                      native_source=native_source,
+                                      required_export_delivery=required_export_delivery)
         async with create_client_server_memory_streams() as (client_streams, server_streams):
             async with anyio.create_task_group() as group:
                 group.start_soon(server.run, *server_streams, server.create_initialization_options())
@@ -219,6 +221,104 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.requests[-1]["params"], {"name": "export_timeline", "arguments": args})
 
         await self.with_session(check, native_source=source)
+
+    async def test_owner_delivery_uses_source_read_before_any_native_export_write(self):
+        """Real 120B run #42754872382 submitted five native 1080p outputs
+        despite an owner's 640x360 brief. The pinned source defaults to HD;
+        before writing, BODY must compare its ACTUAL export-readiness plan,
+        not trust model prose or a '640x360' filename.
+        """
+        from studio_next.body_editor_policy import EditorPathPolicy
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        with tempfile.TemporaryDirectory() as scratch:
+            roots = [Path(scratch) / name for name in
+                     ("projects", "staging", "outputs")]
+            for root in roots:
+                root.mkdir()
+            self.tools = [
+                {"name": "check_export_readiness", "inputSchema": {
+                    "type": "object", "properties": {
+                        "target": {"type": "string"}, "resolution": {"type": "string"},
+                        "width": {"type": "integer"}, "height": {"type": "integer"},
+                        "fps": {"type": "number"}, "endSeconds": {"type": "number"}}}},
+                {"name": "export_timeline", "inputSchema": {
+                    "type": "object", "properties": {
+                        "outputPath": {"type": "string"}, "previewOnly": {"type": "boolean"},
+                        "target": {"type": "string"}, "resolution": {"type": "string"},
+                        "width": {"type": "integer"}, "height": {"type": "integer"},
+                        "fps": {"type": "number"}, "endSeconds": {"type": "number"}}}},
+            ]
+            self.client = LocalEditorClient(self.endpoint, allowed_tools={
+                "check_export_readiness": "read", "export_timeline": "write"},
+                policy=EditorPathPolicy(*roots))
+            owner = {"width": 640, "height": 360, "fps": 24,
+                     "max_duration": 6, "video_codec": "h264"}
+            args = {"outputPath": str(roots[2] / "model-created-640x360.mp4"),
+                    "target": "h264_project", "resolution": "project",
+                    "endSeconds": 6, "previewOnly": False}
+
+            async def check(session):
+                def receipt(width=640, height=360, fps=24, duration=6, codec="h264"):
+                    return json.dumps({
+                        "ready": True, "blockers": [],
+                        "deliveryTarget": {"container": "mp4",
+                                           "videoCodec": codec,
+                                           "width": width, "height": height,
+                                           "fps": fps, "duration": duration}})
+
+                # A source-accurate successful 'ready' flag is NOT enough;
+                # its deliveryTarget may have silently defaulted to 1080p.
+                for variant in (
+                    receipt(1920, 1080), receipt(width="640"),
+                    receipt(fps=30), receipt(duration=60),
+                    receipt(codec="h265"), json.dumps({
+                        "ready": True, "blockers": [], "deliveryTarget": {}}),
+                ):
+                    self.native_text = variant
+                    before = len(self.requests)
+                    rejected = await session.call_tool("export_timeline", args)
+                    self.assertTrue(rejected.is_error)
+                    self.assertEqual(rejected.meta[
+                        "zx7.host/pre-dispatch-rejection"]["code"],
+                        "export_delivery_mismatch")
+                    new_calls = self.requests[before:]
+                    self.assertEqual([r["params"]["name"] for r in new_calls
+                                      if r["method"] == "tools/call"],
+                                     ["check_export_readiness"])
+                self.native_text = receipt()
+                before = len(self.requests)
+                result = await session.call_tool("export_timeline", args)
+                self.assertFalse(result.is_error)
+                self.assertEqual([r["params"]["name"] for r in self.requests[before:]
+                                  if r["method"] == "tools/call"],
+                                 ["check_export_readiness", "export_timeline"])
+                self.assertEqual(self.requests[-1]["params"]["arguments"], args)
+
+            await self.with_session(check, native_source=source,
+                                    required_export_delivery=owner)
+
+            # When no owner delivery contract exists, native preset flexibility
+            # is intentionally retained (e.g. 1080p commercial deliveries).
+            self.requests.clear()
+            self.native_text = json.dumps({
+                "ready": True, "blockers": [], "deliveryTarget": {
+                    "container": "mp4", "videoCodec": "h264",
+                    "width": 1920, "height": 1080, "fps": 24, "duration": 6}})
+            async def no_constraint(session):
+                accepted = await session.call_tool("export_timeline", args)
+                self.assertFalse(accepted.is_error)
+                self.assertEqual(self.requests[-1]["params"]["name"], "export_timeline")
+            await self.with_session(no_constraint, native_source=source)
+
+    async def test_owner_delivery_fails_closed_without_native_readiness_authority(self):
+        from studio_next.body_editor_delivery import admitted_owner_delivery
+        profile = admitted_owner_delivery({
+            "width": 640, "height": 360, "fps": 24,
+            "max_duration": 6, "video_codec": "h264"})
+        with self.assertRaisesRegex(ValueError, "requires native export write"):
+            create_editor_server(self.client, allowed_access={"read", "write"},
+                                 required_export_delivery=profile)
+        self.assertEqual(self.requests, [])
 
     async def test_pinned_asset_batch_requires_a_successful_read_only_plan(self):
         source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
