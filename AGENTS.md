@@ -20,7 +20,9 @@ The canonical cross-session project memory is [project-brain/README.md](project-
 # Accountable engineering ownership
 
 To resume across chats, read the [working agreement](docs/continuity/WORKING_AGREEMENT.md)
-and [current status](docs/continuity/STATUS.md). The [resume prompt](docs/continuity/RESUME_PROMPT.md)
+and the canonical [current STATE](project-brain/STATE.md). Historical
+[STATUS](docs/continuity/STATUS.md) is archived for old evidence.
+The [resume prompt](docs/continuity/RESUME_PROMPT.md)
 is the owner's entry point for a fresh session. Refresh the live GitHub evidence
 before acting on the status snapshot.
 
