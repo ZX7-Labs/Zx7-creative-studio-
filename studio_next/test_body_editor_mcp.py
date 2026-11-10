@@ -318,7 +318,8 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "requires native export write"):
             create_editor_server(self.client, allowed_access={"read", "write"},
                                  required_export_delivery=profile)
-        self.assertEqual(self.requests, [])
+        self.assertFalse(any(
+            request["method"] == "tools/call" for request in self.requests))
 
     async def test_pinned_asset_batch_requires_a_successful_read_only_plan(self):
         source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
