@@ -204,6 +204,11 @@ def pinned_native_editor_identity_policy(source: Path, grants, session, *,
                   if grants.get(name) == "write"}
     if not candidates:
         return None
+    # The host must explicitly grant every required inventory read. A partial
+    # read catalog cannot be silently promoted or advertised as validated.
+    # Preserve the existing editor control path and report preflight disabled.
+    if any(grants.get(name) != "read" for name in _READ_NAMES):
+        return None
     if not _source_matches_pinned_electron_mcp(source):
         return None
     reader = NativeEditorIdentityReader(
