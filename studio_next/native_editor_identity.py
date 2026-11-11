@@ -99,14 +99,22 @@ def _project_state(obj):
     if not isinstance(project, dict) or not isinstance(timeline, dict):
         raise ValueError("native_identity_project_unavailable")
     if (not isinstance(project.get("id"), str) or
-            not isinstance(timeline.get("id"), str) or
-            not isinstance(obj.get("generatedAt"), str)):
+            not isinstance(timeline.get("id"), str)):
+        raise ValueError("native_identity_project_unavailable")
+    # Electron's get_project reports a snapshot.generatedAt when available,
+    # but the actual bridge also exposes host-owned mcp.lastSnapshotAt.
+    # A null producer-generated timestamp must not erase real project state.
+    marker = obj.get("generatedAt")
+    if not isinstance(marker, str) or not marker:
+        mcp = obj.get("mcp")
+        marker = mcp.get("lastSnapshotAt") if isinstance(mcp, dict) else None
+    if not isinstance(marker, str) or not marker:
         raise ValueError("native_identity_project_unavailable")
     counts = (timeline.get("trackCount"), timeline.get("clipCount"),
               obj.get("assetCount"))
     if any(type(x) is not int or x < 0 for x in counts):
         raise ValueError("native_identity_read_malformed")
-    return (project["id"], timeline["id"], obj["generatedAt"], *counts)
+    return (project["id"], timeline["id"], marker, *counts)
 
 
 class NativeEditorIdentityReader:
