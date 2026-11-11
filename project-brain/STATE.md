@@ -1,6 +1,14 @@
 # ZX7 — current engineering STATE
 
-Checkpoint: **2026-11-10 IST**. This file is a snapshot. Refresh current `main`, PRs and Actions runs on entry.
+Checkpoint: **2026-11-12 IST**. This file is a snapshot. Refresh current `main`, PRs and Actions runs on entry.
+
+## G0 reconciliation — implementation in review (NOT merged/accepted)
+
+- Current `main` checked on 12 Nov: `7242fd10886ce27350803dc2dc7eaa1bdb75777d` (source tree remained unchanged). Existing technical native editing evidence below is valid only for its recorded source, not an independently accepted full artistic task.
+- [PR #300](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/300) now proposes [Master Plan](../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md), [G0 A–L trace and F01–F14 fixture definitions](EVIDENCE/2026-11-12-G0-COVERAGE.md), append-only D022 and a **source-only regression check** for A–L/T01–T24/F01–F14 coverage. This is documentation and offline check code only; it introduces **no creative runtime capability**.
+- Original owner [Vision & Standards] ordering (originality, code/system, design/UX, business outcomes, with serious risk exception) was recovered; the first draft omitted that explicit priority. The original private PDF stays outside Git.
+- **Do not mark G0 exited:** the full native model/gateway/editor/physical-source path still needs exact semantics review and relevant current CI; F01–F14 are specifications, not executed acceptance fixtures. Open PRs #202, #236 and #289 need source overlap reconciliation before importing any candidate changes.
+- **First next action after PR validation:** choose and reproduce an actual native-video source/control gap, implement it against installed Velorn/host evidence, then build the complete genuine model→editable project→sound/picture observation→revision→human intervention G1 flow. Prior NVIDIA single-run permission is exhausted; no new paid inference is authorized by this planning PR.
 
 ## Integrated verified code
 
@@ -37,7 +45,7 @@ The [original #297 physical Ubuntu job](https://github.com/ZX7-Labs/Zx7-creative
 
 Local Qwen 4B run #42711402879 was also a **failure** (46 decisions, 9,068 tokens vs 8,192 context, wrong-profile mostly black export); do not spend additional long CPU jobs qualifying this weak candidate while no practical founder local compute exists.
 
-## Immediate next work, in dependency order
+## Historical NVIDIA model-run gate — separate authorization required (after offline G0/G1 source work)
 
 1. Obtain explicit approval for one synthetic-only NVIDIA Nemotron 3.5 Super VL 120B run, bounded to 48 decisions, 180 seconds per request and 1,500 seconds overall, with generated frames and numerical audio diagnostics as the authorized media egress. The earlier authorization is spent. Keep the exact integrated code source, private isolation and separate allowlisted evidence request.
 2. Stage generated footage and sound offline using `python -m scripts.run_nvidia_native_trial --workspace <new-directory> --prepare-audiovisual-only`. Run the native audiovisual profile with `--record-av-project-snapshots` only after approval. Check `python -m scripts.audit_native_av_trial <before.mp4> <after.mp4> <before.comfystudio> <after.comfystudio> --journal <native-journal.jsonl>`. Require 640×360 H.264 at 24 fps for exactly six seconds, audible AAC, matching native delivery settings, a verified saved editorial change and comparable decoded A/V change.
