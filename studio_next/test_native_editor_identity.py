@@ -81,7 +81,15 @@ class NativeReadSession:
                     c[0] == "get_project" for c in self.calls) == 2:
                 self.revision = "revision-human"
             data = {
-                "project": {"id": self.project_id},
+                "project": {
+                    # Exact pinned Velorn source contract intentionally has
+                    # NO project.id. Source identity uses the active timeline,
+                    # name and project path, which are never echoed.
+                    "name": self.project_id,
+                    "path": "/private/owner/native-project",
+                    "currentTimelineId": self.current_timeline},
+                "mcp": {"hasProject": True,
+                        "lastSnapshotAt": self.revision},
                 "currentTimeline": {
                     "id": self.current_timeline,
                     "trackCount": len(self.tracks),
