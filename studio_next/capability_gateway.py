@@ -29,6 +29,14 @@ class CapabilityExecutionError(ValueError):
     """Rejected BEFORE any native dispatch; no guessed operation is allowed."""
 
 
+class NativeReferencePreDispatchError(CapabilityExecutionError):
+    """Host-only, provably no-dispatch denial with categorical safe feedback."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
 def _wire(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=False, allow_nan=False)
@@ -291,13 +299,13 @@ class CapabilityGateway:
                             inventory = await inventory
                         validate_live_references(inputs, rules, inventory)
                     except CapabilityReferenceError as exc:
-                        raise CapabilityExecutionError(str(exc)) from exc
+                        raise NativeReferencePreDispatchError(str(exc)) from exc
                     except CapabilitySessionBudgetError as exc:
                         raise CapabilityExecutionError(str(exc)) from exc
                     except Exception:
-                        # Native errors may contain owner paths/asset names.
-                        # The write was NOT sent or durably admitted.
-                        raise CapabilityExecutionError(
+                        # Native reader errors may contain private owner paths.
+                        # No native write was submitted or durably admitted.
+                        raise NativeReferencePreDispatchError(
                             "native_identity_inventory_unavailable") from None
             # A single trusted budget spans all connected creative engines.
             # Reserve only after live grant/schema/machine preflight, but
