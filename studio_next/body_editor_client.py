@@ -62,6 +62,13 @@ HOST_REJECTION_FEEDBACK = MappingProxyType({
     "invalid_native_reference_identity": "No native edit was dispatched. Existing object reference ID is invalid.",
     "native_reference_batch_exceeds_limit": "No native edit was dispatched. Split the object-reference batch.",
     "invalid_host_reference_snapshot": "No native edit was dispatched. Trusted source object inventory is invalid.",
+    "native_identity_read_failed": "No native edit was dispatched. The connected editor reported an unsuccessful source observation.",
+    "native_identity_read_malformed": "No native edit was dispatched. The editor supplied an invalid machine-readable source observation.",
+    "native_identity_read_oversize": "No native edit was dispatched. Source observation exceeded the configured bound.",
+    "native_identity_read_incomplete": "No native edit was dispatched. The editor could not supply a complete source-object inventory.",
+    "native_identity_project_unavailable": "No native edit was dispatched. The editor's active project or timeline could not be independently identified.",
+    "native_identity_project_changed_during_read": "No native edit was dispatched. The editor project changed during verification. Re-observe before choosing an edit.",
+    "native_identity_source_counts_changed": "No native edit was dispatched. Timeline, clip or asset counts disagreed across native source observations.",
 })
 
 
