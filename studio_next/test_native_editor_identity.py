@@ -314,10 +314,15 @@ class RealGatewayIdentityAdmissionTests(unittest.IsolatedAsyncioTestCase):
         self.native.human_edit_during_read = True
         params = {"clipId": "clip-1", "text": "Do not overwrite"}
         result = await self.model_tools.call_tool("update_text_clip", params)
+        # A human changed the live native snapshot between source reads.
+        # This specific, host-verified no-write reason is now preserved instead
+        # of collapsing it into an opaque inventory error.
         self.assertEqual(host_pre_dispatch_rejection(
-            result, "update_text_clip", params), "native_identity_inventory_unavailable")
+            result, "update_text_clip", params),
+            "native_identity_project_changed_during_read")
         self.assertEqual(self.native.write_attempts, 0)
         self.assertEqual(self.gateway.evidence(), [])
+        self.assertEqual(self.gateway.host_budget_evidence()["reserved_writes"], 0)
 
     async def test_other_existing_engine_grants_and_model_choices_unmodified(self):
         catalog = await self.model_tools.list_tools()
