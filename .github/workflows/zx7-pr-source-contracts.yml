@@ -35,6 +35,8 @@ jobs:
           python -m unittest \
             studio_next.test_capability_attempts \
             studio_next.test_capability_gateway \
+            studio_next.test_capability_reference_guard \
+            studio_next.test_native_editor_identity \
             studio_next.test_capability_session_budget \
             studio_next.test_capability_mcp_session \
             studio_next.test_capability_fabric \
@@ -112,6 +114,8 @@ jobs:
             studio_next.test_body_project_heads \
             studio_next.test_capability_fabric \
             studio_next.test_capability_gateway \
+            studio_next.test_capability_reference_guard \
+            studio_next.test_native_editor_identity \
             studio_next.test_capability_session_budget \
             studio_next.test_capability_mcp_session \
             studio_next.test_capability_attempts \
