@@ -9,7 +9,7 @@ const { createComfyStudioMcpServer } =
 
 const snapshot = ({clipId='clip-A', assetId='asset-A', generation='fixture-1'}={}) => ({
   app: { name: 'Velorn' },
-  project: { id: 'native-project-1', currentTimelineId: 'timeline-1' },
+  project: { name: 'native-project-1', currentTimelineId: 'timeline-1' },
   currentTimeline: {
     id: 'timeline-1', name: 'Native', fps: 24, duration: 6,
     playheadPosition: 0, generatedAt: generation,
@@ -40,7 +40,11 @@ test('Real upstream get_project/get_timeline/get_assets supply source ID evidenc
   const timeline = await observed(server, 'get_timeline', {includeClips:true,limit:1000})
   const assets = await observed(server, 'get_assets', {limit:1000})
   const after = await observed(server, 'get_project', {})
-  assert.equal(before.project.id, 'native-project-1')
+  assert.equal(Object.hasOwn(before.project, 'id'), false,
+    'Real Velorn project snapshot does not expose project.id')
+  assert.equal(before.project.name, 'native-project-1')
+  assert.equal(before.project.currentTimelineId, 'timeline-1')
+  assert.equal(before.mcp.hasProject, true)
   assert.equal(before.currentTimeline.id, 'timeline-1')
   assert.equal(before.currentTimeline.clipCount, 1)
   assert.equal(before.currentTimeline.trackCount, 1)
