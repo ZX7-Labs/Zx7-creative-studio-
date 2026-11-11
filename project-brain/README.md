@@ -11,6 +11,7 @@
 5. [RISKS.md](RISKS.md) lists live failure modes, verification status, and next falsifiable test; close or supersede a risk only with evidence.
 6. [PROJECT_MAP.md](PROJECT_MAP.md) records stable architecture and accessible/unavailable sources.
 7. [EVIDENCE/INDEX.md](EVIDENCE/INDEX.md) links reproducible positive **and negative** tests, exact run/commit IDs and the original Inherit Mode snapshot. Artifact links may expire; persistent conclusions remain in Git history.
+8. [ZX7 Creative Studio Master Plan](../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) consolidates the owner's chronological product/architecture reasoning, original AI engineering team and agent-memory/handoff design, replaceable Brain–BODY controls, hybrid creative-medium hypotheses, live human collaboration and A–L/gates. It is a **design atlas**, not a second current STATE or a supersession of canonical CAPABILITIES. The concrete [G0 F01–F14 fixture map](EVIDENCE/2026-11-12-G0-COVERAGE.md) preserves test definitions; statuses remain unpassed until real evidence exists.
 
 The large [docs/continuity/STATUS.md](../docs/continuity/STATUS.md) is retained **only as historical evidence**. It is not a second current-state document. Use [docs/continuity/WORKING_AGREEMENT.md](../docs/continuity/WORKING_AGREEMENT.md) for the engineering method.
 
