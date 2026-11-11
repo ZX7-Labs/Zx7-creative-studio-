@@ -189,6 +189,17 @@ class PinnedReaderUnitTests(unittest.IsolatedAsyncioTestCase):
                     k:v for k,v in GRANTS.items() if k != missing})
         self.assertEqual(self.native.calls, [])
 
+    async def test_partial_read_grants_never_claim_native_reference_proof(self):
+        source = Path("/not-a-valid-source")
+        for missing in ("get_project", "get_timeline", "get_assets"):
+            with self.subTest(missing=missing), patch(
+                "studio_next.native_editor_identity._source_matches_pinned_electron_mcp",
+                return_value=True):
+                grants = {k: v for k, v in GRANTS.items() if k != missing}
+                self.assertIsNone(pinned_native_editor_identity_policy(
+                    source, grants, self.native))
+        self.assertEqual(self.native.calls, [])
+
     async def test_exact_pinned_attestation_only_and_never_model_route(self):
         source = Path("/not-a-valid-source")
         with patch("studio_next.native_editor_identity._source_matches_pinned_electron_mcp",
