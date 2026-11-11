@@ -29,6 +29,17 @@ class CapabilityExecutionError(ValueError):
     """Rejected BEFORE any native dispatch; no guessed operation is allowed."""
 
 
+_SAFE_NATIVE_IDENTITY_READ_ERRORS = frozenset({
+    "native_identity_read_failed",
+    "native_identity_read_malformed",
+    "native_identity_read_oversize",
+    "native_identity_read_incomplete",
+    "native_identity_project_unavailable",
+    "native_identity_project_changed_during_read",
+    "native_identity_source_counts_changed",
+})
+
+
 class NativeReferencePreDispatchError(CapabilityExecutionError):
     """Host-only, provably no-dispatch denial with categorical safe feedback."""
 
@@ -302,6 +313,15 @@ class CapabilityGateway:
                         raise NativeReferencePreDispatchError(str(exc)) from exc
                     except CapabilitySessionBudgetError as exc:
                         raise CapabilityExecutionError(str(exc)) from exc
+                    except ValueError as exc:
+                        # Typed host-reader categories are public-safe only
+                        # when they appear in this fixed allowlist. Unknown
+                        # exception messages might contain private asset paths.
+                        category = str(exc)
+                        if category in _SAFE_NATIVE_IDENTITY_READ_ERRORS:
+                            raise NativeReferencePreDispatchError(category) from None
+                        raise NativeReferencePreDispatchError(
+                            "native_identity_inventory_unavailable") from None
                     except Exception:
                         # Native reader errors may contain private owner paths.
                         # No native write was submitted or durably admitted.
