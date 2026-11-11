@@ -13,6 +13,10 @@ Founder brief + owner-authorized original assets/rights → model-neutral `studi
 
 The original read-only inspection of repository main at `0e5aaba42a952d87596f9feb5a086a98d4a36e1a` established: source-backed BODY, pinned Velorn `b3c02adbd5c0779feb8abf34978299e9502cc0e7`, host permissioned native editor and a separate optional NVIDIA transport. Scripted installed editor proof was narrower than neural creativity; A–L had zero independently accepted completed domains. Its initial document called #285/#286 unmerged and #275 closed — **historical then, not today**. Original audit basis and inaccessible sources are in [EVIDENCE/2026-11-10-INHERIT.md](EVIDENCE/2026-11-10-INHERIT.md).
 
+## G0 creative-medium proposal — explicitly not yet implemented
+
+The [source-checked master](../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) is a reviewable synthesis of prior research and original owner intent. Its Creative State Fabric is only a **candidate minimal coordination contract**, not a new universal renderer/scene format or a replacement for existing BODY authority. Preserve one native document owner, one host-granted execution boundary, existing source/rights and durable attempt stores; let the model choose among actual native tools, structured graphs, isolated programs, compatible specialist models and GUI fallback. Human edits must advance the native revision and invalidate stale model writes. [G0 trace/F01–F14](EVIDENCE/2026-11-12-G0-COVERAGE.md) distinguishes installed/source-present, scripted proof, real model decisions, physical A/V and professional acceptance.
+
 ## Sources and limits
 
 Repository source, PRs, workflow logs and retained GitHub artifacts were read through the connected GitHub integration; selected synthetic artifact bytes and old founder standards PDF were inspectable in a temporary sandbox. Local `git clone` failed DNS in the original audit. No claim of having read every repository file, reviewed every third-party dependency or independently compared finished work to a professional NLE. The uploaded founder PDF is not copied to public Git. GitHub Actions artifacts may expire and only current source/commits/metadata persist.

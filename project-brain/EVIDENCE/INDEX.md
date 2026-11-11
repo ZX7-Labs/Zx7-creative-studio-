@@ -4,6 +4,7 @@ Evidence statements are source-sha/PR/run scoped; hyperlinks to GitHub Actions a
 
 | Case | Evidence | Outcome / independent limit |
 |---|---|---|
+| G0 complete-scope planning trace (2026-11-12) | [source and F01–F14 contract](2026-11-12-G0-COVERAGE.md), [PR #300](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/300) | **DESIGN IN REVIEW**: A–L map and test definitions preserved; not 14 executed tests, not a validated CSF medium; no paid model run |
 | Original Inherit Mode | [Read-only baseline](2026-11-10-INHERIT.md) | Source/pr/CI inventory and initial risk map; no code was built in that mode |
 | Pinned desktop + Ubuntu source installer | [#285](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/285), [#286](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/286), [installer CI #42694984026](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42694984026) | Actual source/native installed **scripted** create/export/reopen/revise; not independent AI artwork |
 | Qwen 4B full real CPU test | [run #42711402879](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879), artifact #13722569378, [#288](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/288) | **FAILED**: 46 decisions, context 9068 > 8192, wrong-profile mostly black 60s MP4, no independently verified observed revision |
