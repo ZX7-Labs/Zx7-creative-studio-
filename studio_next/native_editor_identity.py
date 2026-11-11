@@ -8,6 +8,7 @@ native revision/preview semantics remain a separate last-mile invariant.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -98,8 +99,16 @@ def _project_state(obj):
     project, timeline = obj.get("project"), obj.get("currentTimeline")
     if not isinstance(project, dict) or not isinstance(timeline, dict):
         raise ValueError("native_identity_project_unavailable")
-    if (not isinstance(project.get("id"), str) or
-            not isinstance(timeline.get("id"), str)):
+    # Verified upstream src/services/mcpSnapshot.js supplies NO project.id.
+    # Its authoritative currentTimelineId must match get_project's timeline,
+    # and the MCP bridge must positively attest that a project is open.
+    mcp = obj.get("mcp")
+    if (not isinstance(mcp, dict) or mcp.get("hasProject") is not True or
+            not isinstance(timeline.get("id"), str) or
+            not isinstance(project.get("currentTimelineId"), str) or
+            not project["currentTimelineId"] or
+            project["currentTimelineId"] != timeline["id"] or
+            not isinstance(project.get("name"), str)):
         raise ValueError("native_identity_project_unavailable")
     # Electron's get_project reports a snapshot.generatedAt when available,
     # but the actual bridge also exposes host-owned mcp.lastSnapshotAt.
@@ -114,7 +123,21 @@ def _project_state(obj):
               obj.get("assetCount"))
     if any(type(x) is not int or x < 0 for x in counts):
         raise ValueError("native_identity_read_malformed")
-    return (project["id"], timeline["id"], marker, *counts)
+    # Project path is potentially private. Digest the stable source-owned
+    # identity material; no original path leaves this trusted reader.
+    source_identity = {
+        "project_name": project["name"],
+        "project_path": project.get("path"),
+        "project_created": project.get("created"),
+        "current_timeline_id": timeline["id"],
+    }
+    try:
+        identity = hashlib.sha256(json.dumps(
+            source_identity, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
+    except (TypeError, ValueError, RecursionError):
+        raise ValueError("native_identity_project_unavailable") from None
+    return (identity, timeline["id"], marker, *counts)
 
 
 class NativeEditorIdentityReader:
