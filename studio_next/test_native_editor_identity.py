@@ -299,10 +299,15 @@ class RealGatewayIdentityAdmissionTests(unittest.IsolatedAsyncioTestCase):
                         {"reader": reader, "rules": self.rules})},
             session_budget=budget)
         rev = (await gateway.refresh())["revision"]
-        with self.assertRaisesRegex(CapabilityExecutionError, "call_budget_exhausted"):
-            await gateway.invoke("editor/update_text_clip", revision=rev,
-                inputs={"clipId": "clip-1", "text": "Do not edit"})
+        chosen = {"clipId": "clip-1", "text": "Do not edit"}
+        reply = await CapabilityGatewayMcpSession(
+            gateway, "editor").call_tool("update_text_clip", chosen)
+        self.assertEqual(host_pre_dispatch_rejection(
+            reply, "update_text_clip", chosen),
+            "native_identity_read_budget_exhausted")
         self.assertEqual(self.native.write_attempts, 0)
+        self.assertEqual(gateway.evidence(), [])
+        self.assertEqual(budget.snapshot()["reserved_calls"], 3)
         self.assertEqual(budget.snapshot()["reserved_writes"], 0)
 
     async def test_human_changes_during_read_does_not_mark_write_uncertain(self):

@@ -58,6 +58,7 @@ HOST_REJECTION_FEEDBACK = MappingProxyType({
     "native_reference_not_in_live_inventory": "No native edit was dispatched. Selected asset, clip or track ID does not exist in the current project; inspect get_timeline and get_assets before choosing.",
     "native_identity_inventory_incomplete": "No native edit was dispatched. Current object inventory was incomplete; inspect source state instead of guessing an ID.",
     "native_identity_inventory_unavailable": "No native edit was dispatched. Source-owned identity observation was unavailable; inspect the editor connection.",
+    "native_identity_read_budget_exhausted": "No native edit was dispatched. The shared native-object observation budget was exhausted; end this bounded session before further native writes.",
     "invalid_native_reference_shape": "No native edit was dispatched. Existing object reference fields have the wrong structure.",
     "invalid_native_reference_identity": "No native edit was dispatched. Existing object reference ID is invalid.",
     "native_reference_batch_exceeds_limit": "No native edit was dispatched. Split the object-reference batch.",

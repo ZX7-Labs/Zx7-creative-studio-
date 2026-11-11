@@ -311,8 +311,12 @@ class CapabilityGateway:
                         validate_live_references(inputs, rules, inventory)
                     except CapabilityReferenceError as exc:
                         raise NativeReferencePreDispatchError(str(exc)) from exc
-                    except CapabilitySessionBudgetError as exc:
-                        raise CapabilityExecutionError(str(exc)) from exc
+                    except CapabilitySessionBudgetError:
+                        # Some source reads may have run, but NO native write
+                        # was sent or durably admitted. Report this truth to
+                        # the model, without misclassifying a prior write.
+                        raise NativeReferencePreDispatchError(
+                            "native_identity_read_budget_exhausted") from None
                     except ValueError as exc:
                         # Typed host-reader categories are public-safe only
                         # when they appear in this fixed allowlist. Unknown
