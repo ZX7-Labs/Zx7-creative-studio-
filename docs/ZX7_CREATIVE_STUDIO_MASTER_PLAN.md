@@ -46,6 +46,8 @@
 
 ### 2.1 Owner requirements (not quality certificates)
 
+**Founder-defined ordering — Vision & Standards v1.0 (preserve exactly in engineering decisions):** **(1) Originality → (2) production-grade code and system strength → (3) disciplined design and user experience → (4) independently measured business value and income.** In conflicts, higher priorities prevail **unless** the lower-priority concern would expose the founder or users to serious risk. This is a value order, not permission to compromise safety, privacy, rights or working reliability. Novelty claims still require research, comparisons and proof. Mature engines may be reused where the original ZX7 contribution is the capable, clean control and coordination system.
+
 1. **Maximum creative expressiveness:** Professional filmmakers, editors, cinematographers, VFX artists, animators, designers, colorists और sound specialists जिन वास्तविक objects/relationships/operations का उपयोग करते हैं, उनमें सूक्ष्म control; new ideas भी संभावित हों, सिर्फ presets नहीं।
 2. **AI-perspective first:** Human hands/eyes/mouse की replication नहीं; machine-native structured state, native programmatic interfaces, source-aware perceptual observations, simulations and safe creative programs जहाँ लाभकारी हों। GUI तभी जब वही relevant capability का समर्थित route हो।
 3. **Brain autonomously chooses both art and method:** Idea, style, cut, pacing, camera, geometry, tool/code/model/graph choice, iteration strategy और stopping criteria creative Brain तय कर सके। BODY factual guardrails लगाए, aesthetic presets नहीं।
@@ -432,7 +434,7 @@ This table mirrors the **existing canonical `CAPABILITIES.md`** at a higher inte
 2. Map each A–L requirement → installed engine/source owner → actual typed affordance/API vs UI-only capability → editable native document → observation/evidence oracle → gap status. Distinguish source-present, currently installed, scripted tested, true model-run and independent creative acceptance.
 3. Trace **one complete execution path** through model adapter, capability registry/host gateway, native editor, source vault, save/reopen, render, perception and review. Inspect problematic modules plus relevant native Velorn implementation, not only docstrings.
 4. Write a concise **append-only decision** in `project-brain/DECISIONS.md` referring to this full master record; update `PROJECT_MAP`, `RISKS`, `STATE` only with actual completed evidence. Keep older notes intact and link them; do not create a competing STATUS.
-5. Define executable acceptance fixtures F01–F14, adversarial cases and installation toolchain. Compare open candidate fixes (`#202`, `#236`, `#289`) before any overlapping code.
+5. Preserve and implement **[F01–F14 baseline acceptance fixture definitions](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md)**, with adversarial cases and installation toolchain. These are test **specifications**, not runnable/passing tests yet. Compare open candidate fixes (`#202`, `#236`, `#289`) before any overlapping code.
 6. Set budget and authorization for model trials; use NVIDIA-first only when a trial is actually justified and separately approved; keep no hosted runtime requirement.
 
 **Exit gate:** single current source of truth, justified architecture choices, first owner workflow specified at exact native tool semantics, hard tests and baseline available, privacy/license constraints mapped, no unknown authority owner on writes. Does **not** require every file to have its line annotated.
@@ -612,7 +614,7 @@ The biggest uncertainty no longer concerns *what product is being built*. That h
 
 **REPO BASELINE TO REFRESH:** `main` `7242fd10886ce27350803dc2dc7eaa1bdb75777d`; compare to latest GitHub main before action, then read open PRs, STATE/RISKS and source pins. Past run `42754872382` failed; previous specific NVIDIA one-shot authorization is exhausted.
 
-**FIRST ACTION:** Reconcile G0 live repository and candidate PRs, confirm trusted native source/identity/observation/runtime contracts, append new decision(s) instead of overwriting old ones, implement executable F01–F14 acceptance harness and a first targeted source fix where missing. Avoid duplicate scheduler/store, broad rewrite or arbitrary new memory framework.
+**FIRST ACTION:** Reconcile G0 live repository and candidate PRs, confirm trusted native source/identity/observation/runtime contracts, append new decision(s) instead of overwriting old ones, and translate [F01–F14](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md) from acceptance *specifications* into targeted executable cases as each affected field is implemented. Start with the first actual verified native-video source defect instead of inventing a framework. Avoid duplicate scheduler/store, broad rewrite or arbitrary new memory framework.
 
 **IMPLEMENTATION START ACCEPTANCE:** exact-source tests, source custody and native revision physical proof, authorizations documented, experimental acceptance fixed before tuning, no unmeasured creative quality claim. Continue to G1 and then G2+G3+G4 by dependency, updating canonical project-brain and current CI evidence after each meaningful integration gate.
 
@@ -649,5 +651,6 @@ The biggest uncertainty no longer concerns *what product is being built*. That h
 - [Reuse and engine evidence](reuse-research.md)
 - [Video foundation plan](video-research-plan.md)
 - [Universal execution model](zx7-universal-execution-architecture.md)
+- [G0 requirement crosswalk and F01–F14 acceptance definitions](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md)
 
 **Status footer:** This document is a **comprehensive planning synthesis**, not a claim of exact every-message transcript, exhaustive line-by-line code review, model evaluation, final API schema or shipped production product. It preserves earlier requirements and names the concrete tests that distinguish a working professional system from a convincing written design.
