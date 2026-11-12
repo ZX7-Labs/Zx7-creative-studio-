@@ -224,7 +224,7 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
         self.assertEqual(self.renderer.writes,0)
         self.assertEqual(self.renderer.clip_text,"Human changes title before AI write")
         self.assertEqual(len(model.observed),2)
-        self.assertEqual(model.observed[-1]["last_native_rejection"][
+        self.assertEqual(model.observed[-1]["last_rejected_native_action_feedback"][
                              "validation_keyword"],"native_revision_conflict")
 
     async def test_original_upstream_without_verified_overlay_does_not_claim_fence(self):
