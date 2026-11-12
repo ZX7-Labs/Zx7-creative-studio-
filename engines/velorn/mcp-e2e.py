@@ -375,13 +375,20 @@ async def exercise(options):
             # Real X11 human-style keyboard gesture into the installed GUI,
             # using the editor's own default M hotkey (not an MCP write).
             # Prove the renderer's actual timeline store accepted the key.
-            initial_count = captured["currentTimeline"]["markerCount"]
             before_gui = await call(session, "get_timeline", {})
             before_gui_ids = {m["id"] for m in before_gui["markers"]}
+            initial_count = len(before_gui_ids)
             inject_gui_keyboard("m")
-            await wait(session, lambda state:
-                (state.get("currentTimeline") or {}).get("markerCount") == initial_count + 1)
-            after_gui = await call(session, "get_timeline", {})
+            # get_project deliberately publishes only clip/track counts.
+            # Marker state belongs to the full real get_timeline schema.
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                after_gui = await call(session, "get_timeline", {})
+                if len(after_gui.get("markers", [])) == initial_count + 1:
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Electron GUI M hotkey did not create an editable marker")
             new_gui_markers = [m for m in after_gui["markers"]
                                if m["id"] not in before_gui_ids]
             assert len(new_gui_markers) == 1, (
