@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 from fractions import Fraction
+import struct
 import hashlib
 import json
 import math
@@ -201,13 +202,15 @@ def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
 
 
 
-def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_duration=6):
+def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_duration=6,
+                              require_audio=False):
     """Prove that the active saved timeline uses an intact staged original."""
     workspace = Path(workspace).resolve()
     if source_ledger is None:
         source_ledger = json.loads((workspace / "source-ledger.json").read_text(encoding="utf-8"))
-        if type(source_ledger) is not list or len(source_ledger) != 1:
-            raise ValueError("Missing unique owner-original source ledger")
+        expected = 2 if require_audio else 1
+        if type(source_ledger) is not list or len(source_ledger) != expected:
+            raise ValueError("Missing required owner-original source ledger")
     if type(source_ledger) is not list or not 1 <= len(source_ledger) <= 32:
         raise ValueError("Missing bounded owner-original source ledger")
     source_hashes = {}
@@ -264,6 +267,7 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
     # picture evidence. Reject ambiguous IDs before associating source clips.
     track_ids = set()
     video_tracks = set()
+    audio_tracks = set()
     for track in tracks:
         if (type(track) is not dict or
                 type(track.get("id")) is not str or not track["id"] or
@@ -272,6 +276,8 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
         track_ids.add(track["id"])
         if track.get("type") == "video" and track.get("visible") is not False:
             video_tracks.add(track["id"])
+        if track.get("type") == "audio" and track.get("muted") is not True:
+            audio_tracks.add(track["id"])
     valid_assets = {}
     for asset in assets:
         if type(asset) is not dict:
@@ -281,15 +287,19 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
             raise ValueError("Ambiguous native project asset identities")
         valid_assets[aid] = asset
     real_original_clips = 0
+    real_original_audio_clips = 0
     for clip in clips:
         if type(clip) is not dict:
             raise ValueError("Malformed native project clip")
         if (clip.get("enabled") is False or
-                clip.get("trackId") not in video_tracks or
                 type(clip.get("assetId")) is not str):
             continue
+        is_video = clip.get("trackId") in video_tracks
+        is_audio = (require_audio and clip.get("trackId") in audio_tracks)
+        if not (is_video or is_audio):
+            continue
         asset = valid_assets.get(clip["assetId"])
-        if not asset or asset.get("type") != "video":
+        if not asset or asset.get("type") != ("video" if is_video else "audio"):
             continue
         metadata = asset.get("settings")
         source_path = metadata.get("sourcePath") if type(metadata) is dict else None
@@ -321,10 +331,19 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
             raise ValueError("Invalid native source clip timeline placement")
         if start >= max_clip_duration:
             continue
-        real_original_clips += 1
+        if is_video:
+            real_original_clips += 1
+        elif Path(source_path).name == "original-synthetic-sound.wav":
+            real_original_audio_clips += 1
+    if require_audio and (
+            len(source_hashes) != 2 or
+            not any(Path(p).name == "original-synthetic-sound.wav"
+                    for p in source_hashes) or
+            not real_original_audio_clips):
+        raise ValueError("No intact source-backed audible clip on active native audio track")
     if not real_original_clips:
         raise ValueError("No physically source-backed video clip on saved active timeline")
-    return {
+    result = {
         "native_project_sha256": _sha256(project_file),
         "active_native_timeline_id": active_id,
         "saved_native_timeline_sha256": timeline_scope_digest(str(project_file.parent), active_id),
@@ -332,6 +351,9 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
         "verified_source_backed_video_clips": real_original_clips,
         "artistic_quality_approved": False,
     }
+    if require_audio:
+        result["verified_source_backed_audio_clips"] = real_original_audio_clips
+    return result
 
 def decoded_video_frames_sha256(path: Path, *, max_frames=240):
     """Hash exact-time presented decoded RGB frames, not container metadata.
@@ -389,6 +411,54 @@ def decoded_video_frames_sha256(path: Path, *, max_frames=240):
     if not presentations:
         raise ValueError("Native output contains no decoded video frames")
     return tuple(presentations)
+
+
+
+class DecodedTrialAudio(NamedTuple):
+    """Physical PCM observation, not semantic listening or artistic acceptance."""
+    pcm_sha256: str
+    sample_rate: int
+    sample_count: int
+    duration_seconds: float
+    rms: float
+    audible: bool
+
+
+def decode_trial_audio(path: Path, *, expected_video_seconds: float,
+                       sample_rate=8000, max_seconds=_TRIAL_MAX_SECONDS):
+    """Fully decode actual export audio, reject missing/silent/misaligned sound.
+
+    The bounded trial resource budget does NOT constrain production soundtracks.
+    We never infer emotion, speech intelligibility, licensing or mix quality
+    from PCM energy; those require a compatible reviewer and human listening.
+    """
+    if (type(expected_video_seconds) not in (int, float) or
+            not 0 < expected_video_seconds <= max_seconds or
+            type(sample_rate) is not int or sample_rate != 8000):
+        raise ValueError("Invalid physical A/V observation budget")
+    try:
+        decoded = subprocess.run(
+            ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-xerror",
+             "-i", str(path), "-map", "0:a:0", "-vn", "-ac", "1",
+             "-ar", str(sample_rate), "-f", "s16le", "pipe:1"],
+            check=True, capture_output=True, timeout=90,
+            env=_no_cloud_credentials()).stdout
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        raise ValueError("Physical export audio is missing or cannot be decoded") from None
+    max_bytes = (max_seconds + 1) * sample_rate * 2
+    if (not decoded or len(decoded) % 2 or len(decoded) > max_bytes):
+        raise ValueError("Invalid bounded decoded export PCM")
+    sample_count = len(decoded) // 2
+    duration = sample_count / sample_rate
+    if abs(duration - expected_video_seconds) > 0.10:
+        raise ValueError("Decoded audio duration is not aligned with picture")
+    power = sum(value[0] * value[0]
+                for value in struct.iter_unpack("<h", decoded))
+    rms = (power / sample_count) ** 0.5 / 32768.0
+    return DecodedTrialAudio(
+        hashlib.sha256(decoded).hexdigest(), sample_rate, sample_count,
+        duration, rms, rms >= 0.005)
+
 
 
 class DecodedTrialExport(NamedTuple):
@@ -472,10 +542,12 @@ def trial_delivery_profile_compliant(
     return True
 
 
-def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str):
+def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
+              audiovisual=False):
     if model_id != _ALLOWED_MODEL:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
-    roots, cfg = prepare_trial(workspace, source=_SOURCE_EDITOR)
+    roots, cfg = prepare_trial(workspace, source=_SOURCE_EDITOR,
+                               audiovisual=audiovisual)
     workspace = Path(workspace).resolve()
     receipt = workspace / "native-journal.jsonl"
     command = [
@@ -490,7 +562,10 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         # There is NO host-authored creative edit or automatic invocation.
         "--structured-actions",
         "--fresh-trial-project",
-        "--evaluation-evidence", "reviewed-revision",
+        "--evaluation-evidence", (
+            "reviewed-av-revision" if audiovisual else "reviewed-revision"),
+        *(["--allow-cloud-audio-diagnostics", "--record-av-project-snapshots"]
+          if audiovisual else []),
         "--max-turns", str(_TRIAL_MAX_TURNS),
         "--model-timeout", str(_TRIAL_MODEL_TIMEOUT_SECONDS),
         "--source", str(_SOURCE_EDITOR),
@@ -522,10 +597,15 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     mp4s = sorted(roots["outputs"].rglob("*.mp4"))
     media = []
     decoded_exports = {}
+    audio_exports = {}
     for path in mp4s:
         decoded = decode_trial_export(path)
         identity = decoded.identity
-        decoded_exports[(destination_digest(str(path)), identity[-1])] = decoded
+        pair_key = (destination_digest(str(path)), identity[-1])
+        decoded_exports[pair_key] = decoded
+        if audiovisual:
+            audio_exports[pair_key] = decode_trial_audio(
+                path, expected_video_seconds=len(decoded.presentation) / _TRIAL_FPS)
         media.append({"path": str(path), "sha256": identity[-1],
                       "bytes": identity[2],
                       "decoded_picture_profile": decoded.picture_profile,
@@ -534,12 +614,17 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
                       "decoded_video_frames": len(decoded.presentation),
                       "decoded_rgb_frame_sequence_sha256": hashlib.sha256(
                           json.dumps(decoded.presentation,
-                                     separators=(",", ":")).encode()).hexdigest()})
+                                     separators=(",", ":")).encode()).hexdigest(),
+                      **({"decoded_audio_pcm_sha256": audio_exports[pair_key].pcm_sha256,
+                          "decoded_audio_duration_seconds": audio_exports[pair_key].duration_seconds,
+                          "decoded_audio_rms": audio_exports[pair_key].rms,
+                          "decoded_audio_audible": audio_exports[pair_key].audible}
+                         if audiovisual else {})})
     # Preserve forensic evidence even when final native state fails acceptance.
     # Never let an empty timeline disappear behind an early RuntimeError.
     try:
         saved_native = {
-            **verify_saved_native_trial(workspace),
+            **verify_saved_native_trial(workspace, require_audio=audiovisual),
             "native_saved_project_verified": True,
         }
     except ValueError as exc:
@@ -556,8 +641,12 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     export_variants = len({entry["sha256"] for entry in media})
     independently_different_picture_exports = len({
         item.presentation for item in decoded_exports.values()})
-    pair = summary.get("reviewed_native_render_pair")
+    pair = summary.get(
+        "reviewed_native_audiovisual_pair" if audiovisual else
+        "reviewed_native_render_pair")
     changed_reviewed_picture = False
+    changed_reviewed_audio = False
+    reviewed_pair_audio_acceptable = False
     reviewed_pair_delivery_profile_compliant = False
     if pair and pair[1]["timeline_sha256"] == saved_native.get("saved_native_timeline_sha256"):
         before, after = (decoded_exports.get((item["destination_sha256"], item["export_sha256"]))
@@ -566,14 +655,26 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
         reviewed_pair_delivery_profile_compliant = (
             trial_delivery_profile_compliant(before) and
             trial_delivery_profile_compliant(after))
+        if audiovisual:
+            a, b = (audio_exports.get((item["destination_sha256"], item["export_sha256"]))
+                    for item in pair)
+            reviewed_pair_audio_acceptable = bool(
+                a and b and a.audible and b.audible)
+            changed_reviewed_audio = bool(
+                reviewed_pair_audio_acceptable and
+                a.pcm_sha256 != b.pcm_sha256)
     evaluated = {
         **saved_native,
         "different_decoded_export_count": export_variants,
         "different_decoded_picture_sequence_count": independently_different_picture_exports,
         "status": summary.get("status"),
         "host_evidence_satisfied": summary.get("evaluation_evidence_satisfied") is True,
-        "reviewed_native_render_pair": pair,
+        "reviewed_native_render_pair": None if audiovisual else pair,
+        "reviewed_native_audiovisual_pair": pair if audiovisual else None,
         "decoded_reviewed_picture_changed": changed_reviewed_picture,
+        "decoded_reviewed_audio_changed": changed_reviewed_audio,
+        "reviewed_pair_audible_audio_acceptable": (
+            reviewed_pair_audio_acceptable if audiovisual else None),
         "reviewed_pair_synthetic_delivery_profile_compliant":
             reviewed_pair_delivery_profile_compliant,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
@@ -588,7 +689,9 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str)
     print(json.dumps(evaluated, ensure_ascii=False))
     if (summary.get("status") != "model_finished_unverified" or
             summary.get("evaluation_evidence_satisfied") is not True or
-            not changed_reviewed_picture or
+            not (changed_reviewed_picture or
+                 (audiovisual and changed_reviewed_audio)) or
+            (audiovisual and not reviewed_pair_audio_acceptable) or
             not reviewed_pair_delivery_profile_compliant or
             saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
@@ -603,12 +706,21 @@ def main(argv=None):
     parser.add_argument("--display", default="127.0.0.1:95")
     parser.add_argument("--prepare-audiovisual-only", action="store_true",
                         help="Stage generated picture and sound without launching any model")
+    parser.add_argument("--audiovisual-trial", action="store_true",
+                        help="Opt in to a model-driven trial with physically decoded sound")
+    parser.add_argument("--allow-cloud-audio-diagnostics", action="store_true",
+                        help="Separate consent for sending synthetic audio statistics to NVIDIA")
     args = parser.parse_args(argv)
     if args.prepare_audiovisual_only:
         prepare_trial(args.workspace, source=_SOURCE_EDITOR, audiovisual=True)
         return
+    if args.audiovisual_trial and not args.allow_cloud_audio_diagnostics:
+        parser.error("Audiovisual NVIDIA trial requires explicit cloud audio diagnostics consent")
+    if args.allow_cloud_audio_diagnostics and not args.audiovisual_trial:
+        parser.error("Audio diagnostics consent is valid only for audiovisual trial")
     run_trial(args.workspace, model_id=args.model_id,
-              xvfb_binary=args.xvfb_binary, display=args.display)
+              xvfb_binary=args.xvfb_binary, display=args.display,
+              audiovisual=args.audiovisual_trial)
 
 
 if __name__ == "__main__":
