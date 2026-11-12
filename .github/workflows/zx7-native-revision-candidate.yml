@@ -1,0 +1,34 @@
+name: ZX7 Native Collaboration — Source Revision Candidate
+
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/native-live-revision.patch'
+      - 'engines/velorn/prepare-native-revision-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - '.github/workflows/zx7-native-revision-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-pinned-collaboration-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prove upstream source identity, patch application and JS syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash engines/velorn/prepare-native-revision-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-native-collab" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-native-collab"
