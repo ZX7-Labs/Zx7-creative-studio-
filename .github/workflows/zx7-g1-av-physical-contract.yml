@@ -40,7 +40,8 @@ jobs:
       - name: Prove real PCM is present, aligned and not digitally silent
         run: |
           python -m unittest -v \
-            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_physical_audio_decode_rejects_missing_silence_and_wrong_timing
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_physical_audio_decode_rejects_missing_silence_and_wrong_timing \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_failed_model_audiovisual_export_retains_negative_audio_receipt
       - name: Recheck original visual-only trial compatibility (no provider call)
         run: |
           python -m unittest -v \
