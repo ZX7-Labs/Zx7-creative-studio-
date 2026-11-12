@@ -36,6 +36,10 @@ def receipt(audio):
         "export_sha256":"a"*64,
         "wav_sha256":hashlib.sha256(audio).hexdigest(),
         "preview_downmixed_and_resampled":True,
+        "requested_start_seconds":1,
+        "requested_duration_seconds":1,
+        "observed_audio_duration_seconds":1,
+        "exact_original_audio_pts_proven":False,
         "original_multichannel_mix_proven":False,
     }
 
@@ -133,6 +137,7 @@ class Session:
     def __init__(self,audio):
         self.audio=audio
         self.corrupt=False
+        self.corrupt_timing=False
         self.calls=0
     async def list_tools(self):
         return SimpleNamespace(tools=[SimpleNamespace(
@@ -150,6 +155,7 @@ class Session:
                     "human_or_artistic_quality_approved": False}))])
         r=receipt(self.audio)
         if self.corrupt:r["wav_sha256"]="f"*64
+        if self.corrupt_timing:r["requested_duration_seconds"]=-1
         return SimpleNamespace(is_error=False,content=[
             SimpleNamespace(type="text",text=json.dumps(r)),
             SimpleNamespace(type="audio",mime_type="audio/wav",
@@ -170,6 +176,9 @@ class ActualNativeAudioRoutingTests(unittest.IsolatedAsyncioTestCase):
             ctx,received=model.audio_input
             self.assertEqual(received,[("audio/wav",audio)])
             self.assertEqual(ctx["audio_evidence"]["wav_sha256"],hashlib.sha256(audio).hexdigest())
+            self.assertEqual(ctx["audio_evidence"]["requested_start_seconds"],1)
+            self.assertEqual(ctx["audio_evidence"]["requested_duration_seconds"],1)
+            self.assertFalse(ctx["audio_evidence"]["exact_original_audio_pts_proven"])
             serialized=p.read_text()
             self.assertNotIn(base64.b64encode(audio).decode()[:100],serialized)
             self.assertIn('"audio_sent_to_model_for_next_decision":true',serialized)
@@ -256,6 +265,15 @@ class ActualNativeAudioRoutingTests(unittest.IsolatedAsyncioTestCase):
         session.corrupt=True
         model=ScriptedAudioModel()
         with self.assertRaisesRegex(NativeCreativeControlError,"verified source"):
+            await NativeCreativeControl(session,model,max_turns=3).run("Listen")
+        self.assertIsNone(model.audio_input)
+
+    async def test_invalid_timed_receipt_fails_before_model_audio_turn(self):
+        audio=wav_bytes()
+        session=Session(audio)
+        session.corrupt_timing=True
+        model=ScriptedAudioModel()
+        with self.assertRaisesRegex(NativeCreativeControlError,"timed excerpt provenance"):
             await NativeCreativeControl(session,model,max_turns=3).run("Listen")
         self.assertIsNone(model.audio_input)
 
