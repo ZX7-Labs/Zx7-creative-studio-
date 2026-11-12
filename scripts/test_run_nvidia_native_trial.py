@@ -793,6 +793,76 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 decode_trial_audio(no_sound, expected_video_seconds=0.5,
                                    max_seconds=1)
 
+    def test_failed_model_audiovisual_export_retains_negative_audio_receipt(self):
+        """A model-reported success cannot erase absent sound from forensic output."""
+        import hashlib
+        from scripts.run_nvidia_native_trial import (
+            DecodedTrialAudio, DecodedTrialExport)
+        from studio_next.native_render_evidence import destination_digest
+        with tempfile.TemporaryDirectory() as scratch:
+            workspace = Path(scratch) / "run"
+            workspace.mkdir()
+            outputs = workspace / "outputs"
+            outputs.mkdir()
+            first, second = (outputs / x for x in ("before.mp4", "after.mp4"))
+            first.write_bytes(b"synthetic-video-a")
+            second.write_bytes(b"synthetic-video-b")
+            def sha(path):
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+            def pair_entry(path):
+                return {"destination_sha256": destination_digest(str(path)),
+                        "export_sha256": sha(path), "timeline_sha256": "fixed-scope"}
+            model_result = {
+                "status": "model_finished_unverified",
+                "evaluation_evidence_satisfied": True,
+                "reviewed_native_audiovisual_pair": [pair_entry(first), pair_entry(second)],
+                "model_selected_write_receipts": 2,
+                "independently_verified_export_receipts": 2,
+            }
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(model_result) + "\\n", stderr="")
+            def video(path):
+                return DecodedTrialExport(
+                    (str(path), "", path.stat().st_size, "", sha(path)),
+                    ((str(path.name), "1/24", sha(path)),),
+                    {"width": 640, "height": 360, "codec_name": "h264"})
+            def audio(path, **_):
+                if path == second:
+                    raise ValueError("Decoded audio absent")
+                return DecodedTrialAudio("f" * 64, 8000, 4000, 0.5, .1, True)
+            saved = {"saved_native_timeline_sha256": "fixed-scope",
+                     "verified_source_backed_video_clips": 1,
+                     "verified_source_backed_audio_clips": 1}
+            roots = {"outputs": outputs, "state": workspace / "state"}
+            with patch("scripts.run_nvidia_native_trial.prepare_trial",
+                       return_value=(roots, workspace / "config.json")), patch(
+                    "scripts.run_nvidia_native_trial.subprocess.run",
+                    return_value=completed), patch(
+                    "scripts.run_nvidia_native_trial.decode_trial_export",
+                    side_effect=video), patch(
+                    "scripts.run_nvidia_native_trial.decode_trial_audio",
+                    side_effect=audio), patch(
+                    "scripts.run_nvidia_native_trial.verify_saved_native_trial",
+                    return_value=saved) as project_check, patch(
+                    "scripts.run_nvidia_native_trial.trial_delivery_profile_compliant",
+                    return_value=True):
+                with self.assertRaisesRegex(RuntimeError, "visual-revision-export proof"):
+                    run_trial(workspace, model_id=_ALLOWED_MODEL,
+                              xvfb_binary="/usr/bin/Xvfb",
+                              display="127.0.0.1:95", audiovisual=True)
+            project_check.assert_called_once_with(workspace, require_audio=True)
+            evaluation = json.loads(
+                (workspace / "native-evaluation.json").read_text(encoding="utf-8"))
+            self.assertTrue(evaluation["native_saved_project_verified"])
+            self.assertEqual(evaluation["decoded_audio_errors"], 1)
+            self.assertFalse(evaluation["reviewed_pair_audible_audio_acceptable"])
+            self.assertEqual(
+                [item["decoded_audio_rejection"]
+                 for item in evaluation["decoded_real_exports"]
+                 if "decoded_audio_rejection" in item],
+                ["audio_missing_or_decode_or_sync_failed"])
+            self.assertFalse(evaluation["artistic_quality_approved"])
+
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "not-created"
