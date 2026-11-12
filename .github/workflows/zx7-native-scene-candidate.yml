@@ -1,0 +1,37 @@
+name: ZX7 Native Scene Collaboration — Revision Candidate
+
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/native-scene-revision.patch'
+      - 'engines/velorn/prepare-native-scene-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/native_editor_identity.py'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/body_editor_mcp.py'
+      - 'studio_next/test_native_scene_revision.py'
+      - '.github/workflows/zx7-native-scene-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify previous source and new deterministic scene patch
+        run: |
+          set -euo pipefail
+          bash engines/velorn/prepare-native-scene-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-native-scene" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-native-scene"
