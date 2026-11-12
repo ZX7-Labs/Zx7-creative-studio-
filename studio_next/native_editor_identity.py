@@ -16,6 +16,7 @@ from pathlib import Path
 from .native_editor_source_pin import (
     _source_matches_pinned_electron_mcp,
     _source_matches_pinned_native_collaboration,
+    _source_matches_pinned_native_scene,
 )
 
 _MAX_TEXT = 6_000_000
@@ -234,18 +235,25 @@ def pinned_native_editor_identity_policy(source: Path, grants, session, *,
         return None
     if not _source_matches_pinned_electron_mcp(source):
         return None
-    source_fenced = (_source_matches_pinned_native_collaboration(source) and
-                     grants.get("update_text_clip") == "write")
+    source_fenced = _source_matches_pinned_native_collaboration(source)
+    scene_fenced = (_source_matches_pinned_native_scene(source)
+                    if source_fenced else False)
+    fenced_names = (
+        (["update_text_clip"] if source_fenced else []) +
+        (["update_shape_clip", "set_clip_keyframes"] if scene_fenced else [])
+    )
+    fenced_names = [name for name in fenced_names
+                    if grants.get(name) == "write"]
     reader = NativeEditorIdentityReader(
         session, grants, reserve_read=reserve_read,
-        require_live_revision=source_fenced)
+        require_live_revision=bool(fenced_names))
     policy = {"reader": reader, "rules": candidates}
-    if source_fenced:
-        # Local source-attested contract; hidden outbound argument cannot be
-        # chosen by the model and is compared by the renderer at write time.
-        policy["fence"] = {"update_text_clip": {
+    if fenced_names:
+        # The model chooses creative parameters. Only source-vetted actions
+        # get a hidden host-owned revision, checked at the synchronous writer.
+        policy["fence"] = {name: {
             "inventory_key": "__zx7_live_revision",
             "argument_key": "__zx7ExpectedRevision",
             "rejected_code": "ZX7_STALE_NATIVE_REVISION",
-        }}
+        } for name in fenced_names}
     return policy

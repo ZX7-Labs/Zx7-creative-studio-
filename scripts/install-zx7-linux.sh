@@ -3,10 +3,21 @@
 # Build an independent, sandboxed ZX7 Studio from this source checkout.
 set -euo pipefail
 
-if (( $# > 1 )); then
-  echo "Usage: bash scripts/install-zx7-linux.sh [INSTALL_PREFIX]" >&2
-  exit 2
-fi
+# Preserve the established install path as the default. The source-attested
+# scene editor is a separately pinned experimental writer variant; no silent
+# switch to a new native runtime or mutation of an installed prefix.
+profile=stable
+install_prefix=""
+for argument in "$@"; do
+  if [[ "$argument" == "--scene-collaboration" && "$profile" == stable ]]; then
+    profile=scene
+  elif [[ "$argument" == -* || -n "$install_prefix" ]]; then
+    echo "Usage: bash scripts/install-zx7-linux.sh [--scene-collaboration] [INSTALL_PREFIX]" >&2
+    exit 2
+  else
+    install_prefix=$argument
+  fi
+done
 if [[ "$(uname -s):$(uname -m)" != Linux:x86_64 || "$EUID" == 0 ]]; then
   echo "Run this installer as an ordinary user on Ubuntu 24.04 x86-64." >&2
   exit 2
@@ -17,7 +28,7 @@ if ! ( . /etc/os-release && [[ "$ID:$VERSION_ID" == ubuntu:24.04 ]] ); then
 fi
 
 checkout=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-requested=${1:-"${HOME}/.local/opt/zx7-studio"}
+requested=${install_prefix:-"${HOME}/.local/opt/zx7-studio"}
 if [[ -e "$requested" || -L "$requested" ]]; then
   echo "Install destination already exists: $requested" >&2
   exit 2
@@ -67,7 +78,12 @@ python3 -m venv "$candidate/venv"
 "$candidate/venv/bin/python" -m pip --isolated install --disable-pip-version-check "$checkout[editor,production]"
 mkdir -p "$candidate/venv/share/zx7-studio"
 editor="$candidate/venv/share/zx7-studio/velorn"
-bash "$checkout/engines/velorn/prepare-supported-source.sh" "$upstream" "$editor"
+if [[ "$profile" == scene ]]; then
+  bash "$checkout/engines/velorn/prepare-native-scene-candidate.sh" \
+    "$upstream" "$editor" --install
+else
+  bash "$checkout/engines/velorn/prepare-supported-source.sh" "$upstream" "$editor"
+fi
 (
   cd "$editor"
   bash "$checkout/engines/velorn/install-ci-dependencies.sh" supported-electron
@@ -91,3 +107,4 @@ chmod 755 "$candidate/bin/zx7-studio"
 "$candidate/bin/zx7-studio" --help >/dev/null
 ln -sT -- "$candidate" "$target"
 printf 'Installed Studio command: %s\n' "$target/bin/zx7-studio"
+printf 'Native editor profile: %s\n' "$profile"

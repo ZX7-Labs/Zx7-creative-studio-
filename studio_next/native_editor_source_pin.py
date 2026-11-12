@@ -16,10 +16,11 @@ PINNED_VELORN_MCP_REVISION = _SOURCE_LOCK["upstream_revision"]
 PINNED_VELORN_DESKTOP_REVISION = _SOURCE_LOCK["desktop_revision"]
 # A separately reviewed and reproducibly built collaboration source revision.
 PINNED_VELORN_COLLAB_REVISION = _SOURCE_LOCK.get("collab_revision")
+PINNED_VELORN_SCENE_REVISION = _SOURCE_LOCK.get("collab_scene_revision")
 TRUSTED_VELORN_REVISIONS = frozenset(
     value for value in (
         PINNED_VELORN_MCP_REVISION, PINNED_VELORN_DESKTOP_REVISION,
-        PINNED_VELORN_COLLAB_REVISION,
+        PINNED_VELORN_COLLAB_REVISION, PINNED_VELORN_SCENE_REVISION,
     ) if isinstance(value, str) and value)
 
 _PINNED_MARKER_PREVIEWS = (
@@ -105,16 +106,41 @@ def _source_matches_pinned_native_collaboration(source: Path) -> bool:
             ["git", "-C", str(source.resolve(strict=True)), "rev-parse", "HEAD"],
             capture_output=True, text=True, timeout=5, env=safe_env)
         if (actual.returncode != 0 or
-                actual.stdout.strip() != PINNED_VELORN_COLLAB_REVISION):
+                actual.stdout.strip() not in {
+                    PINNED_VELORN_COLLAB_REVISION,
+                    PINNED_VELORN_SCENE_REVISION,
+                }):
             return False
+        # A clean PINNED HEAD is the source contract, not just three
+        # reviewed entry-point files. A dirty tracked timeline/store module
+        # can suppress GUI revision emission while leaving those files intact.
+        # Ignore untracked build outputs; reject any staged or unstaged
+        # modification to tracked source. This is checkout attestation, not
+        # a guarantee against post-check mutation by another local process.
         clean = subprocess.run(
             ["git", "-C", str(source.resolve(strict=True)), "diff", "--quiet",
-             "HEAD", "--", "electron/mcpServer.js", "src/services/mcpSnapshot.js",
-             "src/services/mcpActions.js"],
+             "HEAD", "--"],
             capture_output=True, text=True, timeout=5, env=safe_env)
     except (OSError, RuntimeError, subprocess.TimeoutExpired):
         return False
     return clean.returncode == 0
+
+
+def _source_matches_pinned_native_scene(source: Path) -> bool:
+    """Only the exact reviewed child overlay has shape+keyframe CAS semantics."""
+    if (not PINNED_VELORN_SCENE_REVISION or
+            not _source_matches_pinned_native_collaboration(source)):
+        return False
+    safe_env = dict(os.environ)
+    safe_env.pop("NVIDIA_API_KEY", None)
+    try:
+        actual = subprocess.run(
+            ["git", "-C", str(source.resolve(strict=True)), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return False
+    return (actual.returncode == 0 and
+            actual.stdout.strip() == PINNED_VELORN_SCENE_REVISION)
 
 
 def pinned_electron_marker_previews(source: Path, grants: dict) -> tuple[str, ...]:

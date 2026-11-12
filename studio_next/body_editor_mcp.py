@@ -67,13 +67,21 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     # A private bridge wire field, NOT a model-discovered schema property.
     # Only an exact clean collaboration source may receive it. The field
     # can restrict an already-granted edit, never grant a new native action.
-    from .native_editor_source_pin import _source_matches_pinned_native_collaboration
-    revision_bridge = bool(
-        native_source is not None and
-        _source_matches_pinned_native_collaboration(native_source) and
-        grants.get("update_text_clip") == "write" and
-        all(grants.get(x) == "read" for x in (
-            "get_project", "get_timeline", "get_assets")))
+    from .native_editor_source_pin import (
+        _source_matches_pinned_native_collaboration,
+        _source_matches_pinned_native_scene,
+    )
+    has_revision_reads = all(grants.get(x) == "read" for x in (
+        "get_project", "get_timeline", "get_assets"))
+    trusted_collab = bool(native_source is not None and
+                          _source_matches_pinned_native_collaboration(native_source))
+    trusted_scene = bool(trusted_collab and
+                         _source_matches_pinned_native_scene(native_source))
+    revision_bridge_tools = frozenset(
+        name for name in (
+            (("update_text_clip",) if trusted_collab else ()) +
+            (("update_shape_clip", "set_clip_keyframes") if trusted_scene else ())
+        ) if has_revision_reads and grants.get(name) == "write")
     if set(grants) - set(native):
         raise ValueError("Host-granted native editor tool is absent from discovery")
     required_export_delivery = admitted_owner_delivery(required_export_delivery)
@@ -330,9 +338,14 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         # unchanged to the verified source-native synchronous writer. Raw
         # clients cannot acquire more grants via this optional wire value.
         schema_arguments = arguments
-        if (revision_bridge and name == "update_text_clip" and
-                isinstance(arguments, dict) and
-                arguments.get("previewOnly") is not True):
+        requires_source_revision = (
+            name in revision_bridge_tools and
+            isinstance(arguments, dict) and (
+                (name in ("update_text_clip", "update_shape_clip") and
+                 arguments.get("previewOnly") is not True) or
+                (name == "set_clip_keyframes" and
+                 arguments.get("previewOnly") is False)))
+        if requires_source_revision:
             token = arguments.get("__zx7ExpectedRevision")
             if (not isinstance(token, str) or
                     not 38 <= len(token) <= 80 or
