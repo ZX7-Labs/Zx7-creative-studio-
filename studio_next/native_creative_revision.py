@@ -88,6 +88,11 @@ def _secure_read(path: Path):
 def _validate_depth(value, depth=0):
     if depth > _MAX_DEPTH:
         raise NativeRevisionReviewError("Native project has excessive nesting")
+    if type(value) is float and not math.isfinite(value):
+        # json.loads(parse_constant=...) rejects NaN/Infinity literals, but
+        # even strict JSON numeric exponent 1e999 overflows Python float.
+        # Reject before hashing or comparing any native source state.
+        raise NativeRevisionReviewError("Native project contains non-finite numeric state")
     if isinstance(value, dict):
         for entry in value.values():
             _validate_depth(entry, depth + 1)
