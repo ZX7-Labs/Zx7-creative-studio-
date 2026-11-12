@@ -187,6 +187,24 @@ interface cannot claim to hear the soundtrack. These flags do not waive
 separate approval for paid model execution, private media disclosure or
 publication. The free local model route has neither cloud-upload switch.
 
+**Optional original sound perception transport (not enabled by default):**
+only when the owner selects the exact NVIDIA
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` model, the
+`--reviewed-av-revision` evidence profile, native structured actions and
+**separately explicitly** supplies
+`--allow-cloud-original-wav-upload` may the Brain request a source-SHA-verified
+PCM WAV excerpt (maximum 3 seconds, 128 KiB) through the existing native
+tool `zx7_observe_verified_export_audio`. The host validates export and
+excerpt custody/timing before a provider request, then sends an inline
+`audio_url` WAV data URI to that exact audio-capable provider. All other
+NVIDIA models and sessions continue to deny original WAV egress. This is
+**distinct** from the existing numerical sound-diagnostics consent;
+`--allow-cloud-image-upload` still separately controls visible frames.
+This technical transport is not proof that the provider interpreted speech,
+music or sound accurately and does not independently authorize API charges,
+private-media disclosure or publishing. The manual CI NVIDIA evaluation
+request below **does not automatically opt in** to WAV upload.
+
 ### Genuine NVIDIA audiovisual evaluation: no automatic paid inference
 
 The original 2026-11-10 **visual-only** NVIDIA request was consumed and its
