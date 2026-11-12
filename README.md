@@ -123,7 +123,12 @@ checkpoint and does **not** pretend the project is a fresh trial.
 `verify` is **read-only**: it re-hashes and fully decodes both previously
 reviewed physical exports, rejects missing/silent/altered files and unmatched
 source sessions, checks the corresponding populated editable native project,
-and rechecks staged original hashes. It reports workspace-relative paths;
+and rechecks staged original hashes. For fresh projects it also binds the
+final saved editable native document to both host-captured render snapshots,
+rejecting an unchanged or substituted native revision. For existing projects
+without render snapshots it explicitly reports that final source/render
+correspondence has **not** been independently established.
+It reports workspace-relative paths;
 it does not upload media, publish to the internet, modify your source or
 auto-retry uncertain writes. Rights remain owner-stated, not independently
 licensed by this check. Native source presence is not proof that original

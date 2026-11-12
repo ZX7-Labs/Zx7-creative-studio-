@@ -370,6 +370,7 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 directory.mkdir(mode=0o700)
             status = {"session_id": sid, "state": "preparing", "provider": config["provider"],
                       "model_id": config["model_id"], "artistic_quality_approved": False,
+                      "render_snapshots_required": bool(fresh_av),
                       "outputs_directory": str(locations["outputs"]),
                       "projects_directory": str(root / "projects"),
                       "native_journal": str(session / "native-journal.jsonl")}

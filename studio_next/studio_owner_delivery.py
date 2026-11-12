@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 from pathlib import Path
 import re
 import stat
@@ -28,10 +29,29 @@ _MAX_SCAN_ENTRIES = 512
 _MIN_AUDIBLE_PEAK_DBFS = -80.0
 
 
+def _stable_identity(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _open_original_no_follow(path):
+    return os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW |
+                            getattr(os, "O_CLOEXEC", 0)), "rb")
+
+
 def _bounded_native_project(path):
-    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= _MAX_PROJECT_BYTES:
-        raise ValueError("Native editable document is missing, linked or oversized")
-    doc = _load_json(path.read_text(encoding="utf-8"))
+    if path.is_symlink():
+        raise ValueError("Native editable document is linked")
+    with _open_original_no_follow(path) as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= _MAX_PROJECT_BYTES:
+            raise ValueError("Native editable document is missing or oversized")
+        raw = stream.read(_MAX_PROJECT_BYTES + 1)
+        after = os.fstat(stream.fileno())
+    if (len(raw) != before.st_size or
+            _stable_identity(before) != _stable_identity(after) or
+            _stable_identity(after) != _stable_identity(path.stat(follow_symlinks=False))):
+        raise ValueError("Native project changed during physical verification")
+    doc = _load_json(raw.decode("utf-8"))
     if not isinstance(doc, dict) or not isinstance(doc.get("currentTimelineId"), str):
         raise ValueError("Native project has no current editable timeline")
     if not isinstance(doc.get("timelines"), list):
@@ -40,14 +60,24 @@ def _bounded_native_project(path):
               isinstance(t, dict) and t.get("id") == doc["currentTimelineId"]]
     if len(active) != 1 or not isinstance(active[0].get("clips"), list) or not active[0]["clips"]:
         raise ValueError("Native project has no unique populated active timeline")
-    return doc
+    return doc, hashlib.sha256(raw).hexdigest()
 
 
 def _sha256(path):
     sha = hashlib.sha256()
-    with path.open("rb") as stream:
+    with _open_original_no_follow(path) as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_size <= 0:
+            raise ValueError("Original source is not a nonempty regular file")
+        count = 0
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            count += len(chunk)
             sha.update(chunk)
+        after = os.fstat(stream.fileno())
+    if (count != before.st_size or
+            _stable_identity(before) != _stable_identity(after) or
+            _stable_identity(after) != _stable_identity(path.stat(follow_symlinks=False))):
+        raise ValueError("Original source changed during verification")
     return sha.hexdigest()
 
 
@@ -91,10 +121,14 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         raise ValueError("Session is missing or linked outside its workspace")
     status = _read_private(session / "status.json")
     result = status.get("result") if isinstance(status, dict) else None
-    if (status.get("session_id") != session_id or status.get("state") != "completed" or
+    required = (result.get("required_evaluation_evidence")
+                if isinstance(result, dict) else None)
+    if (not isinstance(status, dict) or
+            status.get("session_id") != session_id or status.get("state") != "completed" or
             not isinstance(result, dict) or result.get("evaluation_evidence_satisfied") is not True or
             result.get("status") != "model_finished_unverified" or
-            REVIEWED_AV_PAIR not in result.get("required_evaluation_evidence", [])):
+            not isinstance(required, list) or
+            REVIEWED_AV_PAIR not in required):
         raise ValueError("No completed host-required audiovisual review evidence")
     pair = result.get("reviewed_native_audiovisual_pair")
     if not isinstance(pair, list) or len(pair) != 2:
@@ -184,12 +218,34 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         saved = entry / "project.comfystudio"
         if not saved.exists():
             continue
-        document = _bounded_native_project(saved)
+        document, saved_sha = _bounded_native_project(saved)
         if timeline_scope_digest(str(entry), document["currentTimelineId"]) in timelines:
-            matches.append(saved)
+            matches.append((saved, document["currentTimelineId"], saved_sha))
     if len(matches) != 1:
         raise ValueError("No unique editable saved project matches the reviewed timeline")
-    saved = matches[0]
+    saved, timeline_id, saved_sha = matches[0]
+    snapshots_required = status.get("render_snapshots_required", False)
+    if type(snapshots_required) is not bool:
+        raise ValueError("Malformed owner render snapshot requirement")
+    snapshot_bound = False
+    if snapshots_required:
+        snapshots_root = root / "state" / session_id / "av-project-snapshots"
+        if snapshots_root.is_symlink() or not snapshots_root.is_dir():
+            raise ValueError("Host-required native render snapshots are missing")
+        revisions = []
+        for binding in pair:
+            snapshot = snapshots_root / (binding["destination_sha256"] + ".comfystudio")
+            if not snapshot.is_file() or snapshot.is_symlink():
+                raise ValueError("Host-required render snapshot is missing or linked")
+            snapshot_doc, snapshot_sha = _bounded_native_project(snapshot)
+            if snapshot_doc["currentTimelineId"] != timeline_id:
+                raise ValueError("Native snapshot timeline differs from reviewed project")
+            revisions.append(snapshot_sha)
+        if revisions[0] == revisions[1]:
+            raise ValueError("Native snapshots do not establish an editable revision")
+        if revisions[-1] != saved_sha:
+            raise ValueError("Final saved native source differs from the reviewed render")
+        snapshot_bound = True
     return {
         "schema": 1, "kind": "zx7_owner_native_av_delivery_check",
         "session_id": session_id, "physical_audiovisual_pair_verified": True,
@@ -197,7 +253,9 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         "owner_rights_independently_verified": False,
         "original_media_visible_in_exports_proven": False,
         "editable_native_project_relative_to_workspace": str(saved.relative_to(root)),
-        "editable_native_project_sha256": _sha256(saved),
+        "editable_native_project_sha256": saved_sha,
+        "saved_native_matches_last_render_snapshot": snapshot_bound,
+        "native_render_snapshot_match_not_tested": not snapshots_required,
         "rendered_exports": verified,
         "model_autonomy_independently_evaluated": False,
         "artistic_quality_independently_approved": False,

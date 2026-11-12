@@ -36,11 +36,19 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         self.project = self.workspace / "projects" / "editable-native"
         self.project.mkdir(mode=0o700)
         self.native = self.project / "project.comfystudio"
-        self.native.write_text(json.dumps({
+        self.initial_doc = {
             "currentTimelineId": "timeline-1",
             "timelines": [{"id": "timeline-1", "clips": [
-                {"id": "original", "trackId": "video-track"}]}],
-        }))
+                {"id": "original", "trackId": "video-track",
+                 "name": "before revision"}]}],
+        }
+        self.final_doc = {
+            "currentTimelineId": "timeline-1",
+            "timelines": [{"id": "timeline-1", "clips": [
+                {"id": "original", "trackId": "video-track",
+                 "name": "after revision"}]}],
+        }
+        self.native.write_text(json.dumps(self.final_doc))
         self.media = [self.output_root / "first.mp4",
                       self.output_root / "revised.mp4"]
         for colour, output in (("navy", self.media[0]), ("red", self.media[1])):
@@ -68,8 +76,14 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
              "export_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
              "timeline_sha256": scope}
             for path in self.media]
+        self.snapshots = self.workspace / "state" / self.sid / "av-project-snapshots"
+        self.snapshots.mkdir(parents=True, mode=0o700)
+        for binding, doc in zip(self.pair, (self.initial_doc, self.final_doc), strict=True):
+            (self.snapshots / (binding["destination_sha256"] + ".comfystudio")).write_text(
+                json.dumps(doc))
         self.status = {
             "session_id": self.sid, "state": "completed",
+            "render_snapshots_required": True,
             "result": {"status": "model_finished_unverified",
                        "evaluation_evidence_satisfied": True,
                        "required_evaluation_evidence": [REVIEWED_AV_PAIR],
@@ -88,6 +102,8 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         self.assertTrue(report["physical_audiovisual_pair_verified"])
         self.assertEqual(report["owner_stated_original_count"], 1)
         self.assertTrue(report["source_staging_sha256_verified"])
+        self.assertTrue(report["saved_native_matches_last_render_snapshot"])
+        self.assertFalse(report["native_render_snapshot_match_not_tested"])
         self.assertFalse(report["owner_rights_independently_verified"])
         self.assertFalse(report["original_media_visible_in_exports_proven"])
         self.assertFalse(report["artistic_quality_independently_approved"])
@@ -110,6 +126,21 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
             self.verify()
         self.media[1].unlink()
         with self.assertRaisesRegex(ValueError, "removed"):
+            self.verify()
+
+    def test_owner_rejects_a_substituted_render_snapshot_or_stale_editable_project(self):
+        report = self.verify()
+        self.assertTrue(report["saved_native_matches_last_render_snapshot"])
+        final_snapshot = self.snapshots / (self.pair[1]["destination_sha256"] + ".comfystudio")
+        final_snapshot.write_text(json.dumps(self.initial_doc))
+        with self.assertRaisesRegex(ValueError, "editable revision"):
+            self.verify()
+        final_snapshot.write_text(json.dumps({
+            **self.final_doc, "unverified_post_render_edit": True}))
+        with self.assertRaisesRegex(ValueError, "differs from the reviewed render"):
+            self.verify()
+        final_snapshot.unlink()
+        with self.assertRaisesRegex(ValueError, "render snapshot"):
             self.verify()
 
     def test_owner_rejects_noncompleted_or_unreviewed_sessions(self):
