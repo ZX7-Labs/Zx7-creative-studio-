@@ -14,7 +14,14 @@ import subprocess
 _SOURCE_LOCK = json.loads((Path(__file__).parent / "editor_runtime/source-lock.json").read_text(encoding="utf-8"))
 PINNED_VELORN_MCP_REVISION = _SOURCE_LOCK["upstream_revision"]
 PINNED_VELORN_DESKTOP_REVISION = _SOURCE_LOCK["desktop_revision"]
-TRUSTED_VELORN_REVISIONS = frozenset((PINNED_VELORN_MCP_REVISION, PINNED_VELORN_DESKTOP_REVISION))
+# A separately reviewed and reproducibly built collaboration source revision.
+PINNED_VELORN_COLLAB_REVISION = _SOURCE_LOCK.get("collab_revision")
+TRUSTED_VELORN_REVISIONS = frozenset(
+    value for value in (
+        PINNED_VELORN_MCP_REVISION, PINNED_VELORN_DESKTOP_REVISION,
+        PINNED_VELORN_COLLAB_REVISION,
+    ) if isinstance(value, str) and value)
+
 _PINNED_MARKER_PREVIEWS = (
     "add_timeline_markers", "remove_timeline_markers",
     "set_timeline_marker_properties",
@@ -76,6 +83,34 @@ def _source_matches_pinned_electron_mcp(source: Path) -> bool:
         clean = subprocess.run(
             ["git", "-C", resolved, "diff", "--quiet", "HEAD", "--",
              "electron/mcpServer.js"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return False
+    return clean.returncode == 0
+
+
+def _source_matches_pinned_native_collaboration(source: Path) -> bool:
+    """Exact reviewed overlay and unmodified renderer/API/bridge source.
+
+    Never infer atomic GUI/AI protection from the original upstream commit,
+    the presence of similarly named methods, or a user supplied revision.
+    """
+    if (not PINNED_VELORN_COLLAB_REVISION or not isinstance(source, Path) or
+            not _source_matches_pinned_electron_mcp(source)):
+        return False
+    safe_env = dict(os.environ)
+    safe_env.pop("NVIDIA_API_KEY", None)
+    try:
+        actual = subprocess.run(
+            ["git", "-C", str(source.resolve(strict=True)), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+        if (actual.returncode != 0 or
+                actual.stdout.strip() != PINNED_VELORN_COLLAB_REVISION):
+            return False
+        clean = subprocess.run(
+            ["git", "-C", str(source.resolve(strict=True)), "diff", "--quiet",
+             "HEAD", "--", "electron/mcpServer.js", "src/services/mcpSnapshot.js",
+             "src/services/mcpActions.js"],
             capture_output=True, text=True, timeout=5, env=safe_env)
     except (OSError, RuntimeError, subprocess.TimeoutExpired):
         return False
