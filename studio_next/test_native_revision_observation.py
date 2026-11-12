@@ -109,6 +109,8 @@ class NativeRevisionObservationTests(IsolatedAsyncioTestCase):
         self.assertFalse(r.is_error)
         result = json.loads(txt)
         self.assertEqual(result["status"], "conflicting_changes")
+        self.assertTrue(result["human_source_or_render_recheck"])
+        self.assertTrue(result["ai_source_or_render_recheck"])
         self.assertTrue(result["origin_role_labels_not_authenticated"])
         self.assertFalse(result["automatic_merge_permitted"])
         self.assertTrue(result["live_native_revision_CAS_required_for_every_write"])
