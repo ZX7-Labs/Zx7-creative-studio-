@@ -95,6 +95,36 @@ its workspace. A completed run means the model finished with verified export
 evidence; artistic approval remains separate. An interrupted or failed run is
 retained for inspection and is never automatically replayed.
 
+### Inspect creative revisions and human–AI collisions
+
+The native project is the authority. Saved .comfystudio documents can be
+compared **read-only**, without a model, cloud request, source conversion or
+editing another person's work:
+
+    zx7-studio compare-native ./project/revision-1.comfystudio ./project/revision-2.comfystudio
+    zx7-studio review-native ./project/base.comfystudio ./project/human.comfystudio ./project/ai-candidate.comfystudio
+
+These commands read two or three existing owner-controlled native project files
+(or project directories containing project.comfystudio). They return
+machine-readable SHA-256 provenance, actual native object IDs, changed field
+**paths** and hashes, clip/track/asset/keyframe/marker/order differences,
+source/render recheck requirements, and conservative overlapping-edit flags.
+Raw titles, paths, owner media, voice, text values and model prompts are not
+included in the result. Unknown native properties still affect the exact
+fingerprints; nothing is silently flattened to an invented universal JSON
+editing format. Redirected files, duplicate IDs/keys, orphaned clip references
+and oversized or changing input are refused.
+
+The three-way view compares a shared native base against separate human and
+AI *candidate* saves. A result of no_known_overlap is **not** a safe
+auto-merge or write permit: the native editor's live revision CAS, original
+source checks, explicit grants and actual saved/rendered observation remain
+mandatory. These operations neither merge documents nor certify human
+intervention, genuine model artistry, audio semantics, legal rights or
+professional visual quality. They are a bounded source-aware instrument toward
+G1 collaboration and the later experimental G2 Creative State Fabric
+comparison, **not a claim that the entire medium or A–L product is done**.
+
 Use `run --reviewed-revision` to require two separately verified native renders
 of the same timeline, with a model-observed frame on each side of an
 acknowledged content edit. The second render must follow the latest edit and
