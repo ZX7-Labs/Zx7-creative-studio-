@@ -11,6 +11,7 @@ import base64
 import copy
 import hashlib
 import json
+import math
 import re
 
 from .nvidia_model import NvidiaConfigurationError, NvidiaTransportError, NvidiaModelSettings
@@ -325,6 +326,17 @@ class NvidiaOmniNativeToolCreativeModel(NvidiaNativeToolCreativeModel):
                 not isinstance(evidence.get("export_sha256"), str) or
                 re.fullmatch(r"[0-9a-f]{64}", evidence["export_sha256"]) is None):
             raise NvidiaConfigurationError("Cloud WAV does not match verified original export custody")
+        start = evidence.get("requested_start_seconds")
+        duration = evidence.get("requested_duration_seconds")
+        observed = evidence.get("observed_audio_duration_seconds")
+        if (type(start) not in (int, float) or not math.isfinite(start) or start < 0 or
+                type(duration) not in (int, float) or not math.isfinite(duration) or
+                not 0 < duration <= 3.0 or
+                type(observed) not in (int, float) or not math.isfinite(observed) or
+                not 0 < observed <= duration + 0.05 or
+                evidence.get("preview_downmixed_and_resampled") is not True or
+                evidence.get("exact_original_audio_pts_proven") is not False):
+            raise NvidiaConfigurationError("Cloud WAV needs host-attested bounded excerpt timing")
         messages = self._messages(context, ())
         text = messages[1]["content"]
         if not isinstance(text, str):
@@ -334,7 +346,12 @@ class NvidiaOmniNativeToolCreativeModel(NvidiaNativeToolCreativeModel):
             {"type": "text", "text": json.dumps({
                 "verified_export_sha256": evidence["export_sha256"],
                 "original_wav_sha256": evidence["wav_sha256"],
-                "original_wav_mime": "audio/wav"}, ensure_ascii=False)},
+                "original_wav_mime": "audio/wav",
+                "requested_start_seconds": start,
+                "requested_duration_seconds": duration,
+                "observed_audio_duration_seconds": observed,
+                "preview_downmixed_and_resampled": True,
+                "exact_original_audio_pts_proven": False}, ensure_ascii=False)},
             {"type": "audio_url", "audio_url": {
                 "url": "data:audio/wav;base64," + base64.b64encode(raw).decode("ascii")}},
         ]
