@@ -15,6 +15,8 @@ from studio_next.body_editor_client import (
 )
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+from studio_next.native_creative_control import NativeCreativeControl
+from studio_next.test_native_creative_control import ScriptedModel, decision
 from studio_next.native_editor_identity import (
     NativeEditorIdentityReader, pinned_native_editor_identity_policy,
 )
@@ -202,6 +204,28 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
         self.assertFalse(old.is_error)
         self.assertIsNone(host_native_revision_rejection(
             old, "update_text_clip", {"clipId":"clip-A","text":"valid"}))
+
+    async def test_creative_controller_requires_fresh_model_decision_after_writer_refusal(self):
+        self.renderer.human_gui_edit("Human changes title before AI write")
+        model=ScriptedModel([
+            decision("invoke",tool="update_text_clip",
+                     inputs={"clipId":"clip-A","text":"old stale plan"}),
+            decision("finish",summary="Refused and must inspect fresh editor state"),
+        ])
+        outcome=await NativeCreativeControl(
+            self.host_session, model,max_turns=2,
+            host_tool_access=GRANTS,host_pre_dispatch_rejections=True,
+        ).run("Do not replace human-authored titles")
+        self.assertEqual(outcome["status"], "model_finished_unverified")
+        self.assertTrue(any(e["kind"] == "native_writer_rejected_stale_revision"
+                            and e["native_write_applied"] is False
+                            and e["no_native_dispatch"] is False
+                            for e in outcome["events"]))
+        self.assertEqual(self.renderer.writes,0)
+        self.assertEqual(self.renderer.clip_text,"Human changes title before AI write")
+        self.assertEqual(len(model.observed),2)
+        self.assertEqual(model.observed[-1]["last_native_rejection"][
+                             "validation_keyword"],"native_revision_conflict")
 
     async def test_original_upstream_without_verified_overlay_does_not_claim_fence(self):
         # Backward compatibility. A source filename alone cannot imply
