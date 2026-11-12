@@ -64,6 +64,7 @@ class NativeRevisionObservationTests(IsolatedAsyncioTestCase):
         modified = deepcopy(original)
         modified["timelines"][0]["clips"][0]["textProperties"]["text"] = "PRIVATE OWNER SCRIPT"
         modified["timelines"][0]["clips"][0]["keyframes"]["opacity"][0]["value"] = 32
+        modified["timelines"][0]["clips"][1]["duration"] = 1.5
         before = self.capture(original, export_number=1)
         after = self.capture(modified, export_number=2)
         r, txt = await self.invoke("zx7_list_saved_render_revisions", {})
@@ -91,7 +92,7 @@ class NativeRevisionObservationTests(IsolatedAsyncioTestCase):
             "offset": 1, "limit": 20})
         self.assertFalse(r3.is_error)
         further = json.loads(txt3)
-        self.assertTrue(any("/textProperties/text" in entry.get("changed_fields", ())
+        self.assertTrue(any("/duration" in entry.get("changed_fields", ())
                             for entry in further["review"]["entries"]))
 
     async def test_three_way_conflict_reads_registered_sources_without_merge(self):
@@ -162,7 +163,7 @@ class NativeRevisionObservationTests(IsolatedAsyncioTestCase):
         read = await session.call_tool("zx7_list_saved_render_revisions", {})
         self.assertFalse(read.is_error)
         self.assertEqual(json.loads(read.content[0].text)["snapshots"][0]["export_id"], a)
-        self.assertFalse(any(action["access"] == "write"
+        self.assertFalse(any(action.get("access") == "write"
                              for action in gateway.evidence()))
 
     async def test_schema_blocks_unbounded_page_and_unregistered_tools(self):
