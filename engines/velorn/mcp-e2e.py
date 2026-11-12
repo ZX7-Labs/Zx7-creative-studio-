@@ -33,6 +33,10 @@ async def exercise(options):
     from studio_next.native_editor_project import capture_render_project
     from studio_next.native_render_evidence import native_render_binding
 
+    from studio_next.native_editor_source_pin import (
+        _source_matches_pinned_native_collaboration)
+    collaboration_source = _source_matches_pinned_native_collaboration(
+        options.source)
     fixture = Path(tempfile.mkdtemp(prefix="zx7-editor-mcp-"))
     projects, staging, outputs = (fixture / name for name in ("projects", "staging", "outputs"))
     for path in (projects, staging, outputs):
@@ -334,7 +338,57 @@ async def exercise(options):
             session, first_output, saved_first)
         first_frames = await observe_samples(session, first_output, first_sha)
         first_audio = await observe_audio_envelope(session, first_output, first_sha)
-        await call(session, "update_text_clip", {"clipId": title_id, "text": "MCP revised", "previewOnly": False})
+        if collaboration_source:
+            from studio_next.native_editor_identity import (
+                pinned_native_editor_identity_policy)
+            captured = await call(session, "get_project")
+            stale_token = captured.get("zx7NativeRevision")
+            assert isinstance(stale_token, str) and len(stale_token) >= 38
+            # Real renderer store mutation through an independent native
+            # operation, while the client still holds its previous snapshot.
+            # This is NOT a physical mouse/keyboard GUI intervention.
+            await call(session, "set_clip_style", {
+                "clipId": title_id, "labelColor": "#f97316",
+                "previewOnly": False})
+            refused = await session.call_tool("update_text_clip", {
+                "clipId": title_id, "text": "STALE AI MUST NOT OVERWRITE",
+                "previewOnly": False,
+                "__zx7ExpectedRevision": stale_token})
+            assert refused.is_error, "Native renderer accepted stale source"
+            assert len(refused.content) == 1
+            assert refused.content[0].text == "ZX7_STALE_NATIVE_REVISION", refused
+            await wait(session, lambda state:
+                state.get("zx7NativeRevision") != stale_token)
+            unmodified = await call(session, "get_timeline", {"includeClips": True})
+            title_after_conflict = next(
+                item for item in unmodified["clips"] if item["id"] == title_id)
+            assert title_after_conflict["textProperties"]["text"] == "MCP native edit"
+            assert title_after_conflict.get("labelColor") == "#f97316"
+            policy = pinned_native_editor_identity_policy(
+                options.source, tools, session)
+            assert policy is not None and "fence" in policy
+            admitted_gateway = CapabilityGateway({"editor": (
+                session, tools, {}, None, {}, policy)})
+            await admitted_gateway.refresh()
+            admitted_session = CapabilityGatewayMcpSession(
+                admitted_gateway, "editor")
+            await call(admitted_session, "update_text_clip", {
+                "clipId": title_id, "text": "MCP revised", "previewOnly": False})
+            assert admitted_gateway.evidence()[-1]["state"] == (
+                "host_reported_success_unverified")
+            print("ACTUAL_NATIVE_REVISION_FENCE " + json.dumps({
+                "pinned_source": True,
+                "stale_writer_rejected_no_native_title_mutation": True,
+                "independent_renderer_edit_preserved": True,
+                "trusted_host_revision_token_injected": True,
+                "corrected_native_edit_acknowledged_unverified": True,
+                "actual_direct_human_mouse_edit_tested": False,
+                "real_model_creative_autonomy_tested": False,
+            }, sort_keys=True), flush=True)
+        else:
+            await call(session, "update_text_clip", {
+                "clipId": title_id, "text": "MCP revised",
+                "previewOnly": False})
         saved_second = await call(session, "save_project", {"previewOnly": False})
         shutil.copy2(native_path, fixture / "revision-2.comfystudio")
         assert digest(fixture / "revision-1.comfystudio") != digest(fixture / "revision-2.comfystudio")
