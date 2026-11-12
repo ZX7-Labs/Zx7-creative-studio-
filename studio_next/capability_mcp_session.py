@@ -13,7 +13,8 @@ from types import SimpleNamespace
 from .capability_fabric import (
     discover_all_live_tools, CapabilityContractError, CapabilityFabric)
 from .capability_gateway import (CapabilityExecutionError, CapabilityGateway,
-                                 NativeReferencePreDispatchError)
+                                 NativeReferencePreDispatchError,
+                                 _source_native_commit_intent)
 from .native_editor_identity import _project_state, _read_json_result
 from .body_editor_client import (
     HOST_PRE_DISPATCH_META, HOST_REJECTION_FEEDBACK,
@@ -138,9 +139,15 @@ class CapabilityGatewayMcpSession:
         observed = {}
         if self._require_model_native_observation and record["access"] == "write":
             observed["model_observed_revision"] = self._model_observed_native_revision
-            # A sent or uncertain write invalidates the model's prior view.
-            # The controller re-reads get_project before its next decision.
-            self._model_observed_native_revision = None
+            # Source-attested preview-only calls are observations, not
+            # mutations. Do not force another expensive model turn merely
+            # because the editor returned a safe native edit plan. Every
+            # real or uncertain commit still invalidates the older view.
+            fences = self._gateway._bindings[self._namespace][5]["fence"]
+            native_preview = (name in fences and
+                              not _source_native_commit_intent(name, arguments))
+            if not native_preview:
+                self._model_observed_native_revision = None
         try:
             result = await self._gateway.invoke(
                 operation, revision=self._revision,
