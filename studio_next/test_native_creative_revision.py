@@ -271,6 +271,12 @@ class NativeRevisionTests(unittest.TestCase):
         e = example()
         e["version"] = ""
         invalid.append(e)
+        g = example()
+        g["version"] = "private-owner-brief\n/owner/secrets.txt" * 500
+        invalid.append(g)
+        h = example()
+        h["version"] = "2.1\u0000injected"
+        invalid.append(h)
         f = example()
         f["assets"][0]["id"] = "../../private/secret"
         invalid.append(f)
