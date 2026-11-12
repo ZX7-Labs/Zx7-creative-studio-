@@ -13,7 +13,10 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
-from .native_editor_source_pin import _source_matches_pinned_electron_mcp
+from .native_editor_source_pin import (
+    _source_matches_pinned_electron_mcp,
+    _source_matches_pinned_native_collaboration,
+)
 
 _MAX_TEXT = 6_000_000
 _MAX_ITEMS = 1_000
@@ -148,7 +151,8 @@ class NativeEditorIdentityReader:
     charges all internal observations to the shared per-session call budget.
     """
 
-    def __init__(self, session, grants, *, reserve_read=None):
+    def __init__(self, session, grants, *, reserve_read=None,
+                 require_live_revision=False):
         if (not callable(getattr(session, "call_tool", None)) or
                 not isinstance(grants, Mapping) or
                 any(grants.get(name) != "read" for name in _READ_NAMES) or
@@ -156,6 +160,7 @@ class NativeEditorIdentityReader:
             raise ValueError("native_identity_requires_three_granted_read_tools")
         self._session = session
         self._reserve = reserve_read
+        self._require_live_revision = require_live_revision
 
     async def _read(self, name, args):
         if self._reserve is not None:
@@ -163,15 +168,30 @@ class NativeEditorIdentityReader:
         return _read_json_result(await self._session.call_tool(name, args))
 
     async def __call__(self):
-        before = _project_state(await self._read("get_project", {}))
+        before_object = await self._read("get_project", {})
+        before = _project_state(before_object)
         timeline = await self._read(
             "get_timeline", {"includeClips": True, "limit": _MAX_ITEMS})
         assets = await self._read("get_assets", {"limit": _MAX_ITEMS})
-        after = _project_state(await self._read("get_project", {}))
+        after_object = await self._read("get_project", {})
+        after = _project_state(after_object)
         # A renderer changed source/head during observation: never authorize
         # the caller's old object references on a mixed project snapshot.
         if before != after:
             raise ValueError("native_identity_project_changed_during_read")
+        live_revision = None
+        if self._require_live_revision:
+            first = before_object.get("zx7NativeRevision")
+            last = after_object.get("zx7NativeRevision")
+            if (not isinstance(first, str) or
+                    not 38 <= len(first) <= 80 or
+                    not isinstance(last, str) or
+                    not 38 <= len(last) <= 80 or
+                    any(ord(ch) < 33 or ord(ch) > 126 for ch in first + last)):
+                raise ValueError("native_identity_live_revision_unavailable")
+            if first != last:
+                raise ValueError("native_identity_project_changed_during_read")
+            live_revision = last
         if timeline.get("clipLimitApplied") is not False:
             raise ValueError("native_identity_read_incomplete")
         if assets.get("limitApplied") is not False:
@@ -184,11 +204,14 @@ class NativeEditorIdentityReader:
                 type(assets.get("count")) is not int or
                 assets["count"] != len(asset_ids)):
             raise ValueError("native_identity_source_counts_changed")
-        return {
+        inventory = {
             "tracks": {"ids": tracks, "complete": True},
             "clips": {"ids": clips, "complete": True},
             "assets": {"ids": asset_ids, "complete": True},
         }
+        if live_revision is not None:
+            inventory["__zx7_live_revision"] = live_revision
+        return inventory
 
 
 def pinned_native_editor_identity_policy(source: Path, grants, session, *,
@@ -211,6 +234,18 @@ def pinned_native_editor_identity_policy(source: Path, grants, session, *,
         return None
     if not _source_matches_pinned_electron_mcp(source):
         return None
+    source_fenced = (_source_matches_pinned_native_collaboration(source) and
+                     grants.get("update_text_clip") == "write")
     reader = NativeEditorIdentityReader(
-        session, grants, reserve_read=reserve_read)
-    return {"reader": reader, "rules": candidates}
+        session, grants, reserve_read=reserve_read,
+        require_live_revision=source_fenced)
+    policy = {"reader": reader, "rules": candidates}
+    if source_fenced:
+        # Local source-attested contract; hidden outbound argument cannot be
+        # chosen by the model and is compared by the renderer at write time.
+        policy["fence"] = {"update_text_clip": {
+            "inventory_key": "__zx7_live_revision",
+            "argument_key": "__zx7ExpectedRevision",
+            "rejected_code": "ZX7_STALE_NATIVE_REVISION",
+        }}
+    return policy
