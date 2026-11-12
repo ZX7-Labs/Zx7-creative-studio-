@@ -5,6 +5,7 @@ import json
 from io import BytesIO
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from studio_next.nvidia_native_tool_model import (
@@ -238,7 +239,7 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
             track.setnchannels(1)
             track.setsampwidth(2)
             track.setframerate(16000)
-            track.writeframes(b"\\x01\\x00" * 400)
+            track.writeframes(bytes([1, 0]) * 400)
         return output.getvalue()
 
     @staticmethod
@@ -303,6 +304,47 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
         self.assertNotIn("host_native_tool_contracts", parts[0]["text"])
         self.assertNotIn("nvapi-", json.dumps(captured))
         self.assertEqual(original["audio_evidence"]["wav_sha256"], digest)
+
+
+    def test_native_session_selects_omni_only_with_separate_wav_consent(self):
+        from studio_next.native_editor_session import native_decision_model
+        args = SimpleNamespace(
+            provider="nvidia", base_url="http://127.0.0.1:8080",
+            structured_actions=True, model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+            model_timeout=180, allow_cloud_image_upload=False,
+            allow_cloud_original_wav_upload=False, allow_public_research=False)
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Q" * 32}):
+            disabled = native_decision_model(args)
+            self.assertIsInstance(disabled, NvidiaOmniNativeToolCreativeModel)
+            self.assertFalse(disabled.allow_original_audio_upload)
+            args.allow_cloud_original_wav_upload = True
+            enabled = native_decision_model(args)
+            self.assertIsInstance(enabled, NvidiaOmniNativeToolCreativeModel)
+            self.assertTrue(enabled.allow_original_audio_upload)
+            self.assertEqual(enabled.settings.model_id, NVIDIA_OMNI_AUDIO_MODEL_ID)
+            args.model_id = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+            with self.assertRaisesRegex(ValueError, "Original cloud WAV"):
+                native_decision_model(args)
+
+    def test_owner_and_native_parsers_keep_raw_wav_consent_disabled_by_default(self):
+        from studio_next.native_editor_session import build_parser as native_parser
+        from studio_next.studio_cli import main as owner_main
+        # Native parser requires no remote request, files or model credentials.
+        required = ["--source", "/tmp/test-source",
+                    "--config", "/tmp/grants.json", "--state", "/tmp/native-state",
+                    "--brief-file", "/tmp/brief.txt", "--receipt", "/tmp/receipt.jsonl",
+                    "--model-id", NVIDIA_OMNI_AUDIO_MODEL_ID]
+        args = native_parser().parse_args(required)
+        self.assertFalse(args.allow_cloud_original_wav_upload)
+        self.assertTrue(native_parser().parse_args(
+            required + ["--allow-cloud-original-wav-upload"]).allow_cloud_original_wav_upload)
+        # This is a parser-level safety assertion; no run/HTTP is requested.
+        from unittest.mock import patch as mock_patch
+        with mock_patch("studio_next.studio_cli.run_workspace") as run:
+            owner_main(["run", "/tmp/nonexistent-owner", "--brief", "test"])
+            kwargs = run.call_args.kwargs
+        self.assertFalse(kwargs["allow_cloud_original_wav_upload"])
+
 
 
 if __name__ == "__main__":
