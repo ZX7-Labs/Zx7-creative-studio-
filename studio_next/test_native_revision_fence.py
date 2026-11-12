@@ -144,6 +144,105 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
         return await self.host_session.call_tool(
             "update_text_clip", {"clipId":"clip-A","text":text})
 
+    async def test_model_must_observe_native_project_before_first_protected_edit(self):
+        model_view = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        proposed = {"clipId": "clip-A", "text": "Freshly selected direction"}
+        denied = await model_view.call_tool("update_text_clip", proposed)
+        self.assertTrue(denied.is_error)
+        self.assertEqual(host_pre_dispatch_rejection(
+            denied, "update_text_clip", proposed),
+            "native_identity_model_observation_required")
+        self.assertEqual(self.renderer.writes, 0)
+        self.assertFalse(any(name == "update_text_clip"
+                             for name, _ in self.renderer.calls))
+        observed = await model_view.call_tool("get_project", {})
+        self.assertFalse(observed.is_error)
+        accepted = await model_view.call_tool("update_text_clip", proposed)
+        self.assertFalse(accepted.is_error)
+        self.assertEqual(self.renderer.writes, 1)
+        # The model cannot reuse its pre-write source view for another edit.
+        denied_again = await model_view.call_tool("update_text_clip", proposed)
+        self.assertEqual(host_pre_dispatch_rejection(
+            denied_again, "update_text_clip", proposed),
+            "native_identity_model_observation_required")
+
+    async def test_gui_edit_after_model_observation_is_refused_before_native_dispatch(self):
+        model_view = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        await model_view.call_tool("get_project", {})
+        self.renderer.human_gui_edit("Real manual revision during model planning")
+        self.renderer.publish()
+        proposed = {"clipId": "clip-A", "text": "Old model direction"}
+        before_calls = len(self.renderer.calls)
+        stale = await model_view.call_tool("update_text_clip", proposed)
+        self.assertTrue(stale.is_error)
+        self.assertEqual(host_pre_dispatch_rejection(
+            stale, "update_text_clip", proposed),
+            "native_identity_model_observation_stale")
+        self.assertIsNone(host_native_revision_rejection(
+            stale, "update_text_clip", proposed))
+        self.assertFalse(any(name == "update_text_clip"
+                             for name, _ in self.renderer.calls[before_calls:]))
+        self.assertEqual(self.renderer.writes, 0)
+        self.assertEqual(self.renderer.clip_text,
+                         "Real manual revision during model planning")
+        # Repeating the same old action cannot silently gain the new token.
+        repeated = await model_view.call_tool("update_text_clip", proposed)
+        self.assertEqual(host_pre_dispatch_rejection(
+            repeated, "update_text_clip", proposed),
+            "native_identity_model_observation_required")
+        await model_view.call_tool("get_project", {})
+        fresh = await model_view.call_tool("update_text_clip", {
+            "clipId": "clip-A", "text": "Manual revision preserved and newly refined"})
+        self.assertFalse(fresh.is_error)
+        self.assertEqual(self.renderer.clip_text,
+                         "Manual revision preserved and newly refined")
+
+    async def test_unpublished_gui_mutation_still_rejected_by_native_commit_fence(self):
+        model_view = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        await model_view.call_tool("get_project", {})
+        self.renderer.human_gui_edit("Human edited inside renderer debounce")
+        stale = await model_view.call_tool("update_text_clip", {
+            "clipId": "clip-A", "text": "Outdated change"})
+        self.assertTrue(stale.is_error)
+        self.assertEqual(host_native_revision_rejection(
+            stale, "update_text_clip",
+            {"clipId": "clip-A", "text": "Outdated change"}),
+            "native_revision_changed_at_commit")
+        self.assertEqual(self.renderer.writes, 0)
+        self.assertEqual(self.renderer.clip_text,
+                         "Human edited inside renderer debounce")
+
+    async def test_unusable_native_project_read_never_mints_model_revision(self):
+        model_view = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        self.renderer.available = False
+        observed = await model_view.call_tool("get_project", {})
+        self.assertFalse(observed.is_error)
+        proposed = {"clipId": "clip-A", "text": "Unsafe"}
+        refused = await model_view.call_tool("update_text_clip", proposed)
+        self.assertEqual(host_pre_dispatch_rejection(
+            refused, "update_text_clip", proposed),
+            "native_identity_live_revision_unavailable")
+        self.assertEqual(self.renderer.writes, 0)
+
+    async def test_separate_model_sessions_never_inherit_another_brains_observation(self):
+        first = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        second = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        await first.call_tool("get_project", {})
+        proposed = {"clipId": "clip-A", "text": "Different Brain"}
+        refused = await second.call_tool("update_text_clip", proposed)
+        self.assertEqual(host_pre_dispatch_rejection(
+            refused, "update_text_clip", proposed),
+            "native_identity_model_observation_required")
+        granted = await first.call_tool("update_text_clip", proposed)
+        self.assertFalse(granted.is_error)
+        self.assertEqual(self.renderer.writes, 1)
+
     async def test_human_gui_edit_during_debounce_is_not_lost_and_model_can_replan(self):
         self.renderer.human_gui_edit("Manual human edit")
         chosen={"clipId":"clip-A","text":"Stale planned AI title"}
