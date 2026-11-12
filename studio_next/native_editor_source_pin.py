@@ -111,10 +111,15 @@ def _source_matches_pinned_native_collaboration(source: Path) -> bool:
                     PINNED_VELORN_SCENE_REVISION,
                 }):
             return False
+        # A clean PINNED HEAD is the source contract, not just three
+        # reviewed entry-point files. A dirty tracked timeline/store module
+        # can suppress GUI revision emission while leaving those files intact.
+        # Ignore untracked build outputs; reject any staged or unstaged
+        # modification to tracked source. This is checkout attestation, not
+        # a guarantee against post-check mutation by another local process.
         clean = subprocess.run(
             ["git", "-C", str(source.resolve(strict=True)), "diff", "--quiet",
-             "HEAD", "--", "electron/mcpServer.js", "src/services/mcpSnapshot.js",
-             "src/services/mcpActions.js"],
+             "HEAD", "--"],
             capture_output=True, text=True, timeout=5, env=safe_env)
     except (OSError, RuntimeError, subprocess.TimeoutExpired):
         return False
