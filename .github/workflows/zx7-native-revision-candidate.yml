@@ -69,7 +69,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            ffmpeg unzip xvfb xauth x11-xkb-utils xkb-data \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
             libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
             libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
           python -m pip install --no-cache-dir '.[editor,production]'
