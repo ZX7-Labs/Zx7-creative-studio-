@@ -6,6 +6,8 @@ source-writer F09 test belongs in engines/velorn and is a separate gate.
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
@@ -13,6 +15,8 @@ from unittest.mock import patch
 from studio_next.body_editor_client import (
     host_native_revision_rejection, host_pre_dispatch_rejection,
 )
+from studio_next.capability_attempts import (
+    CapabilityAttemptError, CapabilityAttemptStore)
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.native_creative_control import NativeCreativeControl
@@ -226,6 +230,50 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
         self.assertEqual(len(model.observed),2)
         self.assertEqual(model.observed[-1]["last_rejected_native_action_feedback"][
                              "validation_keyword"],"native_revision_conflict")
+
+    async def test_durable_native_conflict_survives_restart_without_false_replay(self):
+        self.renderer.human_gui_edit("Human original must survive failed AI edit")
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "private" / "native-attempts.sqlite3"
+            store = CapabilityAttemptStore(journal)
+            gateway = CapabilityGateway({"editor": (
+                self.renderer, GRANTS, {}, None, {}, self.policy)},
+                attempt_store=store)
+            await gateway.refresh()
+            allocator = lambda operation: "host-cas-first"
+            admitted = CapabilityGatewayMcpSession(
+                gateway, "editor", host_request_id_allocator=allocator)
+            original = {"clipId": "clip-A", "text": "stale AI title"}
+            reply = await admitted.call_tool("update_text_clip", original)
+            self.assertTrue(reply.is_error)
+            self.assertEqual(host_native_revision_rejection(
+                reply, "update_text_clip", original),
+                "native_revision_changed_at_commit")
+            self.assertEqual(self.renderer.writes, 0)
+            self.assertEqual(store.inspect("host-cas-first")["state"],
+                             "native_conflict_rejected_no_write")
+            reopened = CapabilityAttemptStore(journal)
+            self.assertEqual(reopened.unverified_attempts()["attempts"], [])
+            # The old request identity remains exhausted forever, even when
+            # the known-safe native failure would otherwise permit replanning.
+            self.renderer.publish()
+            with self.assertRaisesRegex(
+                    CapabilityAttemptError, "already admitted"):
+                await admitted.call_tool("update_text_clip", original)
+            self.assertEqual(self.renderer.writes, 0)
+            fresh = CapabilityGatewayMcpSession(
+                gateway, "editor",
+                host_request_id_allocator=lambda _: "host-cas-second")
+            corrected = await fresh.call_tool("update_text_clip", {
+                "clipId": "clip-A",
+                "text": "Human original must survive failed AI edit / revised"})
+            self.assertFalse(corrected.is_error)
+            self.assertEqual(self.renderer.writes, 1)
+            self.assertEqual(reopened.inspect("host-cas-second")["state"],
+                             "host_reported_success_unverified")
+            self.assertEqual(
+                reopened.unverified_attempts()["attempts"][0]["request_id"],
+                "host-cas-second")
 
     async def test_original_upstream_without_verified_overlay_does_not_claim_fence(self):
         # Backward compatibility. A source filename alone cannot imply

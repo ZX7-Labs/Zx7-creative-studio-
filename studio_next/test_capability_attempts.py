@@ -252,6 +252,51 @@ class AttemptStoreTests(unittest.TestCase):
                 self.store.unverified_attempts(cursor=cursor)
         self.assertEqual(self.store.unverified_attempts()["attempts"],[])
 
+    def test_legacy_sqlite_schema_migrates_atomically_without_replaying_intents(self):
+        # Independent V1 physical schema, not a table invented by the new
+        # runtime. Existing admitted attempts must survive exact migration.
+        legacy = self.path.parent / "original-attempts.sqlite3"
+        with sqlite3.connect(legacy) as db:
+            db.execute("""CREATE TABLE capability_attempts (
+                request_id TEXT PRIMARY KEY,
+                operation_id TEXT NOT NULL,
+                catalog_revision TEXT NOT NULL,
+                input_sha256 TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN (
+                    'submitted_unconfirmed',
+                    'host_reported_success_unverified',
+                    'write_uncertain_reconciliation_required')),
+                admitted_ns INTEGER NOT NULL,
+                settled_ns INTEGER
+            )""")
+            db.execute("""INSERT INTO capability_attempts
+                (request_id,operation_id,catalog_revision,input_sha256,state,
+                 admitted_ns,settled_ns) VALUES (?,?,?,?,?,?,?)""",
+                ("legacy-inflight", "graphics/create_layer", REV, DIGEST,
+                 "submitted_unconfirmed", 50, None))
+        legacy.chmod(0o600)
+        store = CapabilityAttemptStore(legacy)
+        self.assertEqual(store.inspect("legacy-inflight")["state"],
+                         "submitted_unconfirmed")
+        store.admit(request_id="verified-no-write",
+                    operation_id="editor/update_text_clip",
+                    catalog_revision=REV, input_sha256=DIGEST)
+        store.settle(request_id="verified-no-write",
+                     state="native_conflict_rejected_no_write")
+        reopened = CapabilityAttemptStore(legacy)
+        self.assertEqual(reopened.inspect("verified-no-write")["state"],
+                         "native_conflict_rejected_no_write")
+        self.assertEqual([a["request_id"] for a in
+                          reopened.unverified_attempts()["attempts"]],
+                         ["legacy-inflight"])
+        with self.assertRaisesRegex(CapabilityAttemptError, "already admitted"):
+            reopened.admit(request_id="verified-no-write",
+                    operation_id="editor/update_text_clip",
+                    catalog_revision=REV, input_sha256=DIGEST)
+        with self.assertRaisesRegex(CapabilityAttemptError, "previously settled"):
+            reopened.settle(request_id="verified-no-write",
+                            state="write_uncertain_reconciliation_required")
+
     def test_one_way_settlement_and_secret_free_private_journal(self):
         self.reserve()
         self.store.settle(request_id="host-attempt-1",

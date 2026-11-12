@@ -48,7 +48,8 @@ jobs:
       - name: Test host/Brain writer CAS including stale and malformed receipts
         run: |
           python -m pip install --no-cache-dir '.[editor]'
-          python -m unittest             studio_next.test_native_revision_fence             studio_next.test_native_editor_identity             studio_next.test_capability_gateway -v
+          python -m unittest             studio_next.test_native_revision_fence             studio_next.test_native_editor_identity             studio_next.test_capability_gateway \
+            studio_next.test_capability_attempts -v
 
   physical-native-collaboration:
     needs: [inspect-pinned-collaboration-source, unit-native-commit-contract]

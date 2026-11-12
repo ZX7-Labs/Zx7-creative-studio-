@@ -428,8 +428,7 @@ class CapabilityGateway:
                 # receipt, an ordinary failed write remains uncertain.
                 if (native_fence is not None and
                         _confirmed_native_revision_conflict(
-                            result, native_fence["rejected_code"]) and
-                        not durable_write):
+                            result, native_fence["rejected_code"])):
                     trace["state"] = "native_conflict_rejected_no_write"
                 else:
                     trace["state"] = ("read_failed" if record["access"] == "read"
