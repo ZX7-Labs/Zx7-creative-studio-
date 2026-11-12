@@ -34,9 +34,13 @@ async def exercise(options):
     from studio_next.native_render_evidence import native_render_binding
 
     from studio_next.native_editor_source_pin import (
-        _source_matches_pinned_native_collaboration)
+        _source_matches_pinned_native_collaboration,
+        _source_matches_pinned_native_scene)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
+    scene_source = _source_matches_pinned_native_scene(options.source)
+    assert not scene_source or collaboration_source, (
+        "Scene source requires the reviewed parent title collaboration revision")
     fixture = Path(tempfile.mkdtemp(prefix="zx7-editor-mcp-"))
     projects, staging, outputs = (fixture / name for name in ("projects", "staging", "outputs"))
     for path in (projects, staging, outputs):
@@ -355,9 +359,30 @@ async def exercise(options):
                     "style": {"fontSize": 24}, "previewOnly": False})
         title_id = title["result"]["clip"]["id"]
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 3)
-        await call(session, "set_clip_keyframes", {"clipId": title_id, "keyframes": [
+        initial_title_keyframes = {"clipId": title_id, "keyframes": [
             {"property": "opacity", "timeSeconds": 0, "value": 20, "easing": "cubicBezier(0.2,0,0.8,1)"},
-            {"property": "opacity", "timeSeconds": 1, "value": 100, "easing": "linear"}], "previewOnly": False})
+            {"property": "opacity", "timeSeconds": 1, "value": 100, "easing": "linear"}], "previewOnly": False}
+        if scene_source:
+            # The source-attested scene writer refuses direct tokenless
+            # keyframe writes. Preserve the same original fixture through
+            # the trusted host-only CAS route, not a direct-MCP bypass.
+            from studio_next.native_editor_identity import (
+                pinned_native_editor_identity_policy)
+            scene_initial_policy = pinned_native_editor_identity_policy(
+                options.source, tools, session)
+            assert scene_initial_policy and set(scene_initial_policy["fence"]) == {
+                "update_text_clip", "update_shape_clip", "set_clip_keyframes"}
+            scene_initial_gateway = CapabilityGateway({"editor": (
+                session, tools, {}, None, {}, scene_initial_policy)})
+            await scene_initial_gateway.refresh()
+            scene_initial_client = CapabilityGatewayMcpSession(
+                scene_initial_gateway, "editor")
+            await call(scene_initial_client, "set_clip_keyframes",
+                       initial_title_keyframes)
+            assert scene_initial_gateway.evidence()[-1]["state"] == (
+                "host_reported_success_unverified")
+        else:
+            await call(session, "set_clip_keyframes", initial_title_keyframes)
         saved_first = await call(session, "save_project", {"previewOnly": False})
         native_path = project / "project.comfystudio"
         shutil.copy2(native_path, fixture / "revision-1.comfystudio")
@@ -1101,6 +1126,264 @@ async def exercise(options):
                 "model_inference_or_artist_quality_demonstrated": False,
                 "previous_model_export_error_attributed": False,
             }, sort_keys=True), flush=True)
+        if scene_source:
+            # G1 native scene: preserve the owner original video and tone,
+            # then operate on an editable, video-overlaid shape on its own
+            # timeline. A scripted ABI fixture, NOT creative AI inference.
+            from studio_next.native_editor_identity import (
+                pinned_native_editor_identity_policy)
+            from studio_next.body_editor_client import (
+                host_native_revision_rejection)
+            sequence = await call(session, "create_timeline", {
+                "name": "G1 scene revision source proof",
+                "width": 320, "height": 180, "fps": 24,
+                "switchToTimeline": True, "previewOnly": False})
+            assert sequence.get("success") is True
+            await wait(session, lambda s:
+                (s.get("currentTimeline") or {}).get("name")
+                == "G1 scene revision source proof"
+                and (s.get("currentTimeline") or {}).get("clipCount") == 0)
+            await call(session, "add_asset_to_timeline", {
+                "assetId": video_ids[0], "startSeconds": 0,
+                "includeAudio": False, "previewOnly": False})
+            await wait(session, lambda s:
+                (s.get("currentTimeline") or {}).get("clipCount") == 1)
+            await call(session, "add_asset_to_timeline", {
+                "assetName": "tone.wav", "startSeconds": 0,
+                "previewOnly": False})
+            await wait(session, lambda s:
+                (s.get("currentTimeline") or {}).get("clipCount") == 2)
+            await call(session, "add_track", {
+                "type": "video", "name": "Scene shape overlay",
+                "previewOnly": False})
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                tracks = (await call(session, "get_timeline", {}))["tracks"]
+                layers = [t for t in tracks
+                          if t["name"] == "Scene shape overlay"]
+                if len(layers) == 1:
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Editable motion overlay track not observed")
+            overlay_track = layers[0]["id"]
+            created_shape = await call(session, "add_shape_clip", {
+                "shapeType": "rectangle", "name": "G1 scene editable rectangle",
+                "fillColor": "#03c471", "width": 140, "height": 100,
+                "trackId": overlay_track, "startSeconds": 0,
+                "durationSeconds": 2, "previewOnly": False})
+            shape_id = created_shape["result"]["clip"]["id"]
+            await wait(session, lambda s:
+                (s.get("currentTimeline") or {}).get("clipCount") == 3)
+            async def live_shape():
+                state = await call(session, "get_timeline", {
+                    "includeClips": True})
+                shape = next(c for c in state["clips"]
+                             if c["id"] == shape_id)
+                return state, shape
+            before_timeline, before_shape = await live_shape()
+            assert before_shape.get("type") == "shape"
+            assert before_shape["shapeProperties"]["fillColor"].lower() == "#03c471"
+            assert before_shape.get("keyframes") in ([], None)
+            # A native default preview must never apply or consume the
+            # model's write budget merely because the action is exposed.
+            planned_keyframes = [
+                {"property": "opacity", "timeSeconds": 0,
+                 "value": 20, "easing": "linear"},
+                {"property": "opacity", "timeSeconds": 1,
+                 "value": 100, "easing": "linear"}]
+            keyframe_preview = await call(session, "set_clip_keyframes", {
+                "clipId": shape_id, "keyframes": planned_keyframes})
+            assert keyframe_preview.get("previewOnly") is True
+            _, after_preview = await live_shape()
+            assert after_preview.get("keyframes") in ([], None), (
+                "Source keyframe default preview unexpectedly applied")
+            baseline_save = await call(
+                session, "save_project", {"previewOnly": False})
+            baseline_export = outputs / "scene-before-shape-revision.mp4"
+            baseline_id, baseline_sha, baseline_profile, baseline_capture = (
+                await render_and_verify(session, baseline_export, baseline_save))
+            baseline_frames = await observe_samples(
+                session, baseline_export, baseline_sha)
+            baseline_audio = await observe_audio_envelope(
+                session, baseline_export, baseline_sha)
+            # Capture a source revision, then intervene through real GUI.
+            # A stale *direct* native shape write must not overwrite its
+            # pre-observed human timeline context or modify shape color.
+            baseline_revision = (
+                await call(session, "get_project"))["zx7NativeRevision"]
+            previous_ids = {m["id"] for m in before_timeline["markers"]}
+            inject_gui_keyboard("m")
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                current_timeline, current_shape = await live_shape()
+                new_ids = ({m["id"] for m in current_timeline["markers"]}
+                           - previous_ids)
+                if len(new_ids) == 1:
+                    first_gui_marker = next(iter(new_ids))
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Real GUI marker did not enter shape timeline")
+            stale_shape = await session.call_tool("update_shape_clip", {
+                "clipId": shape_id, "fillColor": "#e83b61",
+                "previewOnly": False,
+                "__zx7ExpectedRevision": baseline_revision})
+            assert (stale_shape.is_error
+                    and len(stale_shape.content) == 1
+                    and stale_shape.content[0].text ==
+                    "ZX7_STALE_NATIVE_REVISION"), stale_shape
+            _, after_stale_shape = await live_shape()
+            assert after_stale_shape["shapeProperties"]["fillColor"].lower() == (
+                "#03c471")
+            # Trusted host obtains a fresh source-checked clip inventory
+            # and alone supplies the commit revision to the native writer.
+            scene_policy = pinned_native_editor_identity_policy(
+                options.source, tools, session)
+            assert scene_policy and set(scene_policy["fence"]) == {
+                "update_text_clip", "update_shape_clip", "set_clip_keyframes"}
+            native_gateway = CapabilityGateway({"editor": (
+                session, tools, {}, None, {}, scene_policy)})
+            await native_gateway.refresh()
+            scene_host = CapabilityGatewayMcpSession(native_gateway, "editor")
+            changed = await call(scene_host, "update_shape_clip", {
+                "clipId": shape_id, "fillColor": "#e83b61",
+                "previewOnly": False})
+            assert changed.get("success") is True
+            assert native_gateway.evidence()[-1]["state"] == (
+                "host_reported_success_unverified")
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                current_timeline, changed_shape = await live_shape()
+                if changed_shape["shapeProperties"]["fillColor"].lower() == (
+                    "#e83b61"):
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Source-owned shape color never changed")
+            assert any(m["id"] == first_gui_marker
+                       for m in current_timeline["markers"])
+
+            # Human GUI event strictly between host's source transaction
+            # and the keyframe writer entry. This is distinct from merely
+            # passing an old token to a fake function in a unit test.
+            marker_baseline = {
+                m["id"] for m in current_timeline["markers"]}
+            class InterveningSceneSession:
+                def __init__(self, original):
+                    self.original = original
+                    self.interrupted = False
+                    self.manual_marker = None
+                async def list_tools(self):
+                    return await self.original.list_tools()
+                async def call_tool(self, name, inputs):
+                    if (name == "set_clip_keyframes" and
+                            not self.interrupted):
+                        self.interrupted = True
+                        inject_gui_keyboard("m")
+                        deadline = time.monotonic() + 20
+                        while time.monotonic() < deadline:
+                            state = await call(self.original, "get_timeline", {
+                                "includeClips": True})
+                            added = ({m["id"] for m in state["markers"]}
+                                     - marker_baseline)
+                            if len(added) == 1:
+                                self.manual_marker = next(iter(added))
+                                break
+                            await asyncio.sleep(.15)
+                        else:
+                            raise AssertionError(
+                                "Keyboard GUI intervention was never observed")
+                    return await self.original.call_tool(name, inputs)
+            interrupted = InterveningSceneSession(session)
+            interleaved_policy = pinned_native_editor_identity_policy(
+                options.source, tools, interrupted)
+            key_gateway = CapabilityGateway({"editor": (
+                interrupted, tools, {}, None, {}, interleaved_policy)})
+            await key_gateway.refresh()
+            key_host = CapabilityGatewayMcpSession(key_gateway, "editor")
+            key_args = {"clipId": shape_id,
+                        "keyframes": planned_keyframes,
+                        "previewOnly": False}
+            stale_keyframe = await key_host.call_tool(
+                "set_clip_keyframes", key_args)
+            assert stale_keyframe.is_error
+            assert host_native_revision_rejection(
+                stale_keyframe, "set_clip_keyframes", key_args
+            ) == "native_revision_changed_at_commit"
+            assert key_gateway.evidence()[-1]["state"] == (
+                "native_conflict_rejected_no_write")
+            assert interrupted.manual_marker
+            _, unchanged_keyframes = await live_shape()
+            assert unchanged_keyframes.get("keyframes") in ([], None)
+            # Fresh explicit model-side decision after observing changed
+            # source; never replay an uncertain edit or reuse request ID.
+            accepted_keyframes = await call(key_host, "set_clip_keyframes",
+                                            key_args)
+            assert accepted_keyframes.get("success") is True
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                timeline, shape_now = await live_shape()
+                if len(shape_now.get("keyframes") or []) >= 2:
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Source keyframes never appeared")
+            # Source GUI Undo/Redo must preserve both manual annotations.
+            inject_gui_keyboard("ctrl+z")
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                timeline, undone_shape = await live_shape()
+                if not undone_shape.get("keyframes"):
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("GUI Undo did not restore original shape curves")
+            inject_gui_keyboard("ctrl+shift+z")
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                timeline, redone_shape = await live_shape()
+                if len(redone_shape.get("keyframes") or []) >= 2:
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("GUI Redo did not restore editable shape curves")
+            assert all(any(m["id"] == marker for m in timeline["markers"])
+                       for marker in (
+                           first_gui_marker, interrupted.manual_marker))
+            scene_save = await call(session, "save_project", {
+                "previewOnly": False})
+            scene_save_sha = digest(native_path)
+            scene_output = outputs / "scene-after-shape-keyframe-revision.mp4"
+            final_id, final_sha, final_profile, final_capture = (
+                await render_and_verify(session, scene_output, scene_save))
+            final_frames = await observe_samples(session, scene_output, final_sha)
+            final_audio = await observe_audio_envelope(
+                session, scene_output, final_sha)
+            assert baseline_id == final_id
+            assert baseline_sha != final_sha
+            assert baseline_profile == final_profile
+            assert baseline_frames != final_frames, (
+                "Shape/color/curve did not change independently decoded frames")
+            assert (baseline_audio["preview_pcm_sha256"] ==
+                    final_audio["preview_pcm_sha256"]), (
+                "The scene revision unexpectedly changed the owner audio")
+            assert baseline_capture[1] == final_capture[1], (
+                "Native scene render changed original media custody")
+            assert digest(original) == original_hash
+            print("ACTUAL_NATIVE_SCENE_CAS " + json.dumps({
+                "source_pinned_scene_variant": True,
+                "real_GUI_shape_intervention_and_keyframe_race": True,
+                "stale_shape_and_keyframe_mutations_refused": True,
+                "host_reobserved_and_applied_distinct_scene_edits": True,
+                "GUI_undo_redo_preserved_two_manual_markers": True,
+                "native_editable_shape_keyframes_saved": True,
+                "paired_decoded_frames_changed": True,
+                "paired_decoded_audio_preserved": True,
+                "original_source_sha_unchanged": True,
+                "genuine_model_authored_scene": False,
+                "professional_art_quality_approved": False,
+            }, sort_keys=True), flush=True)
     probe = json.loads(run([ffprobe, "-v", "error", "-count_frames", "-show_streams", "-show_format", "-of", "json", str(output)]))
     video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
     audio = next(stream for stream in probe["streams"] if stream["codec_type"] == "audio")
@@ -1137,6 +1420,32 @@ async def exercise(options):
         "audioRms": audio_rms, "output": str(output), "sha256": digest(output), "fixture": str(fixture)}
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
     print(json.dumps(receipt, indent=2))
+    if scene_source:
+        # Independent new Electron process, not an in-memory JSON fixture.
+        async with connected() as session:
+            await call(session, "open_project", {
+                "projectPath": str(project), "previewOnly": False})
+            await wait(session, lambda s:
+                (s.get("currentTimeline") or {}).get("name") ==
+                "G1 scene revision source proof" and
+                (s.get("currentTimeline") or {}).get("clipCount") == 3)
+            reopened = await call(session, "get_timeline", {
+                "includeClips": True})
+            shape = next(c for c in reopened["clips"]
+                         if c["id"] == shape_id)
+            assert shape["shapeProperties"]["fillColor"].lower() == "#e83b61"
+            assert len(shape.get("keyframes") or []) >= 2
+            assert all(any(m["id"] == mid for m in reopened["markers"])
+                       for mid in (first_gui_marker, interrupted.manual_marker))
+            assert digest(native_path) == scene_save_sha
+            assert digest(original) == original_hash
+            print("ACTUAL_NATIVE_SCENE_REOPEN " + json.dumps({
+                "new_native_Electron_process": True,
+                "editable_shape_and_keyframes_persisted": True,
+                "manual_GUI_markers_persisted": True,
+                "source_video_hash_unchanged": True,
+                "model_creativity_attested": False,
+            }, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":
