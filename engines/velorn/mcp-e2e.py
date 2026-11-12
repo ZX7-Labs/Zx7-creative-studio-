@@ -364,7 +364,7 @@ async def exercise(options):
             title_after_conflict = next(
                 item for item in unmodified["clips"] if item["id"] == title_id)
             assert title_after_conflict["textProperties"]["text"] == "MCP native edit"
-            assert any(marker.get("label") == "Human review marker"
+            assert any(marker.get("name") == "Human review marker"
                        for marker in unmodified.get("markers", []))
             policy = pinned_native_editor_identity_policy(
                 options.source, tools, session)
