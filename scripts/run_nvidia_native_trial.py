@@ -551,7 +551,14 @@ def trial_delivery_profile_compliant(
 
 
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
-              audiovisual=False):
+              audiovisual=False, allow_cloud_audio_diagnostics=False):
+    # Runtime API and CLI enforce the same explicit paid/provider disclosure.
+    # An old reviewed visual-only request is not authority to send synthetic
+    # sound statistics to a hosted model or to launch a new cloud evaluation.
+    if audiovisual and allow_cloud_audio_diagnostics is not True:
+        raise ValueError("Audiovisual cloud trial needs explicit audio diagnostics consent")
+    if allow_cloud_audio_diagnostics and not audiovisual:
+        raise ValueError("Cloud audio diagnostics require audiovisual trial mode")
     if model_id != _ALLOWED_MODEL:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
     roots, cfg = prepare_trial(workspace, source=_SOURCE_EDITOR,
@@ -739,7 +746,8 @@ def main(argv=None):
         parser.error("Audio diagnostics consent is valid only for audiovisual trial")
     run_trial(args.workspace, model_id=args.model_id,
               xvfb_binary=args.xvfb_binary, display=args.display,
-              audiovisual=args.audiovisual_trial)
+              audiovisual=args.audiovisual_trial,
+              allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics)
 
 
 if __name__ == "__main__":
