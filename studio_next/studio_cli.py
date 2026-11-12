@@ -497,6 +497,15 @@ def main(argv=None):
     verify.add_argument("session_id")
     verify.add_argument("--max-decode-seconds", type=int, default=900,
                         help="Host resource limit for independent physical decoding, not a creative duration")
+    compare = commands.add_parser("compare-native",
+        help="Compare two saved editable Velorn projects without changing either")
+    compare.add_argument("before", type=Path)
+    compare.add_argument("after", type=Path)
+    review = commands.add_parser("review-native",
+        help="Inspect human and AI candidate revisions against a shared saved native base")
+    review.add_argument("base", type=Path)
+    review.add_argument("human", type=Path)
+    review.add_argument("ai_candidate", type=Path)
     run = commands.add_parser("run", help="Run the existing native AI editor; preserve session and source evidence")
     run.add_argument("workspace", type=Path)
     prompt = run.add_mutually_exclusive_group(required=True)
@@ -534,6 +543,13 @@ def main(argv=None):
             result = verify_owner_audiovisual_delivery(
                 args.workspace, args.session_id,
                 max_decode_seconds=args.max_decode_seconds)
+        elif args.command == "compare-native":
+            from .native_creative_revision import compare_native_revisions
+            result = compare_native_revisions(args.before, args.after)
+        elif args.command == "review-native":
+            from .native_creative_revision import review_native_collaboration
+            result = review_native_collaboration(
+                args.base, args.human, args.ai_candidate)
         else:
             if args.brief is not None:
                 brief = args.brief

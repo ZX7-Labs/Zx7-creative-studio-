@@ -1431,6 +1431,63 @@ async def exercise(options):
             assert baseline_capture[1] == final_capture[1], (
                 "Native scene render changed original media custody")
             assert digest(original) == original_hash
+            # Compare the TWO REAL renderer-bound saved documents. This is
+            # a source-grounded read-only creative-state review, not a new
+            # project model or proof of autonomous model art.
+            from studio_next.native_creative_revision import (
+                compare_native_revisions, review_native_collaboration,
+            )
+            def exact_saved_snapshot(sha):
+                matches = [p for p in snapshots.glob("*.comfystudio")
+                           if digest(p) == sha]
+                assert len(matches) == 1, "Native render source snapshot is ambiguous"
+                return matches[0]
+            before_doc = exact_saved_snapshot(baseline_capture[0])
+            after_doc = exact_saved_snapshot(final_capture[0])
+            comparison = compare_native_revisions(before_doc, after_doc)
+            assert comparison["native_lineage_hint_only"] is True
+            assert comparison["before"]["sha256"] == baseline_capture[0]
+            assert comparison["after"]["sha256"] == final_capture[0]
+            assert comparison["status"] == "differences_observed"
+            shape_changes = [change for change in comparison["changes"]
+                             if change["kind"] == "clip" and change["id"] == shape_id]
+            assert len(shape_changes) == 1
+            assert "/shapeProperties/fillColor" in shape_changes[0]["changed_fields"]
+            assert "/keyframes" in shape_changes[0]["changed_fields"]
+            assert not comparison["impact"]["actual_media_decoded"]
+            # Real human/native candidate has been saved. For an explicit
+            # *scripted* rival candidate, start from the exact saved base and
+            # propose a colliding shape color without calling native writes.
+            # No actor/action origin is inferred from a synthetic file.
+            rival = json.loads(before_doc.read_text(encoding="utf-8"))
+            # Native clip IDs are only unique *within their timeline*.
+            # The same ID may exist in the untouched earlier project timeline.
+            # Select the source-attested active timeline, not the first clip ID.
+            native_timeline_id = shape_changes[0]["timeline_id"]
+            source_timeline = next(
+                t for t in rival["timelines"] if t["id"] == native_timeline_id)
+            source_shape = next(
+                c for c in source_timeline["clips"] if c["id"] == shape_id)
+            assert source_shape.get("shapeProperties"), (
+                "Native review selected a different timeline's clip")
+            source_shape["shapeProperties"]["fillColor"] = "#4444dd"
+            rival_file = fixture / "scripted-rival-native-project.comfystudio"
+            rival_file.write_text(json.dumps(rival, ensure_ascii=False))
+            conflict = review_native_collaboration(
+                before_doc, after_doc, rival_file)
+            assert conflict["status"] == "conflicting_changes", conflict
+            assert any(c["kind"] == "same_field_conflict"
+                       for c in conflict["intersections"])
+            assert conflict["automatic_merge_permitted"] is False
+            print("ACTUAL_NATIVE_CREATIVE_REVISION_REVIEW " + json.dumps({
+                "source_pinned_native_editor": True,
+                "two_real_saved_native_snapshots_sha_bound_to_independent_exports": True,
+                "actual_saved_shape_fill_and_keyframe_change_detected": True,
+                "source_and_native_object_identifiers_only_not_private_text": True,
+                "scripted_colliding_candidate_rejected_without_applying": True,
+                "automatic_native_merge_permitted": False,
+                "genuine_model_artistic_comparison_or_human_shape_drag_proven": False,
+            }, sort_keys=True), flush=True)
             print("ACTUAL_NATIVE_SCENE_CAS " + json.dumps({
                 "source_pinned_scene_variant": True,
                 "real_GUI_marker_intervention_during_shape_and_keyframe_edit": True,
