@@ -1,80 +1,127 @@
 diff --git a/src/services/mcpSnapshot.js b/src/services/mcpSnapshot.js
 --- a/src/services/mcpSnapshot.js
 +++ b/src/services/mcpSnapshot.js
-@@ -6,6 +6,14 @@
+@@ -6,5 +6,14 @@
  
  const SNAPSHOT_VERSION = 1
- const MAX_TEXT_LENGTH = 2000
+-const MAX_TEXT_LENGTH = 2000
++const MAX_TEXT_LENGTH = 2000
 +
-+// ZX7 revision handshake: synchronously invalidated by every renderer store update.
-+// The epoch prevents token reuse across Electron restarts; missing UUID fails closed.
++// Source-owned version invalidated synchronously on renderer store emissions.
 +const zx7NativeEpoch = globalThis.crypto?.randomUUID?.() ?? null
 +let zx7NativeCounter = 0
++let zx7PublisherCount = 0
 +export function getZX7NativeRevision() {
-+  return zx7NativeEpoch ? `${zx7NativeEpoch}:${zx7NativeCounter}` : null
++  return zx7NativeEpoch && zx7PublisherCount > 0
++    ? `${zx7NativeEpoch}:${zx7NativeCounter}` : null
 +}
  
  function truncateText(value, maxLength = MAX_TEXT_LENGTH) {
-   if (value === null || value === undefined) return ''
-@@ -229,6 +237,7 @@
+@@ -229,5 +238,6 @@
    if (!project) {
      return {
-       schemaVersion: SNAPSHOT_VERSION,
+-      schemaVersion: SNAPSHOT_VERSION,
++      schemaVersion: SNAPSHOT_VERSION,
 +      zx7NativeRevision: getZX7NativeRevision(),
        generatedAt: new Date().toISOString(),
        app: { name: 'Velorn' },
-       project: null,
-@@ -266,6 +275,7 @@
+@@ -266,5 +276,6 @@
  
    return {
-     schemaVersion: SNAPSHOT_VERSION,
+-    schemaVersion: SNAPSHOT_VERSION,
++    schemaVersion: SNAPSHOT_VERSION,
 +    zx7NativeRevision: getZX7NativeRevision(),
      generatedAt: new Date().toISOString(),
      app: { name: 'Velorn' },
-     project: {
-@@ -307,6 +317,7 @@
+@@ -292,5 +303,7 @@
+ export function startMcpSnapshotPublisher({ debounceMs = 350, heartbeatMs = 10000 } = {}) {
+   const api = typeof window !== 'undefined' ? window.electronAPI?.mcp : null
+-  if (!api?.updateSnapshot) return () => {}
++  if (!api?.updateSnapshot) return () => {}
++  zx7PublisherCount += 1
++  zx7NativeCounter += 1
  
-   const schedulePublish = () => {
-     if (stopped) return
-+    zx7NativeCounter += 1
+   let publishTimer = null
+@@ -306,6 +319,8 @@
+   }
+ 
+-  const schedulePublish = () => {
+-    if (stopped) return
++  const schedulePublish = (updatedState) => {
++    if (stopped) return
++    // Zustand subscribers pass state; heartbeat passes no state.
++    if (updatedState !== undefined) zx7NativeCounter += 1
      if (publishTimer) clearTimeout(publishTimer)
      publishTimer = setTimeout(publish, debounceMs)
-   }
+@@ -322,5 +337,7 @@
+ 
+   return () => {
+-    stopped = true
++    stopped = true
++    zx7PublisherCount = Math.max(0, zx7PublisherCount - 1)
++    zx7NativeCounter += 1
+     if (publishTimer) clearTimeout(publishTimer)
+     clearInterval(heartbeat)
 diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
 --- a/src/services/mcpActions.js
 +++ b/src/services/mcpActions.js
-@@ -1,6 +1,7 @@
+@@ -1,5 +1,6 @@
  import useTimelineStore, { isSyncLockedClip } from '../stores/timelineStore'
  import useProjectStore, { RESOLUTION_PRESETS, FPS_PRESETS } from '../stores/projectStore'
- import useAssetsStore from '../stores/assetsStore'
+-import useAssetsStore from '../stores/assetsStore'
++import useAssetsStore from '../stores/assetsStore'
 +import { getZX7NativeRevision } from './mcpSnapshot'
  import { useFrameForAIStore } from '../stores/frameForAIStore'
  import { captureTimelineFrameAt, getTopmostVideoOrImageClipAtTime } from '../utils/captureTimelineFrame'
- import { generateColorMatteBlob } from '../utils/overlayGenerators'
-@@ -8931,6 +8932,15 @@
+@@ -8931,6 +8932,16 @@
  }
  
- export async function runMcpAction(action, payload = {}) {
-+  // Source-native synchronous commit fence for title revision only.
-+  // Expected token is injected by trusted ZX7 host, never chosen by Brain.
-+  if (action === 'update_text_clip' && payload?.previewOnly !== true &&
-+      Object.prototype.hasOwnProperty.call(payload, '__zx7ExpectedRevision')) {
+-export async function runMcpAction(action, payload = {}) {
+-  return handleMcpAction({ action, payload })
++export async function runMcpAction(action, payload = {}) {
++  // Synchronous renderer commit entry, NOT Electron's debounced snapshot.
++  // GUI store mutations increment the source revision without a model token.
++  // Missing tokens on this patched MCP write path fail closed.
++  if (action === 'update_text_clip' && payload?.previewOnly !== true) {
 +    const current = getZX7NativeRevision()
-+    if (!current || current !== payload.__zx7ExpectedRevision) {
++    const expected = payload?.__zx7ExpectedRevision
++    if (!current || typeof expected !== 'string' || current !== expected) {
 +      throw new Error('ZX7_STALE_NATIVE_REVISION')
 +    }
 +  }
-   return handleMcpAction({ action, payload })
++  return handleMcpAction({ action, payload })
  }
  
 diff --git a/electron/mcpServer.js b/electron/mcpServer.js
 --- a/electron/mcpServer.js
 +++ b/electron/mcpServer.js
-@@ -10783,6 +10783,7 @@
+@@ -10783,5 +10783,6 @@
            assetCount: snapshot.assets?.length || 0,
            assetCounts: summarizeAssetCounts(snapshot.assets || []),
-           generatedAt: snapshot.generatedAt,
+-          generatedAt: snapshot.generatedAt,
++          generatedAt: snapshot.generatedAt,
 +          zx7NativeRevision: snapshot.zx7NativeRevision ?? null,
            mcp: this.getStatus(),
          })
-       case 'get_timeline': {
+@@ -14210,8 +14211,17 @@
+     }
+ 
+-    const result = await this.performAction({
+-      action: 'update_text_clip',
+-      payload: args,
+-    })
++    let result
++    try {
++      result = await this.performAction({
++        action: 'update_text_clip',
++        payload: args,
++      })
++    } catch (error) {
++      // Only this source-native synchronous fence emits this no-write code.
++      if (error?.message === 'ZX7_STALE_NATIVE_REVISION') {
++        return errorResult('ZX7_STALE_NATIVE_REVISION')
++      }
++      throw error
++    }
+ 
+     return textResult({
