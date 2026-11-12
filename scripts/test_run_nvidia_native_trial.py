@@ -624,6 +624,175 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             with self.assertRaises((subprocess.CalledProcessError, ValueError)):
                 decoded_video_frames_sha256(root / "missing.mp4")
 
+    def test_real_synthetic_audiovisual_bootstrap_and_model_selection(self):
+        """Two original signals, no model-directed shot list or paid request."""
+        import hashlib
+        from scripts.run_nvidia_native_trial import AV_TRIAL_REVISION_TOOLS
+        with tempfile.TemporaryDirectory() as scratch:
+            workspace = Path(scratch) / "av"
+            roots, config_path = prepare_trial(
+                workspace, source=_SOURCE_EDITOR, audiovisual=True)
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(set(config["allowed_tools"]),
+                             _HOST_ALLOWED | AV_TRIAL_REVISION_TOOLS)
+            ledger = json.loads((workspace / "source-ledger.json").read_text())
+            self.assertEqual(len(ledger), 2)
+            self.assertEqual({Path(item["path"]).suffix for item in ledger},
+                             {".mp4", ".wav"})
+            self.assertTrue(all(not x["preauthored_timeline"] for x in ledger))
+            for item in ledger:
+                path = Path(item["path"])
+                self.assertTrue(path.is_file())
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),
+                                 item["sha256"])
+                subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-xerror",
+                                "-i", str(path), "-f", "null", "-"],
+                               check=True, timeout=30)
+            self.assertIn("timed sound diagnostics",
+                          (workspace / "brief.txt").read_text())
+            with self.assertRaisesRegex(ValueError, "must not preexist"):
+                prepare_trial(workspace, source=_SOURCE_EDITOR, audiovisual=True)
+
+        # Nothing launches the model. Verify exact planned CLI arguments
+        # before accepting a future separately consented hosted experiment.
+        with tempfile.TemporaryDirectory() as scratch:
+            workspace = Path(scratch) / "trial"
+            workspace.mkdir()
+            roots = {"state": workspace / "state", "outputs": workspace / "out"}
+            with patch("scripts.run_nvidia_native_trial.prepare_trial",
+                       return_value=(roots, workspace / "host.json")) as staged, patch(
+                    "scripts.run_nvidia_native_trial.subprocess.run",
+                    return_value=subprocess.CompletedProcess([], 1, "", "offline stop")
+            ) as child:
+                with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                    run_trial(workspace, model_id=_ALLOWED_MODEL,
+                              xvfb_binary="/usr/bin/Xvfb",
+                              display="127.0.0.1:95", audiovisual=True)
+            staged.assert_called_once_with(
+                workspace, source=_SOURCE_EDITOR, audiovisual=True)
+            command = child.call_args.args[0]
+            self.assertEqual(command[command.index("--evaluation-evidence") + 1],
+                             "reviewed-av-revision")
+            self.assertIn("--allow-cloud-audio-diagnostics", command)
+            self.assertIn("--record-av-project-snapshots", command)
+            self.assertIn("--structured-actions", command)
+            self.assertEqual(child.call_count, 1)
+
+    def test_audiovisual_native_source_custody_requires_original_active_sound(self):
+        """The saved project must contain actual video AND audio originals."""
+        import hashlib
+        import shutil
+        from scripts.run_nvidia_native_trial import verify_saved_native_trial
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            stage = root / "staging"
+            stage.mkdir()
+            video = stage / "original-neutral-gradient.mp4"
+            sound = stage / "original-synthetic-sound.wav"
+            video.write_bytes(b"source video unit bytes")
+            sound.write_bytes(b"source sound unit bytes")
+            ledger = [{"path": str(p),
+                       "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+                      for p in (video, sound)]
+            (root / "source-ledger.json").write_text(json.dumps(ledger))
+            project_root = root / "projects" / "unit"
+            copies = []
+            assets = []
+            clips = []
+            for index, (source, kind) in enumerate(((video, "video"), (sound, "audio"))):
+                relative = f"assets/{kind}/{source.name}"
+                target = project_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+                copies.append(target)
+                assets.append({"id": f"asset-{kind}", "type": kind,
+                               "path": relative,
+                               "settings": {"sourcePath": str(source)}})
+                clips.append({"id": f"clip-{kind}", "assetId": f"asset-{kind}",
+                              "trackId": f"track-{kind}", "enabled": True,
+                              "startTime": 0.0, "duration": 4.0})
+            base = {"currentTimelineId": "timeline",
+                    "timelines": [{"id": "timeline",
+                                   "tracks": [{"id": "track-video", "type": "video"},
+                                              {"id": "track-audio", "type": "audio"}],
+                                   "clips": clips}],
+                    "assets": assets}
+            saved = project_root / "project.comfystudio"
+            def run(project):
+                saved.write_text(json.dumps(project), encoding="utf-8")
+                return verify_saved_native_trial(root, require_audio=True)
+            result = run(base)
+            self.assertEqual(result["verified_source_backed_audio_clips"], 1)
+            self.assertEqual(result["verified_source_backed_video_clips"], 1)
+            self.assertFalse(result["artistic_quality_approved"])
+            for change in (
+                [{"id": "track-video", "type": "video"},
+                 {"id": "track-audio", "type": "audio", "muted": True}],
+                [{"id": "track-video", "type": "video"},
+                 {"id": "track-audio", "type": "video"}],
+            ):
+                with self.subTest(tracks=change), self.assertRaisesRegex(
+                    ValueError, "source-backed audible clip"
+                ):
+                    run({**base, "timelines": [{**base["timelines"][0],
+                                               "tracks": change}]})
+            with self.assertRaisesRegex(ValueError, "source-backed audible clip"):
+                run({**base, "timelines": [{**base["timelines"][0],
+                                           "clips": clips[:1]}]})
+            with self.assertRaisesRegex(ValueError, "source-backed audible clip"):
+                run({**base, "timelines": [{**base["timelines"][0],
+                                           "clips": [clips[0], {**clips[1], "startTime": 6.0}]}]})
+            run(base)
+            copies[1].write_bytes(b"substituted sound")
+            with self.assertRaisesRegex(ValueError, "differ"):
+                verify_saved_native_trial(root, require_audio=True)
+
+    def test_physical_audio_decode_rejects_missing_silence_and_wrong_timing(self):
+        """Real FFmpeg PCM decoding; never infer sound from MP4 metadata."""
+        import shutil
+        from scripts.run_nvidia_native_trial import decode_trial_audio
+        if not shutil.which("ffmpeg"):
+            self.skipTest("Physical PCM proof requires FFmpeg")
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            def render(name, tone):
+                target = root / name
+                subprocess.run([
+                    "ffmpeg", "-nostdin", "-v", "error",
+                    "-f", "lavfi", "-i", "color=c=navy:s=64x36:r=24:d=0.5",
+                    "-f", "lavfi", "-i",
+                    ("sine=frequency=440:sample_rate=48000:duration=0.5"
+                     if tone else
+                     "anullsrc=channel_layout=mono:sample_rate=48000:d=0.5"),
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-shortest", str(target)
+                ], check=True, timeout=30)
+                return target
+            good = render("audible.mp4", True)
+            silent = render("silent.mp4", False)
+            present = decode_trial_audio(good, expected_video_seconds=0.5,
+                                         max_seconds=1)
+            self.assertTrue(present.audible)
+            self.assertEqual(present.sample_rate, 8000)
+            self.assertGreater(present.sample_count, 3000)
+            self.assertFalse(
+                decode_trial_audio(silent, expected_video_seconds=0.5,
+                                   max_seconds=1).audible)
+            with self.assertRaisesRegex(ValueError, "aligned"):
+                decode_trial_audio(good, expected_video_seconds=0.25,
+                                   max_seconds=1)
+            with self.assertRaisesRegex(ValueError, "budget"):
+                decode_trial_audio(good, expected_video_seconds=float("nan"))
+            no_sound = root / "video-only.mp4"
+            subprocess.run([
+                "ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi",
+                "-i", "color=c=navy:s=64x36:r=24:d=0.5",
+                "-c:v", "libx264", str(no_sound)
+            ], check=True, timeout=30)
+            with self.assertRaisesRegex(ValueError, "missing"):
+                decode_trial_audio(no_sound, expected_video_seconds=0.5,
+                                   max_seconds=1)
+
     def test_unknown_remote_model_is_refused_before_writing_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "not-created"
