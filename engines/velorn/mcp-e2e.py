@@ -1460,8 +1460,16 @@ async def exercise(options):
             # propose a colliding shape color without calling native writes.
             # No actor/action origin is inferred from a synthetic file.
             rival = json.loads(before_doc.read_text(encoding="utf-8"))
-            source_shape = next(c for t in rival["timelines"]
-                                for c in t["clips"] if c["id"] == shape_id)
+            # Native clip IDs are only unique *within their timeline*.
+            # The same ID may exist in the untouched earlier project timeline.
+            # Select the source-attested active timeline, not the first clip ID.
+            native_timeline_id = shape_changes[0]["timeline_id"]
+            source_timeline = next(
+                t for t in rival["timelines"] if t["id"] == native_timeline_id)
+            source_shape = next(
+                c for c in source_timeline["clips"] if c["id"] == shape_id)
+            assert source_shape.get("shapeProperties"), (
+                "Native review selected a different timeline's clip")
             source_shape["shapeProperties"]["fillColor"] = "#4444dd"
             rival_file = fixture / "scripted-rival-native-project.comfystudio"
             rival_file.write_text(json.dumps(rival, ensure_ascii=False))
