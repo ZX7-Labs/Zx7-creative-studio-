@@ -283,6 +283,53 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
             self.assertEqual(store.inspect("model-epoch-op-02")["state"],
                              "host_reported_success_unverified")
 
+    async def test_model_context_discards_old_native_reads_after_human_revision(self):
+        # A no-dispatch refusal is not enough if old clip/track snapshots
+        # continue to mislead the next independent model decision.
+        model_view = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        renderer = self.renderer
+
+        class InterveningGuiSession:
+            async def list_tools(self):
+                return await model_view.list_tools()
+
+            async def call_tool(self, name, arguments):
+                if name == "update_text_clip":
+                    renderer.human_gui_edit("Manual GUI changed live project")
+                    renderer.publish()
+                return await model_view.call_tool(name, arguments)
+
+        model = ScriptedModel([
+            decision("invoke", tool="get_timeline", inputs={"includeClips": True}),
+            decision("invoke", tool="update_text_clip",
+                     inputs={"clipId": "clip-A", "text": "Old model caption"}),
+            decision("finish", summary="Human edit preserved; observation expired"),
+        ])
+        outcome = await NativeCreativeControl(
+            InterveningGuiSession(), model, max_turns=3,
+            host_tool_access=GRANTS, host_pre_dispatch_rejections=True,
+        ).run("Preserve human edits and choose creative native changes")
+        self.assertEqual(outcome["status"], "model_finished_unverified")
+        self.assertEqual(self.renderer.writes, 0)
+        self.assertEqual(self.renderer.clip_text, "Manual GUI changed live project")
+        self.assertEqual(len(model.observed), 3)
+        self.assertTrue(model.observed[1]["native_read_snapshot_cache"],
+                        "A valid earlier model-selected timeline read must be recorded")
+        after_denial = model.observed[2]
+        self.assertEqual(after_denial["native_read_snapshot_cache"], [])
+        self.assertEqual(after_denial["last_native_result_texts"], [])
+        self.assertEqual(after_denial["native_project_presence_from_last_inspection"],
+                         "unknown")
+        self.assertTrue(after_denial["last_host_project_write_reconciliation"][
+            "native_model_observation_invalidated"])
+        self.assertEqual(after_denial["last_rejected_native_action_feedback"][
+            "rejection_code"], "native_identity_model_observation_stale")
+        self.assertTrue(any(
+            event.get("kind") == "host_tool_rejected_before_dispatch" and
+            event.get("rejection_code") == "native_identity_model_observation_stale"
+            for event in outcome["events"]))
+
     async def test_human_gui_edit_during_debounce_is_not_lost_and_model_can_replan(self):
         self.renderer.human_gui_edit("Manual human edit")
         chosen={"clipId":"clip-A","text":"Stale planned AI title"}
