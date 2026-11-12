@@ -181,11 +181,25 @@ artistic/professional quality is certified by this technical command.
 
 For an explicitly authorized **NVIDIA audiovisual review**, `run` additionally
 requires **both** `--allow-cloud-image-upload` and
-`--allow-cloud-audio-diagnostics`. Sound diagnostics are text/numerical
-observations; no WAV is sent and a model without an actual audio perception
-interface cannot claim to hear the soundtrack. These flags do not waive
-separate approval for paid model execution, private media disclosure or
-publication. The free local model route has neither cloud-upload switch.
+`--allow-cloud-audio-diagnostics`. The default sound-diagnostic route sends
+only bounded text/numerical measurements; it **does not send raw WAV**.
+The model may also choose `zx7_observe_verified_export_av_window` to inspect
+2–4 actual verified frames and timed numerical sound measurements for a
+specific creative interval. That combined sensor requires **both** existing
+hosted visual and numeric-audio consents.
+
+For the specifically configured
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` typed-tool Brain only,
+`--allow-cloud-original-wav-upload` adds **separate explicit consent**
+to transmit a short, source-SHA-bound original 16 kHz WAV excerpt (at most
+3 seconds and 128 KiB). Other models are rejected, and hosted WAV egress
+is off by default. This is an optional provider-specific audio-capable
+transport, **not** evidence that the model understood dialogue, music,
+emotion or mastering. No file audio is sent merely because numeric
+diagnostics were allowed; the selected native observation remains host
+permissioned. These flags do not waive **separate approval for paid model
+execution, private media disclosure or publication**. The free local
+model route has neither cloud-upload switch.
 
 ### Genuine NVIDIA audiovisual evaluation: no automatic paid inference
 
