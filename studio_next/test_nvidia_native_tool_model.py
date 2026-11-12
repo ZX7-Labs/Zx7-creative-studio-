@@ -1,14 +1,18 @@
 """Credential-free contracts for native typed NVIDIA model -> common BODY."""
+import base64
+import hashlib
 import json
 from io import BytesIO
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from studio_next.nvidia_native_tool_model import (
-    NvidiaNativeToolCreativeModel, _provider_function,
+    NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
+    NVIDIA_OMNI_AUDIO_MODEL_ID, _provider_function,
 )
-from studio_next.nvidia_model import NvidiaConfigurationError
+from studio_next.nvidia_model import NvidiaConfigurationError, NvidiaModelSettings
 from studio_next.providers import LocalModelOutputError
 
 
@@ -223,6 +227,147 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                 model.decide_with_images(
                     dict(ctx, picture_evidence=[dict(entry, sha256="0"*64)]),
                     [("image/png", img)])
+
+
+class OmniOriginalWavNativeToolTests(unittest.TestCase):
+    @staticmethod
+    def _wav():
+        from io import BytesIO
+        import wave
+        output = BytesIO()
+        with wave.open(output, "wb") as track:
+            track.setnchannels(1)
+            track.setsampwidth(2)
+            track.setframerate(16000)
+            track.writeframes(bytes([1, 0]) * 400)
+        return output.getvalue()
+
+    @staticmethod
+    def _model(*, allowed=False):
+        return NvidiaOmniNativeToolCreativeModel(
+            NvidiaModelSettings(
+                model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+                sampling={"chat_template_kwargs": {"enable_thinking": False}}),
+            system_prompt="Inspect authorized native footage and sound",
+            allow_original_audio_upload=allowed)
+
+    @staticmethod
+    def _timed_evidence(sample):
+        return {
+            "wav_sha256": hashlib.sha256(sample).hexdigest(),
+            "export_sha256": "a" * 64,
+            "requested_start_seconds": 1.5,
+            "requested_duration_seconds": 0.025,
+            "observed_audio_duration_seconds": 0.025,
+            "preview_downmixed_and_resampled": True,
+            "exact_original_audio_pts_proven": False,
+        }
+
+    def test_consent_false_wrong_model_and_ambiguous_custody_reject_before_network(self):
+        sample = self._wav()
+        digest = hashlib.sha256(sample).hexdigest()
+        context = {**_context(), "audio_evidence": self._timed_evidence(sample)}
+        with self.assertRaises(NvidiaConfigurationError):
+            NvidiaOmniNativeToolCreativeModel(
+                NvidiaModelSettings(), system_prompt="no",
+                allow_original_audio_upload=True)
+        with patch("studio_next.nvidia_model.build_opener") as network:
+            model = self._model()
+            with self.assertRaises(NvidiaConfigurationError):
+                model.decide_with_audio(context, [("audio/wav", sample)])
+            permitted = self._model(allowed=True)
+            for evidence, raw in (
+                ({**context["audio_evidence"], "wav_sha256": "b" * 64}, sample),
+                ({**context["audio_evidence"], "export_sha256": "malformed"}, sample),
+                ({**context["audio_evidence"], "requested_start_seconds": True}, sample),
+                ({**context["audio_evidence"], "requested_duration_seconds": -1}, sample),
+                ({**context["audio_evidence"], "requested_duration_seconds": 5}, sample),
+                ({**context["audio_evidence"], "observed_audio_duration_seconds": 5}, sample),
+                ({**context["audio_evidence"], "exact_original_audio_pts_proven": True}, sample),
+                ({**context["audio_evidence"], "preview_downmixed_and_resampled": False}, sample),
+                (context["audio_evidence"], b"Not a real wave"),
+            ):
+                with self.subTest(evidence=evidence, size=len(raw)):
+                    with self.assertRaises(NvidiaConfigurationError):
+                        permitted.decide_with_audio(
+                            {**_context(), "audio_evidence": evidence},
+                            [("audio/wav", raw)])
+            with self.assertRaises(NvidiaConfigurationError):
+                permitted.decide_with_audio(context, [("audio/wav", sample)] * 2)
+            network.assert_not_called()
+
+    def test_sha_bound_raw_wav_enters_only_separately_opted_in_omni_tool_request(self):
+        sample = self._wav()
+        digest = hashlib.sha256(sample).hexdigest()
+        original = {**_context(), "audio_evidence": self._timed_evidence(sample)}
+        captured = []
+        class Opener:
+            def open(self, request, timeout):
+                captured.append(json.loads(request.data))
+                return _reply(_provider_function("get_project"),
+                              '{"inputs":{},"reason":"Inspect timed real audio evidence"}')
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Z" * 32}), patch(
+                "studio_next.nvidia_model.build_opener", return_value=Opener()):
+            result = self._model(allowed=True).decide_with_audio(
+                original, [("audio/wav", sample)])
+        self.assertEqual(result["action"], "invoke")
+        self.assertEqual(result["arguments"], {"tool": "get_project", "inputs": {}})
+        parts = captured[0]["messages"][1]["content"]
+        self.assertEqual([part["type"] for part in parts], ["text", "text", "audio_url"])
+        sound_receipt = json.loads(parts[1]["text"])
+        self.assertEqual(sound_receipt["original_wav_sha256"], digest)
+        self.assertEqual(sound_receipt["requested_start_seconds"], 1.5)
+        self.assertEqual(sound_receipt["requested_duration_seconds"], 0.025)
+        self.assertEqual(sound_receipt["observed_audio_duration_seconds"], 0.025)
+        self.assertTrue(sound_receipt["preview_downmixed_and_resampled"])
+        self.assertFalse(sound_receipt["exact_original_audio_pts_proven"])
+        self.assertEqual(base64.b64decode(parts[2]["audio_url"]["url"].split(",", 1)[1]),
+                         sample)
+        self.assertNotIn("host_native_tool_contracts", parts[0]["text"])
+        self.assertNotIn("nvapi-", json.dumps(captured))
+        self.assertEqual(original["audio_evidence"]["wav_sha256"], digest)
+
+
+    def test_native_session_selects_omni_only_with_separate_wav_consent(self):
+        from studio_next.native_editor_session import native_decision_model
+        args = SimpleNamespace(
+            provider="nvidia", base_url="http://127.0.0.1:8080",
+            structured_actions=True, model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+            model_timeout=180, allow_cloud_image_upload=False,
+            allow_cloud_original_wav_upload=False, allow_public_research=False)
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Q" * 32}):
+            disabled = native_decision_model(args)
+            self.assertIsInstance(disabled, NvidiaOmniNativeToolCreativeModel)
+            self.assertFalse(disabled.allow_original_audio_upload)
+            args.allow_cloud_original_wav_upload = True
+            enabled = native_decision_model(args)
+            self.assertIsInstance(enabled, NvidiaOmniNativeToolCreativeModel)
+            self.assertTrue(enabled.allow_original_audio_upload)
+            self.assertEqual(enabled.settings.model_id, NVIDIA_OMNI_AUDIO_MODEL_ID)
+            args.model_id = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+            with self.assertRaisesRegex(ValueError, "Original cloud WAV"):
+                native_decision_model(args)
+
+    def test_owner_and_native_parsers_keep_raw_wav_consent_disabled_by_default(self):
+        from studio_next.native_editor_session import build_parser as native_parser
+        from studio_next.studio_cli import main as owner_main
+        # Native parser requires no remote request, files or model credentials.
+        required = ["--source", "/tmp/test-source",
+                    "--config", "/tmp/grants.json", "--state", "/tmp/native-state",
+                    "--brief-file", "/tmp/brief.txt", "--receipt", "/tmp/receipt.jsonl",
+                    "--model-id", NVIDIA_OMNI_AUDIO_MODEL_ID]
+        args = native_parser().parse_args(required)
+        self.assertFalse(args.allow_cloud_original_wav_upload)
+        self.assertTrue(native_parser().parse_args(
+            required + ["--allow-cloud-original-wav-upload"]).allow_cloud_original_wav_upload)
+        # This is a parser-level safety assertion; no run/HTTP is requested.
+        from unittest.mock import patch as mock_patch
+        with mock_patch("studio_next.studio_cli.run_workspace") as run:
+            run.return_value = {"state": "completed"}
+            self.assertEqual(owner_main(["run", "/tmp/nonexistent-owner", "--brief", "test"]), 0)
+            kwargs = run.call_args.kwargs
+        self.assertFalse(kwargs["allow_cloud_original_wav_upload"])
+
 
 
 if __name__ == "__main__":
