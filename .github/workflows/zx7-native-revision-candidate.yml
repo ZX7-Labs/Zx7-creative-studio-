@@ -1,0 +1,117 @@
+name: ZX7 Native Collaboration — Source Revision Candidate
+
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/native-live-revision.patch'
+      - 'engines/velorn/prepare-native-revision-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - '.github/workflows/zx7-native-revision-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-pinned-collaboration-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prove upstream source identity, patch application and JS syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash engines/velorn/prepare-native-revision-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-native-collab" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-native-collab"
+
+  unit-native-commit-contract:
+    needs: inspect-pinned-collaboration-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test host/Brain writer CAS including stale and malformed receipts
+        run: |
+          python -m pip install --no-cache-dir '.[editor]'
+          python -m unittest             studio_next.test_native_revision_fence             studio_next.test_native_editor_identity             studio_next.test_capability_gateway \
+            studio_next.test_capability_attempts -v
+
+  physical-native-collaboration:
+    needs: [inspect-pinned-collaboration-source, unit-native-commit-contract]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install actual native desktop and verified media tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Prepare exact reviewed alternative editor source, not mutate upstream
+        run: |
+          editor="$RUNNER_TEMP/zx7-native-collab"
+          bash engines/velorn/prepare-native-revision-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
+          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          test ! -e "$editor/.git/objects/info/alternates"
+          git -C "$editor" diff --exit-code HEAD --
+          echo "ZX7_COLLAB_EDITOR=$editor" >> "$GITHUB_ENV"
+      - name: Build real source-pinned renderer with native revision guard
+        run: |
+          cd "$ZX7_COLLAB_EDITOR"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
+          npm run build
+          test -s dist/index.html
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+      - name: Physical native CAS, editor source, saved A/V revisions and restart
+        run: |
+          python -u engines/velorn/mcp-e2e.py \
+            --source "$ZX7_COLLAB_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:96
+      - name: Preserve diagnostic facts on failure without private payloads
+        if: failure()
+        run: |
+          for log in /tmp/zx7-editor-mcp-*/state/session-*/launcher.log; do
+            if test -f "$log"; then
+              echo "NATIVE COLLAB DIAGNOSTICS"
+              tail -n 60 "$log"
+            fi
+          done
+      - name: Attest original third-party source was never modified
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --

@@ -27,7 +27,39 @@ _OPERATION = re.compile(r"[a-z][a-z0-9_-]{0,47}/[^\x00-\x1f\x7f]{1,160}\Z")
 _TERMINAL_STATES = frozenset({
     "host_reported_success_unverified",
     "write_uncertain_reconciliation_required",
+    "native_conflict_rejected_no_write",
 })
+
+# Original on-disk schema is kept as an exact migration reference. A verified
+# source-native CAS rejection is terminal, but NEVER replayable. Unlike an
+# uncertain remote write it needs no project-state reconciliation.
+_LEGACY_TABLE_SQL = """CREATE TABLE capability_attempts (
+    request_id TEXT PRIMARY KEY,
+    operation_id TEXT NOT NULL,
+    catalog_revision TEXT NOT NULL,
+    input_sha256 TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN (
+        'submitted_unconfirmed',
+        'host_reported_success_unverified',
+        'write_uncertain_reconciliation_required')),
+    admitted_ns INTEGER NOT NULL,
+    settled_ns INTEGER
+)"""
+_CURRENT_TABLE_SQL = _LEGACY_TABLE_SQL.replace(
+    "'write_uncertain_reconciliation_required'))",
+    "'write_uncertain_reconciliation_required',\n"
+    "        'native_conflict_rejected_no_write'))",
+)
+if _CURRENT_TABLE_SQL == _LEGACY_TABLE_SQL:
+    raise RuntimeError("Native journal schema transition is missing")
+
+
+def _normalized_schema_sql(statement):
+    # SQLite may write IF NOT EXISTS in the schema and quote a renamed table.
+    # Never migrate an unrelated or unexpected on-disk ledger schema.
+    without_conditional = re.sub(
+        r"\bIF\s+NOT\s+EXISTS\b", "", statement, flags=re.I)
+    return re.sub(r"\s+", "", without_conditional.replace('"', "")).lower()
 
 
 class CapabilityAttemptError(ValueError):
@@ -67,21 +99,48 @@ class CapabilityAttemptStore:
             raise CapabilityAttemptError("Capability journal must be a private regular file")
         self.path = path
         with self._connect() as db:
-            db.execute("""CREATE TABLE IF NOT EXISTS capability_attempts (
-                request_id TEXT PRIMARY KEY,
-                operation_id TEXT NOT NULL,
-                catalog_revision TEXT NOT NULL,
-                input_sha256 TEXT NOT NULL,
-                state TEXT NOT NULL CHECK(state IN (
-                    'submitted_unconfirmed',
-                    'host_reported_success_unverified',
-                    'write_uncertain_reconciliation_required')),
-                admitted_ns INTEGER NOT NULL,
-                settled_ns INTEGER
-            )""")
-            db.execute("""CREATE INDEX IF NOT EXISTS
-                ix_capability_attempts_stable_scan
-                ON capability_attempts(admitted_ns, request_id)""")
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                row = db.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' "
+                    "AND name='capability_attempts'").fetchone()
+                if row is None:
+                    db.execute(_CURRENT_TABLE_SQL)
+                elif (_normalized_schema_sql(row[0]) ==
+                      _normalized_schema_sql(_LEGACY_TABLE_SQL)):
+                    # Atomic forward-only migration: old intents survive
+                    # exactly, including crash-window/uncertain writes.
+                    # No queue, media, identity or payload is copied outside
+                    # the private database. Failed migration rolls back.
+                    other = db.execute(
+                        "SELECT 1 FROM sqlite_master WHERE "
+                        "name='capability_attempts_revision_next'").fetchone()
+                    if other is not None:
+                        raise CapabilityAttemptError(
+                            "Unexpected native journal migration residue")
+                    db.execute(_CURRENT_TABLE_SQL.replace(
+                        "CREATE TABLE capability_attempts",
+                        "CREATE TABLE capability_attempts_revision_next", 1))
+                    fields = ("request_id,operation_id,catalog_revision,"
+                              "input_sha256,state,admitted_ns,settled_ns")
+                    db.execute(
+                        "INSERT INTO capability_attempts_revision_next "
+                        f"({fields}) SELECT {fields} FROM capability_attempts")
+                    db.execute("DROP TABLE capability_attempts")
+                    db.execute("ALTER TABLE capability_attempts_revision_next "
+                               "RENAME TO capability_attempts")
+                elif (_normalized_schema_sql(row[0]) !=
+                      _normalized_schema_sql(_CURRENT_TABLE_SQL)):
+                    raise CapabilityAttemptError(
+                        "Unknown durable native attempt journal schema")
+                db.execute("""CREATE INDEX IF NOT EXISTS
+                    ix_capability_attempts_stable_scan
+                    ON capability_attempts(admitted_ns, request_id)""")
+                db.execute("COMMIT")
+            except BaseException:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise
 
     def _connect(self):
         # Reuse the production SQLite policy rather than forcing WAL on
@@ -204,6 +263,7 @@ class CapabilityAttemptStore:
                 catalog_revision,input_sha256,state,admitted_ns,settled_ns
                 FROM capability_attempts
                 WHERE (admitted_ns,request_id) > (?,?)
+                  AND state!='native_conflict_rejected_no_write'
                 ORDER BY admitted_ns,request_id LIMIT ?""",
                 (start_ns,start_request,limit+1)).fetchall()
         selected = rows[:limit]

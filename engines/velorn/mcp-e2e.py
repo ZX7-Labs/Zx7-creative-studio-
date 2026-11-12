@@ -33,6 +33,10 @@ async def exercise(options):
     from studio_next.native_editor_project import capture_render_project
     from studio_next.native_render_evidence import native_render_binding
 
+    from studio_next.native_editor_source_pin import (
+        _source_matches_pinned_native_collaboration)
+    collaboration_source = _source_matches_pinned_native_collaboration(
+        options.source)
     fixture = Path(tempfile.mkdtemp(prefix="zx7-editor-mcp-"))
     projects, staging, outputs = (fixture / name for name in ("projects", "staging", "outputs"))
     for path in (projects, staging, outputs):
@@ -171,6 +175,34 @@ async def exercise(options):
                 return state
             await asyncio.sleep(.15)
         raise AssertionError("Native debounced project state did not converge")
+
+    def inject_gui_keyboard(key):
+        """Real X11 keyboard event into installed Electron, not an MCP mutation.
+
+        Run only under the isolated Xvfb CI display. No window-guess fallback
+        or false success if a visible Velorn editor is not uniquely identified.
+        """
+        assert options.display and shutil.which("xdotool"), (
+            "Physical GUI proof requires isolated Xvfb and xdotool")
+        env = {**os.environ, "DISPLAY": options.display}
+        windows = subprocess.check_output(
+            ["xdotool", "search", "--onlyvisible", "--name", "."],
+            env=env, stderr=subprocess.PIPE, timeout=8).decode().split()
+        matches = []
+        for window in set(windows):
+            name = subprocess.check_output(
+                ["xdotool", "getwindowname", window], env=env,
+                stderr=subprocess.PIPE, timeout=8).decode().strip()
+            if "Velorn" in name:
+                matches.append(window)
+        assert len(matches) == 1, (
+            "Exactly one visible Velorn editor GUI window required", len(matches))
+        subprocess.run(["xdotool", "windowfocus", "--sync", matches[0]],
+                       env=env, check=True, timeout=8,
+                       capture_output=True)
+        subprocess.run(["xdotool", "key", "--clearmodifiers", key],
+                       env=env, check=True, timeout=8,
+                       capture_output=True)
 
     async with connected() as session:
         discovered = (await session.list_tools()).tools
@@ -334,7 +366,168 @@ async def exercise(options):
             session, first_output, saved_first)
         first_frames = await observe_samples(session, first_output, first_sha)
         first_audio = await observe_audio_envelope(session, first_output, first_sha)
-        await call(session, "update_text_clip", {"clipId": title_id, "text": "MCP revised", "previewOnly": False})
+        if collaboration_source:
+            from studio_next.native_editor_identity import (
+                pinned_native_editor_identity_policy)
+            captured = await call(session, "get_project")
+            stale_token = captured.get("zx7NativeRevision")
+            assert isinstance(stale_token, str) and len(stale_token) >= 38
+            # Real X11 human-style keyboard gesture into the installed GUI,
+            # using the editor's own default M hotkey (not an MCP write).
+            # Prove the renderer's actual timeline store accepted the key.
+            before_gui = await call(session, "get_timeline", {})
+            before_gui_ids = {m["id"] for m in before_gui["markers"]}
+            initial_count = len(before_gui_ids)
+            inject_gui_keyboard("m")
+            # get_project deliberately publishes only clip/track counts.
+            # Marker state belongs to the full real get_timeline schema.
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                after_gui = await call(session, "get_timeline", {})
+                if len(after_gui.get("markers", [])) == initial_count + 1:
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Electron GUI M hotkey did not create an editable marker")
+            new_gui_markers = [m for m in after_gui["markers"]
+                               if m["id"] not in before_gui_ids]
+            assert len(new_gui_markers) == 1, (
+                "GUI keyboard input did not create exactly one source-owned marker")
+            gui_marker_id = new_gui_markers[0]["id"]
+            # A second independent renderer mutation demonstrates the
+            # original human review annotation survives stale AI refusal.
+            await call(session, "add_timeline_markers", {
+                "markers": [{"timeSeconds": 0.5,
+                             "label": "Human review marker"}],
+                "previewOnly": False})
+            refused = await session.call_tool("update_text_clip", {
+                "clipId": title_id, "text": "STALE AI MUST NOT OVERWRITE",
+                "previewOnly": False,
+                "__zx7ExpectedRevision": stale_token})
+            assert refused.is_error, "Native renderer accepted stale source"
+            assert len(refused.content) == 1
+            assert refused.content[0].text == "ZX7_STALE_NATIVE_REVISION", refused
+            await wait(session, lambda state:
+                state.get("zx7NativeRevision") != stale_token)
+            # The source snapshot publishes at a debounce, so neither a
+            # transport ACK nor one immediate timeline read proves the latest
+            # marker has appeared. Wait for actual source-owned convergence.
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                unmodified = await call(session, "get_timeline", {"includeClips": True})
+                observed_ids = {m["id"] for m in unmodified.get("markers", [])}
+                review_seen = any(
+                    marker.get("name") == "Human review marker"
+                    for marker in unmodified.get("markers", []))
+                if gui_marker_id in observed_ids and review_seen:
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError(
+                    "Real GUI and native review markers failed to converge in source")
+            title_after_conflict = next(
+                item for item in unmodified["clips"] if item["id"] == title_id)
+            assert title_after_conflict["textProperties"]["text"] == "MCP native edit"
+            # Interleave a REAL native GUI event precisely after the host
+            # finishes all four source observations but before its outbound
+            # renderer write. This is the gap #301 cannot protect by itself.
+            from studio_next.body_editor_client import host_native_revision_rejection
+            baseline_ids = {marker["id"] for marker in unmodified["markers"]}
+            class HumanInterruptingNativeSession:
+                def __init__(self, remote):
+                    self.remote = remote
+                    self.intervened = False
+                    self.human_marker_id = None
+
+                async def list_tools(self):
+                    return await self.remote.list_tools()
+
+                async def call_tool(self, name, inputs):
+                    if name == "update_text_clip" and not self.intervened:
+                        self.intervened = True
+                        inject_gui_keyboard("m")
+                        deadline = time.monotonic() + 20
+                        while time.monotonic() < deadline:
+                            observed = await call(
+                                self.remote, "get_timeline", {"includeClips": True})
+                            fresh_ids = {m["id"] for m in observed["markers"]}
+                            added = fresh_ids - baseline_ids
+                            if len(added) == 1:
+                                self.human_marker_id = added.pop()
+                                break
+                            await asyncio.sleep(.15)
+                        else:
+                            raise AssertionError(
+                                "Human GUI intervention never became native-visible")
+                    return await self.remote.call_tool(name, inputs)
+
+            interleaved = HumanInterruptingNativeSession(session)
+            policy = pinned_native_editor_identity_policy(
+                options.source, tools, interleaved)
+            assert policy is not None and "fence" in policy
+            admitted_gateway = CapabilityGateway({"editor": (
+                interleaved, tools, {}, None, {}, policy)})
+            await admitted_gateway.refresh()
+            admitted_session = CapabilityGatewayMcpSession(
+                admitted_gateway, "editor")
+            race_inputs = {"clipId": title_id, "text": "STALE AFTER HOST READ",
+                           "previewOnly": False}
+            raced = await admitted_session.call_tool("update_text_clip", race_inputs)
+            assert raced.is_error
+            assert host_native_revision_rejection(
+                raced, "update_text_clip", race_inputs
+            ) == "native_revision_changed_at_commit", raced
+            assert interleaved.human_marker_id
+            assert admitted_gateway.evidence()[-1]["state"] == (
+                "native_conflict_rejected_no_write")
+            after_race = await call(session, "get_timeline", {"includeClips": True})
+            assert any(m["id"] == interleaved.human_marker_id
+                       for m in after_race["markers"])
+            assert next(c for c in after_race["clips"] if c["id"] == title_id
+                        )["textProperties"]["text"] == "MCP native edit"
+            # A new model decision, NOT an automatic replay of the rejected
+            # write. Use fresh source reads and the actual live revision.
+            await call(admitted_session, "update_text_clip", {
+                "clipId": title_id, "text": "MCP revised", "previewOnly": False})
+            assert admitted_gateway.evidence()[-1]["state"] == (
+                "host_reported_success_unverified")
+
+            async def wait_title(text):
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    state = await call(session, "get_timeline", {"includeClips": True})
+                    clip = next(c for c in state["clips"] if c["id"] == title_id)
+                    if clip["textProperties"]["text"] == text:
+                        return state
+                    await asyncio.sleep(.15)
+                raise AssertionError("Native editable title did not converge after GUI action")
+
+            await wait_title("MCP revised")
+            inject_gui_keyboard("ctrl+z")
+            undone = await wait_title("MCP native edit")
+            assert all(any(m["id"] == mid for m in undone["markers"])
+                       for mid in (gui_marker_id, interleaved.human_marker_id))
+            inject_gui_keyboard("ctrl+shift+z")
+            redone = await wait_title("MCP revised")
+            assert all(any(m["id"] == mid for m in redone["markers"])
+                       for mid in (gui_marker_id, interleaved.human_marker_id))
+            print("ACTUAL_NATIVE_REVISION_FENCE " + json.dumps({
+                "pinned_source": True,
+                "stale_writer_rejected_no_native_title_mutation": True,
+                "independent_renderer_edit_preserved": True,
+                "human_marker_survived_stale_AI_write": True,
+                "trusted_host_revision_token_injected": True,
+                "gui_interrupted_after_host_read_before_native_commit": True,
+                "gui_undo_then_redo_preserved_human_annotations": True,
+                "corrected_native_edit_acknowledged_unverified": True,
+                "actual_direct_human_mouse_edit_tested": False,
+                "real_X11_keyboard_editor_marker_tested": True,
+                "real_model_creative_autonomy_tested": False,
+            }, sort_keys=True), flush=True)
+        else:
+            await call(session, "update_text_clip", {
+                "clipId": title_id, "text": "MCP revised",
+                "previewOnly": False})
         saved_second = await call(session, "save_project", {"previewOnly": False})
         shutil.copy2(native_path, fixture / "revision-2.comfystudio")
         assert digest(fixture / "revision-1.comfystudio") != digest(fixture / "revision-2.comfystudio")
@@ -474,6 +667,12 @@ async def exercise(options):
         timeline = await call(session, "get_timeline", {"includeClips": True})
         title = next(clip for clip in timeline["clips"] if clip["id"] == title_id)
         assert title["textProperties"]["text"] == "MCP revised"
+        if collaboration_source:
+            assert all(any(m.get("id") == marker_id
+                           for m in timeline.get("markers", []))
+                       for marker_id in (gui_marker_id,
+                                         interleaved.human_marker_id)), (
+                "Real GUI-entered human markers were not saved/reopened")
         assert title["keyframes"] == next(clip for clip in saved["timelines"][0]["clips"] if clip["id"] == title_id)["keyframes"]
         # The pinned upstream razor drops arbitrary effects/keyframes on its
         # new right-hand clip. Never silently let BODY split an animated title.

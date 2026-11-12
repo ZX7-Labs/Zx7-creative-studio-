@@ -14,8 +14,11 @@ from .capability_fabric import (
     discover_all_live_tools, CapabilityContractError, CapabilityFabric)
 from .capability_gateway import (CapabilityExecutionError, CapabilityGateway,
                                  NativeReferencePreDispatchError)
-from .body_editor_client import (HOST_PRE_DISPATCH_META,
-                                 HOST_REJECTION_FEEDBACK, native_input_digest)
+from .body_editor_client import (
+    HOST_PRE_DISPATCH_META, HOST_REJECTION_FEEDBACK,
+    HOST_NATIVE_REVISION_META, HOST_NATIVE_REVISION_FEEDBACK,
+    native_input_digest,
+)
 
 
 class CapabilityGatewayMcpSession:
@@ -135,6 +138,16 @@ class CapabilityGatewayMcpSession:
                     "version": 1, "tool": name,
                     "inputs_sha256": native_input_digest(arguments),
                     "code": exc.code}})
+        if result["state"] == "native_conflict_rejected_no_write":
+            code = "native_revision_changed_at_commit"
+            return SimpleNamespace(
+                is_error=True,
+                content=[SimpleNamespace(
+                    type="text", text=HOST_NATIVE_REVISION_FEEDBACK[code])],
+                meta={HOST_NATIVE_REVISION_META: {
+                    "version": 1, "tool": name,
+                    "inputs_sha256": native_input_digest(arguments),
+                    "code": code}})
         return result["native_result"]
 
 

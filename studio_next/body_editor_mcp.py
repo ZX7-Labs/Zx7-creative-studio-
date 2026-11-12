@@ -64,6 +64,16 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         raise ValueError("Native semantic diagnostics require clean pinned editor source")
     native = {tool["name"]: tool for tool in client.list_tools()}
     grants = dict(client.allowed_tools)
+    # A private bridge wire field, NOT a model-discovered schema property.
+    # Only an exact clean collaboration source may receive it. The field
+    # can restrict an already-granted edit, never grant a new native action.
+    from .native_editor_source_pin import _source_matches_pinned_native_collaboration
+    revision_bridge = bool(
+        native_source is not None and
+        _source_matches_pinned_native_collaboration(native_source) and
+        grants.get("update_text_clip") == "write" and
+        all(grants.get(x) == "read" for x in (
+            "get_project", "get_timeline", "get_assets")))
     if set(grants) - set(native):
         raise ValueError("Host-granted native editor tool is absent from discovery")
     required_export_delivery = admitted_owner_delivery(required_export_delivery)
@@ -315,8 +325,24 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         if name not in tools:
             return failed("Native tool is not granted for this MCP session")
         arguments = params.arguments if params.arguments is not None else {}
+        # The original editor schema never advertises this host-injected
+        # revision. Strip it ONLY for schema validation, then forward it
+        # unchanged to the verified source-native synchronous writer. Raw
+        # clients cannot acquire more grants via this optional wire value.
+        schema_arguments = arguments
+        if (revision_bridge and name == "update_text_clip" and
+                isinstance(arguments, dict) and
+                arguments.get("previewOnly") is not True):
+            token = arguments.get("__zx7ExpectedRevision")
+            if (not isinstance(token, str) or
+                    not 38 <= len(token) <= 80 or
+                    "__zx7ExpectedRevision" not in arguments):
+                return failed("Native source revision is missing or invalid")
+            schema_arguments = {
+                key: value for key, value in arguments.items()
+                if key != "__zx7ExpectedRevision"}
         try:
-            validators[name].validate(arguments)
+            validators[name].validate(schema_arguments)
         except jsonschema.ValidationError as exc:
             return failed("Invalid native tool arguments: " + exc.message)
         if name == CONTENT_DIAGNOSTICS_TOOL and content_diagnostics:

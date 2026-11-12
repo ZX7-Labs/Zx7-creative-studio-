@@ -22,7 +22,10 @@ import time
 from typing import Any
 
 from .providers import LocalModelOutputError
-from .body_editor_client import host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK
+from .body_editor_client import (
+    host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK,
+    host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK,
+)
 from .native_editor_source_pin import source_verified_preview_intent
 from .native_render_evidence import (
     AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
@@ -2104,6 +2107,33 @@ class NativeCreativeControl:
                             "inputs_sha256": hashlib.sha256(_wire(args["inputs"]).encode()).hexdigest(),
                             "measured_native_mcp_wall_ms": native_ms,
                             "no_native_dispatch": True, "no_automatic_retry": True})
+                        continue
+                    native_conflict_code = (host_native_revision_rejection(
+                        result, native_name, args["inputs"])
+                        if self.host_pre_dispatch_rejections else None)
+                    if native_conflict_code is not None:
+                        # The editor DID receive the RPC but its synchronous
+                        # writer rejected the stale source before any mutation.
+                        # Do not misclassify this as host pre-dispatch, apply
+                        # success, or an unknown partial write.
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "native_revision_conflict",
+                            "rejection_code": native_conflict_code,
+                            "no_native_dispatch": False,
+                            "native_write_applied": False,
+                            "correction": HOST_NATIVE_REVISION_FEEDBACK[
+                                native_conflict_code]}
+                        self._append({
+                            "kind": "native_writer_rejected_stale_revision",
+                            "turn": turn, "tool": native_name,
+                            "rejection_code": native_conflict_code,
+                            "inputs_sha256": hashlib.sha256(
+                                _wire(args["inputs"]).encode()).hexdigest(),
+                            "measured_native_mcp_wall_ms": native_ms,
+                            "no_native_dispatch": False,
+                            "native_write_applied": False,
+                            "no_automatic_retry": True})
                         continue
                     digest, out_of_budget = _bounded_error_digest(result)
                     error_blocks = _field(result, "content", ())
