@@ -166,8 +166,13 @@ def _named_items(rows, *, kind):
 
 def _inventory(document):
     document = _object(document, "project")
-    if not isinstance(document.get("version"), str) or not document["version"]:
-        raise NativeRevisionReviewError("Saved project has no native format version")
+    version = document.get("version")
+    if (not isinstance(version, str) or not 1 <= len(version) <= 80 or
+            not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,79}", version)):
+        # Version is part of the PUBLIC summary. An untrusted saved file
+        # must never echo arbitrary owner prose, private paths or megabytes
+        # of metadata through a claimed schema-version field.
+        raise NativeRevisionReviewError("Invalid bounded native format version")
     asset_items = _named_items(document.get("assets"), kind="asset")
     timeline_items = _named_items(document.get("timelines"), kind="timeline")
     if not timeline_items:
