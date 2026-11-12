@@ -8,6 +8,7 @@ cannot change grants, dispatch tools or certify creative quality.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from copy import deepcopy
 import json
 
 from .native_action_schema import native_action_schema
@@ -60,6 +61,72 @@ class LocalNativeStructuredCreativeModel(LocalCreativeModel):
     @staticmethod
     def _encode_context(context):
         return json.dumps(context, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+
+    @staticmethod
+    def _model_prompt_view(context):
+        """Deduplicate only host-verifiably identical native evidence for a local model.
+
+        The immutable controller journal, grant semantics and the current native
+        input grammar are untouched. Never discard a unique observation or an
+        unselected native schema. Duplicated read provenance must be unambiguous.
+        """
+        if type(context) is not dict:
+            raise ValueError("Local native context must be an object")
+        view = deepcopy(context)
+        snapshots = view.get("native_read_snapshot_cache")
+        last = view.get("last_native_result_texts")
+        if isinstance(snapshots, list) and isinstance(last, list) and last:
+            matches = [
+                (index, snapshot)
+                for index, snapshot in enumerate(snapshots)
+                if (isinstance(snapshot, dict)
+                    and isinstance(snapshot.get("tool"), str)
+                    and snapshot["tool"]
+                    and snapshot.get("result_texts") == last)
+            ]
+            if len(matches) == 1:
+                index, snapshot = matches[0]
+                view.pop("last_native_result_texts")
+                view["last_native_result_snapshot_reference"] = {
+                    "cache_index": index,
+                    "tool": snapshot["tool"],
+                    "complete_native_texts_preserved_in_snapshot": True,
+                }
+
+        selected = view.get("selectable_native_tools")
+        selected = set(selected) if (isinstance(selected, list)
+                                   and all(type(x) is str for x in selected)) else set()
+        contracts = view.get("host_native_tool_contracts")
+        if isinstance(contracts, list):
+            by_name = {
+                item["name"]: item["input_schema"]
+                for item in contracts
+                if (isinstance(item, dict)
+                    and isinstance(item.get("name"), str)
+                    and item["name"] in selected
+                    and isinstance(item.get("input_schema"), dict))
+            }
+            events = view.get("latest_events")
+            if isinstance(events, list):
+                for event in events:
+                    if (not isinstance(event, dict)
+                            or event.get("kind") != "native_tool_schema"):
+                        continue
+                    source = event.get("input_schema")
+                    active = by_name.get(event.get("tool"))
+                    if (not isinstance(source, dict) or not source
+                            or not isinstance(active, dict)
+                            or not all(key in active and active[key] == value
+                                       for key, value in source.items())
+                            or set(active) - set(source) - {
+                                "required", "additionalProperties"}):
+                        continue
+                    event.pop("input_schema")
+                    event["complete_schema_in_host_bound_response_grammar"] = True
+        # Host-selected full input schemas are encoded into the constrained
+        # response_format, not repeated in the conversational request body.
+        view.pop("host_native_tool_contracts", None)
+        return view
 
     def __init__(self, settings: LocalModelSettings, *, system_prompt: str):
         if "response_format" in settings.sampling:
@@ -151,8 +218,7 @@ class LocalNativeStructuredCreativeModel(LocalCreativeModel):
         schema = self._current_host_schema(context)
         # The decoder receives full selected schemas through response_format.
         # Keep the existing concise native hints in the model prompt.
-        context = {key: value for key, value in context.items()
-                   if key != "host_native_tool_contracts"}
+        context = self._model_prompt_view(context)
         token = self._active_schema.set(schema)
         try:
             return self._invoke(
