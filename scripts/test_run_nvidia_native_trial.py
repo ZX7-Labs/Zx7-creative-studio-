@@ -624,6 +624,21 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             with self.assertRaises((subprocess.CalledProcessError, ValueError)):
                 decoded_video_frames_sha256(root / "missing.mp4")
 
+    def test_audio_cloud_consent_required_before_any_workspace_or_native_launch(self):
+        """Do not promote an earlier visual-only allowance into cloud A/V usage."""
+        with tempfile.TemporaryDirectory() as scratch:
+            trial = Path(scratch) / "no-consent"
+            with self.assertRaisesRegex(ValueError, "explicit audio diagnostics consent"):
+                run_trial(trial, model_id=_ALLOWED_MODEL,
+                          xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                          audiovisual=True)
+            self.assertFalse(trial.exists())
+            with self.assertRaisesRegex(ValueError, "require audiovisual"):
+                run_trial(trial, model_id=_ALLOWED_MODEL,
+                          xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                          allow_cloud_audio_diagnostics=True)
+            self.assertFalse(trial.exists())
+
     def test_real_synthetic_audiovisual_bootstrap_and_model_selection(self):
         """Two original signals, no model-directed shot list or paid request."""
         import hashlib
@@ -667,7 +682,8 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "trial failed"):
                     run_trial(workspace, model_id=_ALLOWED_MODEL,
                               xvfb_binary="/usr/bin/Xvfb",
-                              display="127.0.0.1:95", audiovisual=True)
+                              display="127.0.0.1:95", audiovisual=True,
+                              allow_cloud_audio_diagnostics=True)
             staged.assert_called_once_with(
                 workspace, source=_SOURCE_EDITOR, audiovisual=True)
             command = child.call_args.args[0]
@@ -861,7 +877,8 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "visual-revision-export proof"):
                     run_trial(workspace, model_id=_ALLOWED_MODEL,
                               xvfb_binary="/usr/bin/Xvfb",
-                              display="127.0.0.1:95", audiovisual=True)
+                              display="127.0.0.1:95", audiovisual=True,
+                              allow_cloud_audio_diagnostics=True)
             project_check.assert_called_once_with(workspace, require_audio=True)
             evaluation = json.loads(
                 (workspace / "native-evaluation.json").read_text(encoding="utf-8"))
