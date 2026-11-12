@@ -347,8 +347,9 @@ async def exercise(options):
             # Real renderer store mutation through an independent native
             # operation, while the client still holds its previous snapshot.
             # This is NOT a physical mouse/keyboard GUI intervention.
-            await call(session, "set_clip_style", {
-                "clipId": title_id, "labelColor": "#f97316",
+            await call(session, "add_timeline_markers", {
+                "markers": [{"timeSeconds": 0.5,
+                             "label": "Human review marker"}],
                 "previewOnly": False})
             refused = await session.call_tool("update_text_clip", {
                 "clipId": title_id, "text": "STALE AI MUST NOT OVERWRITE",
@@ -363,7 +364,8 @@ async def exercise(options):
             title_after_conflict = next(
                 item for item in unmodified["clips"] if item["id"] == title_id)
             assert title_after_conflict["textProperties"]["text"] == "MCP native edit"
-            assert title_after_conflict.get("labelColor") == "#f97316"
+            assert any(marker.get("label") == "Human review marker"
+                       for marker in unmodified.get("markers", []))
             policy = pinned_native_editor_identity_policy(
                 options.source, tools, session)
             assert policy is not None and "fence" in policy
@@ -380,6 +382,7 @@ async def exercise(options):
                 "pinned_source": True,
                 "stale_writer_rejected_no_native_title_mutation": True,
                 "independent_renderer_edit_preserved": True,
+                "human_marker_survived_stale_AI_write": True,
                 "trusted_host_revision_token_injected": True,
                 "corrected_native_edit_acknowledged_unverified": True,
                 "actual_direct_human_mouse_edit_tested": False,
