@@ -78,6 +78,8 @@ HOST_REJECTION_FEEDBACK = MappingProxyType({
     "native_identity_project_changed_during_read": "No native edit was dispatched. The editor project changed during verification. Re-observe before choosing an edit.",
     "native_identity_source_counts_changed": "No native edit was dispatched. Timeline, clip or asset counts disagreed across native source observations.",
     "native_identity_live_revision_unavailable": "No native edit was dispatched. A source-attested live project revision was unavailable; do not guess a revision token.",
+    "native_identity_model_observation_required": "No native edit was dispatched. The Brain must inspect the current native project before proposing this protected creative change.",
+    "native_identity_model_observation_stale": "No native edit was dispatched. A human or editor changed the project after the Brain's last observed revision. Read get_project and the affected native objects, then independently plan a fresh edit.",
 })
 
 
