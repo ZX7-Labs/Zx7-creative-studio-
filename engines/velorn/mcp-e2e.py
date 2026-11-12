@@ -428,24 +428,97 @@ async def exercise(options):
             title_after_conflict = next(
                 item for item in unmodified["clips"] if item["id"] == title_id)
             assert title_after_conflict["textProperties"]["text"] == "MCP native edit"
+            # Interleave a REAL native GUI event precisely after the host
+            # finishes all four source observations but before its outbound
+            # renderer write. This is the gap #301 cannot protect by itself.
+            from studio_next.body_editor_client import host_native_revision_rejection
+            baseline_ids = {marker["id"] for marker in unmodified["markers"]}
+            class HumanInterruptingNativeSession:
+                def __init__(self, remote):
+                    self.remote = remote
+                    self.intervened = False
+                    self.human_marker_id = None
+
+                async def list_tools(self):
+                    return await self.remote.list_tools()
+
+                async def call_tool(self, name, inputs):
+                    if name == "update_text_clip" and not self.intervened:
+                        self.intervened = True
+                        inject_gui_keyboard("m")
+                        deadline = time.monotonic() + 20
+                        while time.monotonic() < deadline:
+                            observed = await call(
+                                self.remote, "get_timeline", {"includeClips": True})
+                            fresh_ids = {m["id"] for m in observed["markers"]}
+                            added = fresh_ids - baseline_ids
+                            if len(added) == 1:
+                                self.human_marker_id = added.pop()
+                                break
+                            await asyncio.sleep(.15)
+                        else:
+                            raise AssertionError(
+                                "Human GUI intervention never became native-visible")
+                    return await self.remote.call_tool(name, inputs)
+
+            interleaved = HumanInterruptingNativeSession(session)
             policy = pinned_native_editor_identity_policy(
-                options.source, tools, session)
+                options.source, tools, interleaved)
             assert policy is not None and "fence" in policy
             admitted_gateway = CapabilityGateway({"editor": (
-                session, tools, {}, None, {}, policy)})
+                interleaved, tools, {}, None, {}, policy)})
             await admitted_gateway.refresh()
             admitted_session = CapabilityGatewayMcpSession(
                 admitted_gateway, "editor")
+            race_inputs = {"clipId": title_id, "text": "STALE AFTER HOST READ",
+                           "previewOnly": False}
+            raced = await admitted_session.call_tool("update_text_clip", race_inputs)
+            assert raced.is_error
+            assert host_native_revision_rejection(
+                raced, "update_text_clip", race_inputs
+            ) == "native_revision_changed_at_commit", raced
+            assert interleaved.human_marker_id
+            assert admitted_gateway.evidence()[-1]["state"] == (
+                "native_conflict_rejected_no_write")
+            after_race = await call(session, "get_timeline", {"includeClips": True})
+            assert any(m["id"] == interleaved.human_marker_id
+                       for m in after_race["markers"])
+            assert next(c for c in after_race["clips"] if c["id"] == title_id
+                        )["textProperties"]["text"] == "MCP native edit"
+            # A new model decision, NOT an automatic replay of the rejected
+            # write. Use fresh source reads and the actual live revision.
             await call(admitted_session, "update_text_clip", {
                 "clipId": title_id, "text": "MCP revised", "previewOnly": False})
             assert admitted_gateway.evidence()[-1]["state"] == (
                 "host_reported_success_unverified")
+
+            async def wait_title(text):
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    state = await call(session, "get_timeline", {"includeClips": True})
+                    clip = next(c for c in state["clips"] if c["id"] == title_id)
+                    if clip["textProperties"]["text"] == text:
+                        return state
+                    await asyncio.sleep(.15)
+                raise AssertionError("Native editable title did not converge after GUI action")
+
+            await wait_title("MCP revised")
+            inject_gui_keyboard("ctrl+z")
+            undone = await wait_title("MCP native edit")
+            assert all(any(m["id"] == mid for m in undone["markers"])
+                       for mid in (gui_marker_id, interleaved.human_marker_id))
+            inject_gui_keyboard("ctrl+shift+z")
+            redone = await wait_title("MCP revised")
+            assert all(any(m["id"] == mid for m in redone["markers"])
+                       for mid in (gui_marker_id, interleaved.human_marker_id))
             print("ACTUAL_NATIVE_REVISION_FENCE " + json.dumps({
                 "pinned_source": True,
                 "stale_writer_rejected_no_native_title_mutation": True,
                 "independent_renderer_edit_preserved": True,
                 "human_marker_survived_stale_AI_write": True,
                 "trusted_host_revision_token_injected": True,
+                "gui_interrupted_after_host_read_before_native_commit": True,
+                "gui_undo_then_redo_preserved_human_annotations": True,
                 "corrected_native_edit_acknowledged_unverified": True,
                 "actual_direct_human_mouse_edit_tested": False,
                 "real_X11_keyboard_editor_marker_tested": True,
@@ -595,9 +668,11 @@ async def exercise(options):
         title = next(clip for clip in timeline["clips"] if clip["id"] == title_id)
         assert title["textProperties"]["text"] == "MCP revised"
         if collaboration_source:
-            assert any(m.get("id") == gui_marker_id
-                       for m in timeline.get("markers", [])), (
-                "The real GUI-entered human marker was not saved/reopened")
+            assert all(any(m.get("id") == marker_id
+                           for m in timeline.get("markers", []))
+                       for marker_id in (gui_marker_id,
+                                         interleaved.human_marker_id)), (
+                "Real GUI-entered human markers were not saved/reopened")
         assert title["keyframes"] == next(clip for clip in saved["timelines"][0]["clips"] if clip["id"] == title_id)["keyframes"]
         # The pinned upstream razor drops arbitrary effects/keyframes on its
         # new right-hand clip. Never silently let BODY split an animated title.
