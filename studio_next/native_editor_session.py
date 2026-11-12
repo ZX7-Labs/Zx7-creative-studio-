@@ -357,12 +357,18 @@ async def run_native_session(args):
             gateway = CapabilityGateway(bindings, session_budget=budget)
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
+            model_observation_fence = bool(identity and identity.get("fence"))
             # The Brain can independently search all *host-granted* sources
             # while the same shared gateway, call budget and evidence policy
             # remain authoritative. New revision tools are READ ONLY.
             model_session = (
-                CombinedCapabilityMcpSession(gateway, *bindings)
-                if len(bindings) > 1 else admitted)
+                CombinedCapabilityMcpSession(
+                    gateway, *bindings,
+                    require_model_native_observation_for=(
+                        ("editor",) if model_observation_fence else ()))
+                if len(bindings) > 1 else CapabilityGatewayMcpSession(
+                    gateway, "editor",
+                    require_model_native_observation=model_observation_fence))
             model_grants = dict(host_grants)
             if native_revision_source is not None:
                 model_grants.update(native_revision_source.grants)
@@ -407,6 +413,7 @@ async def run_native_session(args):
         "model_id_reported": outcome["actual_model_id_reported"],
         "selected_provider": args.provider,
         "native_reference_preflight_enabled": identity is not None,
+        "model_observed_native_revision_fence_enabled": model_observation_fence,
         "owner_project_setup": selected_project_setup,
         "model_action_transport": (
             "nvidia_host_native_typed_function_calls" if args.provider == "nvidia" and
