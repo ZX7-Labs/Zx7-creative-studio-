@@ -1671,11 +1671,16 @@ async def exercise(options):
                 "includeClips": True})
             shape = next(c for c in reopened["clips"]
                          if c["id"] == shape_id)
-            assert shape["shapeProperties"]["fillColor"].lower() == "#e83b61"
+            # The model-bound fresh decision followed the prior source-native
+            # shape/keyframe revisions. The reopened authoritative project
+            # must retain its *latest* applied color, not the old pre-intervention
+            # shape from the earlier script-only scene proof.
+            assert shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
             assert isinstance(shape.get("keyframes"), dict)
             assert len(shape["keyframes"].get("opacity") or []) >= 2
             assert all(any(m["id"] == mid for m in reopened["markers"])
-                       for mid in (first_gui_marker, interrupted.manual_marker))
+                       for mid in (first_gui_marker, interrupted.manual_marker,
+                                   third_human_marker))
             assert digest(native_path) == scene_save_sha
             assert digest(original) == original_hash
             print("ACTUAL_NATIVE_SCENE_REOPEN " + json.dumps({
