@@ -11,7 +11,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 from studio_next.body_editor_client import host_native_revision_rejection
-from studio_next.capability_gateway import CapabilityGateway
+from studio_next.capability_gateway import CapabilityExecutionError, CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.native_editor_identity import pinned_native_editor_identity_policy
 from studio_next.test_native_revision_fence import RendererAndDebouncedSnapshot, result
@@ -135,8 +135,14 @@ class SceneCasTests(IsolatedAsyncioTestCase):
                 "__zx7ExpectedRevision": self.native.live_revision}
         for name in ("update_shape_clip", "set_clip_keyframes"):
             with self.subTest(name=name):
-                invalid = await self.client.call_tool(name, args)
-                self.assertTrue(invalid.is_error)
+                before_calls = len(self.native.calls)
+                # The host rejects an unadvertised private CAS field at
+                # schema admission, before any renderer read or write.
+                with self.assertRaisesRegex(
+                    CapabilityExecutionError, "additionalProperties"
+                ):
+                    await self.client.call_tool(name, args)
+                self.assertEqual(len(self.native.calls), before_calls)
         self.assertFalse(self.native.scene_writes)
 
 
