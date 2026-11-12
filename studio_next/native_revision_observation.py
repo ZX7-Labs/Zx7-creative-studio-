@@ -13,7 +13,6 @@ import os
 from pathlib import Path
 import re
 import stat
-from types import SimpleNamespace
 
 from .native_creative_revision import (
     NativeRevisionReviewError, compare_native_revisions,
@@ -161,7 +160,7 @@ class NativeRevisionObservationMcpSession:
         from mcp import types
 
         def refusal():
-            return types.CallToolResult(isError=True, content=[
+            return types.CallToolResult(is_error=True, content=[
                 types.TextContent(type="text", text="Native revision review unavailable or refused")])
 
         if not isinstance(arguments, dict) or name not in self._validators or (
@@ -193,6 +192,13 @@ class NativeRevisionObservationMcpSession:
                 p0, b, _ = self._registered(arguments["before_export_id"])
                 p1, a, _ = self._registered(arguments["after_export_id"])
                 diff = compare_native_revisions(p0, p1)
+                # compare_native_revisions reads the exact files once more.
+                # Never promote evidence from bytes that changed between the
+                # registry check and that read, even in a concurrent GUI race.
+                if (diff["before"]["sha256"] != b.sha256 or
+                        diff["after"]["sha256"] != a.sha256):
+                    raise NativeRevisionReviewError(
+                        "Native project changed while comparing render captures")
                 result = {
                     "schema": "zx7-model-visible-native-compare-v1",
                     "before": b.public(), "after": a.public(),
@@ -207,10 +213,15 @@ class NativeRevisionObservationMcpSession:
                     "not_an_authorization_to_apply_edits": True,
                 }
             else:
-                paths = [self._registered(arguments[key])[0] for key in (
+                selected = [self._registered(arguments[key]) for key in (
                     "base_export_id", "human_candidate_export_id",
                     "ai_candidate_export_id")]
-                collab = review_native_collaboration(*paths)
+                collab = review_native_collaboration(*(row[0] for row in selected))
+                if any(collab[key]["sha256"] != row[1].sha256
+                       for key, row in zip(("base", "human", "ai_candidate"),
+                                           selected, strict=True)):
+                    raise NativeRevisionReviewError(
+                        "Native project changed while reviewing saved candidates")
                 result = {
                     "schema": "zx7-model-visible-native-three-way-v1",
                     "base": collab["base"], "human": collab["human"],
@@ -233,5 +244,5 @@ class NativeRevisionObservationMcpSession:
         except (NativeRevisionReviewError, ValueError, OSError,
                 RecursionError, TypeError):
             return refusal()
-        return types.CallToolResult(isError=False, content=[
+        return types.CallToolResult(is_error=False, content=[
             types.TextContent(type="text", text=raw)])
