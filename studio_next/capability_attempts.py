@@ -58,8 +58,8 @@ def _normalized_schema_sql(statement):
     # SQLite may write IF NOT EXISTS in the schema and quote a renamed table.
     # Never migrate an unrelated or unexpected on-disk ledger schema.
     without_conditional = re.sub(
-        r"\\bIF\\s+NOT\\s+EXISTS\\b", "", statement, flags=re.I)
-    return re.sub(r"\\s+", "", without_conditional.replace('"', "")).lower()
+        r"\bIF\s+NOT\s+EXISTS\b", "", statement, flags=re.I)
+    return re.sub(r"\s+", "", without_conditional.replace('"', "")).lower()
 
 
 class CapabilityAttemptError(ValueError):
