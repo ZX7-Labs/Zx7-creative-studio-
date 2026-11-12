@@ -37,6 +37,7 @@ _SAFE_NATIVE_IDENTITY_READ_ERRORS = frozenset({
     "native_identity_project_unavailable",
     "native_identity_project_changed_during_read",
     "native_identity_source_counts_changed",
+    "native_identity_live_revision_unavailable",
 })
 
 
@@ -46,6 +47,17 @@ class NativeReferencePreDispatchError(CapabilityExecutionError):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
+
+
+def _confirmed_native_revision_conflict(result, code):
+    """Only a source-pinned edit can attest this exact no-write renderer code."""
+    blocks = result.get("content") if isinstance(result, dict) else getattr(result, "content", None)
+    if not isinstance(blocks, (list, tuple)) or len(blocks) != 1:
+        return False
+    block = blocks[0]
+    kind = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+    value = block.get("text") if isinstance(block, dict) else getattr(block, "text", None)
+    return kind == "text" and isinstance(value, str) and value == code
 
 
 def _wire(value):
@@ -104,7 +116,8 @@ class CapabilityGateway:
             identity = entry[5] if len(entry) == 6 else None
             if identity is not None:
                 if (not isinstance(identity, Mapping) or
-                        set(identity) != {"reader", "rules"} or
+                        set(identity) not in (
+                            {"reader", "rules"}, {"reader", "rules", "fence"}) or
                         not callable(identity["reader"]) or
                         not isinstance(identity["rules"], Mapping) or
                         not 1 <= len(identity["rules"]) <= 256):
@@ -121,7 +134,21 @@ class CapabilityGateway:
                         compiled[tool_name] = compile_reference_rules(rules)
                 except CapabilityReferenceError as exc:
                     raise CapabilityExecutionError(str(exc)) from exc
-                identity = {"reader": identity["reader"], "rules": compiled}
+                fences = identity.get("fence", {})
+                if not isinstance(fences, Mapping) or len(fences) > 64:
+                    raise CapabilityExecutionError("Invalid native commit fence policy")
+                checked_fences = {}
+                for tool_name, policy in fences.items():
+                    if (tool_name not in compiled or
+                            not isinstance(policy, Mapping) or
+                            set(policy) != {"inventory_key", "argument_key", "rejected_code"} or
+                            policy.get("inventory_key") != "__zx7_live_revision" or
+                            policy.get("argument_key") != "__zx7ExpectedRevision" or
+                            policy.get("rejected_code") != "ZX7_STALE_NATIVE_REVISION"):
+                        raise CapabilityExecutionError("Unsupported host native revision fence")
+                    checked_fences[tool_name] = dict(policy)
+                identity = {"reader": identity["reader"], "rules": compiled,
+                            "fence": checked_fences}
             if (not callable(getattr(session, "list_tools", None)) or
                     not callable(getattr(session, "call_tool", None)) or
                     not (isinstance(grants, Mapping) or callable(grants)) or
@@ -298,6 +325,10 @@ class CapabilityGateway:
                 if not readiness["admissible"]:
                     raise CapabilityExecutionError(
                         "Machine prerequisite absent or unknown; inspect host state")
+            # Model arguments are validated and fingerprinted independently of
+            # the host-owned source revision appended only for native dispatch.
+            dispatch_inputs = copy.deepcopy(inputs)
+            native_fence = None
             # Explicit source IDs must still exist in the connected engine.
             # The Brain chooses the object/edit; host policy only checks a
             # source-native identity, never substitutes an artistic action.
@@ -309,6 +340,18 @@ class CapabilityGateway:
                         if inspect.isawaitable(inventory):
                             inventory = await inventory
                         validate_live_references(inputs, rules, inventory)
+                        native_fence = identity["fence"].get(name)
+                        if native_fence is not None:
+                            source_revision = inventory.get(native_fence["inventory_key"])
+                            hidden_argument = native_fence["argument_key"]
+                            if (not isinstance(source_revision, str) or
+                                    not 38 <= len(source_revision) <= 80 or
+                                    hidden_argument in inputs):
+                                raise NativeReferencePreDispatchError(
+                                    "native_identity_live_revision_unavailable")
+                            dispatch_inputs[hidden_argument] = source_revision
+                    except NativeReferencePreDispatchError:
+                        raise
                     except CapabilityReferenceError as exc:
                         raise NativeReferencePreDispatchError(str(exc)) from exc
                     except CapabilitySessionBudgetError:
@@ -360,7 +403,7 @@ class CapabilityGateway:
             self._events.append(trace)
             try:
                 # One submission only; uncertain writes require reconciliation.
-                result = await session.call_tool(name, copy.deepcopy(inputs))
+                result = await session.call_tool(name, dispatch_inputs)
             except BaseException:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
@@ -380,8 +423,17 @@ class CapabilityGateway:
                         request_id=request_id, state=trace["state"])
                 raise
             if failure:
-                trace["state"] = ("read_failed" if record["access"] == "read"
-                                  else "write_uncertain_reconciliation_required")
+                # A *source-pinned* synchronous renderer rejection is known
+                # to precede any native mutation. Without the strict exact
+                # receipt, an ordinary failed write remains uncertain.
+                if (native_fence is not None and
+                        _confirmed_native_revision_conflict(
+                            result, native_fence["rejected_code"]) and
+                        not durable_write):
+                    trace["state"] = "native_conflict_rejected_no_write"
+                else:
+                    trace["state"] = ("read_failed" if record["access"] == "read"
+                                      else "write_uncertain_reconciliation_required")
             else:
                 # A successful MCP transport is NOT proof a native edit
                 # committed. Preview-only, internal application failures and
