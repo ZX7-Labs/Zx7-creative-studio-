@@ -73,7 +73,7 @@ jobs:
       - name: Prove independent Linux model-process peak RSS evidence fails closed
         run: python -m unittest studio_next.test_native_model_resource_evidence -v
       - name: Reject ambiguous local model responses before native editing
-        run: python -m unittest studio_next.test_provider studio_next.test_nvidia_model studio_next.test_nvidia_tool_model studio_next.test_nvidia_native_tool_model studio_next.test_local_native_structured_model scripts.test_local_native_trial_request scripts.test_native_model_trial_budget scripts.test_nvidia_smoke_request scripts.test_run_nvidia_native_trial studio_next.test_native_action_schema -v
+        run: python -m unittest studio_next.test_provider studio_next.test_nvidia_model studio_next.test_nvidia_tool_model studio_next.test_nvidia_native_tool_model studio_next.test_local_native_structured_model studio_next.test_local_native_prompt_view scripts.test_local_native_trial_request scripts.test_native_model_trial_budget scripts.test_nvidia_smoke_request scripts.test_run_nvidia_native_trial studio_next.test_native_action_schema -v
       - name: Verify offline synthetic audiovisual trial evidence
         run: python -m unittest scripts.test_audit_native_av_trial -v
       - name: Native editor transport, BODY grants and unchanged native schemas
