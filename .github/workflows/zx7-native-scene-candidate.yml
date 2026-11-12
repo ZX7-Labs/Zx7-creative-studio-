@@ -5,6 +5,9 @@ on:
     paths:
       - 'engines/velorn/native-scene-revision.patch'
       - 'engines/velorn/prepare-native-scene-candidate.sh'
+      - 'engines/velorn/mcp-e2e.py'
+      - 'studio_next/native_creative_revision.py'
+      - 'studio_next/test_native_creative_revision.py'
       - 'studio_next/editor_runtime/source-lock.json'
       - 'studio_next/native_editor_identity.py'
       - 'studio_next/native_editor_source_pin.py'
