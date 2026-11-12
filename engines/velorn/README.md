@@ -216,6 +216,21 @@ sample rate and binary-to-receipt identity. The model server and weights
 **must** truly support audio for this to work. Accepted transport and a
 model response do **not** prove correct interpretation of music, dialogue,
 spatial mix or mastered sound; independent native model trials are still due.
+For a separately consented hosted NVIDIA **Nemotron 3 Nano Omni** Brain,
+`--allow-cloud-original-wav-upload` is only admitted in structured native-tool
+reviewed-A/V mode with that exact model ID. The model may choose the existing
+read-only `zx7_observe_verified_export_audio` tool and receive a genuine
+SHA-bound <=3-second 16 kHz mono WAV excerpt. The trusted host checks export
+identity, measured interval, PCM decoding and the independent raw-audio
+consent before constructing the `audio_url` request. Mere permission for
+numeric audio diagnostics, picture upload or public research **never** allows
+raw WAV egress. No raw WAV, provider token or original media path enters the
+persisted decision journal. The model's response and a matching WAV hash prove
+transport only, **not** semantic hearing, artistic quality or source rights;
+a separately authorized real neural evaluation is still required. The
+controller deliberately rejects raw sound plus picture in one model turn
+until that cross-modal transport is independently verified.
+
 The local model gateway reports **measured monotonic wall time** for each
 completed model decision and native MCP call, and includes aggregate timing
 in its final response. If the actual local inference server supplies numeric
