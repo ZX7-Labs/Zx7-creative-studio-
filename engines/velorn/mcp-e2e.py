@@ -409,14 +409,25 @@ async def exercise(options):
             assert refused.content[0].text == "ZX7_STALE_NATIVE_REVISION", refused
             await wait(session, lambda state:
                 state.get("zx7NativeRevision") != stale_token)
-            unmodified = await call(session, "get_timeline", {"includeClips": True})
+            # The source snapshot publishes at a debounce, so neither a
+            # transport ACK nor one immediate timeline read proves the latest
+            # marker has appeared. Wait for actual source-owned convergence.
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                unmodified = await call(session, "get_timeline", {"includeClips": True})
+                observed_ids = {m["id"] for m in unmodified.get("markers", [])}
+                review_seen = any(
+                    marker.get("name") == "Human review marker"
+                    for marker in unmodified.get("markers", []))
+                if gui_marker_id in observed_ids and review_seen:
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError(
+                    "Real GUI and native review markers failed to converge in source")
             title_after_conflict = next(
                 item for item in unmodified["clips"] if item["id"] == title_id)
             assert title_after_conflict["textProperties"]["text"] == "MCP native edit"
-            assert any(marker.get("name") == "Human review marker"
-                       for marker in unmodified.get("markers", []))
-            assert any(marker.get("id") == gui_marker_id
-                       for marker in unmodified.get("markers", []))
             policy = pinned_native_editor_identity_policy(
                 options.source, tools, session)
             assert policy is not None and "fence" in policy
