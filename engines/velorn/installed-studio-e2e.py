@@ -18,6 +18,36 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def last_native_result_texts(context):
+    """Resolve identical controller evidence after lossless local prompt compaction.
+
+    A prompt may carry an unambiguous reference to cached native read texts
+    rather than duplicating the same full text. This scripted HTTP fixture must
+    test that published contract, not assume a repeated prompt field.
+    """
+    direct = context.get("last_native_result_texts")
+    reference = context.get("last_native_result_snapshot_reference")
+    if direct is not None:
+        assert reference is None, "Contradictory native result representations"
+        assert isinstance(direct, list) and all(type(t) is str for t in direct)
+        return direct
+    if reference is None:
+        return []
+    assert isinstance(reference, dict)
+    assert reference.get("complete_native_texts_preserved_in_snapshot") is True
+    index = reference.get("cache_index")
+    snapshots = context.get("native_read_snapshot_cache")
+    assert type(index) is int and index >= 0
+    assert isinstance(snapshots, list) and index < len(snapshots)
+    snapshot = snapshots[index]
+    assert isinstance(snapshot, dict)
+    assert type(reference.get("tool")) is str and reference["tool"]
+    assert snapshot.get("tool") == reference["tool"]
+    texts = snapshot.get("result_texts")
+    assert isinstance(texts, list) and all(type(t) is str for t in texts)
+    return texts
+
+
 def decode(path):
     return subprocess.check_output([
         "ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", str(path),
@@ -25,7 +55,33 @@ def decode(path):
     ], stderr=subprocess.PIPE, timeout=20)
 
 
+def test_native_result_context_compatibility():
+    original = ['{"ready":true}']
+    duplicate = {"native_read_snapshot_cache": [
+        {"tool": "check_export_readiness", "result_texts": original}],
+        "last_native_result_snapshot_reference": {
+            "cache_index": 0, "tool": "check_export_readiness",
+            "complete_native_texts_preserved_in_snapshot": True}}
+    assert last_native_result_texts({"last_native_result_texts": original}) == original
+    assert last_native_result_texts(duplicate) == original
+    assert last_native_result_texts({}) == []
+    for broken in (
+        {**duplicate, "last_native_result_snapshot_reference": {
+            **duplicate["last_native_result_snapshot_reference"], "cache_index": True}},
+        {**duplicate, "last_native_result_snapshot_reference": {
+            **duplicate["last_native_result_snapshot_reference"], "tool": "wrong"}},
+        {**duplicate, "last_native_result_texts": original},
+    ):
+        try:
+            last_native_result_texts(broken)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("An ambiguous or forged native read was accepted")
+
+
 def exercise(source, xvfb, *, live_research=False):
+    test_native_result_context_compatibility()
     executable = shutil.which("zx7-studio")
     assert executable, "Install the BODY package before this proof"
     with tempfile.TemporaryDirectory(prefix="zx7-installed-editor-") as temporary:
@@ -69,13 +125,13 @@ def exercise(source, xvfb, *, live_research=False):
                     context = json.loads(content)
                     owner = json.loads(context["creative_brief"].split("\n\n", 1)[1].split("\n", 1)[1])
                     if live_research and not research_observations and selected_steps[0][0] == "create_project":
-                        latest = json.loads(context["last_native_result_texts"][0])
+                        latest = json.loads(last_native_result_texts(context)[0])
                         assert latest["kind"] == "research_web_references"
                         research_observations.append(latest)
                     output = Path(owner["outputs_root"]) / "fixture.mp4"
                     tool, args = selected_steps[0]
-                    if tool == "check_export_readiness" and context["last_native_result_texts"]:
-                        latest = json.loads(context["last_native_result_texts"][0])
+                    if tool == "check_export_readiness" and last_native_result_texts(context):
+                        latest = json.loads(last_native_result_texts(context)[0])
                         if "blockers" in latest and "deliveryTarget" in latest:
                             readiness.append({"ready": latest["ready"], "blockers": latest["blockers"]})
                             if latest["ready"] is True:
