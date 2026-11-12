@@ -21,7 +21,11 @@ _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _SID = re.compile(r"[0-9a-f]{24}\Z")
 _MAX_PROJECT_BYTES = 16 * 1024 * 1024
 _MAX_SCAN_ENTRIES = 512
-_MIN_AUDIBLE_PEAK_DBFS = -110.0  # Digital-silence check, NOT a listening/mix score.
+# FFmpeg 7.1.5 reports a silent AAC fixture around -91 dBFS after codec
+# quantization; -110 would wrongly classify coded silence as an audible edit.
+# This conservative evidence floor is NOT a universal music/dialogue loudness
+# target. Quiet intentional content needs separate calibrated listening review.
+_MIN_AUDIBLE_PEAK_DBFS = -80.0
 
 
 def _bounded_native_project(path):
