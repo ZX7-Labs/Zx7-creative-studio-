@@ -244,13 +244,30 @@ async def run_native_session(args):
         if not cloud_diagnostics:
             host_grants.pop(AUDIO_ENVELOPE, None)
     capture_render_project = None
+    native_revision_source = None
     if getattr(args, "record_av_project_snapshots", False):
         if not fresh or REVIEWED_AV_PAIR not in required or host_grants.get("save_project") != "write":
             raise ValueError("Render snapshots require a fresh audiovisual trial with a save grant")
         from .native_editor_project import capture_render_project as capture
+        from .native_revision_observation import NativeRevisionObservationMcpSession
+        from .native_render_evidence import DESTINATION_FIELD
         snapshots_root = args.state.resolve() / "av-project-snapshots"
         snapshots_root.mkdir(mode=0o700)
-        capture_render_project = partial(capture, project_root.resolve(strict=True), snapshots_root)
+        native_revision_source = NativeRevisionObservationMcpSession(snapshots_root)
+        physical_capture = partial(
+            capture, project_root.resolve(strict=True), snapshots_root)
+
+        def capture_and_register_native_revision(response, binding, save_identity):
+            # Capture already attests save identity, native timeline scope,
+            # real original bytes and render settings. Only AFTER that passes
+            # may a model-visible READ candidate enter the host registry.
+            project_sha, options_sha = physical_capture(
+                response, binding, save_identity)
+            native_revision_source.register_host_captured_render(
+                binding[DESTINATION_FIELD], project_sha, options_sha)
+            return project_sha, options_sha
+
+        capture_render_project = capture_and_register_native_revision
     brief = args.brief_file.read_text(encoding="utf-8")
     if REVIEWED_AV_PAIR in required:
         brief += (
@@ -294,14 +311,25 @@ async def run_native_session(args):
             bindings = {"editor": (
                 (session, host_grants, {}, None, {}, identity)
                 if identity is not None else (session, host_grants))}
+            if native_revision_source is not None:
+                bindings["native_review"] = (
+                    native_revision_source, native_revision_source.grants)
             if research is not None:
                 bindings["research"] = (research, research.grants)
             gateway = CapabilityGateway(bindings, session_budget=budget)
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
-            model_session = (CombinedCapabilityMcpSession(gateway, "editor", "research")
-                             if research is not None else admitted)
-            model_grants = host_grants if research is None else {**host_grants, **research.grants}
+            # The Brain can independently search all *host-granted* sources
+            # while the same shared gateway, call budget and evidence policy
+            # remain authoritative. New revision tools are READ ONLY.
+            model_session = (
+                CombinedCapabilityMcpSession(gateway, *bindings)
+                if len(bindings) > 1 else admitted)
+            model_grants = dict(host_grants)
+            if native_revision_source is not None:
+                model_grants.update(native_revision_source.grants)
+            if research is not None:
+                model_grants.update(research.grants)
             selected_project_setup = None
             if getattr(args, "project", None) is not None:
                 from .native_editor_project import open_selected_native_project

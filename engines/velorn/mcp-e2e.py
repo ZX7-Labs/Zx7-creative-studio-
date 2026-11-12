@@ -1455,6 +1455,48 @@ async def exercise(options):
             assert "/shapeProperties/fillColor" in shape_changes[0]["changed_fields"]
             assert "/keyframes" in shape_changes[0]["changed_fields"]
             assert not comparison["impact"]["actual_media_decoded"]
+            # The exact host-captured native snapshots become READ operations
+            # in the existing permissioned gateway. A model may discover
+            # and independently choose whether to compare its actual cuts.
+            # No private path, arbitrary file read or native write is granted.
+            from studio_next.native_revision_observation import (
+                NativeRevisionObservationMcpSession)
+            from studio_next.native_render_evidence import destination_digest
+            from studio_next.capability_session_budget import CapabilitySessionBudget
+            host_revisions = NativeRevisionObservationMcpSession(snapshots)
+            before_export_id = destination_digest(str(baseline_export))
+            after_export_id = destination_digest(str(scene_output))
+            host_revisions.register_host_captured_render(
+                before_export_id, baseline_capture[0], baseline_capture[1])
+            host_revisions.register_host_captured_render(
+                after_export_id, final_capture[0], final_capture[1])
+            observation_gateway = CapabilityGateway({
+                "native_review": (host_revisions, host_revisions.grants)},
+                session_budget=CapabilitySessionBudget(max_calls=8, max_writes=1))
+            await observation_gateway.refresh()
+            model_read_view = CapabilityGatewayMcpSession(
+                observation_gateway, "native_review")
+            observed_tools = {tool.name for tool in (
+                await model_read_view.list_tools()).tools}
+            assert {"zx7_list_saved_render_revisions",
+                    "zx7_compare_saved_render_revisions"}.issubset(observed_tools)
+            native_list = await call(
+                model_read_view, "zx7_list_saved_render_revisions", {})
+            assert native_list["count"] == 2
+            native_diff = await call(
+                model_read_view, "zx7_compare_saved_render_revisions", {
+                    "before_export_id": before_export_id,
+                    "after_export_id": after_export_id,
+                    "offset": 0, "limit": 20})
+            assert native_diff["native_source_binding_verified_for_both"]
+            assert native_diff["not_an_authorization_to_apply_edits"]
+            assert native_diff["review"]["total_count"] == comparison["change_count"]
+            assert native_diff["review"]["has_more_entries"] is False
+            assert any(change["kind"] == "clip" and change["id"] == shape_id
+                       for change in native_diff["review"]["entries"])
+            assert native_diff["impact"]["actual_media_decoded"] is False
+            assert all(record.get("access") != "write"
+                       for record in observation_gateway.evidence())
             # Real human/native candidate has been saved. For an explicit
             # *scripted* rival candidate, start from the exact saved base and
             # propose a colliding shape color without calling native writes.
@@ -1485,6 +1527,7 @@ async def exercise(options):
                 "actual_saved_shape_fill_and_keyframe_change_detected": True,
                 "source_and_native_object_identifiers_only_not_private_text": True,
                 "scripted_colliding_candidate_rejected_without_applying": True,
+                "model_selectable_host_bound_read_only_revision_tools": True,
                 "automatic_native_merge_permitted": False,
                 "genuine_model_artistic_comparison_or_human_shape_drag_proven": False,
             }, sort_keys=True), flush=True)

@@ -1,0 +1,47 @@
+name: ZX7 G1 — Model-Selectable Native Revision Evidence (Offline)
+
+on:
+  pull_request:
+    paths:
+      - 'studio_next/native_revision_observation.py'
+      - 'studio_next/test_native_revision_observation.py'
+      - 'studio_next/native_editor_session.py'
+      - 'studio_next/native_creative_revision.py'
+      - 'engines/velorn/mcp-e2e.py'
+      - '.github/workflows/zx7-g1-brain-native-revision.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'studio_next/native_revision_observation.py'
+      - 'studio_next/test_native_revision_observation.py'
+      - 'studio_next/native_editor_session.py'
+      - '.github/workflows/zx7-g1-brain-native-revision.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  host-bound-revision-model-read-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11','3.12','3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install declared local-only native gateway dependencies
+        run: python -m pip install --no-cache-dir '.[editor]'
+      - name: Compile exact adapter and canonical editor session
+        run: python -m py_compile studio_next/native_creative_revision.py studio_next/native_revision_observation.py studio_next/native_editor_session.py studio_next/test_native_revision_observation.py
+      - name: Verify source-bound model read vs malicious or stale native revisions
+        run: |
+          python -m unittest studio_next.test_native_creative_revision studio_next.test_native_revision_observation -v
+      - name: Verify source-gateway and existing native read contract unchanged
+        run: |
+          python -m unittest studio_next.test_capability_mcp_session studio_next.test_native_creative_control -v
