@@ -359,6 +359,41 @@ async def exercise(options):
             {"property": "opacity", "timeSeconds": 0, "value": 20, "easing": "cubicBezier(0.2,0,0.8,1)"},
             {"property": "opacity", "timeSeconds": 1, "value": 100, "easing": "linear"}], "previewOnly": False})
         saved_first = await call(session, "save_project", {"previewOnly": False})
+        # Cross-check the actual installed native Velorn document, not a
+        # native-shaped unit JSON: the same source/audio custody admission
+        # used by the bounded genuine model-led audiovisual trial.
+        # This E2E harness is executed as engines/velorn/mcp-e2e.py
+        # outside a package installation for scripts/. Load the trusted
+        # repository source file by its fixed path instead of assuming
+        # that GitHub's source checkout is on Python's sys.path.
+        from importlib.util import module_from_spec, spec_from_file_location
+        trial_spec = spec_from_file_location(
+            "_zx7_g1_av_trial_verifier", ROOT / "scripts" /
+            "run_nvidia_native_trial.py")
+        assert trial_spec is not None and trial_spec.loader is not None
+        trial_module = module_from_spec(trial_spec)
+        trial_spec.loader.exec_module(trial_module)
+        verify_saved_native_trial = trial_module.verify_saved_native_trial
+        av_source_ledger = [
+            {"path": str(staging / name), "sha256": digest(staging / name),
+             "media_kind": kind}
+            for name, kind in (("source.mp4", "video"), ("tone.wav", "audio"))
+        ]
+        actual_av_custody = verify_saved_native_trial(
+            fixture, source_ledger=av_source_ledger,
+            max_clip_duration=2, require_audio=True)
+        assert actual_av_custody["verified_source_backed_video_clips"] >= 1
+        assert actual_av_custody["verified_source_backed_audio_clips"] >= 1
+        print("ACTUAL_NATIVE_VIDEO_AUDIO_SOURCE_CUSTODY " + json.dumps({
+            "native_editor_saved_source": True,
+            "video_originals_on_active_timeline":
+                actual_av_custody["verified_source_backed_video_clips"],
+            "audio_originals_on_active_timeline":
+                actual_av_custody["verified_source_backed_audio_clips"],
+            "source_media_sha256_checked_against_copied_native_assets": True,
+            "originals_preserved": True,
+            "neural_authorship_or_independent_artistic_acceptance": False,
+        }, sort_keys=True), flush=True)
         native_path = project / "project.comfystudio"
         shutil.copy2(native_path, fixture / "revision-1.comfystudio")
         first_output = outputs / "mcp-export-first.mp4"

@@ -154,6 +154,97 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(report["state"], "needs_attention")
         self.assertTrue(Path(report["outputs_directory"]).is_dir())
 
+    def test_owner_audiovisual_run_reuses_native_brain_and_snapshots_fresh_project(self):
+        from studio_next import native_editor_session
+        self.init()
+        mocked = AsyncMock(return_value={
+            "status": "model_finished_unverified",
+            "evaluation_evidence_satisfied": False,
+            "reviewed_native_audiovisual_pair": None,
+        })
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked):
+            result = studio.run_workspace(
+                self.root, brief="Create original edited picture and sound",
+                reviewed_av_revision=True)
+        self.assertEqual(result["state"], "needs_attention")
+        args = mocked.await_args.args[0]
+        self.assertEqual(args.evaluation_evidence, "reviewed-av-revision")
+        self.assertTrue(args.fresh_trial_project)
+        self.assertTrue(args.record_av_project_snapshots)
+        self.assertFalse(args.allow_cloud_image_upload)
+        self.assertFalse(args.allow_cloud_audio_diagnostics)
+        self.assertEqual(args.provider, "local")
+        self.assertEqual(result["session_id"], args.receipt.parent.name)
+
+    def test_owner_existing_project_audiovisual_revision_does_not_fake_freshness(self):
+        from studio_next import native_editor_session
+        self.init()
+        project = self.root / "projects" / "owned-editable"
+        project.mkdir()
+        (project / "project.comfystudio").write_text('{"timelines":[]}')
+        mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked):
+            result = studio.run_workspace(
+                self.root, brief="Revise sound and image", project=project,
+                reviewed_av_revision=True)
+        args = mocked.await_args.args[0]
+        self.assertEqual(args.project, project)
+        self.assertEqual(args.evaluation_evidence, "reviewed-av-revision")
+        self.assertFalse(args.fresh_trial_project)
+        self.assertFalse(args.record_av_project_snapshots)
+        self.assertEqual(result["state"], "needs_attention")
+
+    def test_owner_nvidia_audio_review_consent_precedes_any_workspace_side_effect(self):
+        from studio_next import native_editor_session
+        self.init(provider="nvidia", model_id="hosted-fixture")
+        mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked):
+            for flags in (
+                {"reviewed_av_revision": True},
+                {"reviewed_av_revision": True, "allow_cloud_image_upload": True},
+                {"allow_cloud_audio_diagnostics": True},
+                {"reviewed_av_revision": True, "reviewed_revision": True},
+            ):
+                with self.subTest(flags=flags), self.assertRaisesRegex(
+                        ValueError, "explicit|requires|Choose"):
+                    studio.run_workspace(self.root, brief="Creative sound", **flags)
+            self.assertEqual(list((self.root / "sessions").iterdir()), [])
+            mocked.assert_not_awaited()
+            studio.run_workspace(
+                self.root, brief="Original sound and visuals", reviewed_av_revision=True,
+                allow_cloud_image_upload=True,
+                allow_cloud_audio_diagnostics=True)
+        args = mocked.await_args.args[0]
+        self.assertEqual(args.evaluation_evidence, "reviewed-av-revision")
+        self.assertTrue(args.allow_cloud_audio_diagnostics)
+        self.assertTrue(args.allow_cloud_image_upload)
+        self.assertEqual(mocked.await_count, 1)
+
+    def test_owner_cli_exposes_audiovisual_review_and_read_only_verifier(self):
+        self.init()
+        with patch("studio_next.studio_owner_delivery.verify_owner_audiovisual_delivery",
+                   return_value={"technical": True}) as check, \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            code = studio.main(["verify", str(self.root), "a" * 24,
+                                "--max-decode-seconds", "180"])
+        self.assertEqual(code, 0)
+        check.assert_called_once_with(self.root, "a" * 24,
+                                      max_decode_seconds=180)
+        self.assertEqual(json.loads(output.getvalue()), {"technical": True})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch("studio_next.native_editor_session.run_native_session",
+                      new_callable=AsyncMock,
+                      return_value={"evaluation_evidence_satisfied": False}) as model, \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(studio.main([
+                "run", str(self.root), "--brief", "Compose and revise",
+                "--reviewed-av-revision"]), 3)
+        self.assertEqual(model.await_args.args[0].evaluation_evidence,
+                         "reviewed-av-revision")
+
     def test_failed_revision_retains_exact_prior_saved_project(self):
         from studio_next import native_editor_session
         self.init()

@@ -1,0 +1,66 @@
+name: "ZX7 G1 — Physical Audiovisual Production Contract (Offline)"
+
+on:
+  pull_request:
+    paths:
+      - "scripts/run_nvidia_native_trial.py"
+      - "scripts/test_run_nvidia_native_trial.py"
+      - "studio_next/studio_cli.py"
+      - "studio_next/studio_owner_delivery.py"
+      - "studio_next/test_studio_cli.py"
+      - "studio_next/test_studio_owner_delivery.py"
+      - ".github/workflows/zx7-g1-av-physical-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-audiovisual-source-custody-and-decoder:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Checkout pinned native editor without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install local-only native contract dependencies and decoders
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Compile exact source
+        run: |
+          python -m py_compile scripts/run_nvidia_native_trial.py scripts/test_run_nvidia_native_trial.py
+          python -m py_compile studio_next/studio_cli.py studio_next/studio_owner_delivery.py studio_next/test_studio_cli.py studio_next/test_studio_owner_delivery.py
+      - name: Prove actual generated video and sound are source-custodied
+        run: |
+          python -m unittest -v \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_audio_cloud_consent_required_before_any_workspace_or_native_launch \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_real_synthetic_audiovisual_bootstrap_and_model_selection \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_audiovisual_native_source_custody_requires_original_active_sound
+      - name: Prove real PCM is present, aligned and not digitally silent
+        run: |
+          python -m unittest -v \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_physical_audio_decode_rejects_missing_silence_and_wrong_timing \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_failed_model_audiovisual_export_retains_negative_audio_receipt
+      - name: Recheck original visual-only trial compatibility (no provider call)
+        run: |
+          python -m unittest -v \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_host_only_grants_and_real_owned_media_are_created \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_native_trial_actually_requests_structured_actions \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_native_export_revision_requires_changed_decoded_picture_not_new_container
+
+      - name: Prove owner entry point and scoped A/V model review contract
+        run: |
+          python -m unittest -v \
+            studio_next.test_studio_cli
+      - name: Independently decode owner physical pair and reject forged or silent delivery
+        run: |
+          python -m unittest -v \
+            studio_next.test_studio_owner_delivery
