@@ -177,6 +177,30 @@ def native_decision_model(args):
         system_prompt=NATIVE_CREATIVE_SYSTEM + prompt_suffix)
 
 
+def nvidia_media_observation_grants(grants, *, image_upload, audio_diagnostics,
+                                   original_wav_upload):
+    """Restrict *all* hosted sensory channels independently, default-deny.
+
+    No returned permission can exceed the existing host-owned grant map.
+    This is a pure authorization projection, not a model/tool invocation.
+    """
+    if (not isinstance(grants, dict) or any(
+            type(v) is not str or v not in ("read", "write")
+            for v in grants.values()) or
+            any(type(v) is not bool for v in (
+                image_upload, audio_diagnostics, original_wav_upload))):
+        raise ValueError("Invalid hosted media grants or consent bits")
+    restricted = dict(grants)
+    if not original_wav_upload:
+        restricted.pop("zx7_observe_verified_export_audio", None)
+    if not audio_diagnostics:
+        restricted.pop(AUDIO_ENVELOPE, None)
+    # Two modalities in one observation require BOTH independent consents.
+    if not (image_upload and audio_diagnostics):
+        restricted.pop(ACTIVE_AV_WINDOW, None)
+    return restricted
+
+
 async def run_native_session(args):
     """Run the existing host-bound native loop and return its factual summary.
 
@@ -253,18 +277,10 @@ async def run_native_session(args):
     if args.provider == "nvidia":
         if REVIEWED_AV_PAIR in required and not cloud_diagnostics:
             raise ValueError("Cloud audiovisual review requires explicit audio diagnostics consent")
-        # Raw WAV has an *exact-model*, separately consented NVIDIA Omni
-        # transport. Never authorize raw owner sound based on numeric audio
-        # diagnostics or image upload permission alone.
-        if not raw_wav_consent:
-            host_grants.pop("zx7_observe_verified_export_audio", None)
-        if not cloud_diagnostics:
-            host_grants.pop(AUDIO_ENVELOPE, None)
-        # The combined sensor carries BOTH visual bytes and timed audio
-        # diagnostics. All affected cloud permissions must be explicit;
-        # allowing one does not implicitly authorize the other.
-        if not (cloud_diagnostics and args.allow_cloud_image_upload):
-            host_grants.pop(ACTIVE_AV_WINDOW, None)
+        host_grants = nvidia_media_observation_grants(
+            host_grants, image_upload=args.allow_cloud_image_upload,
+            audio_diagnostics=cloud_diagnostics,
+            original_wav_upload=raw_wav_consent)
     capture_render_project = None
     native_revision_source = None
     if getattr(args, "record_av_project_snapshots", False):
