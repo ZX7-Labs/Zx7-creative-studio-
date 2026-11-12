@@ -1,5 +1,7 @@
 > **Historical status archive — no longer the live checkpoint.** The maintained canonical session state is [project-brain/STATE.md](../../project-brain/STATE.md), with [brief](../../project-brain/BRIEF.md), [decisions](../../project-brain/DECISIONS.md), [risks](../../project-brain/RISKS.md) and [evidence](../../project-brain/EVIDENCE/INDEX.md). Entries below intentionally retain older SHA/PR states and MUST NOT be taken as current without live verification.
 
+> **12 November 2026 archive navigation checkpoint (not a second current STATE):** [G0 #300](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/300) and [native identity G1 #301](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/301) are merged; the latter integrated at `4102061b3def7e417ec314ac2ecf8c87a2ea81b9` following 7/7 exact-head PR CI success. Scripted source/native A/V proof is not autonomous model or artistic acceptance. Native GUI/AI atomic revision protection, genuine model revision and sound review remain open. **Use [canonical STATE](../../project-brain/STATE.md) for the actual up-to-date checkpoint and refresh GitHub.**
+
 # ZX7 continuation checkpoint
 
 ## Latest verified integration — 10 November 2026
