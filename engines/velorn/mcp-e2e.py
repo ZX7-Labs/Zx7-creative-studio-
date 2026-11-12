@@ -362,7 +362,18 @@ async def exercise(options):
         # Cross-check the actual installed native Velorn document, not a
         # native-shaped unit JSON: the same source/audio custody admission
         # used by the bounded genuine model-led audiovisual trial.
-        from scripts.run_nvidia_native_trial import verify_saved_native_trial
+        # This E2E harness is executed as engines/velorn/mcp-e2e.py
+        # outside a package installation for scripts/. Load the trusted
+        # repository source file by its fixed path instead of assuming
+        # that GitHub's source checkout is on Python's sys.path.
+        from importlib.util import module_from_spec, spec_from_file_location
+        trial_spec = spec_from_file_location(
+            "_zx7_g1_av_trial_verifier", ROOT / "scripts" /
+            "run_nvidia_native_trial.py")
+        assert trial_spec is not None and trial_spec.loader is not None
+        trial_module = module_from_spec(trial_spec)
+        trial_spec.loader.exec_module(trial_module)
+        verify_saved_native_trial = trial_module.verify_saved_native_trial
         av_source_ledger = [
             {"path": str(staging / name), "sha256": digest(staging / name),
              "media_kind": kind}
