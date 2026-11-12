@@ -10,6 +10,7 @@ BODY_OBSERVERS = frozenset({
     "zx7_observe_verified_export_samples",
     "zx7_observe_verified_export_audio",
     "zx7_observe_verified_export_audio_timeline",
+    "zx7_observe_verified_export_av_window",
 })
 
 

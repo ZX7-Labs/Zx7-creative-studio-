@@ -15,8 +15,9 @@ REVIEWED_NATIVE_EVIDENCE = (
     REVIEWED_RENDER_PAIR,
 )
 TIMED_FRAMES = "zx7_observe_verified_export_samples"
+ACTIVE_AV_WINDOW = "zx7_observe_verified_export_av_window"
 AUDIO_ENVELOPE = "zx7_observe_verified_export_audio_timeline"
-FRAME_TOOLS = frozenset({"zx7_observe_verified_export_frame", TIMED_FRAMES})
+FRAME_TOOLS = frozenset({"zx7_observe_verified_export_frame", TIMED_FRAMES, ACTIVE_AV_WINDOW})
 RENDER_TOOL = "export_timeline"
 VERIFY_TOOL = "zx7_verify_native_export"
 DESTINATION_FIELD = "native_export_destination_sha256"

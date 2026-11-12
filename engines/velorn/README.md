@@ -134,6 +134,30 @@ read-only operation never returns raw source audio, never accepts arbitrary
 host paths or stale export bytes, and has explicit CPU, output and disk budgets.
 This is a supplementary diagnostic next to actual bounded WAV listening.
 
+The **model-selected** read-only `zx7_observe_verified_export_av_window`
+combines the two source-proven observation routes for one *particular creative
+problem*. After independently calling `zx7_verify_native_export`, the Brain
+may choose a 0–30-second window, 2–4 strictly increasing frame timestamps
+**inside** that window, and 2–64 temporal audio bins:
+
+```json
+{"path": "/authorized/output/export.mp4", "start_seconds": 4,
+ "duration_seconds": 3, "frame_seconds": [4.1, 5, 6.8], "bins": 12}
+```
+
+This is an illustrative **read request**, not a fixed editing program or a
+model-selected task outcome. The model receives independently decoded PNG
+frames and the same encoded export's time-bucket numerical sound evidence
+with one SHA256 source identity; its selections remain its own. All-or-nothing
+sensor admission refuses changed source, partial frame failures, mismatched
+audio receipts, unauthorized paths, oversized payloads and missing export
+verification. There is **no new renderer, media store, model or project format**.
+The tool can find a specific broken interval without replacing the separate
+full-length A/V review gates. Images are sparse rather than continuous
+motion; numerical sound buckets do not establish auditory semantics. The
+host's existing NVIDIA cloud image/audio-diagnostic consent boundaries also
+govern this combined tool.
+
 The verifier cannot establish editing originality, artistic acceptance,
 source rights or OS process isolation. The import and editing tools retain
 their exact upstream schemas; this BODY-owned tool is deliberately namespaced.

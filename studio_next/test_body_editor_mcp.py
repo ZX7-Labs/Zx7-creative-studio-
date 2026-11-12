@@ -836,6 +836,188 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("oversized", invalid.content[0].text.lower())
         await self.with_session(check, export_verifier=verifier, frame_observer=observer)
 
+    async def test_selected_av_window_is_one_source_bound_model_observation(self):
+        name = "zx7_observe_verified_export_av_window"
+        export_sha = "3" * 64
+        seen = []
+        def verifier(path, expected=None):
+            self.assertEqual(path, "/trusted/motion-and-sound.mp4")
+            return {"physical_export_verified": True,
+                    "native_export_sha256": export_sha}
+        def frames(path, verified_sha256, at_seconds):
+            seen.append(("frame", at_seconds))
+            png = ("actual-frame-" + str(at_seconds)).encode()
+            return png, {
+                "export_sha256": verified_sha256,
+                "png_sha256": hashlib.sha256(png).hexdigest(),
+                "sampled_video_seconds_requested": at_seconds,
+            }
+        def audio(path, verified_sha256, start_seconds, duration_seconds, bins):
+            seen.append(("audio", start_seconds, duration_seconds, bins))
+            return {
+                "kind": "verified_native_editor_audio_temporal_envelope",
+                "export_sha256": verified_sha256,
+                "requested_start_seconds": start_seconds,
+                "requested_duration_seconds": duration_seconds,
+                "preview_sample_rate": 8000,
+                "observed_pcm_samples": 40000,
+                "preview_pcm_sha256": "4" * 64,
+                "intervals": [{"rms_dbfs": -25.0} for _ in range(bins)],
+            }
+        query = {"path": "/trusted/motion-and-sound.mp4", "start_seconds": 8,
+                 "duration_seconds": 5, "frame_seconds": [8.2, 10.5, 12.7],
+                 "bins": 8}
+        async def check(session):
+            available = {x.name: x for x in (await session.list_tools()).tools}
+            self.assertIn(name, available)
+            self.assertEqual(available[name].input_schema["properties"][
+                "frame_seconds"]["maxItems"], 4)
+            self.assertTrue((await session.call_tool(name, query)).is_error)
+            self.assertFalse((await session.call_tool("zx7_verify_native_export",
+                {"path": query["path"]})).is_error)
+            result = await session.call_tool(name, query)
+            self.assertFalse(result.is_error, result)
+            self.assertEqual(len(result.content), 4)
+            receipt = json.loads(result.content[0].text)
+            self.assertEqual(receipt["kind"], "verified_native_editor_targeted_av_window")
+            self.assertEqual(receipt["export_sha256"], export_sha)
+            self.assertFalse(receipt["human_or_artistic_quality_approved"])
+            self.assertTrue(receipt["numeric_audio_not_semantic_listening"])
+            self.assertEqual(len(receipt["audio_timeline"]["intervals"]), 8)
+            self.assertEqual([v["sampled_video_seconds_requested"]
+                              for v in receipt["samples"]], query["frame_seconds"])
+            for block, proof in zip(result.content[1:], receipt["samples"]):
+                self.assertEqual(block.type, "image")
+                self.assertEqual(hashlib.sha256(base64.b64decode(block.data)).hexdigest(),
+                                 proof["png_sha256"])
+            for bad in (
+                {**query, "frame_seconds": [8.2, 8.2]},
+                {**query, "frame_seconds": [7.9, 10]},
+                {**query, "frame_seconds": [9, 13]},
+                {**query, "frame_seconds": [10, 9]},
+                {**query, "frame_seconds": [9]},
+                {**query, "frame_seconds": [9, 10, 11, 12, 12.2]},
+                {**query, "start_seconds": float("nan")},
+                {**query, "duration_seconds": 31},
+                {**query, "bins": 0},
+                {**query, "bins": True},
+                {**query, "path": "/trusted/unverified.mp4"},
+            ):
+                with self.subTest(bad=bad):
+                    self.assertTrue((await session.call_tool(name, bad)).is_error)
+            self.assertEqual(len(seen), 4)
+            self.assertFalse(any(x["method"] == "tools/call" for x in self.requests))
+        await self.with_session(check, export_verifier=verifier,
+                                frame_observer=frames, audio_timeline_observer=audio)
+        async def no_read(session):
+            self.assertNotIn(name, [x.name for x in (await session.list_tools()).tools])
+        await self.with_session(no_read, access=frozenset({"write"}),
+                                export_verifier=verifier,
+                                frame_observer=frames, audio_timeline_observer=audio)
+
+    async def test_selected_av_window_never_returns_partial_media_on_bad_sound(self):
+        name = "zx7_observe_verified_export_av_window"
+        calls = []
+        def verifier(path, expected=None):
+            return {"physical_export_verified": True,
+                    "native_export_sha256": "a" * 64}
+        def frame(path, verified_sha256, at_seconds):
+            calls.append(at_seconds)
+            png = b"some-image"
+            return png, {
+                "export_sha256": verified_sha256,
+                "png_sha256": hashlib.sha256(png).hexdigest(),
+                "sampled_video_seconds_requested": at_seconds,
+            }
+        def malformed(path, verified_sha256, start_seconds, duration_seconds, bins):
+            return {
+                "kind": "verified_native_editor_audio_temporal_envelope",
+                "export_sha256": "b" * 64,  # different physical movie
+                "requested_start_seconds": start_seconds,
+                "requested_duration_seconds": duration_seconds,
+                "preview_sample_rate": 8000, "observed_pcm_samples": 16000,
+                "preview_pcm_sha256": "c" * 64,
+                "intervals": [{} for _ in range(bins)],
+            }
+        args = {"path": "/trusted/film.mp4", "start_seconds": 0,
+                "duration_seconds": 2, "frame_seconds": [0.1, 1.8], "bins": 8}
+        async def check(session):
+            self.assertFalse((await session.call_tool(
+                "zx7_verify_native_export", {"path": args["path"]})).is_error)
+            first = await session.call_tool(name, args)
+            self.assertTrue(first.is_error)
+            self.assertEqual(len(first.content), 1)
+            second = await session.call_tool(name, args)
+            self.assertTrue(second.is_error)
+            self.assertIn("verify", second.content[0].text.lower())
+            self.assertEqual(calls, [0.1, 1.8])
+        await self.with_session(check, export_verifier=verifier,
+                                frame_observer=frame, audio_timeline_observer=malformed)
+
+    async def test_selected_av_window_physically_decodes_same_sound_and_frames(self):
+        import shutil
+        if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+            self.skipTest("Requires physical ffmpeg/ffprobe decoder")
+        from studio_next.body_editor_export import verify_native_editor_export
+        from studio_next.body_editor_frame import observe_verified_export_frame
+        from studio_next.body_editor_audio_timeline import (
+            observe_verified_export_audio_timeline)
+        from studio_next.body_editor_policy import EditorPathPolicy
+        from studio_next.media_vault import sha256_file
+        with tempfile.TemporaryDirectory() as scratch:
+            roots = [Path(scratch) / n for n in ("projects", "staging", "outputs")]
+            for root in roots:
+                root.mkdir()
+            movie = roots[2] / "physical-window.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+                "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=12:duration=3",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "mpeg4", "-c:a", "aac", "-shortest", str(movie),
+            ], check=True, timeout=40)
+            policy = EditorPathPolicy(*roots)
+            def verifier(path, expected=None):
+                return verify_native_editor_export(path, policy=policy, expected=expected)
+            def frames(path, verified_sha256, at_seconds):
+                return observe_verified_export_frame(path, policy=policy,
+                    verified_sha256=verified_sha256, at_seconds=at_seconds)
+            def sound(path, verified_sha256, start_seconds, duration_seconds, bins):
+                return observe_verified_export_audio_timeline(
+                    path, policy=policy, verified_sha256=verified_sha256,
+                    start_seconds=start_seconds, duration_seconds=duration_seconds,
+                    bins=bins)
+            async def check(session):
+                query = {"path": str(movie), "start_seconds": 0.25,
+                         "duration_seconds": 2.0,
+                         "frame_seconds": [0.5, 1.0, 2.0], "bins": 8}
+                self.assertTrue((await session.call_tool(
+                    "zx7_observe_verified_export_av_window", query)).is_error)
+                self.assertFalse((await session.call_tool(
+                    "zx7_verify_native_export", {"path": str(movie)})).is_error)
+                result = await session.call_tool(
+                    "zx7_observe_verified_export_av_window", query)
+                self.assertFalse(result.is_error, result)
+                receipt = json.loads(result.content[0].text)
+                self.assertEqual(receipt["export_sha256"], sha256_file(movie))
+                self.assertEqual(receipt["audio_timeline"]["observed_pcm_samples"], 16000)
+                self.assertEqual(len(result.content), 4)
+                self.assertTrue(all(x["observed_picture_width"] == 160
+                                    for x in receipt["samples"]))
+                self.assertGreater(max(x["sample_peak_normalized"] for x
+                                       in receipt["audio_timeline"]["intervals"]), 0.02)
+                self.assertFalse(receipt["numeric_audio_not_semantic_listening"] is False)
+                altered = movie.read_bytes() + b"post-verification mutation"
+                movie.write_bytes(altered)
+                failed = await session.call_tool(
+                    "zx7_observe_verified_export_av_window", query)
+                self.assertTrue(failed.is_error)
+                self.assertEqual(len(failed.content), 1)
+                self.assertTrue((await session.call_tool(
+                    "zx7_observe_verified_export_av_window", query)).is_error)
+            await self.with_session(check, export_verifier=verifier,
+                                    frame_observer=frames, audio_timeline_observer=sound)
+
     async def test_verified_native_audio_is_real_mcp_audio_content_not_only_a_metric(self):
         digest = "d" * 64
         wav_bytes = b"RIFF" + b"native-audio-wav-test" * 5

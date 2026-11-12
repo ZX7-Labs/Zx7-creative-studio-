@@ -143,6 +143,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     observed_samples_name = "zx7_observe_verified_export_samples"
     observed_audio_name = "zx7_observe_verified_export_audio"
     observed_audio_timeline_name = "zx7_observe_verified_export_audio_timeline"
+    observed_av_window_name = "zx7_observe_verified_export_av_window"
     verified_exports = {}
     content_diagnostics = (semantic_source and "read" in access and
                            grants.get("get_timeline") == "read")
@@ -185,7 +186,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     if audio_timeline_observer is not None and (export_verifier is None or not callable(audio_timeline_observer)):
         raise ValueError("Audio timeline requires the full host export verifier")
     if any(tool in native for tool in (observed_frame_name, observed_samples_name,
-                                       observed_audio_name, observed_audio_timeline_name)):
+                                       observed_audio_name, observed_audio_timeline_name,
+                                       observed_av_window_name)):
         raise ValueError("Native editor tool name collides with BODY observation")
     if export_verifier is not None:
         if not callable(export_verifier) or verified_export_name in native:
@@ -268,6 +270,42 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                          "original PTS, LUFS, multichannel master or artistic quality"),
             inputSchema=temporal_schema)
         validators[observed_audio_timeline_name] = jsonschema.Draft202012Validator(temporal_schema)
+    if (frame_observer is not None and audio_timeline_observer is not None and
+            export_verifier is not None and "read" in access):
+        # One model-selected time window, two independently decoded modalities
+        # and one *previously verified* physical export identity. This is a
+        # factual sensing instrument; it neither chooses a shot nor approves art.
+        av_window_schema = {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "start_seconds": {"type": "number", "minimum": 0},
+                "duration_seconds": {"type": "number", "exclusiveMinimum": 0,
+                                     "maximum": 30},
+                "frame_seconds": {"type": "array", "minItems": 2, "maxItems": 4,
+                                  "uniqueItems": True,
+                                  "items": {"type": "number", "minimum": 0}},
+                "bins": {"type": "integer", "minimum": 2, "maximum": 64},
+            },
+            "required": ["path", "start_seconds", "duration_seconds",
+                         "frame_seconds", "bins"],
+            "additionalProperties": False,
+        }
+        tools[observed_av_window_name] = types.Tool(
+            name=observed_av_window_name,
+            description=(
+                "Model-selected 0-30s creative problem window: examine 2-4 "
+                "actual decoded frames and the same verified export's timed "
+                "audio RMS/peaks in one source-bound read. Pick timestamps, "
+                "window and bins independently to investigate a specific "
+                "motion, transition, cutout or sound question. Requires prior "
+                "zx7_verify_native_export on those exact bytes. Numerical "
+                "audio and sparse stills are NOT listening, continuous motion, "
+                "semantic video understanding or artistic approval. Do not "
+                "assume this replaces the full-film audiovisual review."),
+            inputSchema=av_window_schema)
+        validators[observed_av_window_name] = (
+            jsonschema.Draft202012Validator(av_window_schema))
     lock = anyio.Lock()
     inspection_capacity = anyio.CapacityLimiter(1)
 
@@ -442,6 +480,87 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             except (ValueError, OSError, subprocess.SubprocessError) as exc:
                 verified_exports.pop(identity, None)
                 return failed("Verified native frame observation failed: " + str(exc))
+        if name == observed_av_window_name:
+            # Semantic/temporal targeting is a MODEL choice; host merely checks
+            # objective numbers and exact published source integrity.
+            start = arguments["start_seconds"]
+            duration = arguments["duration_seconds"]
+            times = arguments["frame_seconds"]
+            bins = arguments["bins"]
+            numeric = (start, duration, *times)
+            if (any(type(v) not in (int, float) or not math.isfinite(v)
+                    for v in numeric) or type(bins) is not int or
+                    start + duration <= start or
+                    any(a >= b for a, b in zip(times, times[1:])) or
+                    times[0] < start or times[-1] >= start + duration):
+                return failed("A/V window requires finite, ordered frames inside its selected interval")
+            identity = str(Path(arguments["path"]).resolve())
+            digest = verified_exports.get(identity)
+            if digest is None:
+                return failed("Independently verify these export bytes before targeted A/V observation")
+            try:
+                def decode_window():
+                    frames = [frame_observer(
+                        arguments["path"], verified_sha256=digest,
+                        at_seconds=at) for at in times]
+                    envelope = audio_timeline_observer(
+                        arguments["path"], verified_sha256=digest,
+                        start_seconds=start, duration_seconds=duration, bins=bins)
+                    return frames, envelope
+                async with inspection_capacity:
+                    with anyio.CancelScope(shield=True):
+                        frames, envelope = await anyio.to_thread.run_sync(
+                            decode_window, abandon_on_cancel=False)
+                total_bytes = 0
+                for (png, receipt), at in zip(frames, times):
+                    if not isinstance(png, bytes) or not isinstance(receipt, dict):
+                        raise ValueError("Missing physical frame observation")
+                    total_bytes += len(png)
+                    if (not 0 < len(png) <= 4 * 1024 * 1024 or
+                            total_bytes > 8 * 1024 * 1024 or
+                            receipt.get("export_sha256") != digest or
+                            receipt.get("png_sha256") != hashlib.sha256(png).hexdigest() or
+                            receipt.get("sampled_video_seconds_requested") != at):
+                        raise ValueError("Untrusted, stale or oversized A/V frame")
+                if (len(frames) != len(times) or not isinstance(envelope, dict) or
+                        envelope.get("kind") != "verified_native_editor_audio_temporal_envelope" or
+                        envelope.get("export_sha256") != digest or
+                        envelope.get("requested_start_seconds") != start or
+                        envelope.get("requested_duration_seconds") != duration or
+                        envelope.get("preview_sample_rate") != 8000 or
+                        type(envelope.get("observed_pcm_samples")) is not int or
+                        envelope["observed_pcm_samples"] <= 0 or
+                        not isinstance(envelope.get("preview_pcm_sha256"), str) or
+                        len(envelope["preview_pcm_sha256"]) != 64 or
+                        any(ch not in "0123456789abcdef"
+                            for ch in envelope["preview_pcm_sha256"]) or
+                        not isinstance(envelope.get("intervals"), list) or
+                        len(envelope["intervals"]) != bins):
+                    raise ValueError("Untrusted or incomplete source-bound A/V envelope")
+                combined = {
+                    "schema": 1,
+                    "kind": "verified_native_editor_targeted_av_window",
+                    "export_sha256": digest,
+                    "requested_start_seconds": start,
+                    "requested_duration_seconds": duration,
+                    "samples": [receipt for _, receipt in frames],
+                    "audio_timeline": envelope,
+                    "sparse_frames_not_continuous_motion": True,
+                    "numeric_audio_not_semantic_listening": True,
+                    "human_or_artistic_quality_approved": False,
+                }
+                return types.CallToolResult(is_error=False, content=[
+                    types.TextContent(type="text",
+                                      text=json.dumps(combined, allow_nan=False)),
+                    *[types.ImageContent(
+                        type="image", data=base64.b64encode(png).decode("ascii"),
+                        mimeType="image/png") for png, _ in frames],
+                ])
+            except (ValueError, OSError, subprocess.SubprocessError) as exc:
+                # Never return partial sensors; a re-verification is needed
+                # because a stale/malformed decode must revoke prior trust.
+                verified_exports.pop(identity, None)
+                return failed("Targeted A/V observation failed: " + str(exc))
         if name == observed_audio_name:
             identity = str(Path(arguments["path"]).resolve())
             digest = verified_exports.get(identity)

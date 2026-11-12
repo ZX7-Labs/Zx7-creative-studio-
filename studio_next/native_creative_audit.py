@@ -29,12 +29,14 @@ _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _OBSERVERS = frozenset({
     "zx7_observe_verified_export_frame",
     "zx7_observe_verified_export_samples",
+    "zx7_observe_verified_export_av_window",
     "zx7_observe_verified_export_audio",
     "zx7_observe_verified_export_audio_timeline",
 })
 _FRAME_OBSERVERS = frozenset({
     "zx7_observe_verified_export_frame",
     "zx7_observe_verified_export_samples",
+    "zx7_observe_verified_export_av_window",
 })
 _EXPORT = "zx7_verify_native_export"
 _COMPLETION_EVIDENCE_TYPES = frozenset({

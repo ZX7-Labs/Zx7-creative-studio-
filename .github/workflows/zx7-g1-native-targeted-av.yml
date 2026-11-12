@@ -1,0 +1,66 @@
+name: ZX7 G1 — Model-Selected Native A/V Observation (Offline)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'studio_next/body_editor_mcp.py'
+      - 'studio_next/test_body_editor_mcp.py'
+      - 'studio_next/native_editor_session.py'
+      - 'studio_next/native_creative_control.py'
+      - 'studio_next/native_creative_audit.py'
+      - 'studio_next/native_render_evidence.py'
+      - 'studio_next/body_editor_frame.py'
+      - 'studio_next/body_editor_audio_timeline.py'
+      - 'engines/velorn/proof_contract.py'
+      - '.github/workflows/zx7-g1-native-targeted-av.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'studio_next/body_editor_mcp.py'
+      - 'studio_next/native_editor_session.py'
+      - 'studio_next/native_creative_control.py'
+      - 'studio_next/native_creative_audit.py'
+      - 'studio_next/native_render_evidence.py'
+      - 'engines/velorn/proof_contract.py'
+      - '.github/workflows/zx7-g1-native-targeted-av.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  physical-bounded-av-sensing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install FFmpeg and declared local Python bridge dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Compile altered gateway, receipts, native controller, provenance tests
+        run: |
+          python -m py_compile studio_next/body_editor_mcp.py studio_next/native_editor_session.py studio_next/native_creative_control.py studio_next/native_creative_audit.py studio_next/native_render_evidence.py studio_next/test_body_editor_mcp.py engines/velorn/proof_contract.py
+      - name: Real SDK A/V window, independent FFmpeg, adversarial source-bounds
+        run: |
+          python -m unittest -v \
+            studio_next.test_body_editor_mcp.EditorMCPTests.test_selected_av_window_is_one_source_bound_model_observation \
+            studio_next.test_body_editor_mcp.EditorMCPTests.test_selected_av_window_never_returns_partial_media_on_bad_sound \
+            studio_next.test_body_editor_mcp.EditorMCPTests.test_selected_av_window_physically_decodes_same_sound_and_frames
+      - name: Existing physical frame/audio oracles and controller/audit behavior
+        run: |
+          python -m unittest -v \
+            studio_next.test_body_editor_frame \
+            studio_next.test_body_editor_audio_timeline \
+            studio_next.test_native_creative_audit
