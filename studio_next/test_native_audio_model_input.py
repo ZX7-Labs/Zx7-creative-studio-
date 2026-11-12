@@ -36,6 +36,10 @@ def receipt(audio):
         "export_sha256":"a"*64,
         "wav_sha256":hashlib.sha256(audio).hexdigest(),
         "preview_downmixed_and_resampled":True,
+        "requested_start_seconds":1,
+        "requested_duration_seconds":1,
+        "observed_audio_duration_seconds":1,
+        "exact_original_audio_pts_proven":False,
         "original_multichannel_mix_proven":False,
     }
 
@@ -133,6 +137,7 @@ class Session:
     def __init__(self,audio):
         self.audio=audio
         self.corrupt=False
+        self.corrupt_timing=False
         self.calls=0
     async def list_tools(self):
         return SimpleNamespace(tools=[SimpleNamespace(
@@ -150,6 +155,7 @@ class Session:
                     "human_or_artistic_quality_approved": False}))])
         r=receipt(self.audio)
         if self.corrupt:r["wav_sha256"]="f"*64
+        if self.corrupt_timing:r["requested_duration_seconds"]=-1
         return SimpleNamespace(is_error=False,content=[
             SimpleNamespace(type="text",text=json.dumps(r)),
             SimpleNamespace(type="audio",mime_type="audio/wav",
@@ -170,11 +176,87 @@ class ActualNativeAudioRoutingTests(unittest.IsolatedAsyncioTestCase):
             ctx,received=model.audio_input
             self.assertEqual(received,[("audio/wav",audio)])
             self.assertEqual(ctx["audio_evidence"]["wav_sha256"],hashlib.sha256(audio).hexdigest())
+            self.assertEqual(ctx["audio_evidence"]["requested_start_seconds"],1)
+            self.assertEqual(ctx["audio_evidence"]["requested_duration_seconds"],1)
+            self.assertFalse(ctx["audio_evidence"]["exact_original_audio_pts_proven"])
             serialized=p.read_text()
             self.assertNotIn(base64.b64encode(audio).decode()[:100],serialized)
             self.assertIn('"audio_sent_to_model_for_next_decision":true',serialized)
             self.assertIn('"independently_verified_export_sha256":"'+("a"*64)+'"',serialized)
             self.assertIn('"observed_export_sha256":"'+("a"*64)+'"',serialized)
+            self.assertFalse(result["artistic_quality_independently_approved"])
+
+
+    async def test_host_verified_audio_reaches_real_omni_adapter_without_extra_native_grants(self):
+        """Native controller, actual source receipt and NVIDIA adapter use one grant path.
+
+        A mocked credentialed HTTP opener proves the bytes and tool envelope
+        without consuming credits or making any genuine semantic perception claim.
+        """
+        import os
+        from studio_next.nvidia_model import NvidiaModelSettings
+        from studio_next.nvidia_native_tool_model import (
+            NvidiaOmniNativeToolCreativeModel, NVIDIA_OMNI_AUDIO_MODEL_ID,
+            _provider_function, _META_FINISH,
+        )
+        audio = wav_bytes()
+        commands = [
+            (_provider_function("zx7_verify_native_export"), {
+                "inputs": {"path": "/host/verified.mp4"},
+                "reason": "Read the actual verified source first"}),
+            (_provider_function("zx7_observe_verified_export_audio"), {
+                "inputs": {"path": "/host/verified.mp4",
+                           "start_seconds": 1, "duration_seconds": 1},
+                "reason": "Hear only the verified export excerpt"}),
+            (_META_FINISH, {
+                "summary": "Mock transport proven, no subjective judgment",
+                "reason": "This was a technical fixture only"}),
+        ]
+        captured = []
+        class Opener:
+            def open(self, request, timeout):
+                body = json.loads(request.data)
+                captured.append(body)
+                function, args = commands[len(captured)-1]
+                return io.BytesIO(json.dumps({"choices": [{
+                    "finish_reason": "tool_calls",
+                    "message": {"tool_calls": [{
+                        "id": "fixture-call", "type": "function",
+                        "function": {"name": function,
+                                     "arguments": json.dumps(args)}}]}}],
+                    "usage": {"prompt_tokens": 23, "completion_tokens": 7,
+                              "total_tokens": 30}}).encode())
+        model = NvidiaOmniNativeToolCreativeModel(
+            NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+                sampling={"chat_template_kwargs": {"enable_thinking": False}}),
+            system_prompt="Use only existing native tools and independent sound evidence",
+            allow_original_audio_upload=True)
+        session = Session(audio)
+        with tempfile.TemporaryDirectory() as root, patch.dict(
+                os.environ, {"NVIDIA_API_KEY": "nvapi-" + "A" * 32}), patch(
+                "studio_next.nvidia_model.build_opener", return_value=Opener()):
+            journal = Path(root) / "private-native-journal.jsonl"
+            result = await NativeCreativeControl(
+                session, model, receipt_path=journal, max_turns=4,
+                host_tool_access={
+                    "zx7_verify_native_export": "read",
+                    "zx7_observe_verified_export_audio": "read",
+                }).run("Inspect the already verified sound source")
+            self.assertEqual(result["status"], "model_finished_unverified")
+            self.assertEqual(session.calls, 2)
+            self.assertEqual(len(captured), 3)
+            self.assertIsInstance(captured[0]["messages"][1]["content"], str)
+            audio_parts = captured[2]["messages"][1]["content"]
+            self.assertEqual([p["type"] for p in audio_parts],
+                             ["text", "text", "audio_url"])
+            sent = audio_parts[-1]["audio_url"]["url"]
+            self.assertTrue(sent.startswith("data:audio/wav;base64,"))
+            self.assertEqual(base64.b64decode(sent.split(",",1)[1]), audio)
+            self.assertEqual(json.loads(audio_parts[1]["text"])[
+                "original_wav_sha256"], hashlib.sha256(audio).hexdigest())
+            self.assertNotIn(base64.b64encode(audio).decode()[:100],
+                             journal.read_text())
+            self.assertNotIn("nvapi-", journal.read_text())
             self.assertFalse(result["artistic_quality_independently_approved"])
 
     async def test_source_mismatch_rejected_before_model_listening(self):
@@ -183,6 +265,15 @@ class ActualNativeAudioRoutingTests(unittest.IsolatedAsyncioTestCase):
         session.corrupt=True
         model=ScriptedAudioModel()
         with self.assertRaisesRegex(NativeCreativeControlError,"verified source"):
+            await NativeCreativeControl(session,model,max_turns=3).run("Listen")
+        self.assertIsNone(model.audio_input)
+
+    async def test_invalid_timed_receipt_fails_before_model_audio_turn(self):
+        audio=wav_bytes()
+        session=Session(audio)
+        session.corrupt_timing=True
+        model=ScriptedAudioModel()
+        with self.assertRaisesRegex(NativeCreativeControlError,"timed excerpt provenance"):
             await NativeCreativeControl(session,model,max_turns=3).run("Listen")
         self.assertIsNone(model.audio_input)
 
