@@ -801,6 +801,17 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             present = decode_trial_audio(good, expected_video_seconds=0.5,
                                          max_seconds=1)
             self.assertTrue(present.audible)
+            # The decoder must limit PCM generation BEFORE capture_output,
+            # not after loading potentially unbounded audio into memory.
+            with patch("scripts.run_nvidia_native_trial.subprocess.run",
+                       return_value=subprocess.CompletedProcess(
+                           [], 0, b"\\0" * 8000, b"")) as bounded:
+                staged = decode_trial_audio(good, expected_video_seconds=0.5,
+                                            max_seconds=1)
+            self.assertFalse(staged.audible)
+            command = bounded.call_args.args[0]
+            self.assertEqual(command[command.index("-t") + 1], "2")
+            self.assertNotIn("NVIDIA_API_KEY", bounded.call_args.kwargs["env"])
             self.assertEqual(present.sample_rate, 8000)
             self.assertGreater(present.sample_count, 3000)
             self.assertFalse(
