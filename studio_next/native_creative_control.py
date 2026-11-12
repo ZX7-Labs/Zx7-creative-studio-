@@ -28,7 +28,7 @@ from .body_editor_client import (
 )
 from .native_editor_source_pin import source_verified_preview_intent
 from .native_render_evidence import (
-    AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
     SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
@@ -60,7 +60,8 @@ _CONTENT_VIDEO_TRACK_WRITES = frozenset({
     "add_text_clip", "add_shape_clip", "add_adjustment_clip",
 })
 _VERIFIED_FRAME_TOOLS = frozenset({
-    "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples"})
+    "zx7_observe_verified_export_frame", "zx7_observe_verified_export_samples",
+    ACTIVE_AV_WINDOW})
 _VERIFIED_AUDIO_TOOLS = frozenset({"zx7_observe_verified_export_audio"})
 _VERIFIED_EXPORT_TOOL = "zx7_verify_native_export"
 _VERIFIED_ENVELOPE_TOOL = AUDIO_ENVELOPE
@@ -2475,6 +2476,27 @@ class NativeCreativeControl:
                     av_values = None
                     new_export_sha = None
                     observed_export_sha = None
+                    if native_name == ACTIVE_AV_WINDOW:
+                        # A chosen partial A/V window is *not* full-film sound
+                        # listening or a completed audiovisual review. The MCP
+                        # bridge binds both underlying decoder results to the
+                        # same verified video. Check that contract before
+                        # admitting its image evidence into the model context.
+                        window = _strict_receipt(texts, "targeted A/V window")
+                        envelope = window.get("audio_timeline")
+                        if (window.get("kind") !=
+                                "verified_native_editor_targeted_av_window" or
+                                not isinstance(envelope, dict) or
+                                envelope.get("kind") !=
+                                "verified_native_editor_audio_temporal_envelope" or
+                                envelope.get("export_sha256") != window.get("export_sha256") or
+                                not isinstance(window.get("samples"), list) or
+                                len(window["samples"]) != len(images) or
+                                not 2 <= len(images) <= 4 or
+                                window.get("numeric_audio_not_semantic_listening") is not True or
+                                window.get("human_or_artistic_quality_approved") is not False):
+                            raise NativeCreativeControlError(
+                                "Targeted window did not bind video and audio to one source")
                     if self._requires_av_review and native_name == TIMED_FRAMES and not images:
                         raise NativeCreativeControlError("Timed audiovisual review requires decoded frames")
                     if native_name == _VERIFIED_EXPORT_TOOL:
