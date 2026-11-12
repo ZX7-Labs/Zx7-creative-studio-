@@ -25,6 +25,9 @@ from .capability_session_budget import (
     CapabilitySessionBudget, CapabilitySessionBudgetError)
 
 
+_MODEL_NATIVE_OBSERVATION_UNCHECKED = object()
+
+
 class CapabilityExecutionError(ValueError):
     """Rejected BEFORE any native dispatch; no guessed operation is allowed."""
 
@@ -38,6 +41,8 @@ _SAFE_NATIVE_IDENTITY_READ_ERRORS = frozenset({
     "native_identity_project_changed_during_read",
     "native_identity_source_counts_changed",
     "native_identity_live_revision_unavailable",
+    "native_identity_model_observation_required",
+    "native_identity_model_observation_stale",
 })
 
 
@@ -261,7 +266,8 @@ class CapabilityGateway:
         return self._attempt_store.unverified_attempts(
             limit=limit, cursor=cursor)
 
-    async def invoke(self, operation_id, *, revision, inputs, request_id=None):
+    async def invoke(self, operation_id, *, revision, inputs, request_id=None,
+                     model_observed_revision=_MODEL_NATIVE_OBSERVATION_UNCHECKED):
         """One model-selected operation; never auto-retry uncertain writes.
 
         Always re-discover live tool ABI and grants under a per-source lock
@@ -366,6 +372,19 @@ class CapabilityGateway:
                                     hidden_argument in inputs):
                                 raise NativeReferencePreDispatchError(
                                     "native_identity_live_revision_unavailable")
+                            # A fresh host inventory alone must not silently
+                            # bless a model decision conceived BEFORE a human
+                            # changed the project. Compare the last native
+                            # project revision the Brain actually observed,
+                            # supplied only by the trusted session wrapper.
+                            if model_observed_revision is not _MODEL_NATIVE_OBSERVATION_UNCHECKED:
+                                if (type(model_observed_revision) is not str or
+                                        not 38 <= len(model_observed_revision) <= 80):
+                                    raise NativeReferencePreDispatchError(
+                                        "native_identity_model_observation_required")
+                                if model_observed_revision != source_revision:
+                                    raise NativeReferencePreDispatchError(
+                                        "native_identity_model_observation_stale")
                             dispatch_inputs[hidden_argument] = source_revision
                     except NativeReferencePreDispatchError:
                         raise
