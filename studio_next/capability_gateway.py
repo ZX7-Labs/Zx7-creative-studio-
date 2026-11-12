@@ -19,12 +19,33 @@ from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
 from .body_editor_mcp import _local_schema_references
 from .capability_attempts import CapabilityAttemptStore
+from .capability_reference_guard import (
+    CapabilityReferenceError, compile_reference_rules, validate_live_references)
 from .capability_session_budget import (
     CapabilitySessionBudget, CapabilitySessionBudgetError)
 
 
 class CapabilityExecutionError(ValueError):
     """Rejected BEFORE any native dispatch; no guessed operation is allowed."""
+
+
+_SAFE_NATIVE_IDENTITY_READ_ERRORS = frozenset({
+    "native_identity_read_failed",
+    "native_identity_read_malformed",
+    "native_identity_read_oversize",
+    "native_identity_read_incomplete",
+    "native_identity_project_unavailable",
+    "native_identity_project_changed_during_read",
+    "native_identity_source_counts_changed",
+})
+
+
+class NativeReferencePreDispatchError(CapabilityExecutionError):
+    """Host-only, provably no-dispatch denial with categorical safe feedback."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
 
 
 def _wire(value):
@@ -51,7 +72,10 @@ class CapabilityGateway:
     """Trusted host-owned source connections, not a model/plugin write proxy.
 
     bindings: namespace -> (connected_session, trusted grants, [prerequisites],
-                             [trusted async or sync fact reader]).
+                             [trusted fact reader], [possible effects],
+                             [host-owned reference reader/policies]).
+    Reference checks inspect actual connected source state before model-selected
+    writes. This does not substitute for native atomic document revisions.
     The fact reader accepts no model-provided data and returns a mapping of
     host-attested boolean facts. Missing facts deny prerequisite admission.
     """
@@ -71,12 +95,33 @@ class CapabilityGateway:
         self._bindings = {}
         self._locks = {}
         for namespace, entry in bindings.items():
-            if not isinstance(entry, tuple) or len(entry) not in (2, 3, 4, 5):
+            if not isinstance(entry, tuple) or len(entry) not in (2, 3, 4, 5, 6):
                 raise CapabilityExecutionError("Source requires a real connection and grants")
             session, grants = entry[:2]
             requires = entry[2] if len(entry) >= 3 else {}
             facts = entry[3] if len(entry) >= 4 else None
-            possible_effects = entry[4] if len(entry) == 5 else {}
+            possible_effects = entry[4] if len(entry) >= 5 else {}
+            identity = entry[5] if len(entry) == 6 else None
+            if identity is not None:
+                if (not isinstance(identity, Mapping) or
+                        set(identity) != {"reader", "rules"} or
+                        not callable(identity["reader"]) or
+                        not isinstance(identity["rules"], Mapping) or
+                        not 1 <= len(identity["rules"]) <= 256):
+                    raise CapabilityExecutionError("Invalid native identity policy")
+                compiled = {}
+                try:
+                    for tool_name, rules in identity["rules"].items():
+                        if (not isinstance(tool_name, str) or
+                                len(tool_name) > 160 or
+                                not isinstance(grants, Mapping) or
+                                grants.get(tool_name) != "write"):
+                            raise CapabilityReferenceError(
+                                "invalid_host_reference_policy")
+                        compiled[tool_name] = compile_reference_rules(rules)
+                except CapabilityReferenceError as exc:
+                    raise CapabilityExecutionError(str(exc)) from exc
+                identity = {"reader": identity["reader"], "rules": compiled}
             if (not callable(getattr(session, "list_tools", None)) or
                     not callable(getattr(session, "call_tool", None)) or
                     not (isinstance(grants, Mapping) or callable(grants)) or
@@ -91,7 +136,7 @@ class CapabilityGateway:
             grant_source = grants if callable(grants) else dict(grants)
             self._bindings[namespace] = (session, grant_source,
                                          copy.deepcopy(requires), facts,
-                                         copy.deepcopy(possible_effects))
+                                         copy.deepcopy(possible_effects), identity)
             self._locks[namespace] = asyncio.Lock()
         if self._session_budget is not None:
             try:
@@ -139,7 +184,7 @@ class CapabilityGateway:
         self._current()
         if namespace not in self._bindings:
             raise CapabilityExecutionError("Unknown connected creative engine")
-        _, _, _, reader, _ = self._bindings[namespace]
+        _, _, _, reader, _, _ = self._bindings[namespace]
         if reader is None:
             raise CapabilityExecutionError("Missing trusted source state reader")
         facts = reader()
@@ -193,7 +238,7 @@ class CapabilityGateway:
             # Revalidate ONLY the selected engine, not every connected
             # creative app on each frame/operation. Cross-domain scaling
             # must not make single-engine edits O(all connected tools).
-            session, _, conditions, fact_reader, effects = self._bindings[namespace]
+            session, _, conditions, fact_reader, effects, identity = self._bindings[namespace]
             # A plainly exhausted host budget must not spend more native
             # tools/list RPCs discovering an action it can never dispatch.
             # The later atomic reservation still handles cross-source races.
@@ -253,6 +298,39 @@ class CapabilityGateway:
                 if not readiness["admissible"]:
                     raise CapabilityExecutionError(
                         "Machine prerequisite absent or unknown; inspect host state")
+            # Explicit source IDs must still exist in the connected engine.
+            # The Brain chooses the object/edit; host policy only checks a
+            # source-native identity, never substitutes an artistic action.
+            if record["access"] == "write" and identity is not None:
+                rules = identity["rules"].get(name)
+                if rules is not None:
+                    try:
+                        inventory = identity["reader"]()
+                        if inspect.isawaitable(inventory):
+                            inventory = await inventory
+                        validate_live_references(inputs, rules, inventory)
+                    except CapabilityReferenceError as exc:
+                        raise NativeReferencePreDispatchError(str(exc)) from exc
+                    except CapabilitySessionBudgetError:
+                        # Some source reads may have run, but NO native write
+                        # was sent or durably admitted. Report this truth to
+                        # the model, without misclassifying a prior write.
+                        raise NativeReferencePreDispatchError(
+                            "native_identity_read_budget_exhausted") from None
+                    except ValueError as exc:
+                        # Typed host-reader categories are public-safe only
+                        # when they appear in this fixed allowlist. Unknown
+                        # exception messages might contain private asset paths.
+                        category = str(exc)
+                        if category in _SAFE_NATIVE_IDENTITY_READ_ERRORS:
+                            raise NativeReferencePreDispatchError(category) from None
+                        raise NativeReferencePreDispatchError(
+                            "native_identity_inventory_unavailable") from None
+                    except Exception:
+                        # Native reader errors may contain private owner paths.
+                        # No native write was submitted or durably admitted.
+                        raise NativeReferencePreDispatchError(
+                            "native_identity_inventory_unavailable") from None
             # A single trusted budget spans all connected creative engines.
             # Reserve only after live grant/schema/machine preflight, but
             # before a durable intent or any native read/write RPC. A failed

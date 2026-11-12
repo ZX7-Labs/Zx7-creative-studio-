@@ -33,6 +33,7 @@ from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession, CombinedCapabilityMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
+from studio_next.native_editor_identity import pinned_native_editor_identity_policy
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -282,7 +283,17 @@ async def run_native_session(args):
             # into NativeCreativeControl. Local and NVIDIA are interchangeable.
             budget = CapabilitySessionBudget(
                 max_calls=args.max_turns * 12, max_writes=args.max_turns)
-            bindings = {"editor": (session, host_grants)}
+            # Actual clean pinned Electron source supplies read-only ID
+            # inventories; the Brain never chooses or fabricates this policy.
+            # Each host-internal source observation charges the existing
+            # cross-engine call budget; no new background agent or API.
+            identity = pinned_native_editor_identity_policy(
+                args.source, host_grants, session,
+                reserve_read=lambda: budget.reserve(
+                    source="editor", access="read"))
+            bindings = {"editor": (
+                (session, host_grants, {}, None, {}, identity)
+                if identity is not None else (session, host_grants))}
             if research is not None:
                 bindings["research"] = (research, research.grants)
             gateway = CapabilityGateway(bindings, session_budget=budget)
@@ -329,6 +340,7 @@ async def run_native_session(args):
         "status": outcome["status"],
         "model_id_reported": outcome["actual_model_id_reported"],
         "selected_provider": args.provider,
+        "native_reference_preflight_enabled": identity is not None,
         "owner_project_setup": selected_project_setup,
         "model_action_transport": (
             "nvidia_host_native_typed_function_calls" if args.provider == "nvidia" and

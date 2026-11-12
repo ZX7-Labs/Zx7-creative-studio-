@@ -12,7 +12,10 @@ from types import SimpleNamespace
 
 from .capability_fabric import (
     discover_all_live_tools, CapabilityContractError, CapabilityFabric)
-from .capability_gateway import CapabilityExecutionError, CapabilityGateway
+from .capability_gateway import (CapabilityExecutionError, CapabilityGateway,
+                                 NativeReferencePreDispatchError)
+from .body_editor_client import (HOST_PRE_DISPATCH_META,
+                                 HOST_REJECTION_FEEDBACK, native_input_digest)
 
 
 class CapabilityGatewayMcpSession:
@@ -112,9 +115,26 @@ class CapabilityGatewayMcpSession:
             if not isinstance(request_id, str) or not request_id.strip():
                 raise CapabilityExecutionError(
                     "Host did not issue a durable native request identity")
-        result = await self._gateway.invoke(
-            operation, revision=self._revision,
-            inputs=arguments, request_id=request_id)
+        try:
+            result = await self._gateway.invoke(
+                operation, revision=self._revision,
+                inputs=arguments, request_id=request_id)
+        except NativeReferencePreDispatchError as exc:
+            # This trusted gateway exception is raised before the first
+            # stateful RPC / durable admission, NEVER for uncertain writes.
+            # The existing controller verifies tool+input digests and then
+            # lets the model independently choose a corrected operation.
+            if exc.code not in HOST_REJECTION_FEEDBACK:
+                raise CapabilityExecutionError(
+                    "Unrecognized host native reference rejection") from None
+            return SimpleNamespace(
+                is_error=True,
+                content=[SimpleNamespace(
+                    type="text", text=HOST_REJECTION_FEEDBACK[exc.code])],
+                meta={HOST_PRE_DISPATCH_META: {
+                    "version": 1, "tool": name,
+                    "inputs_sha256": native_input_digest(arguments),
+                    "code": exc.code}})
         return result["native_result"]
 
 

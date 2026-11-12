@@ -55,6 +55,21 @@ HOST_REJECTION_FEEDBACK = MappingProxyType({
     "export_delivery_mismatch": "Native export was not started. Source-computed delivery settings differ from the owner-authorized profile. Inspect check_export_readiness and choose a matching target, resolution, frame rate and range; do not guess from a filename",
     "placement_plan_unconfirmed": "No timeline edit was submitted. Inspect imported assets with get_assets, target tracks with get_timeline, or preview the placement for the editor error",
     "host_policy_denied": "Native tool rejected by host policy; choose authorized arguments",
+    "native_reference_not_in_live_inventory": "No native edit was dispatched. Selected asset, clip or track ID does not exist in the current project; inspect get_timeline and get_assets before choosing.",
+    "native_identity_inventory_incomplete": "No native edit was dispatched. Current object inventory was incomplete; inspect source state instead of guessing an ID.",
+    "native_identity_inventory_unavailable": "No native edit was dispatched. Source-owned identity observation was unavailable; inspect the editor connection.",
+    "native_identity_read_budget_exhausted": "No native edit was dispatched. The shared native-object observation budget was exhausted; end this bounded session before further native writes.",
+    "invalid_native_reference_shape": "No native edit was dispatched. Existing object reference fields have the wrong structure.",
+    "invalid_native_reference_identity": "No native edit was dispatched. Existing object reference ID is invalid.",
+    "native_reference_batch_exceeds_limit": "No native edit was dispatched. Split the object-reference batch.",
+    "invalid_host_reference_snapshot": "No native edit was dispatched. Trusted source object inventory is invalid.",
+    "native_identity_read_failed": "No native edit was dispatched. The connected editor reported an unsuccessful source observation.",
+    "native_identity_read_malformed": "No native edit was dispatched. The editor supplied an invalid machine-readable source observation.",
+    "native_identity_read_oversize": "No native edit was dispatched. Source observation exceeded the configured bound.",
+    "native_identity_read_incomplete": "No native edit was dispatched. The editor could not supply a complete source-object inventory.",
+    "native_identity_project_unavailable": "No native edit was dispatched. The editor's active project or timeline could not be independently identified.",
+    "native_identity_project_changed_during_read": "No native edit was dispatched. The editor project changed during verification. Re-observe before choosing an edit.",
+    "native_identity_source_counts_changed": "No native edit was dispatched. Timeline, clip or asset counts disagreed across native source observations.",
 })
 
 
