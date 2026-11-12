@@ -1,17 +1,28 @@
 name: "ZX7 NVIDIA — Genuine Native Editor Creative Revision Trial"
+# The former visual one-shot request was already used and FAILED.
+# Do not attach paid provider access to ordinary pushes or PRs.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "research/nvidia-native-trial-request.json"
+    inputs:
+      trial_mode:
+        description: "Only a newly approved, synthetic A/V model audition"
+        required: true
+        type: choice
+        options: [audiovisual]
+      approval_request_id:
+        description: "Exact new reviewed ID in research/nvidia-native-audiovisual-request.json"
+        required: true
+        type: string
   # Pull requests only validate the reviewed request. They never execute a
   # cloud neural trial, upload frames or access the NVIDIA credential.
   pull_request:
     branches: [main]
     paths:
       - "research/nvidia-native-trial-request.json"
+      - "research/nvidia-native-audiovisual-request.json"
       - ".github/workflows/zx7-nvidia-native-editor-trial.yml"
+      - "scripts/nvidia_av_trial_request.py"
+      - "scripts/test_nvidia_av_trial_request.py"
       - "scripts/run_nvidia_native_trial.py"
       - "scripts/nvidia_native_trial_request.py"
       - "scripts/test_run_nvidia_native_trial.py"
@@ -37,11 +48,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify unchanged model identity, approved synthetic-only image consent and hard 48-turn cap
+      - name: Retain prior historical one-shot request parser contract (no credential access)
         run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
+      - name: Verify new A/V mode is DENIED until new source approval and exact dispatch ID
+        run: python -m unittest -v scripts.test_nvidia_av_trial_request
 
   real-model-native-editor-and-export:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.trial_mode == 'audiovisual'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -56,6 +69,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - name: Require a newly approved synthetic picture+sound experiment BEFORE building or exposing credentials
+        env:
+          APPROVAL_REQUEST_ID: ${{ inputs.approval_request_id }}
+        run: |
+          set -euo pipefail
+          python -m scripts.nvidia_av_trial_request \
+            research/nvidia-native-audiovisual-request.json \
+            --dispatch-request-id "$APPROVAL_REQUEST_ID"
       - name: Install original-media codec, sandbox and real MCP dependencies
         run: |
           sudo apt-get update -qq
@@ -75,9 +96,15 @@ jobs:
             studio_next.test_nvidia_tool_model \
             studio_next.test_nvidia_native_tool_model \
             scripts.test_nvidia_smoke_request \
+            scripts.test_nvidia_av_trial_request \
             scripts.test_run_nvidia_native_trial -v
-      - name: Verify owner-reviewed synthetic-only cloud native evaluation request
-        run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
+      - name: Revalidate the exact newly admitted A/V consent and fixed provider model
+        env:
+          APPROVAL_REQUEST_ID: ${{ inputs.approval_request_id }}
+        run: |
+          python -m scripts.nvidia_av_trial_request \
+            research/nvidia-native-audiovisual-request.json \
+            --dispatch-request-id "$APPROVAL_REQUEST_ID"
       - name: Build actual existing source editor with no provider credential available
         working-directory: third_party/velorn
         run: |
@@ -92,7 +119,7 @@ jobs:
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(stat -c '%u:%a' "$helper")" = "0:4755"
-      - name: Real NVIDIA creative decisions -> actual native edit -> frame review -> revision -> export
+      - name: Real NVIDIA creative decisions -> native A/V edit -> timed review -> revised output
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         shell: bash
@@ -104,7 +131,8 @@ jobs:
           fi
           python -u -m scripts.run_nvidia_native_trial \
             --workspace "$RUNNER_TEMP/zx7-nvidia-native-trial" \
-            --xvfb-binary /usr/bin/Xvfb --display 127.0.0.1:95
+            --xvfb-binary /usr/bin/Xvfb --display 127.0.0.1:95 \
+            --audiovisual-trial --allow-cloud-audio-diagnostics
       - name: Independently confirm pinned editor code was never modified
         if: always()
         run: |
@@ -129,9 +157,11 @@ jobs:
             ${{ runner.temp }}/zx7-nvidia-native-trial/native-client-stdout.txt
             ${{ runner.temp }}/zx7-nvidia-native-trial/native-client-stderr.txt
             ${{ runner.temp }}/zx7-nvidia-native-trial/staging/original-neutral-gradient.mp4
+            ${{ runner.temp }}/zx7-nvidia-native-trial/staging/original-synthetic-sound.wav
             ${{ runner.temp }}/zx7-nvidia-native-trial/outputs/*.mp4
             ${{ runner.temp }}/zx7-nvidia-native-trial/projects/**/*.comfystudio
             ${{ runner.temp }}/zx7-nvidia-native-trial/projects/**/assets/video/*.mp4
+            ${{ runner.temp }}/zx7-nvidia-native-trial/projects/**/assets/audio/*.wav
             ${{ runner.temp }}/zx7-nvidia-native-trial/projects/**/project.thumbnail.webp
           include-hidden-files: false
           if-no-files-found: warn

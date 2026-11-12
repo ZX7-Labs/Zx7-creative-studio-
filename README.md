@@ -102,6 +102,75 @@ its verified bytes must differ. The NVIDIA route also requires explicit
 `--allow-cloud-image-upload` for this profile. Production quality assessment
 still requires reviewing the actual picture, motion and sound.
 
+For an **owner-operated picture-and-sound revision** rather than a
+picture-only proof, use the existing Studio entry point:
+
+```sh
+zx7-studio run ./my-studio --brief-file ./brief.txt \
+  --asset ./source.mov --rights 'I own or am licensed to use this media' \
+  --reviewed-av-revision
+zx7-studio status ./my-studio
+zx7-studio verify ./my-studio SESSION_ID --max-decode-seconds 900
+```
+
+The model chooses native edits; the host requires actual A/V verification,
+separated timed frames and decoded sound diagnostics before an independently
+chosen revision and a second conforming export. A fresh/empty native projects
+root allows the host to also retain exact saved native render snapshots. For
+an already saved project, use `--project`; the host keeps a prior-state
+checkpoint and does **not** pretend the project is a fresh trial.
+
+`verify` is **read-only**: it re-hashes and fully decodes both previously
+reviewed physical exports, rejects missing/silent/altered files and unmatched
+source sessions, checks the corresponding populated editable native project,
+and rechecks staged original hashes. For fresh projects it also binds the
+final saved editable native document to both host-captured render snapshots,
+rejecting an unchanged or substituted native revision. For existing projects
+without render snapshots it explicitly reports that final source/render
+correspondence has **not** been independently established.
+It reports workspace-relative paths;
+it does not upload media, publish to the internet, modify your source or
+auto-retry uncertain writes. Rights remain owner-stated, not independently
+licensed by this check. Native source presence is not proof that original
+pixels or sound contributed to a final output; neither model independence nor
+artistic/professional quality is certified by this technical command.
+
+For an explicitly authorized **NVIDIA audiovisual review**, `run` additionally
+requires **both** `--allow-cloud-image-upload` and
+`--allow-cloud-audio-diagnostics`. Sound diagnostics are text/numerical
+observations; no WAV is sent and a model without an actual audio perception
+interface cannot claim to hear the soundtrack. These flags do not waive
+separate approval for paid model execution, private media disclosure or
+publication. The free local model route has neither cloud-upload switch.
+
+### Genuine NVIDIA audiovisual evaluation: no automatic paid inference
+
+The original 2026-11-10 **visual-only** NVIDIA request was consumed and its
+model-generated outputs **failed** the required delivery profile. It is **not**
+permission to repeat a charge or to observe sound. The new source-backed
+picture+sound model audition has a separate strict permission boundary:
+
+- Repository [A/V evaluation request](research/nvidia-native-audiovisual-request.json)
+  ships with `run_authorized: false`. A maintainer must deliberately review a
+  **new synthetic-only** model grant and unique `request_id` in a separate
+  committed change. Do **not** set approval to true for routine tests.
+- Only an explicit **manual** GitHub Actions dispatch on `main` with mode
+  `audiovisual` and that exact new `approval_request_id` can reach the
+  provider step. Pull requests run **only offline denial and request tests**;
+  ordinary pushes can never trigger paid inference. A missing NVIDIA secret
+  is an error, never a local-model fallback.
+- The hosted model may see bounded synthetic frames and **numerical audio
+  diagnostic text**, never raw source WAV. Physical soundtrack decoding,
+  source role/hash custody, actual editable project and two distinct reviewed
+  A/V exports are checked by the trial runner and recorded on failure.
+  Artifacts are limited to synthetic original media and redacted receipts,
+  not the full Electron browser profile.
+- **Important:** the reviewed request is an auditable admission record,
+  not a cryptographically signed or guaranteed one-use token. Repository
+  Actions permissions and a new explicit review before **each** charge still
+  matter. No currently approved A/V run, tested neural artistry or monetary
+  cost measurement is claimed by the inactive request.
+
 `status` also checks the owning runner's live kernel locks. A saved `running`
 record whose runner has died is annotated as needing attention without rewriting
 that record or claiming recovery of an editor/render process.

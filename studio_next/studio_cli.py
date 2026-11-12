@@ -307,7 +307,8 @@ def _stage_asset(path, destination, rights):
 
 def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                   max_turns=32, model_timeout=480, allow_cloud_image_upload=False,
-                  reviewed_revision=False, allow_public_research=False, searxng_url=None,
+                  reviewed_revision=False, reviewed_av_revision=False,
+                  allow_cloud_audio_diagnostics=False, allow_public_research=False, searxng_url=None,
                   xvfb_binary=None, display=None):
     from .native_editor_session import build_parser, run_native_session
     root, config, grants = load_workspace(path)
@@ -319,10 +320,19 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                        timeout_seconds=model_timeout)
     if type(max_turns) is not int or not 1 <= max_turns <= 128:
         raise ValueError("Model turn budget must be between 1 and 128")
-    if config["provider"] == "local" and allow_cloud_image_upload:
+    if reviewed_revision and reviewed_av_revision:
+        raise ValueError("Choose one reviewed revision evidence mode")
+    if type(reviewed_av_revision) is not bool or type(allow_cloud_audio_diagnostics) is not bool:
+        raise ValueError("Reviewed audiovisual and cloud consent switches must be booleans")
+    if config["provider"] == "local" and (allow_cloud_image_upload or allow_cloud_audio_diagnostics):
         raise ValueError("Cloud media permission is only applicable to NVIDIA")
-    if reviewed_revision and config["provider"] == "nvidia" and not allow_cloud_image_upload:
-        raise ValueError("NVIDIA reviewed revisions require explicit --allow-cloud-image-upload")
+    if allow_cloud_audio_diagnostics and not reviewed_av_revision:
+        raise ValueError("Cloud audio diagnostics consent requires reviewed audiovisual mode")
+    if config["provider"] == "nvidia" and (reviewed_revision or reviewed_av_revision):
+        if not allow_cloud_image_upload:
+            raise ValueError("NVIDIA reviewed revisions require explicit --allow-cloud-image-upload")
+        if reviewed_av_revision and not allow_cloud_audio_diagnostics:
+            raise ValueError("NVIDIA audiovisual review requires explicit --allow-cloud-audio-diagnostics")
     if searxng_url is not None:
         if not allow_public_research:
             raise ValueError("A SearXNG endpoint requires explicit --allow-public-research")
@@ -333,6 +343,11 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
         project_path = Path(project).expanduser().resolve(strict=True)
         if not project_path.is_relative_to(root / "projects") or not (project_path / "project.comfystudio").is_file():
             raise ValueError("Choose a saved native project inside this workspace")
+    # An entirely empty native projects root permits a genuinely fresh
+    # reviewed A/V session with source-bound snapshots for both render cuts.
+    # Existing projects are never silently treated as an empty fresh trial.
+    fresh_av = (reviewed_av_revision and project_path is None and
+                not any((root / "projects").iterdir()))
     # Check before creating a run or copying media. No inference on bad setup.
     setup = doctor(root)
     if not setup["ready"]:
@@ -355,6 +370,7 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 directory.mkdir(mode=0o700)
             status = {"session_id": sid, "state": "preparing", "provider": config["provider"],
                       "model_id": config["model_id"], "artistic_quality_approved": False,
+                      "render_snapshots_required": bool(fresh_av),
                       "outputs_directory": str(locations["outputs"]),
                       "projects_directory": str(root / "projects"),
                       "native_journal": str(session / "native-journal.jsonl")}
@@ -380,7 +396,12 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                         "--model-id", config["model_id"], "--base-url", config["base_url"],
                         "--max-turns", str(max_turns), "--model-timeout", str(model_timeout),
                         "--structured-actions", "--evaluation-evidence",
-                        "reviewed-revision" if reviewed_revision else "export"]
+                        ("reviewed-av-revision" if reviewed_av_revision else
+                         "reviewed-revision" if reviewed_revision else "export")]
+                if fresh_av:
+                    argv += ["--fresh-trial-project", "--record-av-project-snapshots"]
+                if allow_cloud_audio_diagnostics:
+                    argv.append("--allow-cloud-audio-diagnostics")
                 for flag, value in (("--xvfb-binary", xvfb_binary), ("--display", display)):
                     if value:
                         argv.extend([flag, str(value)])
@@ -471,6 +492,11 @@ def main(argv=None):
     init.add_argument("--base-url", default="http://127.0.0.1:8080")
     for name in ("doctor", "status"):
         commands.add_parser(name).add_argument("workspace", type=Path)
+    verify = commands.add_parser("verify", help="Independently re-decode both reviewed A/V exports and match editable native project")
+    verify.add_argument("workspace", type=Path)
+    verify.add_argument("session_id")
+    verify.add_argument("--max-decode-seconds", type=int, default=900,
+                        help="Host resource limit for independent physical decoding, not a creative duration")
     run = commands.add_parser("run", help="Run the existing native AI editor; preserve session and source evidence")
     run.add_argument("workspace", type=Path)
     prompt = run.add_mutually_exclusive_group(required=True)
@@ -485,8 +511,13 @@ def main(argv=None):
     run.add_argument("--allow-public-research", action="store_true",
                      help="Allow model-written public queries to external research services")
     run.add_argument("--searxng-url", help="Optional owner-configured loopback SearXNG base URL")
-    run.add_argument("--reviewed-revision", action="store_true",
-                     help="Require observed native renders before and after a revision")
+    reviews = run.add_mutually_exclusive_group()
+    reviews.add_argument("--reviewed-revision", action="store_true",
+                         help="Require verified visual renders before and after a revision")
+    reviews.add_argument("--reviewed-av-revision", action="store_true",
+                         help="Require timed picture AND sound review and editable revision")
+    run.add_argument("--allow-cloud-audio-diagnostics", action="store_true",
+                     help="Separately allow NVIDIA to see numerical sound diagnostics (never raw WAV)")
     run.add_argument("--xvfb-binary")
     run.add_argument("--display")
     args = p.parse_args(argv)
@@ -498,6 +529,11 @@ def main(argv=None):
             result = doctor(args.workspace)
         elif args.command == "status":
             result = workspace_status(args.workspace)
+        elif args.command == "verify":
+            from .studio_owner_delivery import verify_owner_audiovisual_delivery
+            result = verify_owner_audiovisual_delivery(
+                args.workspace, args.session_id,
+                max_decode_seconds=args.max_decode_seconds)
         else:
             if args.brief is not None:
                 brief = args.brief
@@ -509,6 +545,8 @@ def main(argv=None):
                 allow_cloud_image_upload=args.allow_cloud_image_upload,
                 allow_public_research=args.allow_public_research, searxng_url=args.searxng_url,
                 reviewed_revision=args.reviewed_revision,
+                reviewed_av_revision=args.reviewed_av_revision,
+                allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics,
                 xvfb_binary=args.xvfb_binary, display=args.display)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.command == "doctor":
