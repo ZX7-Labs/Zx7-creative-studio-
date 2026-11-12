@@ -48,6 +48,13 @@ class EditorAccessError(PermissionError):
 
 
 HOST_PRE_DISPATCH_META = "zx7.host/pre-dispatch-rejection"
+HOST_NATIVE_REVISION_META = "zx7.host/native-writer-revision-rejection"
+HOST_NATIVE_REVISION_FEEDBACK = MappingProxyType({
+    "native_revision_changed_at_commit":
+        "The native editor rejected this edit at its synchronous commit boundary "
+        "because the live project changed. No edit was applied. Inspect fresh "
+        "project/timeline and independently choose a new revision.",
+})
 HOST_REJECTION_FEEDBACK = MappingProxyType({
     "output_exists": "Native export cannot overwrite an existing destination; choose a new outputPath",
     "output_path_required": "Native export requires an explicit new outputPath",
@@ -70,6 +77,7 @@ HOST_REJECTION_FEEDBACK = MappingProxyType({
     "native_identity_project_unavailable": "No native edit was dispatched. The editor's active project or timeline could not be independently identified.",
     "native_identity_project_changed_during_read": "No native edit was dispatched. The editor project changed during verification. Re-observe before choosing an edit.",
     "native_identity_source_counts_changed": "No native edit was dispatched. Timeline, clip or asset counts disagreed across native source observations.",
+    "native_identity_live_revision_unavailable": "No native edit was dispatched. A source-attested live project revision was unavailable; do not guess a revision token.",
 })
 
 
@@ -102,6 +110,25 @@ def host_pre_dispatch_rejection(result, tool, arguments):
             type(receipt["version"]) is not int or receipt["version"] != 1 or
             receipt["tool"] != tool or type(receipt["code"]) is not str or
             receipt["code"] not in HOST_REJECTION_FEEDBACK or
+            receipt["inputs_sha256"] != native_input_digest(arguments)):
+        return None
+    return receipt["code"]
+
+
+def host_native_revision_rejection(result, tool, arguments):
+    """Trusted BODY meta: native RPC reached the renderer, writer refused it.
+
+    This is different from a host pre-dispatch refusal or an uncertain write.
+    The actual pinned editor code must have produced the exact no-mutation
+    receipt; native text or model text alone never confers that authority.
+    """
+    meta = result.get("_meta") if isinstance(result, dict) else getattr(result, "meta", None)
+    receipt = meta.get(HOST_NATIVE_REVISION_META) if type(meta) is dict else None
+    if (type(receipt) is not dict or
+            set(receipt) != {"version", "tool", "inputs_sha256", "code"} or
+            type(receipt["version"]) is not int or receipt["version"] != 1 or
+            receipt["tool"] != tool or type(receipt["code"]) is not str or
+            receipt["code"] not in HOST_NATIVE_REVISION_FEEDBACK or
             receipt["inputs_sha256"] != native_input_digest(arguments)):
         return None
     return receipt["code"]
