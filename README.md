@@ -102,6 +102,42 @@ its verified bytes must differ. The NVIDIA route also requires explicit
 `--allow-cloud-image-upload` for this profile. Production quality assessment
 still requires reviewing the actual picture, motion and sound.
 
+For an **owner-operated picture-and-sound revision** rather than a
+picture-only proof, use the existing Studio entry point:
+
+```sh
+zx7-studio run ./my-studio --brief-file ./brief.txt \
+  --asset ./source.mov --rights 'I own or am licensed to use this media' \
+  --reviewed-av-revision
+zx7-studio status ./my-studio
+zx7-studio verify ./my-studio SESSION_ID --max-decode-seconds 900
+```
+
+The model chooses native edits; the host requires actual A/V verification,
+separated timed frames and decoded sound diagnostics before an independently
+chosen revision and a second conforming export. A fresh/empty native projects
+root allows the host to also retain exact saved native render snapshots. For
+an already saved project, use `--project`; the host keeps a prior-state
+checkpoint and does **not** pretend the project is a fresh trial.
+
+`verify` is **read-only**: it re-hashes and fully decodes both previously
+reviewed physical exports, rejects missing/silent/altered files and unmatched
+source sessions, checks the corresponding populated editable native project,
+and rechecks staged original hashes. It reports workspace-relative paths;
+it does not upload media, publish to the internet, modify your source or
+auto-retry uncertain writes. Rights remain owner-stated, not independently
+licensed by this check. Native source presence is not proof that original
+pixels or sound contributed to a final output; neither model independence nor
+artistic/professional quality is certified by this technical command.
+
+For an explicitly authorized **NVIDIA audiovisual review**, `run` additionally
+requires **both** `--allow-cloud-image-upload` and
+`--allow-cloud-audio-diagnostics`. Sound diagnostics are text/numerical
+observations; no WAV is sent and a model without an actual audio perception
+interface cannot claim to hear the soundtrack. These flags do not waive
+separate approval for paid model execution, private media disclosure or
+publication. The free local model route has neither cloud-upload switch.
+
 `status` also checks the owning runner's live kernel locks. A saved `running`
 record whose runner has died is annotated as needing attention without rewriting
 that record or claiming recovery of an editor/render process.
