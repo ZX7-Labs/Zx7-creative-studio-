@@ -711,8 +711,14 @@ async def exercise(options):
                 assert len(audio) == 1 and audio[0][0] == "audio/wav"
                 self.actual_audio_hash = hashlib.sha256(audio[0][1]).hexdigest()
                 assert audio[0][1].startswith(b"RIFF")
-                assert context["audio_evidence"] == {
-                    "export_sha256": digest(output), "wav_sha256": self.actual_audio_hash}
+                evidence = context["audio_evidence"]
+                assert evidence["export_sha256"] == digest(output)
+                assert evidence["wav_sha256"] == self.actual_audio_hash
+                assert evidence["requested_start_seconds"] == 0.25
+                assert evidence["requested_duration_seconds"] == 1.0
+                assert 0 < evidence["observed_audio_duration_seconds"] <= 1.05
+                assert evidence["preview_downmixed_and_resampled"] is True
+                assert evidence["exact_original_audio_pts_proven"] is False
                 return {"action": "finish", "arguments": {
                     "summary": "Actual A/V transported, no neural creativity asserted"},
                     "reason": "Technical-only real-media transport fixture"}
