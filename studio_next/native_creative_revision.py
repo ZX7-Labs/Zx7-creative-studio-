@@ -291,10 +291,19 @@ def _lineage(base, candidate):
 def _impact(changes):
     ids = {"asset", "clip", "timeline", "track", "transition", "marker"}
     touched = {v["kind"] for v in changes.values()}
+    # The active timeline, unfamiliar project-level settings and native
+    # ordering can change decoded media even when no clip payload changed.
+    # A timestamp-only native save is not by itself a render change.
+    meaningful_document = any(
+        value["kind"] == "document" and
+        any(field != "/modified" for field in value["changed_fields"])
+        for value in changes.values())
     return {
-        "editable_native_changes_detected": bool(touched & ids),
+        "editable_native_changes_detected":
+            bool(touched & ids or "native_order" in touched or meaningful_document),
         "source_custody_or_render_review_required":
-            bool(touched & {"asset", "clip", "timeline", "track", "transition"}),
+            bool(touched & {"asset", "clip", "timeline", "track",
+                            "transition", "native_order"} or meaningful_document),
         "native_order_review_required": "native_order" in touched,
         "unmodeled_document_metadata_changed": ("document",) in changes,
         "actual_media_decoded": False,
@@ -336,6 +345,18 @@ def _dependency(left_key, right_key, base, human, ai):
     for key, other in ((left_key, right_key), (right_key, left_key)):
         if key[0] == "document":
             return "document_scope"
+        if key[0] == "ordering":
+            if len(key) == 2:
+                # Top-level timelines/assets order is not proven independent
+                # of changed native objects. Keep it review-only.
+                if ((key[1] == "timelines" and other[0] in (
+                        "timeline", "track", "clip", "transition", "marker")) or
+                        (key[1] == "assets" and other[0] in ("asset", "clip"))):
+                    return "project_order_dependency"
+            elif (len(key) == 3 and len(other) > 1 and
+                    key[1] == other[1] and other[0] in (
+                        "timeline", "track", "clip", "transition", "marker")):
+                return "timeline_order_dependency"
         if key[0] == "timeline" and len(other) > 1 and other[1] == key[1]:
             return "timeline_scope"
         if key[0] == "track" and other[0] == "clip" and key[1] == other[1]:

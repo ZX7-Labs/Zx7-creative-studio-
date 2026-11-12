@@ -194,6 +194,48 @@ class NativeRevisionTests(unittest.TestCase):
         self.assertEqual([(c["timeline_id"], c["id"]) for c in clips],
                          [("timeline-1", "clip-1")])
 
+    def test_human_track_reordering_and_ai_clip_edit_need_native_review(self):
+        base = example()
+        human, ai = deepcopy(base), deepcopy(base)
+        human["timelines"][0]["tracks"].reverse()
+        ai["timelines"][0]["clips"][0]["textProperties"]["fontSize"] = 66
+        human_path, ai_path = self.save(human), self.save(ai)
+        result = review_native_collaboration(
+            self.save(base), human_path, ai_path)
+        self.assertEqual(result["status"], "needs_native_review")
+        self.assertIn("timeline_order_dependency",
+                      {c["kind"] for c in result["intersections"]})
+        self.assertTrue(result["human_source_or_render_recheck"])
+        self.assertTrue(result["ai_source_or_render_recheck"])
+        self.assertFalse(result["automatic_merge_permitted"])
+
+    def test_active_timeline_switch_requires_actual_render_check(self):
+        base = example()
+        clone = deepcopy(base["timelines"][0])
+        clone["id"] = "timeline-2"
+        clone["name"] = "Second active scene"
+        base["timelines"].append(clone)
+        switched = deepcopy(base)
+        switched["currentTimelineId"] = "timeline-2"
+        output = compare_native_revisions(self.save(base), self.save(switched))
+        self.assertEqual(output["status"], "differences_observed")
+        self.assertTrue(output["impact"]["editable_native_changes_detected"])
+        self.assertTrue(output["impact"]["source_custody_or_render_review_required"])
+        self.assertTrue(output["impact"]["unmodeled_document_metadata_changed"])
+        self.assertFalse(output["impact"]["actual_media_decoded"])
+
+    def test_timestamp_only_save_is_not_an_edit_or_render_improvement(self):
+        base = example()
+        retimestamped = deepcopy(base)
+        retimestamped["modified"] = "new-metadata-only"
+        output = compare_native_revisions(
+            self.save(base), self.save(retimestamped))
+        self.assertNotEqual(output["before"]["sha256"],
+                            output["after"]["sha256"])
+        self.assertFalse(output["impact"]["editable_native_changes_detected"])
+        self.assertFalse(output["impact"]["source_custody_or_render_review_required"])
+        self.assertTrue(output["impact"]["unmodeled_document_metadata_changed"])
+
     def test_identical_human_and_ai_changes_do_not_fabricate_conflict(self):
         base = example()
         human = deepcopy(base)
