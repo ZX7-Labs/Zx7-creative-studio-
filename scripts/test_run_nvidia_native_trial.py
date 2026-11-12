@@ -692,8 +692,9 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             video.write_bytes(b"source video unit bytes")
             sound.write_bytes(b"source sound unit bytes")
             ledger = [{"path": str(p),
-                       "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
-                      for p in (video, sound)]
+                       "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                       "media_kind": kind}
+                      for p, kind in ((video, "video"), (sound, "audio"))]
             (root / "source-ledger.json").write_text(json.dumps(ledger))
             project_root = root / "projects" / "unit"
             copies = []
@@ -743,6 +744,17 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 run({**base, "timelines": [{**base["timelines"][0],
                                            "clips": [clips[0], {**clips[1], "startTime": 6.0}]}]})
             run(base)
+            # Source identities are typed by the host, not guessed from
+            # filenames. Swapping a manifest's audio/video role is rejected
+            # even if all physical SHA-256 values still match.
+            swapped = [
+                {**ledger[0], "media_kind": "audio"},
+                {**ledger[1], "media_kind": "video"},
+            ]
+            (root / "source-ledger.json").write_text(json.dumps(swapped))
+            with self.assertRaisesRegex(ValueError, "contradicts"):
+                verify_saved_native_trial(root, require_audio=True)
+            (root / "source-ledger.json").write_text(json.dumps(ledger))
             copies[1].write_bytes(b"substituted sound")
             with self.assertRaisesRegex(ValueError, "differ"):
                 verify_saved_native_trial(root, require_audio=True)
