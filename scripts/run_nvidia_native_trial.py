@@ -448,7 +448,8 @@ def decode_trial_audio(path: Path, *, expected_video_seconds: float,
         decoded = subprocess.run(
             ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-xerror",
              "-i", str(path), "-map", "0:a:0", "-vn", "-ac", "1",
-             "-ar", str(sample_rate), "-f", "s16le", "pipe:1"],
+             "-ar", str(sample_rate), "-t", str(max_seconds + 1),
+             "-f", "s16le", "pipe:1"],
             check=True, capture_output=True, timeout=90,
             env=_no_cloud_credentials()).stdout
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
