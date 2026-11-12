@@ -413,8 +413,26 @@ def _source_bound_audio(texts: list[str], audio: list[tuple[str, bytes]]):
             receipt["wav_sha256"] != hashlib.sha256(audio[0][1]).hexdigest() or
             receipt.get("preview_downmixed_and_resampled") is not True):
         raise NativeCreativeControlError("Original WAV does not match its verified source/decoder")
+    # The native bridge already checks these against the model-selected read
+    # arguments. Preserve the bounded time window across the next model turn:
+    # a digest alone identifies bytes but not their position in the edit.
+    start = receipt.get("requested_start_seconds")
+    duration = receipt.get("requested_duration_seconds")
+    observed = receipt.get("observed_audio_duration_seconds")
+    if (type(start) not in (int, float) or not math.isfinite(start) or start < 0 or
+            type(duration) not in (int, float) or not math.isfinite(duration) or
+            not 0 < duration <= 3.0 or
+            type(observed) not in (int, float) or not math.isfinite(observed) or
+            not 0 < observed <= duration + 0.05 or
+            receipt.get("exact_original_audio_pts_proven") is not False):
+        raise NativeCreativeControlError("Verified sound lacks bounded timed excerpt provenance")
     return {"export_sha256": receipt["export_sha256"],
-            "wav_sha256": receipt["wav_sha256"]}
+            "wav_sha256": receipt["wav_sha256"],
+            "requested_start_seconds": start,
+            "requested_duration_seconds": duration,
+            "observed_audio_duration_seconds": observed,
+            "preview_downmixed_and_resampled": True,
+            "exact_original_audio_pts_proven": False}
 
 
 def _bounded_error_digest(result):
