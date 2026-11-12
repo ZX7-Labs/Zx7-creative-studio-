@@ -251,11 +251,22 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
             system_prompt="Inspect authorized native footage and sound",
             allow_original_audio_upload=allowed)
 
+    @staticmethod
+    def _timed_evidence(sample):
+        return {
+            "wav_sha256": hashlib.sha256(sample).hexdigest(),
+            "export_sha256": "a" * 64,
+            "requested_start_seconds": 1.5,
+            "requested_duration_seconds": 0.025,
+            "observed_audio_duration_seconds": 0.025,
+            "preview_downmixed_and_resampled": True,
+            "exact_original_audio_pts_proven": False,
+        }
+
     def test_consent_false_wrong_model_and_ambiguous_custody_reject_before_network(self):
         sample = self._wav()
         digest = hashlib.sha256(sample).hexdigest()
-        context = {**_context(), "audio_evidence": {
-            "wav_sha256": digest, "export_sha256": "a" * 64}}
+        context = {**_context(), "audio_evidence": self._timed_evidence(sample)}
         with self.assertRaises(NvidiaConfigurationError):
             NvidiaOmniNativeToolCreativeModel(
                 NvidiaModelSettings(), system_prompt="no",
@@ -266,8 +277,14 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
                 model.decide_with_audio(context, [("audio/wav", sample)])
             permitted = self._model(allowed=True)
             for evidence, raw in (
-                ({"wav_sha256": "b" * 64, "export_sha256": "a" * 64}, sample),
-                ({"wav_sha256": digest, "export_sha256": "malformed"}, sample),
+                ({**context["audio_evidence"], "wav_sha256": "b" * 64}, sample),
+                ({**context["audio_evidence"], "export_sha256": "malformed"}, sample),
+                ({**context["audio_evidence"], "requested_start_seconds": True}, sample),
+                ({**context["audio_evidence"], "requested_duration_seconds": -1}, sample),
+                ({**context["audio_evidence"], "requested_duration_seconds": 5}, sample),
+                ({**context["audio_evidence"], "observed_audio_duration_seconds": 5}, sample),
+                ({**context["audio_evidence"], "exact_original_audio_pts_proven": True}, sample),
+                ({**context["audio_evidence"], "preview_downmixed_and_resampled": False}, sample),
                 (context["audio_evidence"], b"Not a real wave"),
             ):
                 with self.subTest(evidence=evidence, size=len(raw)):
@@ -282,8 +299,7 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
     def test_sha_bound_raw_wav_enters_only_separately_opted_in_omni_tool_request(self):
         sample = self._wav()
         digest = hashlib.sha256(sample).hexdigest()
-        original = {**_context(), "audio_evidence": {
-            "export_sha256": "a" * 64, "wav_sha256": digest}}
+        original = {**_context(), "audio_evidence": self._timed_evidence(sample)}
         captured = []
         class Opener:
             def open(self, request, timeout):
@@ -298,7 +314,13 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
         self.assertEqual(result["arguments"], {"tool": "get_project", "inputs": {}})
         parts = captured[0]["messages"][1]["content"]
         self.assertEqual([part["type"] for part in parts], ["text", "text", "audio_url"])
-        self.assertEqual(json.loads(parts[1]["text"])["original_wav_sha256"], digest)
+        sound_receipt = json.loads(parts[1]["text"])
+        self.assertEqual(sound_receipt["original_wav_sha256"], digest)
+        self.assertEqual(sound_receipt["requested_start_seconds"], 1.5)
+        self.assertEqual(sound_receipt["requested_duration_seconds"], 0.025)
+        self.assertEqual(sound_receipt["observed_audio_duration_seconds"], 0.025)
+        self.assertTrue(sound_receipt["preview_downmixed_and_resampled"])
+        self.assertFalse(sound_receipt["exact_original_audio_pts_proven"])
         self.assertEqual(base64.b64decode(parts[2]["audio_url"]["url"].split(",", 1)[1]),
                          sample)
         self.assertNotIn("host_native_tool_contracts", parts[0]["text"])
