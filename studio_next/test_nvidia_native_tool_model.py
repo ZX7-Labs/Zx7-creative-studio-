@@ -370,5 +370,46 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
 
 
 
+
+    def test_host_media_grants_require_separate_sensory_permissions(self):
+        from studio_next.native_editor_session import (
+            nvidia_media_observation_grants)
+        original = {
+            "zx7_observe_verified_export_frame": "read",
+            "zx7_observe_verified_export_audio": "read",
+            "zx7_observe_verified_export_audio_timeline": "read",
+            "zx7_observe_verified_export_av_window": "read",
+            "update_shape_clip": "write",
+        }
+        for image in (False, True):
+            for diagnostics in (False, True):
+                for wav in (False, True):
+                    with self.subTest(image=image, diagnostics=diagnostics, wav=wav):
+                        admitted = nvidia_media_observation_grants(
+                            original, image_upload=image,
+                            audio_diagnostics=diagnostics,
+                            original_wav_upload=wav)
+                        self.assertEqual(
+                            "zx7_observe_verified_export_av_window" in admitted,
+                            image and diagnostics)
+                        self.assertEqual(
+                            "zx7_observe_verified_export_audio_timeline" in admitted,
+                            diagnostics)
+                        self.assertEqual(
+                            "zx7_observe_verified_export_audio" in admitted, wav)
+                        self.assertEqual(admitted["update_shape_clip"], "write")
+                        self.assertEqual(
+                            original["zx7_observe_verified_export_av_window"], "read")
+        for v in (None, 1, "true", [], {}):
+            with self.subTest(invalid=v), self.assertRaises(ValueError):
+                nvidia_media_observation_grants(
+                    original, image_upload=v, audio_diagnostics=False,
+                    original_wav_upload=False)
+        with self.assertRaises(ValueError):
+            nvidia_media_observation_grants(
+                {"unguarded": "admin"}, image_upload=True,
+                audio_diagnostics=True, original_wav_upload=True)
+
+
 if __name__ == "__main__":
     unittest.main()
