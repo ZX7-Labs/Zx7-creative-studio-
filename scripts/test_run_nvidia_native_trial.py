@@ -805,7 +805,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             # not after loading potentially unbounded audio into memory.
             with patch("scripts.run_nvidia_native_trial.subprocess.run",
                        return_value=subprocess.CompletedProcess(
-                           [], 0, b"\\0" * 8000, b"")) as bounded:
+                           [], 0, b"\0" * 8000, b"")) as bounded:
                 staged = decode_trial_audio(good, expected_video_seconds=0.5,
                                             max_seconds=1)
             self.assertFalse(staged.audible)
