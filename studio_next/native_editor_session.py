@@ -121,11 +121,17 @@ def native_decision_model(args):
             raise ValueError("NVIDIA endpoint is fixed, not overridden by --base-url")
         from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
         model_type = NvidiaCreativeModel
+        raw_wav = getattr(args, "allow_cloud_original_wav_upload", False)
+        from studio_next.nvidia_native_tool_model import (
+            NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
+            NVIDIA_OMNI_AUDIO_MODEL_ID, NATIVE_DIRECT_TOOL_SYSTEM,
+        )
+        omni = args.structured_actions and args.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
+        if raw_wav and not omni:
+            raise ValueError("Original cloud WAV requires the exact NVIDIA Omni structured-tool model")
         if args.structured_actions:
-            from studio_next.nvidia_native_tool_model import (
-                NvidiaNativeToolCreativeModel, NATIVE_DIRECT_TOOL_SYSTEM,
-            )
-            model_type = NvidiaNativeToolCreativeModel
+            model_type = (NvidiaOmniNativeToolCreativeModel
+                          if omni else NvidiaNativeToolCreativeModel)
         # Provider transport policy, NOT a second BODY/agent path.
         # NVIDIA's pinned Nemotron 3.5 VL is a REASONING tool model. The
         # initial live editor trials unintentionally DISABLED its reasoning,
@@ -138,10 +144,12 @@ def native_decision_model(args):
             NvidiaModelSettings(
                 model_id=args.model_id, timeout_seconds=args.model_timeout,
                 max_tokens=8192,
-                sampling={
-                    "temperature": 1.0, "top_p": 0.95,
-                    "reasoning_effort": "low",
-                })
+                sampling=({"temperature": 0.2,
+                           "chat_template_kwargs": {"enable_thinking": False}}
+                          if omni else {
+                           "temperature": 1.0, "top_p": 0.95,
+                           "reasoning_effort": "low",
+                          }))
             if args.structured_actions else
             NvidiaModelSettings(model_id=args.model_id,
                                 timeout_seconds=args.model_timeout))
@@ -149,12 +157,13 @@ def native_decision_model(args):
             nvidia_settings,
             system_prompt=(NATIVE_DIRECT_TOOL_SYSTEM if args.structured_actions
                            else NATIVE_CREATIVE_SYSTEM) + prompt_suffix,
-            allow_image_upload=args.allow_cloud_image_upload)
+            allow_image_upload=args.allow_cloud_image_upload,
+            **({"allow_original_audio_upload": raw_wav} if omni else {}))
         model.verify_host_credentials()
         return model
     if args.provider != "local":
         raise ValueError("Unrecognized creative model provider")
-    if args.allow_cloud_image_upload:
+    if args.allow_cloud_image_upload or getattr(args, "allow_cloud_original_wav_upload", False):
         raise ValueError("Cloud-media consent requires --provider nvidia")
     local_type = LocalCreativeModel
     if args.structured_actions:
@@ -231,6 +240,11 @@ async def run_native_session(args):
                      pinned_electron_asset_placement_previews(args.source, host_grants) +
                      pinned_electron_clip_edit_previews(args.source, host_grants))
     cloud_diagnostics = getattr(args, "allow_cloud_audio_diagnostics", False)
+    raw_wav_consent = getattr(args, "allow_cloud_original_wav_upload", False)
+    if raw_wav_consent and (args.provider != "nvidia" or
+                            args.model_id != "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning" or
+                            not args.structured_actions or REVIEWED_AV_PAIR not in required):
+        raise ValueError("Original cloud WAV needs explicit NVIDIA Omni reviewed-AV admission")
     if cloud_diagnostics and (args.provider != "nvidia" or REVIEWED_AV_PAIR not in required):
         raise ValueError("Cloud audio diagnostics require NVIDIA audiovisual review mode")
     if (args.provider == "nvidia" and REVIEWED_RENDER_PAIR in required
@@ -239,9 +253,11 @@ async def run_native_session(args):
     if args.provider == "nvidia":
         if REVIEWED_AV_PAIR in required and not cloud_diagnostics:
             raise ValueError("Cloud audiovisual review requires explicit audio diagnostics consent")
-        # WAV has no validated NVIDIA input contract. Numerical diagnostics
-        # are text and must also be excluded from unconsented hosted sessions.
-        host_grants.pop("zx7_observe_verified_export_audio", None)
+        # Raw WAV has an *exact-model*, separately consented NVIDIA Omni
+        # transport. Never authorize raw owner sound based on numeric audio
+        # diagnostics or image upload permission alone.
+        if not raw_wav_consent:
+            host_grants.pop("zx7_observe_verified_export_audio", None)
         if not cloud_diagnostics:
             host_grants.pop(AUDIO_ENVELOPE, None)
         # The combined sensor carries BOTH visual bytes and timed audio
@@ -396,6 +412,7 @@ async def run_native_session(args):
         "token_usage_independently_verified": False,
         "cloud_media_upload_permitted_by_host": args.allow_cloud_image_upload,
         "cloud_audio_diagnostics_permitted_by_host": cloud_diagnostics,
+        "cloud_original_wav_upload_permitted_by_host": raw_wav_consent,
         "public_research_permitted_by_host": research is not None,
         "receipt": str(args.receipt),
         "native_editing_capability_complete": False,
@@ -427,6 +444,8 @@ def build_parser():
                    help="Explicitly consent to sending private observed frames to NVIDIA")
     p.add_argument("--allow-cloud-audio-diagnostics", action="store_true",
                    help="Explicitly consent to sending numerical audio timeline diagnostics to NVIDIA")
+    p.add_argument("--allow-cloud-original-wav-upload", action="store_true",
+                   help="Separately consent to SHA-bound raw WAV upload to exact NVIDIA Omni model")
     p.add_argument("--allow-public-research", action="store_true",
                    help="Allow model-written public queries to external research services")
     p.add_argument("--searxng-url", help="Optional owner-configured loopback SearXNG base URL")
