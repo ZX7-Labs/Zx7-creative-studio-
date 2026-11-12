@@ -243,6 +243,46 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
         self.assertFalse(granted.is_error)
         self.assertEqual(self.renderer.writes, 1)
 
+    async def test_stale_model_read_denial_never_admits_durable_native_write(self):
+        # The host must reject the model-observation mismatch BEFORE its
+        # SQLite intent ledger or native editor receives any write.
+        with tempfile.TemporaryDirectory() as directory:
+            store = CapabilityAttemptStore(
+                Path(directory) / "protected" / "native-attempts.sqlite3")
+            gateway = CapabilityGateway({"editor": (
+                self.renderer, GRANTS, {}, None, {}, self.policy)},
+                attempt_store=store)
+            await gateway.refresh()
+            model_view = CapabilityGatewayMcpSession(
+                gateway, "editor",
+                host_request_id_allocator=lambda _: "model-epoch-op-01",
+                require_model_native_observation=True)
+            await model_view.call_tool("get_project", {})
+            self.renderer.human_gui_edit("Manual edit before durable admission")
+            self.renderer.publish()
+            proposed = {"clipId": "clip-A", "text": "Should not write"}
+            rejected = await model_view.call_tool("update_text_clip", proposed)
+            self.assertEqual(host_pre_dispatch_rejection(
+                rejected, "update_text_clip", proposed),
+                "native_identity_model_observation_stale")
+            self.assertEqual(self.renderer.writes, 0)
+            self.assertEqual(store.unverified_attempts()["attempts"], [])
+            # No SQLite attempt should exist because dispatch never began.
+            self.assertIsNone(store.inspect("model-epoch-op-01"))
+            # A fresh host-owned read and a different model decision may be
+            # admitted with the next request identity; old media remains.
+            fresh = CapabilityGatewayMcpSession(
+                gateway, "editor",
+                host_request_id_allocator=lambda _: "model-epoch-op-02",
+                require_model_native_observation=True)
+            await fresh.call_tool("get_project", {})
+            chosen = await fresh.call_tool("update_text_clip", {
+                "clipId": "clip-A", "text": "Manual edit preserved in new plan"})
+            self.assertFalse(chosen.is_error)
+            self.assertEqual(self.renderer.writes, 1)
+            self.assertEqual(store.inspect("model-epoch-op-02")["state"],
+                             "host_reported_success_unverified")
+
     async def test_human_gui_edit_during_debounce_is_not_lost_and_model_can_replan(self):
         self.renderer.human_gui_edit("Manual human edit")
         chosen={"clipId":"clip-A","text":"Stale planned AI title"}
