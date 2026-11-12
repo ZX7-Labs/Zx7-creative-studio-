@@ -35,6 +35,7 @@ jobs:
       - name: Prove actual generated video and sound are source-custodied
         run: |
           python -m unittest -v \
+            scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_audio_cloud_consent_required_before_any_workspace_or_native_launch \
             scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_real_synthetic_audiovisual_bootstrap_and_model_selection \
             scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_audiovisual_native_source_custody_requires_original_active_sound
       - name: Prove real PCM is present, aligned and not digitally silent
