@@ -229,6 +229,10 @@ class NativeRevisionObservationMcpSession:
                     "status": collab["status"],
                     "human_changed_objects": collab["human_changed_objects"],
                     "ai_changed_objects": collab["ai_changed_objects"],
+                    "human_source_or_render_recheck":
+                        collab["human_source_or_render_recheck"],
+                    "ai_source_or_render_recheck":
+                        collab["ai_source_or_render_recheck"],
                     "review": _bounded_page(
                         collab["intersections"], arguments,
                         full_count=len(collab["intersections"])),
