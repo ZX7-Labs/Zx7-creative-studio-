@@ -125,6 +125,20 @@ professional visual quality. They are a bounded source-aware instrument toward
 G1 collaboration and the later experimental G2 Creative State Fabric
 comparison, **not a claim that the entire medium or A–L product is done**.
 
+In **fresh** `zx7-studio run --reviewed-av-revision` sessions, the existing native
+model gateway can also expose three separately host-granted **READ** operations:
+`zx7_list_saved_render_revisions`, `zx7_compare_saved_render_revisions` and
+`zx7_review_saved_render_candidates`. Their subjects are *only* saved native
+snapshots registered by the host after original native save and render receipt
+checks. A replaceable model may independently choose a source-attested
+comparison using opaque export digests; model text cannot select an arbitrary
+file, create a registration, merge documents or bypass native write guards.
+Large diffs are paged with explicit incomplete-page indicators, and full
+physical/creative verification remains a distinct gate. Existing-project runs
+without fresh captured render-bound snapshots do not silently gain this
+capability. No model success or professional artwork is implied by scripted
+tool tests.
+
 Use `run --reviewed-revision` to require two separately verified native renders
 of the same timeline, with a model-observed frame on each side of an
 acknowledged content edit. The second render must follow the latest edit and
