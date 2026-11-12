@@ -33,8 +33,25 @@ jobs:
             "$RUNNER_TEMP/zx7-native-collab" --inspect
           test ! -e "$RUNNER_TEMP/zx7-native-collab"
 
-  physical-native-collaboration:
+  unit-native-commit-contract:
     needs: inspect-pinned-collaboration-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test host/Brain writer CAS including stale and malformed receipts
+        run: |
+          python -m pip install --no-cache-dir '.[editor]'
+          python -m unittest             studio_next.test_native_revision_fence             studio_next.test_native_editor_identity             studio_next.test_capability_gateway -v
+
+  physical-native-collaboration:
+    needs: [inspect-pinned-collaboration-source, unit-native-commit-contract]
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
