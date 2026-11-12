@@ -110,6 +110,7 @@ def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
     source_ledger = [{
         "path": str(image_path),
         "sha256": _sha256(image_path),
+        "media_kind": "video",
         "rights": "original locally generated neutral creative test source",
         "preauthored_timeline": False,
     }]
@@ -124,6 +125,7 @@ def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
         source_ledger.append({
             "path": str(audio_path),
             "sha256": _sha256(audio_path),
+            "media_kind": "audio",
             "rights": "original locally generated synthetic audio test source",
             "preauthored_timeline": False,
         })
@@ -214,6 +216,7 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
     if type(source_ledger) is not list or not 1 <= len(source_ledger) <= 32:
         raise ValueError("Missing bounded owner-original source ledger")
     source_hashes = {}
+    source_kinds = {}
     staging = (workspace / "staging").resolve(strict=True)
     for entry in source_ledger:
         if (type(entry) is not dict or type(entry.get("path")) is not str or
@@ -226,6 +229,13 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
                 _sha256(original) != entry["sha256"]):
             raise ValueError("Original staged video differs from owner SHA ledger")
         source_hashes[str(original)] = entry["sha256"]
+        if require_audio:
+            kind = entry.get("media_kind")
+            if kind not in ("video", "audio"):
+                raise ValueError("Audiovisual original requires host-declared media kind")
+            source_kinds[str(original)] = kind
+    if require_audio and sorted(source_kinds.values()) != ["audio", "video"]:
+        raise ValueError("Audiovisual source pack must contain one video and one sound")
     root = workspace / "projects"
     candidates = list(root.glob("*/project.comfystudio"))
     if len(candidates) != 1:
@@ -305,6 +315,8 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
         source_path = metadata.get("sourcePath") if type(metadata) is dict else None
         if type(source_path) is not str or source_path not in source_hashes:
             continue
+        if require_audio and source_kinds[source_path] != asset.get("type"):
+            raise ValueError("Native asset type contradicts original source manifest")
         relative = asset.get("path")
         if (type(relative) is not str or not relative or
                 Path(relative).is_absolute()):
@@ -333,13 +345,9 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
             continue
         if is_video:
             real_original_clips += 1
-        elif Path(source_path).name == "original-synthetic-sound.wav":
+        elif source_kinds.get(source_path) == "audio":
             real_original_audio_clips += 1
-    if require_audio and (
-            len(source_hashes) != 2 or
-            not any(Path(p).name == "original-synthetic-sound.wav"
-                    for p in source_hashes) or
-            not real_original_audio_clips):
+    if require_audio and not real_original_audio_clips:
         raise ValueError("No intact source-backed audible clip on active native audio track")
     if not real_original_clips:
         raise ValueError("No physically source-backed video clip on saved active timeline")
