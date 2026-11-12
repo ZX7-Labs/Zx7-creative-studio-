@@ -124,6 +124,10 @@ class SceneCasTests(IsolatedAsyncioTestCase):
         preview_shape = await self.client.call_tool("update_shape_clip", {
             "clipId": "clip-A", "previewOnly": True})
         self.assertFalse(preview_shape.is_error)
+        shape_previews = [arguments for name, arguments in self.native.calls
+                          if name == "update_shape_clip"]
+        self.assertTrue(shape_previews)
+        self.assertNotIn("__zx7ExpectedRevision", shape_previews[-1])
         self.assertFalse(self.native.scene_writes)
 
     async def test_model_supplied_hidden_revision_never_overrides_host(self):

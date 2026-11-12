@@ -49,6 +49,20 @@ class NativeReferencePreDispatchError(CapabilityExecutionError):
         super().__init__(code)
 
 
+def _source_native_commit_intent(tool, inputs):
+    """Only source-attested *commits* need a native writer CAS token.
+
+    Reader-like previews remain public-schema clean. In the pinned editor
+    keyframe previews are the default; text and shape previews require an
+    explicit true. Never infer that a preview is a write from the tool name.
+    """
+    if tool == "set_clip_keyframes":
+        return inputs.get("previewOnly") is False
+    if tool in ("update_text_clip", "update_shape_clip"):
+        return inputs.get("previewOnly") is not True
+    return False
+
+
 def _confirmed_native_revision_conflict(result, code):
     """Only a source-pinned edit can attest this exact no-write renderer code."""
     blocks = result.get("content") if isinstance(result, dict) else getattr(result, "content", None)
@@ -340,7 +354,10 @@ class CapabilityGateway:
                         if inspect.isawaitable(inventory):
                             inventory = await inventory
                         validate_live_references(inputs, rules, inventory)
-                        native_fence = identity["fence"].get(name)
+                        native_fence = (
+                            identity["fence"].get(name)
+                            if _source_native_commit_intent(name, inputs)
+                            else None)
                         if native_fence is not None:
                             source_revision = inventory.get(native_fence["inventory_key"])
                             hidden_argument = native_fence["argument_key"]

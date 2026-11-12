@@ -1316,6 +1316,13 @@ async def exercise(options):
             assert interrupted.manual_marker
             _, unchanged_keyframes = await live_shape()
             assert unchanged_keyframes.get("keyframes") in ([], None)
+            def shape_opacity_curve(shape_clip):
+                curves = shape_clip.get("keyframes")
+                if not isinstance(curves, dict):
+                    return []
+                keys = curves.get("opacity")
+                return keys if isinstance(keys, list) else []
+
             # Fresh explicit model-side decision after observing changed
             # source; never replay an uncertain edit or reuse request ID.
             accepted_keyframes = await call(key_host, "set_clip_keyframes",
@@ -1324,7 +1331,7 @@ async def exercise(options):
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
                 timeline, shape_now = await live_shape()
-                if len(shape_now.get("keyframes") or []) >= 2:
+                if len(shape_opacity_curve(shape_now)) >= 2:
                     break
                 await asyncio.sleep(.15)
             else:
@@ -1334,7 +1341,7 @@ async def exercise(options):
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
                 timeline, undone_shape = await live_shape()
-                if not undone_shape.get("keyframes"):
+                if not shape_opacity_curve(undone_shape):
                     break
                 await asyncio.sleep(.15)
             else:
@@ -1343,7 +1350,7 @@ async def exercise(options):
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
                 timeline, redone_shape = await live_shape()
-                if len(redone_shape.get("keyframes") or []) >= 2:
+                if len(shape_opacity_curve(redone_shape)) >= 2:
                     break
                 await asyncio.sleep(.15)
             else:
@@ -1434,7 +1441,8 @@ async def exercise(options):
             shape = next(c for c in reopened["clips"]
                          if c["id"] == shape_id)
             assert shape["shapeProperties"]["fillColor"].lower() == "#e83b61"
-            assert len(shape.get("keyframes") or []) >= 2
+            assert isinstance(shape.get("keyframes"), dict)
+            assert len(shape["keyframes"].get("opacity") or []) >= 2
             assert all(any(m["id"] == mid for m in reopened["markers"])
                        for mid in (first_gui_marker, interrupted.manual_marker))
             assert digest(native_path) == scene_save_sha
