@@ -6,14 +6,20 @@ renderer is not an independent artistic/physical-editing acceptance.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest import IsolatedAsyncioTestCase
+from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import patch
 from types import SimpleNamespace
+import subprocess
+import tempfile
 
 from studio_next.body_editor_client import host_native_revision_rejection
 from studio_next.capability_gateway import CapabilityExecutionError, CapabilityGateway
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.native_editor_identity import pinned_native_editor_identity_policy
+from studio_next.native_editor_source_pin import (
+    _source_matches_pinned_native_collaboration,
+    _source_matches_pinned_native_scene,
+)
 from studio_next.test_native_revision_fence import RendererAndDebouncedSnapshot, result
 
 SCENE_GRANTS = {
@@ -144,6 +150,62 @@ class SceneCasTests(IsolatedAsyncioTestCase):
                     await self.client.call_tool(name, args)
                 self.assertEqual(len(self.native.calls), before_calls)
         self.assertFalse(self.native.scene_writes)
+
+
+class NativeSourceCheckoutAttestationTests(TestCase):
+    """Actual temporary Git checkouts, not a mocked 'clean source' verdict."""
+
+    def test_unrelated_dirty_tracked_store_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="zx7-source-pin-") as raw:
+            root = Path(raw)
+            files = {
+                "electron/mcpServer.js": "// pinned external bridge\\n",
+                "src/services/mcpSnapshot.js": "// revision source\\n",
+                "src/services/mcpActions.js": "// native CAS writer\\n",
+                "src/stores/timelineStore.js": "// GUI store emits revisions\\n",
+            }
+            for name, content in files.items():
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", "-C", str(root), *args], check=True,
+                    capture_output=True, text=True).stdout.strip()
+
+            git("init", "-q")
+            git("add", "--", ".")
+            git("-c", "user.name=ZX7 Test",
+                "-c", "user.email=zx7-test@example.invalid",
+                "commit", "-qm", "synthetic clean editor source")
+            pinned = git("rev-parse", "HEAD")
+            pin = "studio_next.native_editor_source_pin."
+            with (
+                patch(pin + "TRUSTED_VELORN_REVISIONS", frozenset({pinned})),
+                patch(pin + "PINNED_VELORN_COLLAB_REVISION", pinned),
+                patch(pin + "PINNED_VELORN_SCENE_REVISION", pinned),
+            ):
+                self.assertTrue(_source_matches_pinned_native_collaboration(root))
+                self.assertTrue(_source_matches_pinned_native_scene(root))
+
+                # Old source policy only inspected three bridge files.
+                # A tracked GUI store modification escaped that check.
+                tracked_store = root / "src/stores/timelineStore.js"
+                tracked_store.write_text("// deliberately stop GUI notification\\n",
+                                         encoding="utf-8")
+                self.assertFalse(_source_matches_pinned_native_collaboration(root))
+                self.assertFalse(_source_matches_pinned_native_scene(root))
+                git("add", "--", "src/stores/timelineStore.js")
+                self.assertFalse(_source_matches_pinned_native_scene(root),
+                                 "A staged store edit must not attest clean")
+                git("restore", "--staged", "--worktree", "--",
+                    "src/stores/timelineStore.js")
+                self.assertTrue(_source_matches_pinned_native_scene(root))
+
+                (root / "src/services/mcpActions.js").write_text(
+                    "// changed CAS writer\\n", encoding="utf-8")
+                self.assertFalse(_source_matches_pinned_native_scene(root))
 
 
 if __name__ == "__main__":
