@@ -373,9 +373,11 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             "host-grants.json", "brief.txt", "source-ledger.json",
             "native-evaluation.json", "native-journal.jsonl",
             "native-client-stdout.txt", "native-client-stderr.txt",
-            "staging/original-neutral-gradient.mp4", "outputs/*.mp4",
-            "projects/**/*.comfystudio",
+            "staging/original-neutral-gradient.mp4",
+            "staging/original-synthetic-sound.wav",
+            "outputs/*.mp4", "projects/**/*.comfystudio",
             "projects/**/assets/video/*.mp4",
+            "projects/**/assets/audio/*.wav",
             "projects/**/project.thumbnail.webp",
         })
         self.assertNotIn("zx7-nvidia-native-trial/\n", upload)
@@ -390,7 +392,18 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertIn("'zx7-nvidia-native-creative-acceptance'", group)
         self.assertIn("cancel-in-progress: false", group)
         self.assertIn("if: github.event_name == 'pull_request'", workflow)
-        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch' && "
+            "github.ref == 'refs/heads/main' && inputs.trial_mode == 'audiovisual'",
+            workflow)
+        self.assertNotIn("  push:", workflow, "Ordinary push must never launch paid AI")
+        self.assertIn("approval_request_id:", workflow)
+        self.assertIn("scripts.nvidia_av_trial_request", workflow)
+        self.assertIn("--audiovisual-trial --allow-cloud-audio-diagnostics", workflow)
+        self.assertLess(workflow.index("Require a newly approved synthetic"),
+                        workflow.index("NVIDIA_API_KEY:"))
+        self.assertNotIn("github.event_name == 'pull_request' && github.ref == 'refs/heads/main'",
+                         workflow)
 
     def test_native_trial_actually_requests_structured_actions(self):
         with tempfile.TemporaryDirectory() as scratch:

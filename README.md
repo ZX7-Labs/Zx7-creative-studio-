@@ -143,6 +143,34 @@ interface cannot claim to hear the soundtrack. These flags do not waive
 separate approval for paid model execution, private media disclosure or
 publication. The free local model route has neither cloud-upload switch.
 
+### Genuine NVIDIA audiovisual evaluation: no automatic paid inference
+
+The original 2026-11-10 **visual-only** NVIDIA request was consumed and its
+model-generated outputs **failed** the required delivery profile. It is **not**
+permission to repeat a charge or to observe sound. The new source-backed
+picture+sound model audition has a separate strict permission boundary:
+
+- Repository [A/V evaluation request](research/nvidia-native-audiovisual-request.json)
+  ships with `run_authorized: false`. A maintainer must deliberately review a
+  **new synthetic-only** model grant and unique `request_id` in a separate
+  committed change. Do **not** set approval to true for routine tests.
+- Only an explicit **manual** GitHub Actions dispatch on `main` with mode
+  `audiovisual` and that exact new `approval_request_id` can reach the
+  provider step. Pull requests run **only offline denial and request tests**;
+  ordinary pushes can never trigger paid inference. A missing NVIDIA secret
+  is an error, never a local-model fallback.
+- The hosted model may see bounded synthetic frames and **numerical audio
+  diagnostic text**, never raw source WAV. Physical soundtrack decoding,
+  source role/hash custody, actual editable project and two distinct reviewed
+  A/V exports are checked by the trial runner and recorded on failure.
+  Artifacts are limited to synthetic original media and redacted receipts,
+  not the full Electron browser profile.
+- **Important:** the reviewed request is an auditable admission record,
+  not a cryptographically signed or guaranteed one-use token. Repository
+  Actions permissions and a new explicit review before **each** charge still
+  matter. No currently approved A/V run, tested neural artistry or monetary
+  cost measurement is claimed by the inactive request.
+
 `status` also checks the owning runner's live kernel locks. A saved `running`
 record whose runner has died is annotated as needing attention without rewriting
 that record or claiming recovery of an editor/render process.
