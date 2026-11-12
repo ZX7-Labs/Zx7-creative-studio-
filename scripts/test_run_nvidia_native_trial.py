@@ -820,7 +820,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 "independently_verified_export_receipts": 2,
             }
             completed = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=json.dumps(model_result) + "\\n", stderr="")
+                args=[], returncode=0, stdout=json.dumps(model_result) + "\n", stderr="")
             def video(path):
                 return DecodedTrialExport(
                     (str(path), "", path.stat().st_size, "", sha(path)),
