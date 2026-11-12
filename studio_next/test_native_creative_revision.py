@@ -240,6 +240,7 @@ class NativeRevisionTests(unittest.TestCase):
     def test_no_forged_json_duplicates_nonfinite_or_excessive_depth(self):
         for raw in ('{"version":"1","version":"2"}',
                     '{"version":NaN}',
+                    '{"version":"1.0","assets":[],"timelines":[],"opacity":1e999}',
                     '{"foo":' + "[" * 45 + "0" + "]" * 45 + "}"):
             with self.subTest(raw=raw[:25]):
                 with self.assertRaises(NativeRevisionReviewError):
