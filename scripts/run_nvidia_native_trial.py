@@ -598,14 +598,21 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
     media = []
     decoded_exports = {}
     audio_exports = {}
+    audio_rejections = {}
     for path in mp4s:
         decoded = decode_trial_export(path)
         identity = decoded.identity
         pair_key = (destination_digest(str(path)), identity[-1])
         decoded_exports[pair_key] = decoded
         if audiovisual:
-            audio_exports[pair_key] = decode_trial_audio(
-                path, expected_video_seconds=len(decoded.presentation) / _TRIAL_FPS)
+            try:
+                audio_exports[pair_key] = decode_trial_audio(
+                    path, expected_video_seconds=len(decoded.presentation) / _TRIAL_FPS)
+            except ValueError:
+                # Missing, silent or mistimed source sound must not erase the
+                # physical investigation. Save a bounded negative receipt
+                # and fail final acceptance, never invent a valid audio hash.
+                audio_rejections[pair_key] = "audio_missing_or_decode_or_sync_failed"
         media.append({"path": str(path), "sha256": identity[-1],
                       "bytes": identity[2],
                       "decoded_picture_profile": decoded.picture_profile,
@@ -619,7 +626,9 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
                           "decoded_audio_duration_seconds": audio_exports[pair_key].duration_seconds,
                           "decoded_audio_rms": audio_exports[pair_key].rms,
                           "decoded_audio_audible": audio_exports[pair_key].audible}
-                         if audiovisual else {})})
+                         if audiovisual and pair_key in audio_exports else {}),
+                      **({"decoded_audio_rejection": audio_rejections[pair_key]}
+                         if pair_key in audio_rejections else {})})
     # Preserve forensic evidence even when final native state fails acceptance.
     # Never let an empty timeline disappear behind an early RuntimeError.
     try:
@@ -680,6 +689,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         "model_selected_write_receipts": summary.get("model_selected_write_receipts"),
         "physical_export_verify_receipts": summary.get("independently_verified_export_receipts"),
         "decoded_real_exports": media,
+        "decoded_audio_errors": len(audio_rejections) if audiovisual else None,
         "original_media_sent_to_model": False,
         "synthetic_frame_upload_explicitly_authorized": True,
         "artistic_quality_approved": False,
@@ -691,7 +701,8 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
             summary.get("evaluation_evidence_satisfied") is not True or
             not (changed_reviewed_picture or
                  (audiovisual and changed_reviewed_audio)) or
-            (audiovisual and not reviewed_pair_audio_acceptable) or
+            (audiovisual and (
+                not reviewed_pair_audio_acceptable or bool(audio_rejections))) or
             not reviewed_pair_delivery_profile_compliant or
             saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
