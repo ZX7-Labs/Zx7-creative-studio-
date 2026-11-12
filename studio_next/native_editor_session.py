@@ -244,8 +244,10 @@ async def run_native_session(args):
         host_grants.pop("zx7_observe_verified_export_audio", None)
         if not cloud_diagnostics:
             host_grants.pop(AUDIO_ENVELOPE, None)
-            # Paired physical frames + numerical audio share the same consent
-            # boundary; do not reveal new audio metrics to an unconsented Brain.
+        # The combined sensor carries BOTH visual bytes and timed audio
+        # diagnostics. All affected cloud permissions must be explicit;
+        # allowing one does not implicitly authorize the other.
+        if not (cloud_diagnostics and args.allow_cloud_image_upload):
             host_grants.pop(ACTIVE_AV_WINDOW, None)
     capture_render_project = None
     native_revision_source = None
