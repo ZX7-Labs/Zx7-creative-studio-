@@ -1127,9 +1127,11 @@ async def exercise(options):
                 "previous_model_export_error_attributed": False,
             }, sort_keys=True), flush=True)
         if scene_source:
-            # G1 native scene: preserve the owner original video and tone,
-            # then operate on an editable, video-overlaid shape on its own
-            # timeline. A scripted ABI fixture, NOT creative AI inference.
+            # G1 native scene: preserve original picture/sound and operate
+            # on an editable shape. The real GUI keyboard marker changes the
+            # timeline during native shape/keyframe CAS, but this does NOT
+            # exercise human pointer dragging the shape or changing its curve.
+            # Scripted physical-editor proof, NOT creative AI inference.
             from studio_next.native_editor_identity import (
                 pinned_native_editor_identity_policy)
             from studio_next.body_editor_client import (
@@ -1380,7 +1382,8 @@ async def exercise(options):
             assert digest(original) == original_hash
             print("ACTUAL_NATIVE_SCENE_CAS " + json.dumps({
                 "source_pinned_scene_variant": True,
-                "real_GUI_shape_intervention_and_keyframe_race": True,
+                "real_GUI_marker_intervention_during_shape_and_keyframe_edit": True,
+                "direct_human_shape_drag_or_keyframe_manipulation_tested": False,
                 "stale_shape_and_keyframe_mutations_refused": True,
                 "host_reobserved_and_applied_distinct_scene_edits": True,
                 "GUI_undo_redo_preserved_two_manual_markers": True,
