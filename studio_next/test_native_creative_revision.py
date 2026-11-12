@@ -175,6 +175,25 @@ class NativeRevisionTests(unittest.TestCase):
         self.assertIn("asset_clip_dependency",
                       {c["kind"] for c in output2["intersections"]})
 
+    def test_clip_ids_are_scoped_by_real_timeline_not_global(self):
+        base = example()
+        second = deepcopy(base["timelines"][0])
+        second["id"] = "timeline-2"
+        second["name"] = "Other scene with repeated native clip IDs"
+        base["timelines"].append(second)
+        base["currentTimelineId"] = "timeline-2"
+        human, ai = deepcopy(base), deepcopy(base)
+        human["timelines"][0]["clips"][0]["textProperties"]["text"] = "Human first timeline"
+        ai["timelines"][1]["clips"][0]["textProperties"]["text"] = "AI second timeline"
+        result = review_native_collaboration(
+            self.save(base), self.save(human), self.save(ai))
+        self.assertEqual(result["status"], "no_known_overlap")
+        self.assertFalse(result["automatic_merge_permitted"])
+        first = compare_native_revisions(self.save(base), self.save(human))
+        clips = [c for c in first["changes"] if c["kind"] == "clip"]
+        self.assertEqual([(c["timeline_id"], c["id"]) for c in clips],
+                         [("timeline-1", "clip-1")])
+
     def test_identical_human_and_ai_changes_do_not_fabricate_conflict(self):
         base = example()
         human = deepcopy(base)

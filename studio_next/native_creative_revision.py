@@ -218,7 +218,8 @@ class NativeProjectSnapshot:
     def public(self):
         return {"sha256": self.sha256, "size_bytes": self.size_bytes,
                 "native_version": self.version, "counts": dict(self.counts),
-                "source_owned_native_document": True,
+                "native_format_fields_inspected": True,
+                "native_editor_origin_independently_attested": False,
                 "media_rights_independently_verified": False}
 
 
@@ -394,7 +395,8 @@ def review_native_collaboration(base_file, human_file, ai_file):
         "intersections": collisions,
         "human_source_or_render_recheck": _impact(ours)["source_custody_or_render_review_required"],
         "ai_source_or_render_recheck": _impact(theirs)["source_custody_or_render_review_required"],
-        "native_save_preserved": True,
+        "input_saved_files_not_modified_by_review": True,
+        "native_editor_save_independently_attested": False,
         "automatic_merge_permitted": False,
         "live_native_revision_CAS_required_for_every_write": True,
         "source_rights_and_artistic_quality_unverified": True,
