@@ -1,0 +1,66 @@
+diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
+--- a/src/services/mcpActions.js
++++ b/src/services/mcpActions.js
+@@ -8935,7 +8935,12 @@
+   // Synchronous renderer commit entry, NOT Electron's debounced snapshot.
+   // GUI store mutations increment the source revision without a model token.
+   // Missing tokens on this patched MCP write path fail closed.
+-  if (action === 'update_text_clip' && payload?.previewOnly !== true) {
++  const commitFenced = (
++    ((action === 'update_text_clip' || action === 'update_shape_clip') &&
++      payload?.previewOnly !== true) ||
++    (action === 'set_clip_keyframes' && payload?.previewOnly === false)
++  )
++  if (commitFenced) {
+     const current = getZX7NativeRevision()
+     const expected = payload?.__zx7ExpectedRevision
+     if (!current || typeof expected !== 'string' || current !== expected) {
+diff --git a/electron/mcpServer.js b/electron/mcpServer.js
+--- a/electron/mcpServer.js
++++ b/electron/mcpServer.js
+@@ -14320,10 +14320,18 @@
+       return errorResult('MCP shape bridge is not available. Restart Velorn and try again.')
+     }
+ 
+-    const result = await this.performAction({
+-      action: 'update_shape_clip',
+-      payload: args,
+-    })
++    let result
++    try {
++      result = await this.performAction({
++        action: 'update_shape_clip',
++        payload: args,
++      })
++    } catch (error) {
++      if (error?.message === 'ZX7_STALE_NATIVE_REVISION') {
++        return errorResult('ZX7_STALE_NATIVE_REVISION')
++      }
++      throw error
++    }
+ 
+     return textResult({
+       success: args.previewOnly === true ? undefined : true,
+@@ -14489,10 +14497,18 @@
+       return errorResult('MCP clip keyframe bridge is not available. Restart Velorn and try again.')
+     }
+ 
+-    const result = await this.performAction({
+-      action: 'set_clip_keyframes',
+-      payload: applyArgs,
+-    })
++    let result
++    try {
++      result = await this.performAction({
++        action: 'set_clip_keyframes',
++        payload: applyArgs,
++      })
++    } catch (error) {
++      if (error?.message === 'ZX7_STALE_NATIVE_REVISION') {
++        return errorResult('ZX7_STALE_NATIVE_REVISION')
++      }
++      throw error
++    }
+ 
+     return textResult({
+       success: true,
