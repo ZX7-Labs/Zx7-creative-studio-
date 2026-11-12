@@ -5,6 +5,10 @@ on:
     paths:
       - "scripts/run_nvidia_native_trial.py"
       - "scripts/test_run_nvidia_native_trial.py"
+      - "studio_next/studio_cli.py"
+      - "studio_next/studio_owner_delivery.py"
+      - "studio_next/test_studio_cli.py"
+      - "studio_next/test_studio_owner_delivery.py"
       - ".github/workflows/zx7-g1-av-physical-contract.yml"
   workflow_dispatch:
 
@@ -31,7 +35,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg
           python -m pip install --no-cache-dir '.[editor,production]'
       - name: Compile exact source
-        run: python -m py_compile scripts/run_nvidia_native_trial.py scripts/test_run_nvidia_native_trial.py
+        run: |
+          python -m py_compile scripts/run_nvidia_native_trial.py scripts/test_run_nvidia_native_trial.py
+          python -m py_compile studio_next/studio_cli.py studio_next/studio_owner_delivery.py studio_next/test_studio_cli.py studio_next/test_studio_owner_delivery.py
       - name: Prove actual generated video and sound are source-custodied
         run: |
           python -m unittest -v \
@@ -49,3 +55,12 @@ jobs:
             scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_host_only_grants_and_real_owned_media_are_created \
             scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_native_trial_actually_requests_structured_actions \
             scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_native_export_revision_requires_changed_decoded_picture_not_new_container
+
+      - name: Prove owner entry point and scoped A/V model review contract
+        run: |
+          python -m unittest -v \
+            studio_next.test_studio_cli
+      - name: Independently decode owner physical pair and reject forged or silent delivery
+        run: |
+          python -m unittest -v \
+            studio_next.test_studio_owner_delivery
