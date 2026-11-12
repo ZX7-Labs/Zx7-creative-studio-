@@ -7,12 +7,13 @@ output transport but shares the same trusted BODY decision and tool contracts.
 """
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import json
 import re
 
-from .nvidia_model import NvidiaConfigurationError, NvidiaTransportError
+from .nvidia_model import NvidiaConfigurationError, NvidiaTransportError, NvidiaModelSettings
 from .nvidia_tool_model import NvidiaToolCreativeModel
 from .providers import LocalModelOutputError, _model_json
 
@@ -20,6 +21,7 @@ _META_SEARCH = "zx7_search_host_capabilities"
 _META_DESCRIBE = "zx7_inspect_host_tool"
 _META_FINISH = "zx7_finish_verified_session"
 _KNOWN = frozenset({"search", "describe", "invoke", "discover", "finish"})
+NVIDIA_OMNI_AUDIO_MODEL_ID = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 
 # Direct calls are not arbitrary function calls. The provider sees exact
 # current native schemas; the BODY is the sole executor and validator.
@@ -185,7 +187,10 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             raise NvidiaConfigurationError("Host native function catalog is too large")
         return functions, mapping
 
-    def _call_as_native_tool(self, context, *, images=()):
+    def _messages_with_audio(self, context, images, audio):
+        raise NvidiaConfigurationError("This NVIDIA native model has no verified raw-WAV contract")
+
+    def _call_as_native_tool(self, context, *, images=(), audio=()):
         self.last_call_usage = None
         functions, mapping = self._tool_surface(context)
         payload = {
@@ -194,7 +199,8 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             # Validated locally and stripped by NvidiaCreativeModel._open_request,
             # NOT advertised as a provider-side JSON Schema guarantee.
             "response_format": {"type": "json_object"},
-            "messages": self._messages(context, images),
+            "messages": (self._messages_with_audio(context, images, audio)
+                         if audio else self._messages(context, images)),
             "tools": functions,
             "tool_choice": "required",
             "parallel_tool_calls": False,
@@ -277,3 +283,62 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
 
     def decide_with_images(self, context, images):
         return self._call_as_native_tool(context, images=images)
+
+
+
+class NvidiaOmniNativeToolCreativeModel(NvidiaNativeToolCreativeModel):
+    """Separately consented original WAV -> NVIDIA Omni, same host-owned native tools.
+
+    Provider request compatibility is documented, but actual hosted creative
+    competence and semantic sound perception require separate live evaluation.
+    No WAV leaves the process without explicit consent and source-hash binding.
+    """
+
+    def __init__(self, settings=None, *, system_prompt=None,
+                 allow_image_upload=False, allow_original_audio_upload=False):
+        if (not isinstance(settings, NvidiaModelSettings) or
+                settings.model_id != NVIDIA_OMNI_AUDIO_MODEL_ID):
+            raise NvidiaConfigurationError("Omni audio must use the reviewed exact model identity")
+        if type(allow_original_audio_upload) is not bool:
+            raise NvidiaConfigurationError("Original audio egress consent must be an explicit boolean")
+        super().__init__(settings, system_prompt=system_prompt,
+                         allow_image_upload=allow_image_upload)
+        self.allow_original_audio_upload = allow_original_audio_upload
+
+    def _messages_with_audio(self, context, images, audio):
+        if not self.allow_original_audio_upload:
+            raise NvidiaConfigurationError("Original WAV upload requires separate explicit owner consent")
+        if images:
+            raise NvidiaConfigurationError("Combined cloud picture+sound requires separate audited transport")
+        if (not isinstance(audio, (list, tuple)) or len(audio) != 1 or
+                not isinstance(audio[0], tuple) or len(audio[0]) != 2):
+            raise NvidiaConfigurationError("Cloud original sound must be a single bounded WAV")
+        mime, raw = audio[0]
+        if (mime != "audio/wav" or type(raw) is not bytes or
+                not 44 <= len(raw) <= 128 * 1024 or
+                not raw.startswith(b"RIFF") or raw[8:12] != b"WAVE"):
+            raise NvidiaConfigurationError("Cloud WAV is malformed or over the host evidence limit")
+        evidence = context.get("audio_evidence") if isinstance(context, dict) else None
+        if (not isinstance(evidence, dict) or
+                not isinstance(evidence.get("wav_sha256"), str) or
+                evidence["wav_sha256"] != hashlib.sha256(raw).hexdigest() or
+                not isinstance(evidence.get("export_sha256"), str) or
+                re.fullmatch(r"[0-9a-f]{64}", evidence["export_sha256"]) is None):
+            raise NvidiaConfigurationError("Cloud WAV does not match verified original export custody")
+        messages = self._messages(context, ())
+        text = messages[1]["content"]
+        if not isinstance(text, str):
+            raise NvidiaConfigurationError("Unexpected native tool text request form")
+        messages[1]["content"] = [
+            {"type": "text", "text": text},
+            {"type": "text", "text": json.dumps({
+                "verified_export_sha256": evidence["export_sha256"],
+                "original_wav_sha256": evidence["wav_sha256"],
+                "original_wav_mime": "audio/wav"}, ensure_ascii=False)},
+            {"type": "audio_url", "audio_url": {
+                "url": "data:audio/wav;base64," + base64.b64encode(raw).decode("ascii")}},
+        ]
+        return messages
+
+    def decide_with_audio(self, context, audio):
+        return self._call_as_native_tool(context, audio=audio)

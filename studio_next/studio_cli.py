@@ -308,7 +308,8 @@ def _stage_asset(path, destination, rights):
 def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                   max_turns=32, model_timeout=480, allow_cloud_image_upload=False,
                   reviewed_revision=False, reviewed_av_revision=False,
-                  allow_cloud_audio_diagnostics=False, allow_public_research=False, searxng_url=None,
+                  allow_cloud_audio_diagnostics=False, allow_cloud_original_wav_upload=False,
+                  allow_public_research=False, searxng_url=None,
                   xvfb_binary=None, display=None):
     from .native_editor_session import build_parser, run_native_session
     root, config, grants = load_workspace(path)
@@ -322,10 +323,17 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
         raise ValueError("Model turn budget must be between 1 and 128")
     if reviewed_revision and reviewed_av_revision:
         raise ValueError("Choose one reviewed revision evidence mode")
-    if type(reviewed_av_revision) is not bool or type(allow_cloud_audio_diagnostics) is not bool:
+    if (type(reviewed_av_revision) is not bool or
+            type(allow_cloud_audio_diagnostics) is not bool or
+            type(allow_cloud_original_wav_upload) is not bool):
         raise ValueError("Reviewed audiovisual and cloud consent switches must be booleans")
-    if config["provider"] == "local" and (allow_cloud_image_upload or allow_cloud_audio_diagnostics):
+    if config["provider"] == "local" and (allow_cloud_image_upload or allow_cloud_audio_diagnostics or allow_cloud_original_wav_upload):
         raise ValueError("Cloud media permission is only applicable to NVIDIA")
+    if allow_cloud_original_wav_upload and (
+            config["provider"] != "nvidia" or
+            config["model_id"] != "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning" or
+            not reviewed_av_revision):
+        raise ValueError("Original cloud WAV requires NVIDIA Omni reviewed audiovisual mode")
     if allow_cloud_audio_diagnostics and not reviewed_av_revision:
         raise ValueError("Cloud audio diagnostics consent requires reviewed audiovisual mode")
     if config["provider"] == "nvidia" and (reviewed_revision or reviewed_av_revision):
@@ -402,6 +410,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                     argv += ["--fresh-trial-project", "--record-av-project-snapshots"]
                 if allow_cloud_audio_diagnostics:
                     argv.append("--allow-cloud-audio-diagnostics")
+                if allow_cloud_original_wav_upload:
+                    argv.append("--allow-cloud-original-wav-upload")
                 for flag, value in (("--xvfb-binary", xvfb_binary), ("--display", display)):
                     if value:
                         argv.extend([flag, str(value)])
@@ -518,6 +528,8 @@ def main(argv=None):
                          help="Require timed picture AND sound review and editable revision")
     run.add_argument("--allow-cloud-audio-diagnostics", action="store_true",
                      help="Separately allow NVIDIA to see numerical sound diagnostics (never raw WAV)")
+    run.add_argument("--allow-cloud-original-wav-upload", action="store_true",
+                     help="Independently consent to original WAV sent to exact NVIDIA Omni model")
     run.add_argument("--xvfb-binary")
     run.add_argument("--display")
     args = p.parse_args(argv)
@@ -547,6 +559,7 @@ def main(argv=None):
                 reviewed_revision=args.reviewed_revision,
                 reviewed_av_revision=args.reviewed_av_revision,
                 allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics,
+                allow_cloud_original_wav_upload=args.allow_cloud_original_wav_upload,
                 xvfb_binary=args.xvfb_binary, display=args.display)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.command == "doctor":

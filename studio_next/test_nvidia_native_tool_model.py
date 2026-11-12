@@ -1,4 +1,6 @@
 """Credential-free contracts for native typed NVIDIA model -> common BODY."""
+import base64
+import hashlib
 import json
 from io import BytesIO
 import os
@@ -6,9 +8,10 @@ import unittest
 from unittest.mock import patch
 
 from studio_next.nvidia_native_tool_model import (
-    NvidiaNativeToolCreativeModel, _provider_function,
+    NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
+    NVIDIA_OMNI_AUDIO_MODEL_ID, _provider_function,
 )
-from studio_next.nvidia_model import NvidiaConfigurationError
+from studio_next.nvidia_model import NvidiaConfigurationError, NvidiaModelSettings
 from studio_next.providers import LocalModelOutputError
 
 
@@ -223,6 +226,83 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                 model.decide_with_images(
                     dict(ctx, picture_evidence=[dict(entry, sha256="0"*64)]),
                     [("image/png", img)])
+
+
+class OmniOriginalWavNativeToolTests(unittest.TestCase):
+    @staticmethod
+    def _wav():
+        from io import BytesIO
+        import wave
+        output = BytesIO()
+        with wave.open(output, "wb") as track:
+            track.setnchannels(1)
+            track.setsampwidth(2)
+            track.setframerate(16000)
+            track.writeframes(b"\\x01\\x00" * 400)
+        return output.getvalue()
+
+    @staticmethod
+    def _model(*, allowed=False):
+        return NvidiaOmniNativeToolCreativeModel(
+            NvidiaModelSettings(
+                model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+                sampling={"chat_template_kwargs": {"enable_thinking": False}}),
+            system_prompt="Inspect authorized native footage and sound",
+            allow_original_audio_upload=allowed)
+
+    def test_consent_false_wrong_model_and_ambiguous_custody_reject_before_network(self):
+        sample = self._wav()
+        digest = hashlib.sha256(sample).hexdigest()
+        context = {**_context(), "audio_evidence": {
+            "wav_sha256": digest, "export_sha256": "a" * 64}}
+        with self.assertRaises(NvidiaConfigurationError):
+            NvidiaOmniNativeToolCreativeModel(
+                NvidiaModelSettings(), system_prompt="no",
+                allow_original_audio_upload=True)
+        with patch("studio_next.nvidia_model.build_opener") as network:
+            model = self._model()
+            with self.assertRaises(NvidiaConfigurationError):
+                model.decide_with_audio(context, [("audio/wav", sample)])
+            permitted = self._model(allowed=True)
+            for evidence, raw in (
+                ({"wav_sha256": "b" * 64, "export_sha256": "a" * 64}, sample),
+                ({"wav_sha256": digest, "export_sha256": "malformed"}, sample),
+                (context["audio_evidence"], b"Not a real wave"),
+            ):
+                with self.subTest(evidence=evidence, size=len(raw)):
+                    with self.assertRaises(NvidiaConfigurationError):
+                        permitted.decide_with_audio(
+                            {**_context(), "audio_evidence": evidence},
+                            [("audio/wav", raw)])
+            with self.assertRaises(NvidiaConfigurationError):
+                permitted.decide_with_audio(context, [("audio/wav", sample)] * 2)
+            network.assert_not_called()
+
+    def test_sha_bound_raw_wav_enters_only_separately_opted_in_omni_tool_request(self):
+        sample = self._wav()
+        digest = hashlib.sha256(sample).hexdigest()
+        original = {**_context(), "audio_evidence": {
+            "export_sha256": "a" * 64, "wav_sha256": digest}}
+        captured = []
+        class Opener:
+            def open(self, request, timeout):
+                captured.append(json.loads(request.data))
+                return _reply(_provider_function("get_project"),
+                              '{"inputs":{},"reason":"Inspect timed real audio evidence"}')
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Z" * 32}), patch(
+                "studio_next.nvidia_model.build_opener", return_value=Opener()):
+            result = self._model(allowed=True).decide_with_audio(
+                original, [("audio/wav", sample)])
+        self.assertEqual(result["action"], "invoke")
+        self.assertEqual(result["arguments"], {"tool": "get_project", "inputs": {}})
+        parts = captured[0]["messages"][1]["content"]
+        self.assertEqual([part["type"] for part in parts], ["text", "text", "audio_url"])
+        self.assertEqual(json.loads(parts[1]["text"])["original_wav_sha256"], digest)
+        self.assertEqual(base64.b64decode(parts[2]["audio_url"]["url"].split(",", 1)[1]),
+                         sample)
+        self.assertNotIn("host_native_tool_contracts", parts[0]["text"])
+        self.assertNotIn("nvapi-", json.dumps(captured))
+        self.assertEqual(original["audio_evidence"]["wav_sha256"], digest)
 
 
 if __name__ == "__main__":
