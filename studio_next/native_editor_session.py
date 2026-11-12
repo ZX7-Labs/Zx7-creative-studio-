@@ -21,7 +21,7 @@ from mcp.client.stdio import stdio_client
 from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CREATIVE_SYSTEM
 from studio_next.native_creative_audit import audit_native_journal
 from studio_next.native_render_evidence import (
-    AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
+    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
 )
 from studio_next.native_editor_source_pin import (
     PINNED_VELORN_MCP_REVISION as _PINNED_MCP_PREVIEW_COMMIT,
@@ -59,7 +59,8 @@ def native_session_grants(configuration: dict, source: Path) -> dict:
         grants.update({name: "read" for name in (
             "zx7_verify_native_export", "zx7_observe_verified_export_frame",
             "zx7_observe_verified_export_samples", "zx7_observe_verified_export_audio",
-            "zx7_observe_verified_export_audio_timeline")})
+            "zx7_observe_verified_export_audio_timeline",
+            ACTIVE_AV_WINDOW)})
     if "read" in access and grants.get("get_timeline") == "read":
         from .native_editor_diagnostics import native_content_diagnostics_source_verified
         if native_content_diagnostics_source_verified(source):
@@ -243,6 +244,9 @@ async def run_native_session(args):
         host_grants.pop("zx7_observe_verified_export_audio", None)
         if not cloud_diagnostics:
             host_grants.pop(AUDIO_ENVELOPE, None)
+            # Paired physical frames + numerical audio share the same consent
+            # boundary; do not reveal new audio metrics to an unconsented Brain.
+            host_grants.pop(ACTIVE_AV_WINDOW, None)
     capture_render_project = None
     native_revision_source = None
     if getattr(args, "record_av_project_snapshots", False):
