@@ -341,7 +341,8 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
         # This is a parser-level safety assertion; no run/HTTP is requested.
         from unittest.mock import patch as mock_patch
         with mock_patch("studio_next.studio_cli.run_workspace") as run:
-            owner_main(["run", "/tmp/nonexistent-owner", "--brief", "test"])
+            run.return_value = {"state": "completed"}
+            self.assertEqual(owner_main(["run", "/tmp/nonexistent-owner", "--brief", "test"]), 0)
             kwargs = run.call_args.kwargs
         self.assertFalse(kwargs["allow_cloud_original_wav_upload"])
 
