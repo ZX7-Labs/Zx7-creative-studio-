@@ -10,6 +10,8 @@ on:
       - 'studio_next/native_editor_source_pin.py'
       - 'studio_next/body_editor_mcp.py'
       - 'studio_next/test_native_scene_revision.py'
+      - 'scripts/install-zx7-linux.sh'
+      - 'engines/velorn/README.md'
       - '.github/workflows/zx7-native-scene-candidate.yml'
   workflow_dispatch:
 
@@ -28,6 +30,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify candidate installer syntax before installing anything
+        run: bash -n scripts/install-zx7-linux.sh
       - name: Verify previous source and new deterministic scene patch
         run: |
           set -euo pipefail

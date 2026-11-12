@@ -88,6 +88,22 @@ async def exercise(options):
         return data
 
     async def render_and_verify(session, output, save_receipt):
+        # Native save success is an application acknowledgement; read the
+        # actual document until that exact acknowledged modified revision is
+        # physically present BEFORE dispatching an irreversible export. Do
+        # not issue a second save or treat a newer/different revision as equal.
+        saved_identity = save_receipt["result"]["project"]
+        saved_document = Path(saved_identity["path"]) / "project.comfystudio"
+        deadline = time.monotonic() + 15
+        while True:
+            if saved_document.is_file() and not saved_document.is_symlink():
+                observed_save = json.loads(saved_document.read_text(encoding="utf-8"))
+                if observed_save.get("modified") == saved_identity["modified"]:
+                    break
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    "Native saved document never converged to acknowledged revision")
+            await asyncio.sleep(.15)
         rendered = await call(session, "export_timeline", {
             "outputPath": str(output), "target": "h264_project", "width": 320,
             "height": 180, "range": "custom", "startSeconds": 0, "endSeconds": 2,

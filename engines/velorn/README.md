@@ -25,6 +25,31 @@ approved revision in `studio_next/editor_runtime/source-lock.json`. The proof
 checks actual file selection, image-sequence decoding, and the installed
 Studio's create, export, reopen and revise operations.
 
+## Opt-in live human + AI scene revision source
+
+The default stable installed native editor remains unchanged. For the separately
+reproducible **source-native shape/keyframe CAS candidate**, install a new prefix
+explicitly instead of modifying an existing workspace or replacing default
+source code:
+
+```sh
+bash scripts/install-zx7-linux.sh --scene-collaboration "$HOME/.local/opt/zx7-studio-scene"
+"$HOME/.local/opt/zx7-studio-scene/bin/zx7-studio" init ./scene-studio
+"$HOME/.local/opt/zx7-studio-scene/bin/zx7-studio" doctor ./scene-studio
+```
+
+The exact source overlay must match `collab_scene_revision` in the checked-in
+source lock. The installer still builds a complete Electron desktop with
+source-attested native editing and never installs to an existing prefix.
+An already-initialized private owner workspace remains bound to its chosen
+editor source; no migration or media replacement is inferred. The original
+title-CAS contract remains in place. Only `update_text_clip`,
+`update_shape_clip` and explicit committed `set_clip_keyframes` are
+writer-epoch protected. The physical GUI proof intervenes with a **keyboard
+marker**, not direct pointer drag of a shape or actual model-human coauthoring.
+Other native write families, independent security review, genuine autonomous
+artistic quality and final release remain open gates.
+
 ## Connect a local AI client through standard MCP
 
 Install the optional bridge with `python -m pip install '.[editor]'`. Protocol
