@@ -491,6 +491,11 @@ def main(argv=None):
     init.add_argument("--base-url", default="http://127.0.0.1:8080")
     for name in ("doctor", "status"):
         commands.add_parser(name).add_argument("workspace", type=Path)
+    verify = commands.add_parser("verify", help="Independently re-decode both reviewed A/V exports and match editable native project")
+    verify.add_argument("workspace", type=Path)
+    verify.add_argument("session_id")
+    verify.add_argument("--max-decode-seconds", type=int, default=900,
+                        help="Host resource limit for independent physical decoding, not a creative duration")
     run = commands.add_parser("run", help="Run the existing native AI editor; preserve session and source evidence")
     run.add_argument("workspace", type=Path)
     prompt = run.add_mutually_exclusive_group(required=True)
@@ -523,6 +528,11 @@ def main(argv=None):
             result = doctor(args.workspace)
         elif args.command == "status":
             result = workspace_status(args.workspace)
+        elif args.command == "verify":
+            from .studio_owner_delivery import verify_owner_audiovisual_delivery
+            result = verify_owner_audiovisual_delivery(
+                args.workspace, args.session_id,
+                max_decode_seconds=args.max_decode_seconds)
         else:
             if args.brief is not None:
                 brief = args.brief
