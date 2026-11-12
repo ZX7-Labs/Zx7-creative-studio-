@@ -176,6 +176,34 @@ async def exercise(options):
             await asyncio.sleep(.15)
         raise AssertionError("Native debounced project state did not converge")
 
+    def inject_gui_keyboard(key):
+        """Real X11 keyboard event into installed Electron, not an MCP mutation.
+
+        Run only under the isolated Xvfb CI display. No window-guess fallback
+        or false success if a visible Velorn editor is not uniquely identified.
+        """
+        assert options.display and shutil.which("xdotool"), (
+            "Physical GUI proof requires isolated Xvfb and xdotool")
+        env = {**os.environ, "DISPLAY": options.display}
+        windows = subprocess.check_output(
+            ["xdotool", "search", "--onlyvisible", "--name", "."],
+            env=env, stderr=subprocess.PIPE, timeout=8).decode().split()
+        matches = []
+        for window in set(windows):
+            name = subprocess.check_output(
+                ["xdotool", "getwindowname", window], env=env,
+                stderr=subprocess.PIPE, timeout=8).decode().strip()
+            if "Velorn" in name:
+                matches.append(window)
+        assert len(matches) == 1, (
+            "Exactly one visible Velorn editor GUI window required", len(matches))
+        subprocess.run(["xdotool", "windowfocus", "--sync", matches[0]],
+                       env=env, check=True, timeout=8,
+                       capture_output=True)
+        subprocess.run(["xdotool", "key", "--clearmodifiers", key],
+                       env=env, check=True, timeout=8,
+                       capture_output=True)
+
     async with connected() as session:
         discovered = (await session.list_tools()).tools
         from studio_next.body_editor_client import LocalEditorClient
@@ -344,9 +372,23 @@ async def exercise(options):
             captured = await call(session, "get_project")
             stale_token = captured.get("zx7NativeRevision")
             assert isinstance(stale_token, str) and len(stale_token) >= 38
-            # Real renderer store mutation through an independent native
-            # operation, while the client still holds its previous snapshot.
-            # This is NOT a physical mouse/keyboard GUI intervention.
+            # Real X11 human-style keyboard gesture into the installed GUI,
+            # using the editor's own default M hotkey (not an MCP write).
+            # Prove the renderer's actual timeline store accepted the key.
+            initial_count = captured["currentTimeline"]["markerCount"]
+            before_gui = await call(session, "get_timeline", {})
+            before_gui_ids = {m["id"] for m in before_gui["markers"]}
+            inject_gui_keyboard("m")
+            await wait(session, lambda state:
+                (state.get("currentTimeline") or {}).get("markerCount") == initial_count + 1)
+            after_gui = await call(session, "get_timeline", {})
+            new_gui_markers = [m for m in after_gui["markers"]
+                               if m["id"] not in before_gui_ids]
+            assert len(new_gui_markers) == 1, (
+                "GUI keyboard input did not create exactly one source-owned marker")
+            gui_marker_id = new_gui_markers[0]["id"]
+            # A second independent renderer mutation demonstrates the
+            # original human review annotation survives stale AI refusal.
             await call(session, "add_timeline_markers", {
                 "markers": [{"timeSeconds": 0.5,
                              "label": "Human review marker"}],
@@ -365,6 +407,8 @@ async def exercise(options):
                 item for item in unmodified["clips"] if item["id"] == title_id)
             assert title_after_conflict["textProperties"]["text"] == "MCP native edit"
             assert any(marker.get("name") == "Human review marker"
+                       for marker in unmodified.get("markers", []))
+            assert any(marker.get("id") == gui_marker_id
                        for marker in unmodified.get("markers", []))
             policy = pinned_native_editor_identity_policy(
                 options.source, tools, session)
@@ -386,6 +430,7 @@ async def exercise(options):
                 "trusted_host_revision_token_injected": True,
                 "corrected_native_edit_acknowledged_unverified": True,
                 "actual_direct_human_mouse_edit_tested": False,
+                "real_X11_keyboard_editor_marker_tested": True,
                 "real_model_creative_autonomy_tested": False,
             }, sort_keys=True), flush=True)
         else:
@@ -531,6 +576,10 @@ async def exercise(options):
         timeline = await call(session, "get_timeline", {"includeClips": True})
         title = next(clip for clip in timeline["clips"] if clip["id"] == title_id)
         assert title["textProperties"]["text"] == "MCP revised"
+        if collaboration_source:
+            assert any(m.get("id") == gui_marker_id
+                       for m in timeline.get("markers", [])), (
+                "The real GUI-entered human marker was not saved/reopened")
         assert title["keyframes"] == next(clip for clip in saved["timelines"][0]["clips"] if clip["id"] == title_id)["keyframes"]
         # The pinned upstream razor drops arbitrary effects/keyframes on its
         # new right-hand clip. Never silently let BODY split an animated title.
