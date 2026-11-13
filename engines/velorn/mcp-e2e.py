@@ -39,13 +39,16 @@ async def exercise(options):
         _source_matches_pinned_native_scene,
         _source_matches_pinned_native_editorial,
         _source_matches_pinned_native_save,
-        _source_matches_pinned_native_save_order)
+        _source_matches_pinned_native_save_order,
+        _source_matches_pinned_native_save_interleave)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
     editorial_source = _source_matches_pinned_native_editorial(options.source)
     save_source = _source_matches_pinned_native_save(options.source)
     save_order_source = _source_matches_pinned_native_save_order(options.source)
+    interleave_source = _source_matches_pinned_native_save_interleave(options.source)
+    assert not interleave_source or save_order_source
     assert not save_order_source or save_source
     assert not save_source or editorial_source
     assert not editorial_source or scene_source
@@ -57,6 +60,9 @@ async def exercise(options):
         path.mkdir()
     snapshots = fixture / "saved-render-projects"
     snapshots.mkdir(mode=0o700)
+    native_gate = fixture / "native-save-interleave-gate"
+    if interleave_source:
+        native_gate.mkdir(mode=0o700)
     # Exercise the shipped host profile, including every advertised schema.
     # Actual edits below cover a narrower, explicitly measured workflow.
     tools = json.loads((ROOT / "engines/velorn/editor.example.json").read_text())["allowed_tools"]
@@ -82,7 +88,10 @@ async def exercise(options):
     # Read-only DOM geometry requires an isolated synthetic CI X11 editor.
     # No production run exposes a remote debugging endpoint.
     pointer_inspection_env = (
-        {**os.environ, "ZX7_POINTER_E2E_CDP_PORT": "19393"}
+        {**os.environ, "ZX7_POINTER_E2E_CDP_PORT": "19393",
+         **({"ZX7_CI_NATIVE_SAVE_GATE_DIR": str(native_gate),
+             "ZX7_CI_NATIVE_SAVE_PROJECTS_ROOT": str(projects)}
+            if interleave_source else {})}
         if editorial_source and options.xvfb_binary and
            os.environ.get("CI") == "true" else None)
     params = StdioServerParameters(
@@ -2147,6 +2156,53 @@ async def exercise(options):
                         "original_picture_source_SHA_unchanged": True,
                         "new_human_edit_during_inflight_save_tested": False,
                         "genuine_AI_artistic_choice_tested": False,
+                    }, sort_keys=True), flush=True)
+                if interleave_source:
+                    from native_save_interleave_flow import (
+                        exercise_live_native_save)
+                    from studio_next.native_editor_source_pin import (
+                        _source_matches_pinned_native_save_interleave)
+                    assert _source_matches_pinned_native_save_interleave(options.source)
+                    interleave_result = await exercise_live_native_save(
+                        session=recovered_session, call=call,
+                        gate=native_gate, project=project, native_path=native_path,
+                        editor_source=options.source, state_root=fixture / "state",
+                        display=options.display, pointer_clip_id=pointer_clip_id,
+                        native_timeline_id=native_timeline_id,
+                        original=original, digest=digest)
+            if interleave_source:
+                # Fresh Electron after a deliberately interrupted in-flight
+                # write. The LAST CONFIRMED native project must survive,
+                # including human-style movement, source media and scene state.
+                async with connected() as final_session:
+                    assert digest(native_path) == interleave_result["committed_sha"]
+                    assert digest(original) == interleave_result["source_sha"]
+                    await call(final_session, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(final_session, lambda state:
+                        (state.get("currentTimeline") or {}).get("clipCount") == 3)
+                    final_timeline = await call(final_session, "get_timeline", {
+                        "includeClips": True})
+                    final_video = next(c for c in final_timeline["clips"]
+                                       if c["id"] == pointer_clip_id)
+                    final_shape = next(c for c in final_timeline["clips"]
+                                       if c["id"] == shape_id)
+                    assert abs(final_video["startTime"] -
+                               interleave_result["video_clip_start"]) < .001
+                    assert final_shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
+                    assert len(final_shape.get("keyframes", {}).get("opacity", [])) >= 2
+                    assert digest(native_path) == interleave_result["committed_sha"]
+                    assert digest(original) == interleave_result["source_sha"]
+                    print("ACTUAL_NATIVE_INTERRUPTED_WRITE_RECOVERY " + json.dumps({
+                        "fresh_Electron_reopened_last_confirmed_native_source": True,
+                        "human_GUI_edit_survived_kill_during_later_save": True,
+                        "original_picture_and_sound_source_custody_preserved": True,
+                        "editable_shape_and_keyframes_retained": True,
+                        "no_duplicate_native_clips": len(final_timeline["clips"]) == 3,
+                        "uncertain_native_save_not_replayed": True,
+                        "physical_encoded_AV_previously_verified": True,
+                        "independent_creative_art_quality_proven": False,
+                        "kernel_powercut_fsync_tested": False,
                     }, sort_keys=True), flush=True)
 
 

@@ -1,0 +1,150 @@
+diff --git a/electron/main.js b/electron/main.js
+--- a/electron/main.js
++++ b/electron/main.js
+@@ -375,3 +375,4 @@ async function writeFileAtomic(filePath, data, options) {
+   try {
+     await fs.writeFile(tempPath, data, options)
++    await require('./nativeSaveBarrier.cjs').maybePauseBeforeNativeProjectRename(filePath)
+     await fs.rename(tempPath, filePath)
+diff --git a/electron/nativeSaveBarrier.cjs b/electron/nativeSaveBarrier.cjs
+new file mode 100644
+--- /dev/null
++++ b/electron/nativeSaveBarrier.cjs
+@@ -0,0 +1,65 @@
++'use strict'
++
++// Test-only fault boundary in an independently pinned CI Electron source child.
++// This is NOT a model, UI, remotely callable or production fault-injection API.
++const fs = require('node:fs/promises')
++const path = require('node:path')
++
++const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
++const safeMarker = async marker => {
++  const stat = await fs.lstat(marker)
++  if (!stat.isFile() || stat.isSymbolicLink()) {
++    throw new Error('Untrusted native-save test marker')
++  }
++}
++
++// Pause after the real atomic temporary file has been written, before rename.
++// The renderer and actual X11 UI remain live; the harness may edit concurrently
++// or kill the exact isolated CI Electron process while the write is pending.
++async function maybePauseBeforeNativeProjectRename(filePath) {
++  if (process.env.CI !== 'true') return false
++  const gateDir = process.env.ZX7_CI_NATIVE_SAVE_GATE_DIR
++  const workspaceRoot = process.env.ZX7_CI_NATIVE_SAVE_PROJECTS_ROOT
++  if (!gateDir || !workspaceRoot) return false
++  if (!path.isAbsolute(gateDir) || !path.isAbsolute(workspaceRoot)) {
++    throw new Error('Native-save test paths must be absolute')
++  }
++  const candidate = path.resolve(filePath)
++  const relative = path.relative(path.resolve(workspaceRoot), candidate)
++  if (path.basename(candidate) !== 'project.comfystudio' ||
++      !relative || relative === '..' || relative.startsWith('..' + path.sep) ||
++      path.isAbsolute(relative)) return false
++
++  const directory = await fs.lstat(gateDir)
++  if (!directory.isDirectory() || directory.isSymbolicLink()) {
++    throw new Error('Native-save test gate must be a real directory')
++  }
++  const armed = path.join(gateDir, 'armed')
++  try {
++    await safeMarker(armed)
++  } catch (error) {
++    if (error.code === 'ENOENT') return false
++    throw error
++  }
++
++  const entered = path.join(gateDir, 'entered')
++  const release = path.join(gateDir, 'release')
++  // Exclusive marker also prevents silently accepting a previous session.
++  await fs.writeFile(entered, String(process.pid) + '\n', { flag: 'wx', mode: 0o600 })
++  const deadline = Date.now() + 20000
++  while (Date.now() < deadline) {
++    try {
++      await safeMarker(release)
++      await fs.unlink(armed)
++      await fs.unlink(release)
++      await fs.unlink(entered)
++      return true
++    } catch (error) {
++      if (error.code !== 'ENOENT') throw error
++    }
++    await sleep(50)
++  }
++  throw new Error('Isolated native-save test barrier timed out without release')
++}
++
++module.exports = { maybePauseBeforeNativeProjectRename }
+diff --git a/electron/nativeSaveBarrier.test.mjs b/electron/nativeSaveBarrier.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/electron/nativeSaveBarrier.test.mjs
+@@ -0,0 +1,67 @@
++'use strict'
++import test from 'node:test'
++import assert from 'node:assert/strict'
++import os from 'node:os'
++import fs from 'node:fs/promises'
++import path from 'node:path'
++import barrier from './nativeSaveBarrier.cjs'
++const { maybePauseBeforeNativeProjectRename } = barrier
++
++const waitFile = async (file) => {
++  for (let i = 0; i < 60; i++) {
++    try { await fs.access(file); return }
++    catch (error) { if (error.code !== 'ENOENT') throw error }
++    await new Promise(resolve => setTimeout(resolve, 30))
++  }
++  throw new Error('Native-save test gate was never entered')
++}
++
++test('CI-only barrier cannot stall unrelated or unarmed saves', async () => {
++  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'zx7-native-save-gate-'))
++  try {
++    const root = path.join(scratch, 'projects'), gate = path.join(scratch, 'gate')
++    await fs.mkdir(root)
++    await fs.mkdir(gate)
++    const before = { ...process.env }
++    try {
++      process.env.ZX7_CI_NATIVE_SAVE_GATE_DIR = gate
++      process.env.ZX7_CI_NATIVE_SAVE_PROJECTS_ROOT = root
++      delete process.env.CI
++      assert.equal(await maybePauseBeforeNativeProjectRename(path.join(root, 'item', 'project.comfystudio')), false)
++      process.env.CI = 'true'
++      assert.equal(await maybePauseBeforeNativeProjectRename(path.join(root, 'item', 'project.comfystudio')), false)
++      await fs.writeFile(path.join(gate, 'armed'), '1')
++      assert.equal(await maybePauseBeforeNativeProjectRename(path.join(scratch, 'outside', 'project.comfystudio')), false)
++      assert.equal(await maybePauseBeforeNativeProjectRename(path.join(root, 'item', 'unrelated.mov')), false)
++    } finally { process.env = before }
++  } finally { await fs.rm(scratch, { recursive: true, force: true }) }
++})
++
++test('real asynchronous barrier is held until explicit release and cleans markers', async () => {
++  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'zx7-native-save-gate-'))
++  const before = { ...process.env }
++  try {
++    const root = path.join(scratch, 'projects'), gate = path.join(scratch, 'gate')
++    await fs.mkdir(root)
++    await fs.mkdir(gate)
++    process.env.CI = 'true'
++    process.env.ZX7_CI_NATIVE_SAVE_GATE_DIR = gate
++    process.env.ZX7_CI_NATIVE_SAVE_PROJECTS_ROOT = root
++    await fs.writeFile(path.join(gate, 'armed'), '1')
++    let completed = false
++    const pending = maybePauseBeforeNativeProjectRename(path.join(root, 'item', 'project.comfystudio')).then(result => {
++      completed = true
++      return result
++    })
++    await waitFile(path.join(gate, 'entered'))
++    assert.equal(completed, false)
++    await fs.writeFile(path.join(gate, 'release'), '1')
++    assert.equal(await pending, true)
++    for (const name of ['armed', 'entered', 'release']) {
++      await assert.rejects(fs.stat(path.join(gate, name)), { code: 'ENOENT' })
++    }
++  } finally {
++    process.env = before
++    await fs.rm(scratch, { recursive: true, force: true })
++  }
++})
