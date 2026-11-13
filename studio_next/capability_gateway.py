@@ -26,6 +26,14 @@ from .capability_session_budget import (
 
 
 _MODEL_NATIVE_OBSERVATION_UNCHECKED = object()
+# Only pinned, synchronously committing editorial actions. An arbitrary
+# WRITE does not acquire native revision semantics by its name.
+_SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS = frozenset((
+    "move_clips", "trim_clips", "delete_clips",
+    "add_asset_to_timeline", "add_assets_to_timeline",
+    "set_clip_audio", "set_clip_speed", "update_track",
+    "add_transition", "set_clip_style",
+))
 
 
 class CapabilityExecutionError(ValueError):
@@ -61,7 +69,7 @@ def _source_native_commit_intent(tool, inputs):
     keyframe previews are the default; text and shape previews require an
     explicit true. Never infer that a preview is a write from the tool name.
     """
-    if tool == "set_clip_keyframes":
+    if tool == "set_clip_keyframes" or tool in _SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS:
         return inputs.get("previewOnly") is False
     if tool in ("update_text_clip", "update_shape_clip"):
         return inputs.get("previewOnly") is not True
