@@ -16,7 +16,8 @@ async function assertFree(port) {
   await new Promise(resolve => server.close(resolve))
 }
 export async function launchVelorn({ source, profileRoot, projectsRoot, stagingRoot, outputRoot,
-  xvfbBinary, xvfbLibraryDir, display, noSandbox = false, softwareGpu = false, startupTimeoutMs = 90000, signal }) {
+  xvfbBinary, xvfbLibraryDir, display, noSandbox = false, softwareGpu = false,
+  pointerTestPort = null, startupTimeoutMs = 90000, signal }) {
   signal?.throwIfAborted()
   for (const [key, value] of Object.entries({ source, profileRoot, projectsRoot, stagingRoot, outputRoot }))
     if (!value || !path.isAbsolute(value)) throw Error(`${key} must be an explicit absolute path.`)
@@ -28,7 +29,15 @@ export async function launchVelorn({ source, profileRoot, projectsRoot, stagingR
   await fs.access(path.join(source, 'dist', 'index.html'))
   const require = createRequire(path.join(source, 'package.json'))
   const electron = require('electron')
-  await Promise.all([assertFree(5173), assertFree(19790)])
+  if (pointerTestPort !== null) {
+    if (process.env.CI !== 'true' || !xvfbBinary ||
+        !/^127\\.0\\.0\\.1:\\d+$/.test(display || '') ||
+        pointerTestPort !== 19393) {
+      throw Error('Native pointer inspector is permitted only in isolated synthetic Xvfb CI')
+    }
+  }
+  await Promise.all([assertFree(5173), assertFree(19790),
+    ...(pointerTestPort === null ? [] : [assertFree(pointerTestPort)])])
   await fs.mkdir(profileRoot, { recursive: true })
   const appProfile = path.join(profileRoot, 'velorn')
   await fs.mkdir(appProfile, { recursive: true })
@@ -96,7 +105,13 @@ export async function launchVelorn({ source, profileRoot, projectsRoot, stagingR
       if (Date.now() > deadline) throw Error('Production renderer server did not become ready.')
       await pause(100)
     }
-    start(electron, [...(noSandbox ? ['--no-sandbox'] : []), ...(softwareGpu ? ['--disable-gpu'] : []), source], display ? { DISPLAY: display } : {})
+    start(electron, [...(noSandbox ? ['--no-sandbox'] : []),
+      ...(softwareGpu ? ['--disable-gpu'] : []),
+      ...(pointerTestPort === null ? [] : [
+        '--remote-debugging-address=127.0.0.1',
+        `--remote-debugging-port=${pointerTestPort}`,
+      ]),
+      source], display ? { DISPLAY: display } : {})
     const client = new VelornClient({ projectsRoot, stagingRoot, outputRoot })
     while (true) {
       checkChildren()
