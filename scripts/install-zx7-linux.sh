@@ -13,8 +13,10 @@ for argument in "$@"; do
     profile=scene
   elif [[ "$argument" == "--editorial-collaboration" && "$profile" == stable ]]; then
     profile=editorial
+  elif [[ "$argument" == "--cross-process-collaboration" && "$profile" == stable ]]; then
+    profile=cross-process
   elif [[ "$argument" == -* || -n "$install_prefix" ]]; then
-    echo "Usage: bash scripts/install-zx7-linux.sh [--scene-collaboration|--editorial-collaboration] [INSTALL_PREFIX]" >&2
+    echo "Usage: bash scripts/install-zx7-linux.sh [--scene-collaboration|--editorial-collaboration|--cross-process-collaboration] [INSTALL_PREFIX]" >&2
     exit 2
   else
     install_prefix=$argument
@@ -41,7 +43,7 @@ parent=$(dirname -- "$target")
 echo "Installing Ubuntu dependencies with apt. The editor runs as your user."
 sudo apt-get update -qq
 sudo apt-get install -y --no-install-recommends \
-  ca-certificates curl git python3 python3-venv xz-utils unzip \
+  ca-certificates curl git python3 python3-venv xz-utils unzip util-linux \
   ffmpeg xvfb xauth x11-xkb-utils xkb-data \
   libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
   libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
@@ -80,7 +82,13 @@ python3 -m venv "$candidate/venv"
 "$candidate/venv/bin/python" -m pip --isolated install --disable-pip-version-check "$checkout[editor,production]"
 mkdir -p "$candidate/venv/share/zx7-studio"
 editor="$candidate/venv/share/zx7-studio/velorn"
-if [[ "$profile" == editorial ]]; then
+if [[ "$profile" == cross-process ]]; then
+  # Linux-only, explicitly opted-in cooperative native writer. Preserve
+  # installed/stable sources, other profiles, and all existing owner data.
+  command -v flock >/dev/null || { echo "Linux flock is required" >&2; exit 1; }
+  bash "$checkout/engines/velorn/prepare-native-cross-process-candidate.sh" \
+    "$upstream" "$editor" --install
+elif [[ "$profile" == editorial ]]; then
   # Upgrade only the explicitly opted-in editorial profile. Its reviewed
   # parent variants stay trusted; stable/default installations are untouched.
   bash "$checkout/engines/velorn/prepare-native-save-order-candidate.sh" \
