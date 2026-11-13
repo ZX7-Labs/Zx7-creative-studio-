@@ -100,7 +100,9 @@ jobs:
           editor="$ZX7_OWNER_CP_EDITOR"
           xvfb-run -a timeout 40s "$editor/node_modules/electron/dist/electron" \
             engines/velorn/image-sequence-selection-e2e.cjs "$editor" after
-          "$ZX7_OWNER_CP_PREFIX/venv/bin/python" \
+          # The physical owner CLI is resolved by name inside installed-studio-e2e.
+          # Preserve its real installed entry point instead of a checkout shim.
+          PATH="$ZX7_OWNER_CP_PREFIX/bin:$PATH" "$ZX7_OWNER_CP_PREFIX/venv/bin/python" \
             -u engines/velorn/installed-studio-e2e.py \
             --source "$editor" --xvfb-binary /usr/bin/Xvfb
       - name: Source custody after installed tests
