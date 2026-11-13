@@ -33,10 +33,10 @@ def validate_native_interruption_gate(
             not project_root.is_dir() or not state.is_dir() or not editor.is_dir()):
         raise AssertionError("Unsafe native-save gate or project path")
     test_root = state.parent
-    if (test_root.name != "state" or
-            not test_root.parent.name.startswith("zx7-editor-mcp-") or
-            gate_root != test_root.parent / "native-save-interleave-gate" or
-            not project_root.is_relative_to(test_root.parent / "projects")):
+    if (state.name != "state" or
+            not test_root.name.startswith("zx7-editor-mcp-") or
+            gate_root != test_root / "native-save-interleave-gate" or
+            not project_root.is_relative_to(test_root / "projects")):
         raise AssertionError("Gate/project are not in the same synthetic CI fixture")
 
     for marker in ("armed", "entered"):
