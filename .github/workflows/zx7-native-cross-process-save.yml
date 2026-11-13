@@ -6,7 +6,7 @@ on:
       - '.github/workflows/zx7-native-cross-process-save.yml'
       - 'engines/velorn/nativeProjectCAS.cjs'
       - 'engines/velorn/nativeProjectCAS.test.cjs'
-      - 'engines/velorn/nativeProjectCAS.bindings.test.mjs'
+      - 'engines/velorn/nativeProjectCAS.bindings.source.mjs'
       - 'engines/velorn/native-cross-process-save.patch'
       - 'engines/velorn/prepare-native-cross-process-candidate.sh'
       - 'studio_next/editor_runtime/source-lock.json'
@@ -36,6 +36,7 @@ jobs:
           set -euo pipefail
           node --check engines/velorn/nativeProjectCAS.cjs
           node --check engines/velorn/nativeProjectCAS.test.cjs
+          node --check engines/velorn/nativeProjectCAS.bindings.source.mjs
           command -v flock
           node --test engines/velorn/nativeProjectCAS.test.cjs
 
@@ -65,7 +66,7 @@ jobs:
           expected=$(python3 -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_cross_process_revision"])')
           test "$(git -C "$RUNNER_TEMP/zx7-cross-process-installed" rev-parse HEAD)" = "$expected"
           node --test "$RUNNER_TEMP/zx7-cross-process-installed/electron/nativeProjectCAS.test.cjs" \
-            "$RUNNER_TEMP/zx7-cross-process-installed/electron/nativeProjectCAS.bindings.test.mjs"
+            "$RUNNER_TEMP/zx7-cross-process-installed/electron/nativeProjectCAS.bindings.source.mjs"
           test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
           git -C third_party/velorn diff --quiet HEAD --
 
