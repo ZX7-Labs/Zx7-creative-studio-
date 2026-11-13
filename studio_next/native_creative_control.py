@@ -2106,6 +2106,23 @@ class NativeCreativeControl:
                     if code is not None:
                         # The trusted bridge refused BEFORE native RPC. This
                         # is neither an ACK nor an uncertain native mutation.
+                        # If the native project changed since the Brain's last
+                        # real observation, *all* cached timeline/asset facts
+                        # and native edit previews may describe a human's old
+                        # state. Invalidate that evidence before the next model
+                        # turn. No host-read should silently invent a new plan.
+                        if code in ("native_identity_model_observation_stale",
+                                    "native_identity_model_observation_required"):
+                            self._native_read_snapshots.clear()
+                            self._placement_observations.clear()
+                            self._last_native_texts = []
+                            self._last_native_preview_feedback = None
+                            self._project_presence = "unknown"
+                            self._post_write_state_warning = {
+                                "native_model_observation_invalidated": True,
+                                "project_state_unknown": True,
+                                "must_inspect_native_project": True,
+                            }
                         # The next call still requires a new MODEL decision.
                         self._last_preflight_feedback = {
                             "tool": native_name, "validation_keyword": "host_pre_dispatch",

@@ -1417,6 +1417,77 @@ async def exercise(options):
             assert all(any(m["id"] == marker for m in timeline["markers"])
                        for marker in (
                            first_gui_marker, interrupted.manual_marker))
+            # A real AI session must be bound to the project state the model
+            # had seen BEFORE thinking; the host's fresh inventory cannot
+            # silently legitimize a stale model decision after GUI activity.
+            from studio_next.body_editor_client import host_pre_dispatch_rejection
+            model_visible = CapabilityGatewayMcpSession(
+                native_gateway, "editor",
+                require_model_native_observation=True)
+            model_choice = {"clipId": shape_id, "fillColor": "#d34a77",
+                            "previewOnly": False}
+            unobserved = await model_visible.call_tool(
+                "update_shape_clip", model_choice)
+            assert host_pre_dispatch_rejection(
+                unobserved, "update_shape_clip", model_choice
+            ) == "native_identity_model_observation_required"
+            model_snapshot = await call(model_visible, "get_project", {})
+            previously_observed = model_snapshot["zx7NativeRevision"]
+            previous_markers = {m["id"] for m in timeline["markers"]}
+            inject_gui_keyboard("m")
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                timeline, unchanged_human_shape = await live_shape()
+                found = {m["id"] for m in timeline["markers"]} - previous_markers
+                if len(found) == 1:
+                    third_human_marker = next(iter(found))
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Manual GUI edit after model observation not seen")
+            await wait(session, lambda state:
+                state.get("zx7NativeRevision") != previously_observed and
+                state.get("zx7NativeRevision") is not None)
+            stale_model_plan = await model_visible.call_tool(
+                "update_shape_clip", model_choice)
+            assert host_pre_dispatch_rejection(
+                stale_model_plan, "update_shape_clip", model_choice
+            ) == "native_identity_model_observation_stale"
+            assert unchanged_human_shape["shapeProperties"]["fillColor"].lower() == (
+                "#e83b61")
+            no_replay = await model_visible.call_tool(
+                "update_shape_clip", model_choice)
+            assert host_pre_dispatch_rejection(
+                no_replay, "update_shape_clip", model_choice
+            ) == "native_identity_model_observation_required"
+            await call(model_visible, "get_project", {})
+            fresh_model_choice = await call(
+                model_visible, "update_shape_clip", model_choice)
+            assert fresh_model_choice.get("success") is True
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                timeline, model_revised_shape = await live_shape()
+                if (model_revised_shape["shapeProperties"]["fillColor"].lower()
+                        == "#d34a77"):
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Fresh model-visible project revision not applied")
+            assert all(any(m["id"] == marker for m in timeline["markers"])
+                       for marker in (first_gui_marker,
+                                      interrupted.manual_marker,
+                                      third_human_marker))
+            assert len(shape_opacity_curve(model_revised_shape)) >= 2
+            print("ACTUAL_MODEL_OBSERVED_GUI_EPOCH " + json.dumps({
+                "actual_gui_edit_after_model_source_read": True,
+                "stale_model_action_rejected_before_native_dispatch": True,
+                "repeated_unobserved_action_remained_rejected": True,
+                "model_visible_fresh_source_read_required": True,
+                "subsequent_native_shape_edit_saved_by_real_editor": True,
+                "three_human_GUI_annotations_preserved": True,
+                "real_neural_model_decisions_tested": False,
+                "professional_art_quality_approved": False,
+            }, sort_keys=True), flush=True)
             scene_save = await call(session, "save_project", {
                 "previewOnly": False})
             scene_save_sha = digest(native_path)
@@ -1600,11 +1671,16 @@ async def exercise(options):
                 "includeClips": True})
             shape = next(c for c in reopened["clips"]
                          if c["id"] == shape_id)
-            assert shape["shapeProperties"]["fillColor"].lower() == "#e83b61"
+            # The model-bound fresh decision followed the prior source-native
+            # shape/keyframe revisions. The reopened authoritative project
+            # must retain its *latest* applied color, not the old pre-intervention
+            # shape from the earlier script-only scene proof.
+            assert shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
             assert isinstance(shape.get("keyframes"), dict)
             assert len(shape["keyframes"].get("opacity") or []) >= 2
             assert all(any(m["id"] == mid for m in reopened["markers"])
-                       for mid in (first_gui_marker, interrupted.manual_marker))
+                       for mid in (first_gui_marker, interrupted.manual_marker,
+                                   third_human_marker))
             assert digest(native_path) == scene_save_sha
             assert digest(original) == original_hash
             print("ACTUAL_NATIVE_SCENE_REOPEN " + json.dumps({

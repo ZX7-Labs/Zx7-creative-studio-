@@ -80,6 +80,56 @@ class SceneCasTests(IsolatedAsyncioTestCase):
         await self.gateway.refresh()
         self.client = CapabilityGatewayMcpSession(self.gateway, "editor")
 
+    async def test_model_revision_binding_prevents_stale_shape_and_keyframe_edit(self):
+        from studio_next.body_editor_client import host_pre_dispatch_rejection
+        candidate = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        await candidate.call_tool("get_project", {})
+        self.native.human_gui_edit("GUI edited native shape during model thought")
+        self.native.publish()
+        for name, arguments in (
+            ("update_shape_clip", {"clipId": "clip-A",
+                                   "fillColor": "#aabbcc", "previewOnly": False}),
+            ("set_clip_keyframes", {"clipId": "clip-A",
+                                   "keyframes": [{"time": 0, "value": 0.5}],
+                                   "previewOnly": False}),
+        ):
+            with self.subTest(native_tool=name):
+                before = len([n for n, _ in self.native.calls if n == name])
+                denied = await candidate.call_tool(name, arguments)
+                self.assertTrue(denied.is_error)
+                self.assertEqual(host_pre_dispatch_rejection(
+                    denied, name, arguments),
+                    "native_identity_model_observation_stale"
+                    if name == "update_shape_clip" else
+                    "native_identity_model_observation_required")
+                self.assertEqual(before, len([
+                    n for n, _ in self.native.calls if n == name]))
+        self.assertEqual(self.native.scene_writes, [])
+        await candidate.call_tool("get_project", {})
+        edited = await candidate.call_tool("update_shape_clip", {
+            "clipId": "clip-A", "fillColor": "#aabbcc", "previewOnly": False})
+        self.assertFalse(edited.is_error)
+        self.assertEqual(len(self.native.scene_writes), 1)
+
+    async def test_read_only_native_preview_does_not_consume_model_epoch(self):
+        candidate = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        await candidate.call_tool("get_project", {})
+        for name, arguments in (
+            ("update_shape_clip", {"clipId": "clip-A", "previewOnly": True}),
+            ("set_clip_keyframes", {"clipId": "clip-A", "keyframes": []}),
+        ):
+            result = await candidate.call_tool(name, arguments)
+            self.assertFalse(result.is_error)
+        # Model must still be able to choose a real commit after inspecting
+        # previews, without a second write or fabricated native observation.
+        actual = await candidate.call_tool("set_clip_keyframes", {
+            "clipId": "clip-A", "keyframes": [{"time": 0, "value": 1}],
+            "previewOnly": False})
+        self.assertFalse(actual.is_error)
+        self.assertEqual(len(self.native.scene_writes), 1)
+
     async def test_expected_fences_are_only_source_proven_scope(self):
         self.assertEqual(set(self.policy["fence"]), {
             "update_text_clip", "update_shape_clip", "set_clip_keyframes"})
