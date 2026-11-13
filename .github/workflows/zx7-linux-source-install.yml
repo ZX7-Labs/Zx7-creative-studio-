@@ -82,7 +82,10 @@ jobs:
       - name: Installed source modules pass real Linux lock and active-source-hydration tests
         run: |
           set -euo pipefail
-          node --test "$ZX7_OWNER_CP_EDITOR/electron/nativeProjectCAS.test.cjs" \
+          # Test with the Node executable the installed owner Studio actually ships.
+          # GitHub runner's default 'node' is not part of this installation.
+          "$ZX7_OWNER_CP_PREFIX/node/bin/node" --version
+          "$ZX7_OWNER_CP_PREFIX/node/bin/node" --test "$ZX7_OWNER_CP_EDITOR/electron/nativeProjectCAS.test.cjs" \
             "$ZX7_OWNER_CP_EDITOR/electron/nativeProjectCAS.bindings.source.mjs"
           # A second install must refuse replacing an existing user prefix.
           before=$(readlink -- "$ZX7_OWNER_CP_PREFIX")
