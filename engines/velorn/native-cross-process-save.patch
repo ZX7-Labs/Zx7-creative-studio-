@@ -52,7 +52,7 @@ diff --git a/src/services/fileSystem.js b/src/services/fileSystem.js
 +      throw new Error('Native project read lacks an exact source SHA')
 +    }
 +    if (bindSourceHead) nativeProjectSourceHeads.set(
-      projectDir, filePath === primaryPath ? result.sha256 : null)
++      projectDir, filePath === primaryPath ? result.sha256 : null)
 +    return projectData
 +  }
 +  
