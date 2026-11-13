@@ -247,6 +247,24 @@ def _source_matches_pinned_native_save_interleave(source: Path) -> bool:
             actual.stdout.strip() == PINNED_VELORN_SAVE_INTERLEAVE_REVISION)
 
 
+
+def _source_matches_pinned_native_cross_process(source: Path) -> bool:
+    """Exact clean, reviewed source-native Linux CAS writer, not test name."""
+    if (not PINNED_VELORN_CROSS_PROCESS_REVISION or
+            not _source_matches_pinned_native_save_order(source)):
+        return False
+    safe_env = dict(os.environ)
+    safe_env.pop("NVIDIA_API_KEY", None)
+    try:
+        actual = subprocess.run(
+            ["git", "-C", str(source.resolve(strict=True)), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return False
+    return (actual.returncode == 0 and
+            actual.stdout.strip() == PINNED_VELORN_CROSS_PROCESS_REVISION)
+
+
 def pinned_electron_marker_previews(source: Path, grants: dict) -> tuple[str, ...]:
     """Allow exactly source-verified *flat marker* no-write receipts."""
     if not _verified_editor_grants(grants):
