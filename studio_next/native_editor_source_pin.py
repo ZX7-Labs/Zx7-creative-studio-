@@ -19,11 +19,13 @@ PINNED_VELORN_COLLAB_REVISION = _SOURCE_LOCK.get("collab_revision")
 PINNED_VELORN_SCENE_REVISION = _SOURCE_LOCK.get("collab_scene_revision")
 PINNED_VELORN_EDITORIAL_REVISION = _SOURCE_LOCK.get("collab_editorial_revision")
 PINNED_VELORN_SAVE_REVISION = _SOURCE_LOCK.get("collab_save_revision")
+PINNED_VELORN_SAVE_ORDER_REVISION = _SOURCE_LOCK.get("collab_save_order_revision")
 TRUSTED_VELORN_REVISIONS = frozenset(
     value for value in (
         PINNED_VELORN_MCP_REVISION, PINNED_VELORN_DESKTOP_REVISION,
         PINNED_VELORN_COLLAB_REVISION, PINNED_VELORN_SCENE_REVISION,
         PINNED_VELORN_EDITORIAL_REVISION, PINNED_VELORN_SAVE_REVISION,
+        PINNED_VELORN_SAVE_ORDER_REVISION,
     ) if isinstance(value, str) and value)
 
 _PINNED_MARKER_PREVIEWS = (
@@ -114,6 +116,7 @@ def _source_matches_pinned_native_collaboration(source: Path) -> bool:
                     PINNED_VELORN_SCENE_REVISION,
                     PINNED_VELORN_EDITORIAL_REVISION,
                     PINNED_VELORN_SAVE_REVISION,
+                    PINNED_VELORN_SAVE_ORDER_REVISION,
                 }):
             return False
         # A clean PINNED HEAD is the source contract, not just three
@@ -147,7 +150,8 @@ def _source_matches_pinned_native_scene(source: Path) -> bool:
     return (actual.returncode == 0 and
             actual.stdout.strip() in {PINNED_VELORN_SCENE_REVISION,
                                       PINNED_VELORN_EDITORIAL_REVISION,
-                                      PINNED_VELORN_SAVE_REVISION})
+                                      PINNED_VELORN_SAVE_REVISION,
+                                      PINNED_VELORN_SAVE_ORDER_REVISION})
 
 
 def _source_matches_pinned_native_editorial(source: Path) -> bool:
@@ -165,7 +169,8 @@ def _source_matches_pinned_native_editorial(source: Path) -> bool:
         return False
     return (actual.returncode == 0 and
             actual.stdout.strip() in {PINNED_VELORN_EDITORIAL_REVISION,
-                                      PINNED_VELORN_SAVE_REVISION})
+                                      PINNED_VELORN_SAVE_REVISION,
+                                      PINNED_VELORN_SAVE_ORDER_REVISION})
 
 
 
@@ -183,7 +188,25 @@ def _source_matches_pinned_native_save(source: Path) -> bool:
     except (OSError, RuntimeError, subprocess.TimeoutExpired):
         return False
     return (actual.returncode == 0 and
-            actual.stdout.strip() == PINNED_VELORN_SAVE_REVISION)
+            actual.stdout.strip() in {PINNED_VELORN_SAVE_REVISION,
+                                      PINNED_VELORN_SAVE_ORDER_REVISION})
+
+
+def _source_matches_pinned_native_save_order(source: Path) -> bool:
+    """Exact reviewed descendant proves serialized project saves and no-loss close."""
+    if (not PINNED_VELORN_SAVE_ORDER_REVISION or
+            not _source_matches_pinned_native_save(source)):
+        return False
+    safe_env = dict(os.environ)
+    safe_env.pop("NVIDIA_API_KEY", None)
+    try:
+        actual = subprocess.run(
+            ["git", "-C", str(source.resolve(strict=True)), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return False
+    return (actual.returncode == 0 and
+            actual.stdout.strip() == PINNED_VELORN_SAVE_ORDER_REVISION)
 
 
 def pinned_electron_marker_previews(source: Path, grants: dict) -> tuple[str, ...]:
