@@ -1302,8 +1302,16 @@ async def exercise(options):
             # and alone supplies the commit revision to the native writer.
             scene_policy = pinned_native_editor_identity_policy(
                 options.source, tools, session)
-            assert scene_policy and set(scene_policy["fence"]) == {
+            scene_fences = {
                 "update_text_clip", "update_shape_clip", "set_clip_keyframes"}
+            if editorial_source:
+                scene_fences.update({
+                    "move_clips", "trim_clips", "delete_clips",
+                    "add_asset_to_timeline", "add_assets_to_timeline",
+                    "set_clip_audio", "set_clip_speed", "update_track",
+                    "add_transition", "set_clip_style",
+                })
+            assert scene_policy and set(scene_policy["fence"]) == scene_fences
             native_gateway = CapabilityGateway({"editor": (
                 session, tools, {}, None, {}, scene_policy)})
             await native_gateway.refresh()
