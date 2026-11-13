@@ -117,7 +117,7 @@ export async function launchVelorn({ source, profileRoot, projectsRoot, stagingR
     // model-callable kill tool, production path or arbitrary PID selection.
     if (process.env.CI === 'true' && xvfbBinary && display &&
         nativeElectron.pid && Number.isSafeInteger(nativeElectron.pid)) {
-      await log.write(`ZX7_CI_NATIVE_ELECTRON_PID=${nativeElectron.pid}\\n`)
+      await log.write(`ZX7_CI_NATIVE_ELECTRON_PID=${nativeElectron.pid}\n`)
     }
     const client = new VelornClient({ projectsRoot, stagingRoot, outputRoot })
     while (true) {
