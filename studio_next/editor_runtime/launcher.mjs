@@ -31,7 +31,7 @@ export async function launchVelorn({ source, profileRoot, projectsRoot, stagingR
   const electron = require('electron')
   if (pointerTestPort !== null) {
     if (process.env.CI !== 'true' || !xvfbBinary ||
-        !/^127\\.0\\.0\\.1:\\d+$/.test(display || '') ||
+        !/^127\.0\.0\.1:\d+$/.test(display || '') ||
         pointerTestPort !== 19393) {
       throw Error('Native pointer inspector is permitted only in isolated synthetic Xvfb CI')
     }
