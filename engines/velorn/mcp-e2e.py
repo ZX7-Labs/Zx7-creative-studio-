@@ -1592,7 +1592,46 @@ async def exercise(options):
                         snapshot = await call(view, "get_project", {})
                         assert snapshot["zx7NativeRevision"] == source_epoch
                 old_timeline, old_shape = await live_shape()
-                old_markers = {m["id"] for m in old_timeline["markers"]}
+                before_pointer_title = next(
+                    c for c in old_timeline["clips"] if c["id"] == title_id)
+                before_pointer_title_time = before_pointer_title["startTime"]
+                # This independent model-view read happens BEFORE the real
+                # mouse gesture. A later host inventory read cannot silently
+                # make an older model decision current again.
+                pointer_model_view = CapabilityGatewayMcpSession(
+                    editorial_gateway, "editor",
+                    require_model_native_observation=True)
+                assert (await call(pointer_model_view, "get_project", {})
+                        )["zx7NativeRevision"] == source_epoch
+                from native_pointer_proof import drag_native_clip_pointer
+                pointer_input = await drag_native_clip_pointer(
+                    options.display, title_id)
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    pointer_timeline, _ = await live_shape()
+                    pointer_title = next(
+                        c for c in pointer_timeline["clips"]
+                        if c["id"] == title_id)
+                    if (pointer_title["startTime"] -
+                            before_pointer_title_time > .25):
+                        break
+                    await asyncio.sleep(.15)
+                else:
+                    raise AssertionError(
+                        "Real X11 pointer did not move an editable native title clip")
+                human_pointer_title_start = pointer_title["startTime"]
+                native_pointer_revision = await wait(session, lambda state:
+                    isinstance(state.get("zx7NativeRevision"), str) and
+                    state["zx7NativeRevision"] != source_epoch)
+                assert native_pointer_revision["zx7NativeRevision"] != source_epoch
+                stale_pointer_args = {
+                    "clipId": shape_id, "startSeconds": .25, "previewOnly": False}
+                blocked_pointer_plan = await pointer_model_view.call_tool(
+                    "move_clips", stale_pointer_args)
+                assert host_pre_dispatch_rejection(
+                    blocked_pointer_plan, "move_clips", stale_pointer_args
+                ) == "native_identity_model_observation_stale"
+                old_markers = {m["id"] for m in pointer_timeline["markers"]}
                 inject_gui_keyboard("m")
                 deadline = time.monotonic() + 20
                 while time.monotonic() < deadline:
