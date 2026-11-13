@@ -2,6 +2,8 @@
 import os
 from pathlib import Path
 import tempfile
+import signal
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -61,6 +63,56 @@ class CrashProofSecurityTests(unittest.TestCase):
                         editor_source=Path("/not-owned"),
                         state_root=Path("/tmp"), display=display)
             kill.assert_not_called()
+
+
+    def test_native_kill_is_kernel_pidfd_pinned_and_closes_descriptor(self):
+        with (
+            patch.dict(os.environ, {"CI": "true"}),
+            patch("engines.velorn.native_crash_proof._candidate_pid",
+                  return_value=321),
+            patch("engines.velorn.native_crash_proof.os.pidfd_open",
+                  return_value=19) as open_fd,
+            patch("engines.velorn.native_crash_proof.os.close") as close_fd,
+            patch("engines.velorn.native_crash_proof.Path.read_bytes",
+                  return_value=b"synthetic"),
+            patch("engines.velorn.native_crash_proof.Path.stat",
+                  return_value=SimpleNamespace(st_uid=os.getuid())),
+            patch("engines.velorn.native_crash_proof._verify_process_identity") as verify,
+            patch("engines.velorn.native_crash_proof.signal.pidfd_send_signal") as send,
+        ):
+            result = kill_exact_editor_after_saved_revision(
+                editor_source=Path("/synthetic-editor"),
+                state_root=Path("/synthetic-state"),
+                display="127.0.0.1:97")
+            self.assertEqual(result, 321)
+            open_fd.assert_called_once_with(321, 0)
+            verify.assert_called_once()
+            send.assert_called_once_with(19, signal.SIGKILL)
+            close_fd.assert_called_once_with(19)
+
+    def test_changed_identity_prevents_pidfd_signal_and_closes_fd(self):
+        with (
+            patch.dict(os.environ, {"CI": "true"}),
+            patch("engines.velorn.native_crash_proof._candidate_pid",
+                  return_value=321),
+            patch("engines.velorn.native_crash_proof.os.pidfd_open",
+                  return_value=19),
+            patch("engines.velorn.native_crash_proof.os.close") as close_fd,
+            patch("engines.velorn.native_crash_proof.Path.read_bytes",
+                  return_value=b"synthetic"),
+            patch("engines.velorn.native_crash_proof.Path.stat",
+                  return_value=SimpleNamespace(st_uid=os.getuid())),
+            patch("engines.velorn.native_crash_proof._verify_process_identity",
+                  side_effect=AssertionError("process changed")),
+            patch("engines.velorn.native_crash_proof.signal.pidfd_send_signal") as send,
+        ):
+            with self.assertRaisesRegex(AssertionError, "process changed"):
+                kill_exact_editor_after_saved_revision(
+                    editor_source=Path("/synthetic-editor"),
+                    state_root=Path("/synthetic-state"),
+                    display="127.0.0.1:97")
+            send.assert_not_called()
+            close_fd.assert_called_once_with(19)
 
 
 if __name__ == "__main__":
