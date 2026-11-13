@@ -69,6 +69,7 @@ jobs:
           python -m unittest \
             studio_next.test_native_editorial_revision \
             studio_next.test_native_crash_proof \
+            studio_next.test_native_save_authority \
             studio_next.test_native_pointer_proof \
             studio_next.test_native_revision_fence \
             studio_next.test_native_scene_revision -v
