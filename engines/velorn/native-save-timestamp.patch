@@ -23,16 +23,16 @@ diff --git a/src/services/fileSystem.js b/src/services/fileSystem.js
    }
    
    // Web fallback
-@@ -270,7 +271,7 @@
+@@ -270,7 +271,8 @@
      await writeProjectSnapshot(projectDir, serializedProject, saveTimestamp)
    } catch (snapshotError) {
      console.warn('Project snapshot save failed:', snapshotError)
--  }
-+  }  return savedModified
+   }
++  return savedModified
  }
  
  /**
-@@ -316,14 +317,14 @@
+@@ -316,14 +318,14 @@
      created: now,
      modified: now,
    }
