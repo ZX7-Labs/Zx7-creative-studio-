@@ -17,6 +17,7 @@ from .native_editor_source_pin import (
     _source_matches_pinned_electron_mcp,
     _source_matches_pinned_native_collaboration,
     _source_matches_pinned_native_scene,
+    _source_matches_pinned_native_editorial,
 )
 
 _MAX_TEXT = 6_000_000
@@ -50,6 +51,7 @@ _NATIVE_REFERENCES = {
     "update_track": {"/trackId": "tracks"},
     "remove_track": {"/trackId": "tracks"},
     "set_clip_audio": {"/clipId": "clips", "/clipIds/*": "clips"},
+    "set_clip_speed": {"/clipId": "clips", "/clipIds/*": "clips"},
     "set_clip_mask": {
         "/clipId": "clips", "/clipIds/*": "clips",
         "/trackId": "tracks", "/maskAssetId": "assets"},
@@ -238,9 +240,17 @@ def pinned_native_editor_identity_policy(source: Path, grants, session, *,
     source_fenced = _source_matches_pinned_native_collaboration(source)
     scene_fenced = (_source_matches_pinned_native_scene(source)
                     if source_fenced else False)
+    editorial_fenced = (_source_matches_pinned_native_editorial(source)
+                        if scene_fenced else False)
     fenced_names = (
         (["update_text_clip"] if source_fenced else []) +
-        (["update_shape_clip", "set_clip_keyframes"] if scene_fenced else [])
+        (["update_shape_clip", "set_clip_keyframes"] if scene_fenced else []) +
+        ([
+            "move_clips", "trim_clips", "delete_clips",
+            "add_asset_to_timeline", "add_assets_to_timeline",
+            "set_clip_audio", "set_clip_speed", "update_track",
+            "add_transition", "set_clip_style",
+        ] if editorial_fenced else [])
     )
     fenced_names = [name for name in fenced_names
                     if grants.get(name) == "write"]

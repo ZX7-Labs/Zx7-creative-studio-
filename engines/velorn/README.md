@@ -50,6 +50,39 @@ marker**, not direct pointer drag of a shape or actual model-human coauthoring.
 Other native write families, independent security review, genuine autonomous
 artistic quality and final release remain open gates.
 
+## Opt-in full editorial co-editing source (G1 integration)
+
+The separately **source-pinned editorial child** adds source-native atomic
+revision checking to ten synchronous Velorn editing operations: move/trim/delete
+clips, add one/multiple original assets to the timeline, clip audio gain/fades
+and playback speed, track updates, transitions, and clip style. The existing
+text, editable shape and keyframe protections remain. All other native writer
+families are still outside this opt-in source CAS contract; the full A–L
+creative field is not certified.
+
+```sh
+bash scripts/install-zx7-linux.sh --editorial-collaboration "$HOME/.local/opt/zx7-studio-editorial"
+"$HOME/.local/opt/zx7-studio-editorial/bin/zx7-studio" init ./editorial-studio
+"$HOME/.local/opt/zx7-studio-editorial/bin/zx7-studio" doctor ./editorial-studio
+```
+
+The installer builds an independent source tree from the existing reviewed
+scene revision, applies `native-editorial-revision.patch` and refuses any
+source SHA other than `collab_editorial_revision`. Neither the default Studio
+nor the older scene installation or private media is modified. A model-facing
+native creative session checks the **model's actual last observed get_project
+revision** before any of these commits, uses a fresh host-owned object inventory
+and has the installed editor compare the revision again at its synchronous
+renderer writer. Preview-only requests are unmodified. A stale plan is never
+silently replanned by BODY, and an ambiguous result is not replayed.
+
+These ten actions were chosen because their reviewed native renderer handlers
+are synchronous before timeline store writes. Async generators, effects,
+project switching, external app changes and unsandboxed plugins are **not**
+covered. The reproducible source variant and actual Electron GUI/independently
+decoded A/V test are separate from neural decision competence and human artistic
+approval; see `zx7-native-editorial-candidate.yml` for the exact test.
+
 ## Connect a local AI client through standard MCP
 
 Install the optional bridge with `python -m pip install '.[editor]'`. Protocol

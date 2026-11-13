@@ -11,8 +11,10 @@ install_prefix=""
 for argument in "$@"; do
   if [[ "$argument" == "--scene-collaboration" && "$profile" == stable ]]; then
     profile=scene
+  elif [[ "$argument" == "--editorial-collaboration" && "$profile" == stable ]]; then
+    profile=editorial
   elif [[ "$argument" == -* || -n "$install_prefix" ]]; then
-    echo "Usage: bash scripts/install-zx7-linux.sh [--scene-collaboration] [INSTALL_PREFIX]" >&2
+    echo "Usage: bash scripts/install-zx7-linux.sh [--scene-collaboration|--editorial-collaboration] [INSTALL_PREFIX]" >&2
     exit 2
   else
     install_prefix=$argument
@@ -78,7 +80,10 @@ python3 -m venv "$candidate/venv"
 "$candidate/venv/bin/python" -m pip --isolated install --disable-pip-version-check "$checkout[editor,production]"
 mkdir -p "$candidate/venv/share/zx7-studio"
 editor="$candidate/venv/share/zx7-studio/velorn"
-if [[ "$profile" == scene ]]; then
+if [[ "$profile" == editorial ]]; then
+  bash "$checkout/engines/velorn/prepare-native-editorial-candidate.sh" \
+    "$upstream" "$editor" --install
+elif [[ "$profile" == scene ]]; then
   bash "$checkout/engines/velorn/prepare-native-scene-candidate.sh" \
     "$upstream" "$editor" --install
 else
