@@ -31,7 +31,7 @@ git -C "$stage/ordered" diff --quiet HEAD --
 node --check "$stage/ordered/src/stores/projectStore.js"
 node --check "$stage/ordered/src/services/projectDirtyTracker.js"
 node --check "$stage/ordered/src/services/nativeSaveSequence.js"
-node --experimental-default-type=module --test \
+node --test \
   "$stage/ordered/src/services/nativeSaveSequence.test.mjs"
 printf 'Reproducible ZX7 native save ordering revision: %s\n' "$rev"
 if [[ "$3" == "--inspect" ]]; then exit 0; fi
