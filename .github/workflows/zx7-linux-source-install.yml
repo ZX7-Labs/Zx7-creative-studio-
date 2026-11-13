@@ -51,3 +51,65 @@ jobs:
           PATH="$ZX7_INSTALL_PREFIX/bin:$PATH" "$ZX7_INSTALL_PREFIX/venv/bin/python" \
             -u engines/velorn/installed-studio-e2e.py --source "$ZX7_INSTALLED_EDITOR" \
             --xvfb-binary /usr/bin/Xvfb --live-research
+
+  native-cross-process-source-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Actually install separate Linux cross-process studio to fresh prefix
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/zx7-owner-cross-process-install"
+          test ! -e "$target" && test ! -L "$target"
+          bash scripts/install-zx7-linux.sh --cross-process-collaboration "$target"
+          test -L "$target"
+          test -x "$target/bin/zx7-studio"
+          test "$("$target/node/bin/node" --version)" = "v24.22.2"
+          editor=$(realpath -- "$target/venv/share/zx7-studio/velorn")
+          expected=$(python3 -c 'import json; print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_cross_process_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --quiet HEAD --
+          test ! -e "$editor/.git/objects/info/alternates"
+          test "$(stat -c '%u:%a' "$editor/node_modules/electron/dist/chrome-sandbox")" = "0:4755"
+          command -v flock
+          "$target/bin/zx7-studio" --help
+          echo "ZX7_OWNER_CP_PREFIX=$target" >> "$GITHUB_ENV"
+          echo "ZX7_OWNER_CP_EDITOR=$editor" >> "$GITHUB_ENV"
+      - name: Installed source modules pass real Linux lock and active-source-hydration tests
+        run: |
+          set -euo pipefail
+          # Test with the Node executable the installed owner Studio actually ships.
+          # GitHub runner's default 'node' is not part of this installation.
+          "$ZX7_OWNER_CP_PREFIX/node/bin/node" --version
+          "$ZX7_OWNER_CP_PREFIX/node/bin/node" --test "$ZX7_OWNER_CP_EDITOR/electron/nativeProjectCAS.test.cjs" \
+            "$ZX7_OWNER_CP_EDITOR/electron/nativeProjectCAS.bindings.source.mjs"
+          # A second install must refuse replacing an existing user prefix.
+          before=$(readlink -- "$ZX7_OWNER_CP_PREFIX")
+          if bash scripts/install-zx7-linux.sh --cross-process-collaboration "$ZX7_OWNER_CP_PREFIX"; then
+            echo "Cross-process installer silently replaced owner installation" >&2
+            exit 1
+          fi
+          test "$(readlink -- "$ZX7_OWNER_CP_PREFIX")" = "$before"
+      - name: Real installed sandboxed Electron image selection and CLI source export
+        run: |
+          set -euo pipefail
+          editor="$ZX7_OWNER_CP_EDITOR"
+          xvfb-run -a timeout 40s "$editor/node_modules/electron/dist/electron" \
+            engines/velorn/image-sequence-selection-e2e.cjs "$editor" after
+          # The physical owner CLI is resolved by name inside installed-studio-e2e.
+          # Preserve its real installed entry point instead of a checkout shim.
+          PATH="$ZX7_OWNER_CP_PREFIX/bin:$PATH" "$ZX7_OWNER_CP_PREFIX/venv/bin/python" \
+            -u engines/velorn/installed-studio-e2e.py \
+            --source "$editor" --xvfb-binary /usr/bin/Xvfb
+      - name: Source custody after installed tests
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
+          if [[ -n "${ZX7_OWNER_CP_EDITOR:-}" ]]; then
+            git -C "$ZX7_OWNER_CP_EDITOR" diff --quiet HEAD --
+          fi

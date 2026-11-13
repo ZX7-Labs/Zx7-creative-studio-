@@ -106,8 +106,18 @@ reviewing the other writer's committed work and protecting your own unsaved
 changes. Read-only project listings and duplication-source inspection do not
 change the active editor's save authority; explicit project open/reopen does.
 
-On Linux with util-linux `flock`, prepare a **new, nonexistent destination**
-from the checked-in upstream submodule (never patch your current editor):
+On Ubuntu 24.04 x86-64, the preferred owner-operable path is a fresh,
+separate installed Studio prefix (never overwrite an existing installation):
+
+```sh
+bash scripts/install-zx7-linux.sh --cross-process-collaboration \
+  "$HOME/.local/opt/zx7-studio-cross-process"
+"$HOME/.local/opt/zx7-studio-cross-process/bin/zx7-studio" --help
+```
+
+For source developers, on Linux with util-linux `flock`, prepare a **new,
+nonexistent destination** from the checked-in upstream submodule (never
+patch your current editor):
 
 ```sh
 bash engines/velorn/prepare-native-cross-process-candidate.sh \
