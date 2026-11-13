@@ -107,10 +107,13 @@ jobs:
           test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
       - name: Actual installed native GUI/MCP editing, source A/V and fresh reopen
         run: |
+          # This is the only synthetic X11 display allowed by the
+          # independently reviewed pidfd crash-proof security boundary.
+          python -m unittest studio_next.test_native_crash_proof -v
           python -u engines/velorn/mcp-e2e.py \
             --source "$ZX7_CROSS_PROCESS_EDITOR" \
             --xvfb-binary /usr/bin/Xvfb \
-            --display 127.0.0.1:98
+            --display 127.0.0.1:97
       - name: Original source and opt-in reproducible child remain unchanged
         if: always()
         run: |
