@@ -81,7 +81,9 @@ python3 -m venv "$candidate/venv"
 mkdir -p "$candidate/venv/share/zx7-studio"
 editor="$candidate/venv/share/zx7-studio/velorn"
 if [[ "$profile" == editorial ]]; then
-  bash "$checkout/engines/velorn/prepare-native-editorial-candidate.sh" \
+  # Upgrade only the explicitly opted-in editorial profile. Its reviewed
+  # parent variants stay trusted; stable/default installations are untouched.
+  bash "$checkout/engines/velorn/prepare-native-save-candidate.sh" \
     "$upstream" "$editor" --install
 elif [[ "$profile" == scene ]]; then
   bash "$checkout/engines/velorn/prepare-native-scene-candidate.sh" \
