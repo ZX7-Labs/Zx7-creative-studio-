@@ -35,10 +35,13 @@ async def exercise(options):
 
     from studio_next.native_editor_source_pin import (
         _source_matches_pinned_native_collaboration,
-        _source_matches_pinned_native_scene)
+        _source_matches_pinned_native_scene,
+        _source_matches_pinned_native_editorial)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
+    editorial_source = _source_matches_pinned_native_editorial(options.source)
+    assert not editorial_source or scene_source
     assert not scene_source or collaboration_source, (
         "Scene source requires the reviewed parent title collaboration revision")
     fixture = Path(tempfile.mkdtemp(prefix="zx7-editor-mcp-"))
@@ -1488,6 +1491,122 @@ async def exercise(options):
                 "real_neural_model_decisions_tested": False,
                 "professional_art_quality_approved": False,
             }, sort_keys=True), flush=True)
+            if editorial_source:
+                # Ten real source-native editorial writers. These execute
+                # synchronously after the single renderer CAS, not through a
+                # debounced Electron plan or a fabricated model observation.
+                # The model must see a project version BEFORE it decides.
+                editorial_ops = {
+                    "move_clips": {"clipId": shape_id,
+                                   "startSeconds": .25, "previewOnly": False},
+                    "trim_clips": {"clipId": shape_id,
+                                   "durationSeconds": 1.75, "previewOnly": False},
+                    "delete_clips": {"clipIds": [shape_id], "previewOnly": False},
+                    "add_asset_to_timeline": {"assetId": video_ids[0],
+                                   "startSeconds": 0, "previewOnly": False},
+                    "add_assets_to_timeline": {"assets": [
+                                   {"assetId": video_ids[0]}], "previewOnly": False},
+                    "set_clip_audio": {"clipId": shape_id,
+                                   "volume": .5, "previewOnly": False},
+                    "set_clip_speed": {"clipId": shape_id,
+                                   "speed": 1.5, "previewOnly": False},
+                    "update_track": {"trackId": overlay_track,
+                                   "name": "New AI label", "previewOnly": False},
+                    "add_transition": {"clipId": shape_id,
+                                   "edge": "in", "durationSeconds": .25,
+                                   "previewOnly": False},
+                    "set_clip_style": {"clipId": shape_id,
+                                   "opacity": 80, "previewOnly": False},
+                }
+                editorial_policy = pinned_native_editor_identity_policy(
+                    options.source, tools, session)
+                assert editorial_policy is not None
+                assert set(editorial_ops).issubset(editorial_policy["fence"])
+                editorial_gateway = CapabilityGateway({"editor": (
+                    session, tools, {}, None, {}, editorial_policy)})
+                await editorial_gateway.refresh()
+                model_views = {
+                    name: CapabilityGatewayMcpSession(
+                        editorial_gateway, "editor",
+                        require_model_native_observation=True)
+                    for name in editorial_ops
+                }
+                source_epoch = (
+                    await call(model_views["move_clips"], "get_project", {})
+                )["zx7NativeRevision"]
+                for name, view in model_views.items():
+                    if name != "move_clips":
+                        snapshot = await call(view, "get_project", {})
+                        assert snapshot["zx7NativeRevision"] == source_epoch
+                old_timeline, old_shape = await live_shape()
+                old_markers = {m["id"] for m in old_timeline["markers"]}
+                inject_gui_keyboard("m")
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    state, after_gui_shape = await live_shape()
+                    new_markers = {m["id"] for m in state["markers"]} - old_markers
+                    if len(new_markers) == 1:
+                        editorial_gui_marker = next(iter(new_markers))
+                        break
+                    await asyncio.sleep(.15)
+                else:
+                    raise AssertionError("Editorial GUI marker never entered source")
+                await wait(session, lambda state:
+                    state.get("zx7NativeRevision") not in (source_epoch, None))
+                direct_cas = await session.call_tool("move_clips", {
+                    **editorial_ops["move_clips"],
+                    "__zx7ExpectedRevision": source_epoch})
+                assert direct_cas.is_error and len(direct_cas.content) == 1
+                assert direct_cas.content[0].text == "ZX7_STALE_NATIVE_REVISION"
+                for name, args in editorial_ops.items():
+                    refused = await model_views[name].call_tool(name, args)
+                    assert host_pre_dispatch_rejection(
+                        refused, name, args
+                    ) == "native_identity_model_observation_stale", name
+                    assert not any(e["state"] == "host_reported_success_unverified"
+                                   and e["operation_id"].endswith("/" + name)
+                                   for e in editorial_gateway.evidence()), name
+                state, after_all_refusals = await live_shape()
+                assert after_all_refusals == after_gui_shape
+                assert any(m["id"] == editorial_gui_marker
+                           for m in state["markers"])
+                # The Brain selects a new native move after observing the
+                # updated project. Source-attested preview MUST NOT mutate
+                # or consume this model-visible revision.
+                move_view = model_views["move_clips"]
+                await call(move_view, "get_project", {})
+                preview = await call(move_view, "move_clips", {
+                    **editorial_ops["move_clips"], "previewOnly": True})
+                assert preview.get("previewOnly") is True
+                _, after_preview = await live_shape()
+                assert after_preview == after_all_refusals
+                applied = await call(move_view, "move_clips",
+                                     editorial_ops["move_clips"])
+                assert applied.get("success") is True
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    state, moved = await live_shape()
+                    if abs(moved["startTime"] - .25) <= .045:
+                        break
+                    await asyncio.sleep(.15)
+                else:
+                    raise AssertionError("Native editor did not apply source-guarded clip move")
+                assert any(m["id"] == editorial_gui_marker
+                           for m in state["markers"])
+                assert digest(original) == original_hash
+                print("ACTUAL_NATIVE_EDITORIAL_CAS " + json.dumps({
+                    "exact_source_pinned_editorial_variant": True,
+                    "source_native_editorial_families": len(editorial_ops),
+                    "real_GUI_edit_after_ten_model_visible_reads": True,
+                    "all_ten_stale_model_plan_mutations_refused_pre_dispatch": True,
+                    "direct_stale_native_writer_mutation_refused": True,
+                    "preview_no_native_mutation": True,
+                    "fresh_model_visible_revision_required_and_applied": True,
+                    "actual_editable_clip_moved_in_source": True,
+                    "human_GUI_annotations_preserved": True,
+                    "original_picture_sound_source_untouched": True,
+                    "neural_artistic_decisions_tested": False,
+                }, sort_keys=True), flush=True)
             scene_save = await call(session, "save_project", {
                 "previewOnly": False})
             scene_save_sha = digest(native_path)
@@ -1676,11 +1795,14 @@ async def exercise(options):
             # must retain its *latest* applied color, not the old pre-intervention
             # shape from the earlier script-only scene proof.
             assert shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
+            if editorial_source:
+                assert abs(shape["startTime"] - .25) <= .045
             assert isinstance(shape.get("keyframes"), dict)
             assert len(shape["keyframes"].get("opacity") or []) >= 2
             assert all(any(m["id"] == mid for m in reopened["markers"])
                        for mid in (first_gui_marker, interrupted.manual_marker,
-                                   third_human_marker))
+                                   third_human_marker,
+                                   *((editorial_gui_marker,) if editorial_source else ())))
             assert digest(native_path) == scene_save_sha
             assert digest(original) == original_hash
             print("ACTUAL_NATIVE_SCENE_REOPEN " + json.dumps({
