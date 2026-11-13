@@ -1592,9 +1592,17 @@ async def exercise(options):
                         snapshot = await call(view, "get_project", {})
                         assert snapshot["zx7NativeRevision"] == source_epoch
                 old_timeline, old_shape = await live_shape()
-                before_pointer_title = next(
-                    c for c in old_timeline["clips"] if c["id"] == title_id)
-                before_pointer_title_time = before_pointer_title["startTime"]
+                # Select the original video clip from THIS scene's actual
+                # timeline; the previous editable title_id belongs to an
+                # earlier timeline. Moving a different source track must
+                # survive the Brain's later overlay-shape edit.
+                before_pointer_clip = next(
+                    c for c in old_timeline["clips"]
+                    if c["type"] == "video" and
+                       c["trackId"] != old_shape["trackId"])
+                pointer_clip_id = before_pointer_clip["id"]
+                before_pointer_clip_time = before_pointer_clip["startTime"]
+                assert pointer_clip_id != shape_id
                 # This independent model-view read happens BEFORE the real
                 # mouse gesture. A later host inventory read cannot silently
                 # make an older model decision current again.
@@ -1605,21 +1613,21 @@ async def exercise(options):
                         )["zx7NativeRevision"] == source_epoch
                 from native_pointer_proof import drag_native_clip_pointer
                 pointer_input = await drag_native_clip_pointer(
-                    options.display, title_id)
+                    options.display, pointer_clip_id)
                 deadline = time.monotonic() + 20
                 while time.monotonic() < deadline:
                     pointer_timeline, _ = await live_shape()
-                    pointer_title = next(
+                    pointer_clip = next(
                         c for c in pointer_timeline["clips"]
-                        if c["id"] == title_id)
-                    if (pointer_title["startTime"] -
-                            before_pointer_title_time > .25):
+                        if c["id"] == pointer_clip_id)
+                    if (pointer_clip["startTime"] -
+                            before_pointer_clip_time > .25):
                         break
                     await asyncio.sleep(.15)
                 else:
                     raise AssertionError(
-                        "Real X11 pointer did not move an editable native title clip")
-                human_pointer_title_start = pointer_title["startTime"]
+                        "Real X11 pointer did not move the current source video clip")
+                human_pointer_clip_start = pointer_clip["startTime"]
                 native_pointer_revision = await wait(session, lambda state:
                     isinstance(state.get("zx7NativeRevision"), str) and
                     state["zx7NativeRevision"] != source_epoch)
@@ -1685,18 +1693,18 @@ async def exercise(options):
                     raise AssertionError("Native editor did not apply source-guarded clip move")
                 assert any(m["id"] == editorial_gui_marker
                            for m in state["markers"])
-                after_ai_title = next(
-                    c for c in state["clips"] if c["id"] == title_id)
-                assert abs(after_ai_title["startTime"] -
-                           human_pointer_title_start) < .02, (
-                    "Fresh AI native shape edit overwrote human pointer title edit")
+                after_ai_clip = next(
+                    c for c in state["clips"] if c["id"] == pointer_clip_id)
+                assert abs(after_ai_clip["startTime"] -
+                           human_pointer_clip_start) < .02, (
+                    "Fresh AI shape edit changed the pointer-authored source-video position")
                 assert digest(original) == original_hash
                 print("ACTUAL_NATIVE_POINTER_COEDIT " + json.dumps({
                     **pointer_input,
-                    "real_native_title_position_changed_by_X11_pointer": True,
+                    "real_native_source_video_position_changed_by_X11_pointer": True,
                     "pointer_changed_source_revision_before_keyboard_marker": True,
                     "stale_AI_move_rejected_without_native_write": True,
-                    "fresh_AI_move_on_distinct_shape_preserved_human_title": True,
+                    "fresh_AI_move_on_distinct_shape_preserved_human_video_clip": True,
                     "genuine_neural_brain_tested": False,
                     "genuine_human_operator_present": False,
                 }, sort_keys=True), flush=True)
@@ -1903,11 +1911,11 @@ async def exercise(options):
             assert shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
             if editorial_source:
                 assert abs(shape["startTime"] - .25) <= .045
-                title_after_reopen = next(
-                    c for c in reopened["clips"] if c["id"] == title_id)
-                assert abs(title_after_reopen["startTime"] -
-                           human_pointer_title_start) < .02, (
-                    "Real Electron restart dropped human pointer-authored title edit")
+                pointer_video_after_reopen = next(
+                    c for c in reopened["clips"] if c["id"] == pointer_clip_id)
+                assert abs(pointer_video_after_reopen["startTime"] -
+                           human_pointer_clip_start) < .02, (
+                    "Real Electron restart lost pointer-authored source-video edit")
             assert isinstance(shape.get("keyframes"), dict)
             assert len(shape["keyframes"].get("opacity") or []) >= 2
             assert all(any(m["id"] == mid for m in reopened["markers"])
