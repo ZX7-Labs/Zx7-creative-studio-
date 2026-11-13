@@ -66,10 +66,14 @@ bash scripts/install-zx7-linux.sh --editorial-collaboration "$HOME/.local/opt/zx
 "$HOME/.local/opt/zx7-studio-editorial/bin/zx7-studio" doctor ./editorial-studio
 ```
 
-The installer builds an independent source tree from the existing reviewed
-scene revision, applies `native-editorial-revision.patch` and refuses any
-source SHA other than `collab_editorial_revision`. Neither the default Studio
-nor the older scene installation or private media is modified. A model-facing
+The installer builds an independent source tree from the reviewed
+scene/editorial revisions, then applies `native-save-timestamp.patch` from
+`prepare-native-save-candidate.sh` and checks exact `collab_save_revision`.
+The source write returns its actual serialized `project.comfystudio.modified`
+to create/save/duplicate and MCP acknowledgments. This fixes the observed
+two-timestamp ambiguity; it does **not** certify concurrent-save ordering or
+recovery from an interrupted write. The original/default/scene and previously
+pinned editorial revisions remain trusted and untouched. A model-facing
 native creative session checks the **model's actual last observed get_project
 revision** before any of these commits, uses a fresh host-owned object inventory
 and has the installed editor compare the revision again at its synchronous
@@ -81,7 +85,9 @@ are synchronous before timeline store writes. Async generators, effects,
 project switching, external app changes and unsandboxed plugins are **not**
 covered. The reproducible source variant and actual Electron GUI/independently
 decoded A/V test are separate from neural decision competence and human artistic
-approval; see `zx7-native-editorial-candidate.yml` for the exact test.
+approval; see `zx7-native-editorial-candidate.yml` for the older editorial
+source and `zx7-native-save-authority.yml` for the installed native
+save-stamp, live GUI co-edit, real A/V and post-save crash/reopen test.
 
 ## Connect a local AI client through standard MCP
 
