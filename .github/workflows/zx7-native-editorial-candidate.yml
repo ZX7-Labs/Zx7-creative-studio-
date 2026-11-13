@@ -1,0 +1,42 @@
+name: ZX7 Native Editorial Collaboration — Source-Pinned Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/native-editorial-revision.patch'
+      - 'engines/velorn/prepare-native-editorial-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/editor_runtime/launcher.mjs'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/native_editor_identity.py'
+      - 'studio_next/capability_gateway.py'
+      - 'studio_next/test_native_editorial_revision.py'
+      - 'engines/velorn/mcp-e2e.py'
+      - 'scripts/install-zx7-linux.sh'
+      - '.github/workflows/zx7-native-editorial-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify editorial patch applies to exact clean source-pinned scene
+        run: |
+          set -euo pipefail
+          bash -n scripts/install-zx7-linux.sh
+          bash -n engines/velorn/prepare-native-editorial-candidate.sh
+          bash engines/velorn/prepare-native-editorial-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-native-editorial" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-native-editorial"
