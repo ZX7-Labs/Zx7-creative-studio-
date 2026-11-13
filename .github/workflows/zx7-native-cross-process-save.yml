@@ -1,0 +1,35 @@
+name: ZX7 G1 — Cross-Process Native Project Save Authority
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zx7-native-cross-process-save.yml'
+      - 'engines/velorn/nativeProjectCAS.cjs'
+      - 'engines/velorn/nativeProjectCAS.test.cjs'
+      - 'engines/velorn/native-cross-process-save.patch'
+      - 'engines/velorn/prepare-native-cross-process-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-kernel-write-cas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Actual Linux flock, source SHA and independent process/crash tests
+        run: |
+          set -euo pipefail
+          node --check engines/velorn/nativeProjectCAS.cjs
+          node --check engines/velorn/nativeProjectCAS.test.cjs
+          command -v flock
+          node --test engines/velorn/nativeProjectCAS.test.cjs
