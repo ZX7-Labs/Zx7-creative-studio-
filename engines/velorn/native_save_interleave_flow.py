@@ -64,11 +64,9 @@ async def exercise_live_native_save(
         # IMPORTANT: This changes live native Velorn GUI with an actual mouse
         # while the renderer's earlier source snapshot is pending disk rename.
         pointer = await drag_native_clip_pointer(display, pointer_clip_id)
-        after_gui = await call(session, "get_timeline", {"includeClips": True})
-        moved = next(c for c in after_gui["clips"] if c["id"] == pointer_clip_id)
-        shifted_start = float(moved["startTime"])
-        assert abs(shifted_start - original_start) > .02, (
-            "Human-style GUI edit did not mutate the actual native source")
+        # Do NOT issue a second MCP tool while the first save is waiting.
+        # The native adapter may serialize RPCs; the mouse is independent OS
+        # input. Verify the resulting clip through a real read after release.
         assert not pending.done() and digest(native_path) == old_disk_sha, (
             "Native save completed before testing concurrent live editing")
     finally:
@@ -86,9 +84,9 @@ async def exercise_live_native_save(
     # must not clear the dirty epoch or silently overwrite newer content.
     after_first = await call(session, "get_timeline", {"includeClips": True})
     retained = next(c for c in after_first["clips"] if c["id"] == pointer_clip_id)
-    assert abs(float(retained["startTime"]) - shifted_start) < .001, (
-        "Earlier native save acknowledgment silently reverted a newer GUI edit")
-    assert abs(shifted_start - original_start) > .02
+    shifted_start = float(retained["startTime"])
+    assert abs(shifted_start - original_start) > .02, (
+        "Earlier save acknowledgment reverted the X11-authored edit")
     second = await call(session, "save_project", {"previewOnly": False})
     second_clip, second_stamp = saved_clip(native_path, pointer_clip_id)
     assert second_stamp == second["result"]["project"]["modified"]
