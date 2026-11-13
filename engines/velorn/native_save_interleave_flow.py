@@ -16,14 +16,18 @@ from native_pointer_proof import drag_native_clip_pointer
 from native_save_interleave_proof import kill_exact_editor_during_native_write
 
 
-def saved_clip(document: Path, clip_id: str):
+def saved_clip(document: Path, clip_id: str, timeline_id: str):
+    """Select the exact active native timeline: clip IDs are NOT global IDs."""
     data = json.loads(document.read_text(encoding="utf-8"))
-    matches = [
-        clip for timeline in data["timelines"]
-        for clip in timeline["clips"] if clip["id"] == clip_id
-    ]
+    if data.get("currentTimelineId") != timeline_id:
+        raise AssertionError("Native active timeline changed from observed source")
+    selected = [timeline for timeline in data["timelines"]
+                if timeline["id"] == timeline_id]
+    if len(selected) != 1:
+        raise AssertionError("Source-attested native timeline missing or duplicated")
+    matches = [clip for clip in selected[0]["clips"] if clip["id"] == clip_id]
     if len(matches) != 1:
-        raise AssertionError("Original native source video clip missing or duplicated")
+        raise AssertionError("Native source video clip missing or duplicated in target timeline")
     return matches[0], data["modified"]
 
 
@@ -42,7 +46,7 @@ async def await_native_gate(gate: Path, pending: asyncio.Task) -> None:
 async def exercise_live_native_save(
         *, session, call, gate: Path, project: Path, native_path: Path,
         editor_source: Path, state_root: Path, display: str, pointer_clip_id: str,
-        original: Path, digest):
+        native_timeline_id: str, original: Path, digest):
     """Return source-bound recovery receipt after physical live GUI conflict and SIGKILL.
 
     A first save snapshot is intentionally stalled after its real native
@@ -53,7 +57,7 @@ async def exercise_live_native_save(
     assert gate.is_dir() and not gate.is_symlink()
     assert native_path == project / "project.comfystudio"
     old_disk_sha, original_sha = digest(native_path), digest(original)
-    before, previous_stamp = saved_clip(native_path, pointer_clip_id)
+    before, previous_stamp = saved_clip(native_path, pointer_clip_id, native_timeline_id)
     original_start = float(before["startTime"])
 
     (gate / "armed").write_text("1", encoding="utf-8")
@@ -74,7 +78,7 @@ async def exercise_live_native_save(
         if (gate / "entered").exists():
             (gate / "release").write_text("1", encoding="utf-8")
     first = await asyncio.wait_for(pending, timeout=45)
-    first_clip, first_stamp = saved_clip(native_path, pointer_clip_id)
+    first_clip, first_stamp = saved_clip(native_path, pointer_clip_id, native_timeline_id)
     assert first_stamp == first["result"]["project"]["modified"]
     assert abs(float(first_clip["startTime"]) - original_start) < .001, (
         "In-flight first save retroactively captured newer GUI changes")
@@ -88,7 +92,7 @@ async def exercise_live_native_save(
     assert abs(shifted_start - original_start) > .02, (
         "Earlier save acknowledgment reverted the X11-authored edit")
     second = await call(session, "save_project", {"previewOnly": False})
-    second_clip, second_stamp = saved_clip(native_path, pointer_clip_id)
+    second_clip, second_stamp = saved_clip(native_path, pointer_clip_id, native_timeline_id)
     assert second_stamp == second["result"]["project"]["modified"]
     assert abs(float(second_clip["startTime"]) - shifted_start) < .001
     committed_sha = digest(native_path)

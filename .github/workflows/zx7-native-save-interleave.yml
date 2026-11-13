@@ -7,6 +7,9 @@ on:
       - 'engines/velorn/native-save-interleaving.patch'
       - 'engines/velorn/prepare-native-interleave-candidate.sh'
       - 'engines/velorn/mcp-e2e.py'
+      - 'engines/velorn/native_save_interleave_flow.py'
+      - 'engines/velorn/native_save_interleave_proof.py'
+      - 'engines/velorn/test_native_save_interleave_flow.py'
       - 'studio_next/editor_runtime/source-lock.json'
       - 'studio_next/editor_runtime/launcher.mjs'
       - 'studio_next/editor_runtime/launcher-save-interleave.test.mjs'
@@ -66,6 +69,7 @@ jobs:
           python -m pip install --no-cache-dir '.[editor,production]'
       - name: Offline test exact source admission and unsafe kill refusals
         run: |
+          python -m unittest discover -s engines/velorn -p 'test_native_save_interleave_flow.py' -v
           python -m unittest \
             studio_next.test_native_save_interleave \
             studio_next.test_native_save_ordering \

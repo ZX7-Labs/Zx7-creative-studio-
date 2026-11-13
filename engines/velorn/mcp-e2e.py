@@ -2168,6 +2168,7 @@ async def exercise(options):
                         gate=native_gate, project=project, native_path=native_path,
                         editor_source=options.source, state_root=fixture / "state",
                         display=options.display, pointer_clip_id=pointer_clip_id,
+                        native_timeline_id=native_timeline_id,
                         original=original, digest=digest)
             if interleave_source:
                 # Fresh Electron after a deliberately interrupted in-flight
