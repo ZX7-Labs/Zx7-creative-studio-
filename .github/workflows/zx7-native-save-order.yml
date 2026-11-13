@@ -10,6 +10,9 @@ on:
       - 'studio_next/editor_runtime/launcher.mjs'
       - 'scripts/install-zx7-linux.sh'
       - 'engines/velorn/mcp-e2e.py'
+      - 'engines/velorn/native-close-geometry.mjs'
+      - 'engines/velorn/native_close_proof.py'
+      - 'studio_next/test_native_close_proof.py'
       - 'studio_next/test_native_save_ordering.py'
       - '.github/workflows/zx7-native-save-order.yml'
   workflow_dispatch:
@@ -33,6 +36,8 @@ jobs:
         run: |
           set -euo pipefail
           bash -n engines/velorn/prepare-native-save-order-candidate.sh
+          node --check engines/velorn/native-close-geometry.mjs
+          python -m py_compile engines/velorn/native_close_proof.py
           bash engines/velorn/prepare-native-save-order-candidate.sh \
             "$GITHUB_WORKSPACE/third_party/velorn" \
             "$RUNNER_TEMP/zx7-native-save-order-review" --inspect
@@ -67,6 +72,7 @@ jobs:
         run: |
           python -m unittest \
             studio_next.test_native_save_ordering \
+            studio_next.test_native_close_proof \
             studio_next.test_native_save_authority \
             studio_next.test_native_crash_proof \
             studio_next.test_native_pointer_proof \
@@ -93,7 +99,7 @@ jobs:
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
-      - name: Real failed native save, three overlapping writes, original picture and sound, crash recovery
+      - name: Real denied save + X11 UI rejected close; overlapping writes, original A/V and crash recovery
         run: |
           python -u engines/velorn/mcp-e2e.py \
             --source "$ZX7_SAVE_ORDER_EDITOR" \
