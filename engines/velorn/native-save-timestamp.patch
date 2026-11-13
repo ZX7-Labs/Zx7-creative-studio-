@@ -1,0 +1,77 @@
+diff --git a/src/services/fileSystem.js b/src/services/fileSystem.js
+--- a/src/services/fileSystem.js
++++ b/src/services/fileSystem.js
+@@ -240,10 +240,11 @@
+  */
+ export const saveProject = async (projectDir, projectData) => {
+   const saveTimestamp = new Date()
++  const savedModified = saveTimestamp.toISOString()
+   const dataWithMeta = {
+     ...projectData,
+     version: '1.0',
+-    modified: saveTimestamp.toISOString(),
++    modified: savedModified,
+   }
+   const serializedProject = JSON.stringify(dataWithMeta, null, 2)
+   
+@@ -258,7 +259,7 @@
+     } catch (snapshotError) {
+       console.warn('Project snapshot save failed:', snapshotError)
+     }
+-    return
++    return savedModified
+   }
+   
+   // Web fallback
+@@ -270,7 +271,8 @@
+     await writeProjectSnapshot(projectDir, serializedProject, saveTimestamp)
+   } catch (snapshotError) {
+     console.warn('Project snapshot save failed:', snapshotError)
+   }
++  return savedModified
+ }
+ 
+ /**
+@@ -316,14 +318,14 @@
+     created: now,
+     modified: now,
+   }
+-  await saveProject(duplicatePath, duplicatedProject)
++  const savedModified = await saveProject(duplicatePath, duplicatedProject)
+ 
+   return {
+     path: duplicatePath,
+     name: duplicateName,
+     projectData: {
+       ...duplicatedProject,
+-      modified: now,
++      modified: savedModified,
+     },
+     copied: copyResult.copied ?? null,
+   }
+diff --git a/src/stores/projectStore.js b/src/stores/projectStore.js
+--- a/src/stores/projectStore.js
++++ b/src/stores/projectStore.js
+@@ -441,8 +441,9 @@
+             generateWorkspace: null,
+           }
+           
+-          // Save project file
+-          await saveProjectToFile(projectHandleOrPath, projectData)
++          // Persisted file owns the timestamp acknowledged to the native UI.
++          const savedModified = await saveProjectToFile(projectHandleOrPath, projectData)
++          projectData.modified = savedModified
+           
+           // Store handle/path for persistence
+           await storeDirectoryHandle('currentProject', projectHandleOrPath)
+@@ -676,7 +677,9 @@
+             modified: new Date().toISOString(),
+           }
+           
+-          await saveProjectToFile(state.currentProjectHandle, updatedProject)
++          // Exact persisted timestamp, not a second UI-local revision.
++          const savedModified = await saveProjectToFile(state.currentProjectHandle, updatedProject)
++          updatedProject.modified = savedModified
+           
+           set({
+             currentProject: updatedProject,

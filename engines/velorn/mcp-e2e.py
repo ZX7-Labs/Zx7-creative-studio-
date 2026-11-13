@@ -36,11 +36,14 @@ async def exercise(options):
     from studio_next.native_editor_source_pin import (
         _source_matches_pinned_native_collaboration,
         _source_matches_pinned_native_scene,
-        _source_matches_pinned_native_editorial)
+        _source_matches_pinned_native_editorial,
+        _source_matches_pinned_native_save)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
     editorial_source = _source_matches_pinned_native_editorial(options.source)
+    save_source = _source_matches_pinned_native_save(options.source)
+    assert not save_source or editorial_source
     assert not editorial_source or scene_source
     assert not scene_source or collaboration_source, (
         "Scene source requires the reviewed parent title collaboration revision")
@@ -385,6 +388,41 @@ async def exercise(options):
             "human_or_artistic_quality_approved": False,
         }, sort_keys=True), flush=True)
         project = Path(state["project"]["path"])
+        if save_source:
+            # The original source produces two different save timestamps:
+            # projectStore returns one, while fileSystem serializes another.
+            # This exact pinned descendant must return the *written* stamp
+            # to create, save and the live MCP snapshot, never relying on a
+            # coincidentally matching millisecond or a blind retry.
+            native_document = project / "project.comfystudio"
+            assert native_document.is_file() and not native_document.is_symlink()
+            initial_disk = json.loads(
+                native_document.read_text(encoding="utf-8"))
+            assert state["project"]["modified"] == initial_disk["modified"]
+            native_save_stamps = []
+            for _ in range(3):
+                await asyncio.sleep(.025)
+                save_receipt = await call(session, "save_project", {
+                    "previewOnly": False})
+                saved = save_receipt["result"]["project"]
+                disk = json.loads(
+                    native_document.read_text(encoding="utf-8"))
+                assert disk["modified"] == saved["modified"], (
+                    "Native filesystem and MCP save receipt diverged")
+                await wait(session, lambda p:
+                    (p.get("project") or {}).get("modified") ==
+                    saved["modified"])
+                native_save_stamps.append(saved["modified"])
+            assert len(set(native_save_stamps)) == 3
+            print("ACTUAL_NATIVE_SAVE_TIMESTAMP_AUTHORITY " + json.dumps({
+                "exact_source_pinned_save_revision": True,
+                "created_project_UI_equals_saved_file_stamp": True,
+                "three_separate_native_saves_returned_actual_disk_stamp": True,
+                "live_source_snapshot_converged_to_each_disk_stamp": True,
+                "distinct_save_timestamps": True,
+                "native_writes_not_replayed_on_uncertainty": True,
+                "creative_model_or_crash_during_write_tested": False,
+            }, sort_keys=True), flush=True)
         blocked_output = outputs / "no-source.mp4"
         unready = await session.call_tool("export_timeline", {
             "outputPath": str(blocked_output), "target": "h264_project",
