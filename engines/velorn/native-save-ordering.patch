@@ -1,0 +1,268 @@
+diff --git a/src/stores/projectStore.js b/src/stores/projectStore.js
+--- a/src/stores/projectStore.js
++++ b/src/stores/projectStore.js
+@@ -18,12 +18,17 @@
+ import { useTimelineStore } from './timelineStore'
+ import { useAssetsStore } from './assetsStore'
+ import { captureAndSaveProjectThumbnail } from '../utils/projectThumbnail'
+-import { markProjectClean } from '../services/projectDirtyTracker'
++import { markProjectClean, isProjectDirty, getProjectEditEpoch } from '../services/projectDirtyTracker'
++import { createSerializedSave, canDiscardSavedProject } from '../services/nativeSaveSequence'
+ import {
+   createDefaultFlowAiProjectData,
+   normalizeFlowAiProjectData,
+ } from '../services/flowAiSchema'
+ 
++// One native editor session has one authoritative save writer. Do not
++// serialize duplicate snapshots concurrently or silently replay failed writes.
++const serializeNativeSave = createSerializedSave()
++
+ /**
+  * Resolution presets for new projects
+  */
+@@ -631,7 +636,7 @@
+        * Save the current project
+        * @param {object} updates - Partial project data to merge
+        */
+-      saveProject: async (updates = {}) => {
++      saveProject: (updates = {}) => serializeNativeSave(async () => {
+         const state = get()
+         
+         if (!state.currentProjectHandle || !state.currentProject) {
+@@ -643,6 +648,7 @@
+           // Gather current state from timeline and assets stores
+           const currentTimelineData = useTimelineStore.getState().getProjectData()
+           const assetsData = useAssetsStore.getState().getProjectData()
++          const capturedEditEpoch = getProjectEditEpoch()
+           
+           // Update the current timeline in the timelines array
+           const updatedTimelines = (state.currentProject.timelines || []).map(t => 
+@@ -680,11 +686,28 @@
+           // Exact persisted timestamp, not a second UI-local revision.
+           const savedModified = await saveProjectToFile(state.currentProjectHandle, updatedProject)
+           updatedProject.modified = savedModified
+-          
+-          set({
+-            currentProject: updatedProject,
+-            lastAutoSave: new Date().toISOString(),
+-          })
++          const currentAfterSave = get()
++          // An external project switch may have happened while the native
++          // thumbnail/file writer awaited I/O. Never overwrite that document.
++          if (currentAfterSave.currentProjectHandle !== state.currentProjectHandle ||
++              currentAfterSave.currentProject?.created !== state.currentProject?.created) {
++            return false
++          }
++          const newerEditsPending = getProjectEditEpoch() !== capturedEditEpoch
++          if (newerEditsPending) {
++            // Keep all newer in-memory project metadata and UI edits. Only
++            // advance its disk-save stamp, while leaving dirty=true so a
++            // subsequent explicit save/autosave serializes the newest state.
++            set({
++              currentProject: { ...currentAfterSave.currentProject, modified: savedModified },
++              lastAutoSave: new Date().toISOString(),
++            })
++          } else {
++            set({
++              currentProject: updatedProject,
++              lastAutoSave: new Date().toISOString(),
++            })
++          }
+           
+           // Update recent projects list
+           set((state) => ({
+@@ -698,7 +721,7 @@
+           // After the save-induced set() calls above, so their transient
+           // dirty mark is cleared too. Everything gathered above is now on
+           // disk.
+-          markProjectClean()
++          if (!newerEditsPending) markProjectClean()
+ 
+           return true
+         } catch (err) {
+@@ -706,7 +729,7 @@
+           set({ error: err.message })
+           return false
+         }
+-      },
++      }),
+ 
+       saveTimelineStructureToHistory: () => {
+         if (useTimelineStore.getState().compoundEditContext) return false
+@@ -824,12 +847,31 @@
+        */
+       closeProject: async () => {
+         if (!finishCompoundFocus()) return false
+-        // Save before closing
+-        await get().saveProject()
+-        
+-        // Clear current project handle from storage
++        const closingHandle = get().currentProjectHandle
++        const closingCreated = get().currentProject?.created
++        const sameProject = () => (
++          get().currentProjectHandle === closingHandle &&
++          get().currentProject?.created === closingCreated
++        )
++        // A failed/ambiguous write, project switch, or a human edit that
++        // arrived during saving forbids clearing the only live source state.
++        const saved = await get().saveProject()
++        if (!canDiscardSavedProject(saved, isProjectDirty(), sameProject())) {
++          set({ error: 'Project has unsaved changes; close was cancelled.' })
++          return false
++        }
++
+         await removeStoredDirectoryHandle('currentProject')
+-        
++        // Storage removal is asynchronous too. Recheck before discarding
++        // current state and restore the recent-project handle on a race.
++        if (!canDiscardSavedProject(true, isProjectDirty(), sameProject())) {
++          if (get().currentProjectHandle) {
++            await storeDirectoryHandle('currentProject', get().currentProjectHandle)
++          }
++          set({ error: 'Project changed during close; close was cancelled.' })
++          return false
++        }
++
+         // Clear timeline and assets stores
+         useTimelineStore.getState().clearProject()
+         useAssetsStore.getState().clearProject()
+@@ -842,6 +884,7 @@
+           projectFuture: [],
+           projectHistoryLastChangedAt: 0,
+         })
++        return true
+       },
+       
+       // ==========================================
+diff --git a/src/services/projectDirtyTracker.js b/src/services/projectDirtyTracker.js
+--- a/src/services/projectDirtyTracker.js
++++ b/src/services/projectDirtyTracker.js
+@@ -47,11 +47,17 @@
+ ]
+ 
+ let dirty = false
++let editEpoch = 0
+ 
+ export function markProjectDirty() {
+   dirty = true
++  editEpoch += 1
+ }
+ 
++export function getProjectEditEpoch() {
++  return editEpoch
++}
++
+ export function markProjectClean() {
+   dirty = false
+ }
+diff --git a/src/services/nativeSaveSequence.js b/src/services/nativeSaveSequence.js
+new file mode 100644
+--- /dev/null
++++ b/src/services/nativeSaveSequence.js
+@@ -0,0 +1,21 @@
++// Serialize asynchronous native project saves at their single source owner.
++// Every invocation samples source state when its turn begins, not at enqueue.
++export const createSerializedSave = () => {
++  let tail = Promise.resolve()
++  return (task) => {
++    if (typeof task !== 'function') {
++      return Promise.reject(new TypeError('Save operation must be a function'))
++    }
++    const active = tail.then(task, task)
++    // One failure must not poison later *independently requested* saves.
++    // This never retries the failed write.
++    tail = active.then(() => undefined, () => undefined)
++    return active
++  }
++}
++
++// Never discard the only in-memory original if persistence failed or if
++// a human/editor action made new unsaved changes after the save snapshot.
++export const canDiscardSavedProject = (saved, dirty, sameProject) => (
++  saved === true && dirty === false && sameProject === true
++)
+diff --git a/src/services/nativeSaveSequence.test.mjs b/src/services/nativeSaveSequence.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/services/nativeSaveSequence.test.mjs
+@@ -0,0 +1,80 @@
++import assert from 'node:assert/strict'
++import test from 'node:test'
++import { createSerializedSave, canDiscardSavedProject } from './nativeSaveSequence.js'
++import {
++  getProjectEditEpoch, markProjectDirty, markProjectClean, isProjectDirty,
++} from './projectDirtyTracker.js'
++
++const deferred = () => {
++  let resolve, reject
++  const promise = new Promise((res, rej) => { resolve = res; reject = rej })
++  return { promise, resolve, reject }
++}
++
++test('overlapping saves are strictly ordered and take source state when started', async () => {
++  const run = createSerializedSave()
++  const gate = deferred()
++  const events = []
++  let activeState = 'first'
++  const first = run(async () => {
++    events.push(['start', activeState])
++    await gate.promise
++    events.push(['finish', activeState])
++    return 'disk-1'
++  })
++  const second = run(async () => {
++    events.push(['start', activeState])
++    return 'disk-2'
++  })
++  await Promise.resolve()
++  await Promise.resolve()
++  assert.deepEqual(events, [['start', 'first']])
++  activeState = 'human-edit'
++  gate.resolve()
++  assert.equal(await first, 'disk-1')
++  assert.equal(await second, 'disk-2')
++  assert.deepEqual(events, [
++    ['start', 'first'], ['finish', 'human-edit'], ['start', 'human-edit'],
++  ])
++})
++
++test('failed write does not replay; subsequent explicit save is allowed', async () => {
++  const run = createSerializedSave()
++  const gate = deferred()
++  let writes = 0
++  const first = run(async () => { writes++; await gate.promise; throw Error('disk full') })
++  const second = run(async () => { writes++; return 'saved' })
++  await Promise.resolve()
++  gate.resolve()
++  await assert.rejects(first, /disk full/)
++  assert.equal(await second, 'saved')
++  assert.equal(writes, 2)
++})
++
++test('invalid task is rejected without mutating sequence', async () => {
++  const run = createSerializedSave()
++  await assert.rejects(run('not a task'), /function/)
++  assert.equal(await run(async () => 'still works'), 'still works')
++})
++
++test('project is never discarded after failed save, newer edit or project switch', () => {
++  assert.equal(canDiscardSavedProject(true, false, true), true)
++  for (const candidate of [
++    [false, false, true], [true, true, true], [true, false, false],
++    [undefined, false, true], [true, undefined, true], [1, false, true],
++  ]) assert.equal(canDiscardSavedProject(...candidate), false)
++})
++
++test('dirty edit epoch detects intervening human changes without hiding them', () => {
++  markProjectClean()
++  const before = getProjectEditEpoch()
++  assert.equal(isProjectDirty(), false)
++  markProjectDirty()
++  assert.equal(isProjectDirty(), true)
++  assert.equal(getProjectEditEpoch(), before + 1)
++  markProjectDirty()
++  assert.equal(getProjectEditEpoch(), before + 2)
++  markProjectClean()
++  assert.equal(getProjectEditEpoch(), before + 2)
++  assert.equal(isProjectDirty(), false)
++})
