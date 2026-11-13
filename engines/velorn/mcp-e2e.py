@@ -40,7 +40,8 @@ async def exercise(options):
         _source_matches_pinned_native_editorial,
         _source_matches_pinned_native_save,
         _source_matches_pinned_native_save_order,
-        _source_matches_pinned_native_save_interleave)
+        _source_matches_pinned_native_save_interleave,
+        _source_matches_pinned_native_cross_process)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
@@ -48,6 +49,9 @@ async def exercise(options):
     save_source = _source_matches_pinned_native_save(options.source)
     save_order_source = _source_matches_pinned_native_save_order(options.source)
     interleave_source = _source_matches_pinned_native_save_interleave(options.source)
+    cross_process_source = _source_matches_pinned_native_cross_process(options.source)
+    assert not (interleave_source and cross_process_source)
+    assert not cross_process_source or save_order_source
     assert not interleave_source or save_order_source
     assert not save_order_source or save_source
     assert not save_source or editorial_source
@@ -2157,6 +2161,14 @@ async def exercise(options):
                         "new_human_edit_during_inflight_save_tested": False,
                         "genuine_AI_artistic_choice_tested": False,
                     }, sort_keys=True), flush=True)
+                if cross_process_source:
+                    from native_cross_process_e2e import (
+                        exercise_external_native_writer_conflict)
+                    cross_result = await exercise_external_native_writer_conflict(
+                        session=recovered_session, call=call,
+                        editor_source=options.source, native_path=native_path,
+                        original=original, digest=digest,
+                        display=options.display, active_project=project)
                 if interleave_source:
                     from native_save_interleave_flow import (
                         exercise_live_native_save)
@@ -2170,6 +2182,42 @@ async def exercise(options):
                         display=options.display, pointer_clip_id=pointer_clip_id,
                         native_timeline_id=native_timeline_id,
                         original=original, digest=digest)
+            if cross_process_source:
+                # The stale editor is gone; a new native Electron must load
+                # the external writer's SHA, restore original editable clips,
+                # and only then be allowed to save a NEW independent revision.
+                async with connected() as post_conflict:
+                    assert digest(native_path) == cross_result["committed_sha"]
+                    await call(post_conflict, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(post_conflict, lambda state:
+                        (state.get("currentTimeline") or {}).get("clipCount") == 3)
+                    fresh_timeline = await call(post_conflict, "get_timeline", {
+                        "includeClips": True})
+                    fresh_shape = next(c for c in fresh_timeline["clips"]
+                                       if c["id"] == shape_id)
+                    fresh_video = next(c for c in fresh_timeline["clips"]
+                                       if c["id"] == pointer_clip_id)
+                    assert fresh_shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
+                    assert abs(fresh_video["startTime"] - human_pointer_clip_start) < .02
+                    assert len(fresh_shape.get("keyframes", {}).get("opacity", [])) >= 2
+                    assert (json.loads(native_path.read_text(encoding="utf-8"))
+                            ["zx7CrossProcessProof"] == cross_result["marker"])
+                    saved_after_reload = await call(post_conflict, "save_project", {
+                        "previewOnly": False})
+                    assert saved_after_reload["result"]["project"]["modified"] == (
+                        json.loads(native_path.read_text(encoding="utf-8"))["modified"])
+                    assert (json.loads(native_path.read_text(encoding="utf-8"))
+                            ["zx7CrossProcessProof"] == cross_result["marker"])
+                    assert digest(original) == cross_result["original_sha"]
+                    print("ACTUAL_NATIVE_CROSS_PROCESS_FRESH_RELOAD " + json.dumps({
+                        "fresh_Electron_reloaded_external_committed_source": True,
+                        "saved_external_metadata_survived_native_reopen": True,
+                        "new_native_save_only_after_explicit_source_reload": True,
+                        "original_picture_audio_and_editable_scene_preserved": True,
+                        "previous_stale_save_never_replayed": True,
+                        "human_operator_or_model_creativity_proven": False,
+                    }, sort_keys=True), flush=True)
             if interleave_source:
                 # Fresh Electron after a deliberately interrupted in-flight
                 # write. The LAST CONFIRMED native project must survive,

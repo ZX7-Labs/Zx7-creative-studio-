@@ -1,0 +1,132 @@
+name: ZX7 G1 — Cross-Process Native Project Save Authority
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zx7-native-cross-process-save.yml'
+      - 'engines/velorn/nativeProjectCAS.cjs'
+      - 'engines/velorn/nativeProjectCAS.test.cjs'
+      - 'engines/velorn/nativeProjectCAS.bindings.source.mjs'
+      - 'engines/velorn/native-cross-process-save.patch'
+      - 'engines/velorn/prepare-native-cross-process-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'engines/velorn/native_cross_process_e2e.py'
+      - 'engines/velorn/mcp-e2e.py'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/editor_runtime/launcher.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-kernel-write-cas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Actual Linux flock, source SHA and independent process/crash tests
+        run: |
+          set -euo pipefail
+          node --check engines/velorn/nativeProjectCAS.cjs
+          node --check engines/velorn/nativeProjectCAS.test.cjs
+          node --check engines/velorn/nativeProjectCAS.bindings.source.mjs
+          command -v flock
+          node --test engines/velorn/nativeProjectCAS.test.cjs
+
+  source-child-review:
+    needs: linux-kernel-write-cas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Inspect deterministic pinned Velorn patch and source-integrated writer
+        run: |
+          set -euo pipefail
+          bash -n engines/velorn/prepare-native-cross-process-candidate.sh
+          bash engines/velorn/prepare-native-cross-process-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-cross-process-inspect" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-cross-process-inspect"
+          bash engines/velorn/prepare-native-cross-process-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-cross-process-installed" --install
+          expected=$(python3 -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_cross_process_revision"])')
+          test "$(git -C "$RUNNER_TEMP/zx7-cross-process-installed" rev-parse HEAD)" = "$expected"
+          node --test "$RUNNER_TEMP/zx7-cross-process-installed/electron/nativeProjectCAS.test.cjs" \
+            "$RUNNER_TEMP/zx7-cross-process-installed/electron/nativeProjectCAS.bindings.source.mjs"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
+
+  installed-native-editor:
+    needs: source-child-review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install real Electron, sandbox, X11 and media inspector dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Build actual source-pinned native cross-process editor
+        run: |
+          set -euo pipefail
+          editor="$RUNNER_TEMP/zx7-native-cross-process-installed"
+          bash engines/velorn/prepare-native-cross-process-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
+          expected=$(python3 -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_cross_process_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --quiet HEAD --
+          echo "ZX7_CROSS_PROCESS_EDITOR=$editor" >> "$GITHUB_ENV"
+          cd "$editor"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
+          npm run build
+          test -s dist/index.html
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+      - name: Actual installed native GUI/MCP editing, source A/V and fresh reopen
+        run: |
+          # This is the only synthetic X11 display allowed by the
+          # independently reviewed pidfd crash-proof security boundary.
+          python -m py_compile engines/velorn/native_cross_process_e2e.py engines/velorn/mcp-e2e.py studio_next/native_editor_source_pin.py
+          python -m unittest studio_next.test_native_crash_proof -v
+          python -u engines/velorn/mcp-e2e.py \
+            --source "$ZX7_CROSS_PROCESS_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:97
+      - name: Original source and opt-in reproducible child remain unchanged
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
+          if [[ -n "${ZX7_CROSS_PROCESS_EDITOR:-}" ]]; then
+            git -C "$ZX7_CROSS_PROCESS_EDITOR" diff --quiet HEAD --
+          fi

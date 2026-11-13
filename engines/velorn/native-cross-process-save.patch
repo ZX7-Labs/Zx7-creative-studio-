@@ -1,0 +1,122 @@
+diff --git a/src/services/fileSystem.js b/src/services/fileSystem.js
+--- a/src/services/fileSystem.js
++++ b/src/services/fileSystem.js
+@@ -106,3 +106,7 @@
+ const PROJECT_FILENAME = 'project.comfystudio'
+-const PROJECT_FILENAME_LEGACY = 'project.storyflow'
++const PROJECT_FILENAME_LEGACY = 'project.storyflow'
++// Only the exact native project actually hydrated in this editor advances
++// this optimistic disk head; unrelated read-only observations never do.
++const nativeProjectSourceHeads = new Map()
++const NATIVE_SHA = /^[a-f0-9]{64}$/
+ const PROJECT_AUTOSAVE_DIRNAME = 'autosave'
+@@ -251,6 +255,12 @@
+     const filePath = await window.electronAPI.pathJoin(projectDir, PROJECT_FILENAME)
+-    const result = await window.electronAPI.writeFile(filePath, serializedProject)
+-    if (!result.success) {
+-      throw new Error(result.error)
+-    }
++    const expectedSha256 = nativeProjectSourceHeads.has(projectDir)
++      ? nativeProjectSourceHeads.get(projectDir) : null
++    const result = await window.electronAPI.writeFile(filePath, serializedProject, {
++      zx7ExpectedSha256: expectedSha256,
++    })
++    if (!result.success) throw new Error(result.error || 'Native project save was not acknowledged')
++    if (typeof result.sha256 !== 'string' || !NATIVE_SHA.test(result.sha256)) {
++      throw new Error('Native project save lacks exact committed source SHA')
++    }
++    nativeProjectSourceHeads.set(projectDir, result.sha256)
+     try {
+@@ -318,3 +328,5 @@
+   }
+-  const savedModified = await saveProject(duplicatePath, duplicatedProject)
++  // A copied project already exists. Observe its exact destination SHA first.
++  await loadProject(duplicatePath, { bindSourceHead: true })
++  const savedModified = await saveProject(duplicatePath, duplicatedProject)
+ 
+@@ -356,3 +368,3 @@
+  */
+-export const loadProject = async (projectDir) => {
++export const loadProject = async (projectDir, { bindSourceHead = false } = {}) => {
+   if (isElectron()) {
+@@ -375,6 +387,14 @@
+     }
+-    return projectData
+-  }
+-  
+-  // Web fallback: try comfystudio first, then legacy storyflow
++    // Bind optimistic head only to the project actually loaded for editing.
++    // Legacy .storyflow may create a new primary .comfystudio on first save.
++    if (filePath === primaryPath &&
++        (typeof result.sha256 !== 'string' || !NATIVE_SHA.test(result.sha256))) {
++      throw new Error('Native project read lacks an exact source SHA')
++    }
++    if (bindSourceHead) nativeProjectSourceHeads.set(
++      projectDir, filePath === primaryPath ? result.sha256 : null)
++    return projectData
++  }
++  
++  // Web fallback: try comfystudio first, then legacy storyflow
+   const tryLoad = async (filename) => {
+diff --git a/src/stores/projectStore.js b/src/stores/projectStore.js
+--- a/src/stores/projectStore.js
++++ b/src/stores/projectStore.js
+@@ -346,3 +346,3 @@
+             if (isValid) {
+-              const projectData = await loadProjectFromFile(storedProject)
++              const projectData = await loadProjectFromFile(storedProject, { bindSourceHead: true })
+               if (projectData) {
+@@ -503,3 +503,3 @@
+           // Load project data
+-          const projectData = await loadProjectFromFile(projectHandleOrPath)
++          const projectData = await loadProjectFromFile(projectHandleOrPath, { bindSourceHead: true })
+           if (!projectData) {
+diff --git a/electron/main.js b/electron/main.js
+--- a/electron/main.js
++++ b/electron/main.js
+@@ -4065,11 +4065,9 @@
+   try {
+-    const encoding = options.encoding || null // null returns Buffer
+-    const data = await fs.readFile(filePath, encoding)
+-    
+-    // If no encoding specified, return as base64 for binary files
+-    if (!encoding) {
+-      return { success: true, data: data.toString('base64'), encoding: 'base64' }
+-    }
+-    
+-    return { success: true, data, encoding }
++    const encoding = options.encoding || null // null returns Buffer
++    const data = await fs.readFile(filePath)
++    // SHA is of exact source bytes, not decoded/re-encoded JSON.
++    const sha256 = path.basename(filePath) === 'project.comfystudio' && encoding === 'utf8'
++      ? crypto.createHash('sha256').update(data).digest('hex') : undefined
++    if (!encoding) return { success: true, data: data.toString('base64'), encoding: 'base64' }
++    return { success: true, data: data.toString(encoding), encoding, sha256 }
+   } catch (err) {
+@@ -4100,4 +4098,12 @@
+ 
+-    await writeFileAtomic(filePath, writeData, options.encoding === 'base64' ? null : options)
+-    return { success: true }
++    if (path.basename(filePath) === 'project.comfystudio') {
++      if (!Object.prototype.hasOwnProperty.call(options, 'zx7ExpectedSha256')) {
++        throw new Error('Native project save requires a source-bound revision')
++      }
++      const { saveNativeProjectCAS } = require('./nativeProjectCAS.cjs')
++      const saved = await saveNativeProjectCAS(filePath, writeData, options.zx7ExpectedSha256)
++      return { success: true, sha256: saved.sha256 }
++    }
++    await writeFileAtomic(filePath, writeData, options.encoding === 'base64' ? null : options)
++    return { success: true }
+   } catch (err) {
+@@ -4107,5 +4113,8 @@
+ 
+-ipcMain.handle('fs:writeFileFromArrayBuffer', async (event, filePath, arrayBuffer) => {
+-  try {
+-    const buffer = Buffer.from(arrayBuffer)
++ipcMain.handle('fs:writeFileFromArrayBuffer', async (event, filePath, arrayBuffer) => {
++  try {
++    if (path.basename(filePath) === 'project.comfystudio') {
++      throw new Error('Raw writes cannot bypass native project source locking')
++    }
++    const buffer = Buffer.from(arrayBuffer)
+     await writeFileAtomic(filePath, buffer)

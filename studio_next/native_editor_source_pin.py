@@ -22,12 +22,14 @@ PINNED_VELORN_SAVE_REVISION = _SOURCE_LOCK.get("collab_save_revision")
 PINNED_VELORN_SAVE_ORDER_REVISION = _SOURCE_LOCK.get("collab_save_order_revision")
 # Synthetic CI-only descendant: never a production/user editor source grant.
 PINNED_VELORN_SAVE_INTERLEAVE_REVISION = _SOURCE_LOCK.get("collab_save_interleave_revision")
+PINNED_VELORN_CROSS_PROCESS_REVISION = _SOURCE_LOCK.get("collab_cross_process_revision")
 TRUSTED_VELORN_REVISIONS = frozenset(
     value for value in (
         PINNED_VELORN_MCP_REVISION, PINNED_VELORN_DESKTOP_REVISION,
         PINNED_VELORN_COLLAB_REVISION, PINNED_VELORN_SCENE_REVISION,
         PINNED_VELORN_EDITORIAL_REVISION, PINNED_VELORN_SAVE_REVISION,
         PINNED_VELORN_SAVE_ORDER_REVISION,
+        PINNED_VELORN_CROSS_PROCESS_REVISION,
         *( (PINNED_VELORN_SAVE_INTERLEAVE_REVISION,)
            if os.environ.get("CI") == "true" else () ),
     ) if isinstance(value, str) and value)
@@ -122,6 +124,7 @@ def _source_matches_pinned_native_collaboration(source: Path) -> bool:
                     PINNED_VELORN_SAVE_REVISION,
                     PINNED_VELORN_SAVE_ORDER_REVISION,
                     PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
+                    PINNED_VELORN_CROSS_PROCESS_REVISION,
                 }):
             return False
         # A clean PINNED HEAD is the source contract, not just three
@@ -157,7 +160,8 @@ def _source_matches_pinned_native_scene(source: Path) -> bool:
                                       PINNED_VELORN_EDITORIAL_REVISION,
                                       PINNED_VELORN_SAVE_REVISION,
                                       PINNED_VELORN_SAVE_ORDER_REVISION,
-                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION})
+                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
+                                      PINNED_VELORN_CROSS_PROCESS_REVISION})
 
 
 def _source_matches_pinned_native_editorial(source: Path) -> bool:
@@ -177,7 +181,8 @@ def _source_matches_pinned_native_editorial(source: Path) -> bool:
             actual.stdout.strip() in {PINNED_VELORN_EDITORIAL_REVISION,
                                       PINNED_VELORN_SAVE_REVISION,
                                       PINNED_VELORN_SAVE_ORDER_REVISION,
-                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION})
+                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
+                                      PINNED_VELORN_CROSS_PROCESS_REVISION})
 
 
 
@@ -197,7 +202,8 @@ def _source_matches_pinned_native_save(source: Path) -> bool:
     return (actual.returncode == 0 and
             actual.stdout.strip() in {PINNED_VELORN_SAVE_REVISION,
                                       PINNED_VELORN_SAVE_ORDER_REVISION,
-                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION})
+                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
+                                      PINNED_VELORN_CROSS_PROCESS_REVISION})
 
 
 def _source_matches_pinned_native_save_order(source: Path) -> bool:
@@ -215,7 +221,8 @@ def _source_matches_pinned_native_save_order(source: Path) -> bool:
         return False
     return (actual.returncode == 0 and
             actual.stdout.strip() in {PINNED_VELORN_SAVE_ORDER_REVISION,
-                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION})
+                                      PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
+                                      PINNED_VELORN_CROSS_PROCESS_REVISION})
 
 
 def _source_matches_pinned_native_save_interleave(source: Path) -> bool:
@@ -238,6 +245,24 @@ def _source_matches_pinned_native_save_interleave(source: Path) -> bool:
         return False
     return (actual.returncode == 0 and
             actual.stdout.strip() == PINNED_VELORN_SAVE_INTERLEAVE_REVISION)
+
+
+
+def _source_matches_pinned_native_cross_process(source: Path) -> bool:
+    """Exact clean, reviewed source-native Linux CAS writer, not test name."""
+    if (not PINNED_VELORN_CROSS_PROCESS_REVISION or
+            not _source_matches_pinned_native_save_order(source)):
+        return False
+    safe_env = dict(os.environ)
+    safe_env.pop("NVIDIA_API_KEY", None)
+    try:
+        actual = subprocess.run(
+            ["git", "-C", str(source.resolve(strict=True)), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, env=safe_env)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return False
+    return (actual.returncode == 0 and
+            actual.stdout.strip() == PINNED_VELORN_CROSS_PROCESS_REVISION)
 
 
 def pinned_electron_marker_previews(source: Path, grants: dict) -> tuple[str, ...]:

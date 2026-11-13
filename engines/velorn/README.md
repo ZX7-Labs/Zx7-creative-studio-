@@ -96,6 +96,34 @@ approval; see `zx7-native-editorial-candidate.yml` for the older editorial
 source and `zx7-native-save-authority.yml` for the installed native
 save-stamp, live GUI co-edit, real A/V and post-save crash/reopen test.
 
+## Opt-in Linux cross-process native project-save authority (G1 candidate)
+
+For separate **cooperative native writers** of the same `project.comfystudio`,
+the optional Linux source child adds exact loaded-byte SHA comparison under a
+kernel `flock` before the actual atomic document replacement. A stale editor
+save fails; it does **not** merge or replay unsaved edits. Reopen only after
+reviewing the other writer's committed work and protecting your own unsaved
+changes. Read-only project listings and duplication-source inspection do not
+change the active editor's save authority; explicit project open/reopen does.
+
+On Linux with util-linux `flock`, prepare a **new, nonexistent destination**
+from the checked-in upstream submodule (never patch your current editor):
+
+```sh
+bash engines/velorn/prepare-native-cross-process-candidate.sh \
+  "$PWD/third_party/velorn" "$HOME/zx7-native-cross-process-source" --install
+```
+
+The descendant must match `collab_cross_process_revision` in the source lock;
+use the existing trusted-source launcher and install that child's Electron
+dependencies. It is a developer opt-in, **not** the default/published desktop
+installer. The fixed ports still allow only one full editor per network
+namespace; physical verification runs one real Electron and another
+independent native-source OS writer. The same lock is advisory: unmodified
+editor versions, noncooperative writers, remote filesystems, cross-platform
+portability, power-cut recovery and independent artistic evaluation are **not**
+covered. Actual CI is `zx7-native-cross-process-save.yml`.
+
 ## Connect a local AI client through standard MCP
 
 Install the optional bridge with `python -m pip install '.[editor]'`. Protocol
