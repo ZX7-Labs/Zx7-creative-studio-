@@ -49,7 +49,7 @@ diff --git a/electron/mcpServer.js b/electron/mcpServer.js
 -    }
 -  }
 -
--  async runComfyUIConnectionDiagnosis
+-  async runComfyUIConnectionDiagnosis(args = {}) {
 +      default:
 +        return errorResult(`Unknown tool: ${name}`)
 +      }
@@ -63,7 +63,7 @@ diff --git a/electron/mcpServer.js b/electron/mcpServer.js
 +    }
 +  }
 +
-+  async runComfyUIConnectionDiagnosis
++  async runComfyUIConnectionDiagnosis(args = {}) {
      if (!this.diagnoseComfyUIConnection) {
        return errorResult('ComfyUI connection diagnostics are not available. Restart Velorn and try again.')
      }
