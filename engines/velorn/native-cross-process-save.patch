@@ -34,7 +34,7 @@ diff --git a/src/services/fileSystem.js b/src/services/fileSystem.js
 +  await loadProject(duplicatePath, { bindSourceHead: true })
 +  const savedModified = await saveProject(duplicatePath, duplicatedProject)
  
-@@ -357,3 +369,3 @@
+@@ -356,3 +368,3 @@
   */
 -export const loadProject = async (projectDir) => {
 +export const loadProject = async (projectDir, { bindSourceHead = false } = {}) => {
