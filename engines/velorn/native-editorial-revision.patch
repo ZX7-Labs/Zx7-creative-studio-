@@ -52,36 +52,29 @@ diff --git a/electron/mcpServer.js b/electron/mcpServer.js
 -        return this.addTransition(snapshot, args)
 +        return await this.addTransition(snapshot, args)
        case 'update_transition':
-@@ -11022,4 +11023,4 @@
+@@ -11022,17 +11023,17 @@
          return this.removeTransitions(snapshot, args)
        case 'move_clips':
 -        return this.moveClips(snapshot, args)
 +        return await this.moveClips(snapshot, args)
        case 'trim_clips':
-@@ -11024,4 +11025,4 @@
-         return this.moveClips(snapshot, args)
-       case 'trim_clips':
 -        return this.trimClips(snapshot, args)
 +        return await this.trimClips(snapshot, args)
-       case 'delete_clips':
-@@ -11026,4 +11027,4 @@
-         return this.trimClips(snapshot, args)
        case 'delete_clips':
 -        return this.deleteClips(snapshot, args)
 +        return await this.deleteClips(snapshot, args)
        case 'add_asset_to_timeline':
-@@ -11028,4 +11029,4 @@
-         return this.deleteClips(snapshot, args)
-       case 'add_asset_to_timeline':
 -        return this.addAssetToTimeline(snapshot, args)
 +        return await this.addAssetToTimeline(snapshot, args)
        case 'replace_clip_with_asset':
-@@ -11034,4 +11035,4 @@
+         return this.replaceClipWithAsset(snapshot, args)
+       case 'add_solid_color':
          return this.addSolidColor(snapshot, args)
        case 'add_assets_to_timeline':
 -        return this.addAssetsToTimeline(snapshot, args)
 +        return await this.addAssetsToTimeline(snapshot, args)
        case 'add_adjustment_clip':
+         return this.addAdjustmentClip(snapshot, args)
 @@ -11065,12 +11066,20 @@
          return this.exportDeliveryBatch(snapshot, args)
        case 'export_fcpxml':
