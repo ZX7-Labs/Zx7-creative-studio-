@@ -1507,7 +1507,7 @@ async def exercise(options):
                     "add_assets_to_timeline": {"assets": [
                                    {"assetId": video_ids[0]}], "previewOnly": False},
                     "set_clip_audio": {"clipId": shape_id,
-                                   "volume": .5, "previewOnly": False},
+                                   "gainDb": -3, "previewOnly": False},
                     "set_clip_speed": {"clipId": shape_id,
                                    "speed": 1.5, "previewOnly": False},
                     "update_track": {"trackId": overlay_track,
@@ -1516,7 +1516,7 @@ async def exercise(options):
                                    "edge": "in", "durationSeconds": .25,
                                    "previewOnly": False},
                     "set_clip_style": {"clipId": shape_id,
-                                   "opacity": 80, "previewOnly": False},
+                                   "transform": {"opacity": .8}, "previewOnly": False},
                 }
                 editorial_policy = pinned_native_editor_identity_policy(
                     options.source, tools, session)
