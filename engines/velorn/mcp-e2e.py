@@ -1685,7 +1685,21 @@ async def exercise(options):
                     raise AssertionError("Native editor did not apply source-guarded clip move")
                 assert any(m["id"] == editorial_gui_marker
                            for m in state["markers"])
+                after_ai_title = next(
+                    c for c in state["clips"] if c["id"] == title_id)
+                assert abs(after_ai_title["startTime"] -
+                           human_pointer_title_start) < .02, (
+                    "Fresh AI native shape edit overwrote human pointer title edit")
                 assert digest(original) == original_hash
+                print("ACTUAL_NATIVE_POINTER_COEDIT " + json.dumps({
+                    **pointer_input,
+                    "real_native_title_position_changed_by_X11_pointer": True,
+                    "pointer_changed_source_revision_before_keyboard_marker": True,
+                    "stale_AI_move_rejected_without_native_write": True,
+                    "fresh_AI_move_on_distinct_shape_preserved_human_title": True,
+                    "genuine_neural_brain_tested": False,
+                    "genuine_human_operator_present": False,
+                }, sort_keys=True), flush=True)
                 print("ACTUAL_NATIVE_EDITORIAL_CAS " + json.dumps({
                     "exact_source_pinned_editorial_variant": True,
                     "source_native_editorial_families": len(editorial_ops),
@@ -1889,6 +1903,11 @@ async def exercise(options):
             assert shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
             if editorial_source:
                 assert abs(shape["startTime"] - .25) <= .045
+                title_after_reopen = next(
+                    c for c in reopened["clips"] if c["id"] == title_id)
+                assert abs(title_after_reopen["startTime"] -
+                           human_pointer_title_start) < .02, (
+                    "Real Electron restart dropped human pointer-authored title edit")
             assert isinstance(shape.get("keyframes"), dict)
             assert len(shape["keyframes"].get("opacity") or []) >= 2
             assert all(any(m["id"] == mid for m in reopened["markers"])
