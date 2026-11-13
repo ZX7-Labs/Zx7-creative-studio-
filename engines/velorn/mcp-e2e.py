@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import struct
 import sys
@@ -37,12 +38,15 @@ async def exercise(options):
         _source_matches_pinned_native_collaboration,
         _source_matches_pinned_native_scene,
         _source_matches_pinned_native_editorial,
-        _source_matches_pinned_native_save)
+        _source_matches_pinned_native_save,
+        _source_matches_pinned_native_save_order)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
     editorial_source = _source_matches_pinned_native_editorial(options.source)
     save_source = _source_matches_pinned_native_save(options.source)
+    save_order_source = _source_matches_pinned_native_save_order(options.source)
+    assert not save_order_source or save_source
     assert not save_source or editorial_source
     assert not editorial_source or scene_source
     assert not scene_source or collaboration_source, (
@@ -422,6 +426,61 @@ async def exercise(options):
                 "distinct_save_timestamps": True,
                 "native_writes_not_replayed_on_uncertainty": True,
                 "creative_model_or_crash_during_write_tested": False,
+            }, sort_keys=True), flush=True)
+        if save_order_source and os.environ.get("CI") == "true":
+            # Real *kernel permission* failure on this isolated CI project:
+            # the original atomic temp+rename writer must reject saving and
+            # leave its last committed document + active project untouched.
+            native_document = project / "project.comfystudio"
+            before_failure = digest(native_document)
+            before_mode = stat.S_IMODE(project.stat().st_mode)
+            assert (before_mode & 0o200) and not native_document.is_symlink()
+            os.chmod(project, before_mode & ~0o222)
+            try:
+                assert not os.access(project, os.W_OK), (
+                    "CI test user unexpectedly retained native save permission")
+                denied_save = await session.call_tool(
+                    "save_project", {"previewOnly": False})
+                assert denied_save.is_error, (
+                    "Read-only project directory unexpectedly admitted native save")
+                assert digest(native_document) == before_failure, (
+                    "Rejected write corrupted the last saved native document")
+                live = await call(session, "get_project")
+                assert live.get("mcp", {}).get("hasProject") is True
+                assert live.get("project", {}).get("path") == str(project), (
+                    "Failed native save evicted the active project")
+            finally:
+                os.chmod(project, before_mode)
+            # A failed save must not poison later *independent* saves. The
+            # new source serialize function does not replay the failed one.
+            after_failure = await call(session, "save_project", {
+                "previewOnly": False})
+            assert (after_failure["result"]["project"]["modified"] ==
+                    json.loads(native_document.read_text())["modified"])
+            # Three genuinely overlapping MCP requests. Native writer queues
+            # state acquisition + thumbnail + file I/O. Do not infer that
+            # MCP transport's own scheduling is a cross-process lock.
+            concurrent = await asyncio.gather(*(
+                call(session, "save_project", {"previewOnly": False})
+                for _ in range(3)))
+            receipts = [r["result"]["project"]["modified"] for r in concurrent]
+            final_disk = json.loads(native_document.read_text())
+            assert final_disk["modified"] in receipts
+            await wait(session, lambda p:
+                (p.get("project") or {}).get("modified") ==
+                final_disk["modified"])
+            assert len(concurrent) == 3 and digest(native_document) != before_failure
+            print("ACTUAL_NATIVE_SAVE_ERROR_AND_CONCURRENCY " + json.dumps({
+                "pinned_native_serialized_save_revision": True,
+                "real_kernel_denied_native_save": True,
+                "last_committed_project_file_unchanged_on_failure": True,
+                "active_project_survived_failed_save": True,
+                "independent_save_after_error_succeeded": True,
+                "three_overlapping_native_save_requests": True,
+                "final_saved_timestamp_from_acknowledged_requests": True,
+                "intervening_human_edit_during_save_physically_tested": False,
+                "real_UI_close_after_failed_save_tested": False,
+                "true_neural_filmmaking_tested": False,
             }, sort_keys=True), flush=True)
         blocked_output = outputs / "no-source.mp4"
         unready = await session.call_tool("export_timeline", {
