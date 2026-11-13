@@ -14,6 +14,8 @@ on:
       - 'engines/velorn/mcp-e2e.py'
       - 'engines/velorn/native-pointer-geometry.mjs'
       - 'engines/velorn/native_pointer_proof.py'
+      - 'engines/velorn/native_crash_proof.py'
+      - 'studio_next/test_native_crash_proof.py'
       - 'studio_next/editor_runtime/mcp.mjs'
       - 'studio_next/test_native_pointer_proof.py'
       - 'scripts/install-zx7-linux.sh'
@@ -76,6 +78,7 @@ jobs:
           python -m unittest \
             studio_next.test_native_editorial_revision \
             studio_next.test_native_pointer_proof \
+            studio_next.test_native_crash_proof \
             studio_next.test_native_revision_fence \
             studio_next.test_native_scene_revision -v
       - name: Install reviewed editorial Git source variant into isolated root
@@ -98,7 +101,7 @@ jobs:
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
-      - name: Real human GUI action vs ten editorial native writers, save, independent A/V, reopen
+      - name: Real GUI/AI editorial coedit, original A/V, process SIGKILL and native crash recovery
         run: |
           python -u engines/velorn/mcp-e2e.py \
             --source "$ZX7_EDITORIAL_EDITOR" \

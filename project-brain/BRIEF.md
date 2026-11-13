@@ -12,6 +12,9 @@ Maintain one coherent native workspace and host-granted capability boundary; use
 
 ## Current development strategy (owner delta)
 
+**Latest owner clarification · 2026-11-13 · supersedes the timing of the earlier NVIDIA-first development instruction:** Continue building the complete Master Plan and do not invoke the NVIDIA API during the current offline/native engineering stages. Use it **only when the system and creative evaluation path are actually ready and its use is warranted**; keep separate purpose-specific paid inference, raw-audio and private-media consent requirements. All CI must remain no-provider by default. The earlier NVIDIA-first guidance below remains the preferred candidate for a *future authorized* capable-model trial, **not permission to spend now**. Do not misrepresent scripted tests as neural creative completion.
+
+
 - **NOW:** Develop and evaluate the complete AI-to-BODY workflow with the already connected **NVIDIA API** and a verified provider-capable model. Do **not** spend time on repeat, weak/local-CPU whole-workflow model evaluations. Use offline protocol, security and physical native tests wherever possible; cloud model runs should be rare, bounded, consented and supported by prior failure analysis.
 - **LATER:** Evaluate local models when practical hardware and meaningful model competency tests are available. The product's intended **local-first, open-source/self-hostable and provider-agnostic** character remains a release objective. NVIDIA-assisted engineering is not a license to make paid NVIDIA inference a hidden product dependency.
 - A passed hosted-model editor/permission test can establish shared BODY behavior; it **cannot** certify an untested local model's planning, reasoning, tool calling or visual creativity.
