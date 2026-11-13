@@ -1931,6 +1931,64 @@ async def exercise(options):
                 "source_video_hash_unchanged": True,
                 "model_creativity_attested": False,
             }, sort_keys=True), flush=True)
+            if editorial_source and os.environ.get("CI") == "true":
+                # Independent native PROCESS KILL test. First ensure all
+                # professional source/export assertions and a physical save
+                # have already succeeded. Only kill the exact CI launcher
+                # child; no in-flight writer or owner media may be targeted.
+                from native_crash_proof import (
+                    kill_exact_editor_after_saved_revision)
+                before_crash_sha = digest(native_path)
+                assert before_crash_sha == scene_save_sha
+                assert digest(original) == original_hash
+                killed_pid = kill_exact_editor_after_saved_revision(
+                    editor_source=options.source, state_root=fixture / "state",
+                    display=options.display)
+                assert killed_pid > 100
+                assert digest(native_path) == before_crash_sha, (
+                    "Persisted native document changed during process death")
+                assert digest(original) == original_hash
+                print("ACTUAL_NATIVE_POST_SAVE_CRASH " + json.dumps({
+                    "exact_pinned_Electron_process_SIGKILL": True,
+                    "killed_process_identity_verified": True,
+                    "saved_document_SHA_unchanged_after_process_death": True,
+                    "original_source_SHA_unchanged": True,
+                    "no_in_flight_write_or_neural_model_assumed": True,
+                }, sort_keys=True), flush=True)
+        if editorial_source and os.environ.get("CI") == "true":
+            # New launcher/main Electron, *after* an unclean SIGKILL, must
+            # load the same physically saved native project. Never replay a
+            # rejected/uncertain AI write to repair the result.
+            async with connected() as recovered_session:
+                await call(recovered_session, "open_project", {
+                    "projectPath": str(project), "previewOnly": False})
+                await wait(recovered_session, lambda state:
+                    (state.get("currentTimeline") or {}).get("name") ==
+                    "G1 scene revision source proof" and
+                    (state.get("currentTimeline") or {}).get("clipCount") == 3)
+                recovered = await call(recovered_session, "get_timeline", {
+                    "includeClips": True})
+                assert len(recovered["clips"]) == 3
+                recovered_shape = next(
+                    c for c in recovered["clips"] if c["id"] == shape_id)
+                recovered_video = next(
+                    c for c in recovered["clips"] if c["id"] == pointer_clip_id)
+                assert recovered_shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
+                assert abs(recovered_shape["startTime"] - .25) <= .045
+                assert len(recovered_shape.get("keyframes", {}).get("opacity", [])) >= 2
+                assert abs(recovered_video["startTime"] -
+                           human_pointer_clip_start) < .02
+                assert digest(native_path) == before_crash_sha
+                assert digest(original) == original_hash
+                print("ACTUAL_NATIVE_POST_CRASH_RECOVERY " + json.dumps({
+                    "fresh_native_Electron_process_after_unexpected_SIGKILL": True,
+                    "same_saved_native_project_SHA": True,
+                    "human_pointer_video_edit_retained": True,
+                    "distinct_AI_shape_clip_and_keyframes_retained": True,
+                    "no_duplicate_editorial_clips": True,
+                    "original_picture_source_untouched": True,
+                    "actual_neural_creativity_or_crash_during_write_tested": False,
+                }, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":
