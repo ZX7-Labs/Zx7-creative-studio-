@@ -44,6 +44,20 @@ async function main() {
       '--config', values.config, '--print-launch-config'], {
       cwd: workingDirectory, maxBuffer: 256 * 1024, timeout: 15000, signal: controller.signal,
     })
+    // A Chromium debugging socket exists ONLY for isolated synthetic X11
+    // pointer integration proof. It is never a production MCP option and
+    // never enabled by a model, project document or untrusted tool input.
+    // An explicit CI environment variable alone is insufficient: require
+    // a separate Xvfb display plus exact CI identity and the fixed port.
+    const rawPointerPort = process.env.ZX7_POINTER_E2E_CDP_PORT
+    let pointerTestPort = null
+    if (rawPointerPort !== undefined) {
+      if (process.env.CI !== 'true' || !values['xvfb-binary'] ||
+          !values.display || rawPointerPort !== '19393') {
+        throw Error('Native pointer inspection can only run in isolated Xvfb CI')
+      }
+      pointerTestPort = 19393
+    }
     const config = JSON.parse(stdout)
     if (config.endpoint !== 'http://127.0.0.1:19790/mcp') throw Error('The pinned editor requires its local fixed MCP endpoint')
     await fs.mkdir(values.state, { recursive: true })
@@ -51,7 +65,8 @@ async function main() {
     session = await launchVelorn({ source: values.source, profileRoot,
       projectsRoot: config.projects_root, stagingRoot: config.staging_root, outputRoot: config.outputs_root,
       xvfbBinary: values['xvfb-binary'], xvfbLibraryDir: values['xvfb-lib-dir'], display: values.display,
-      noSandbox: !!values['no-sandbox'], softwareGpu: !!values['software-gpu'], signal: controller.signal })
+      noSandbox: !!values['no-sandbox'], softwareGpu: !!values['software-gpu'],
+      pointerTestPort, signal: controller.signal })
     controller.signal.throwIfAborted()
     bridge = spawn(values.python, ['-m', 'studio_next.body_editor_mcp', '--config', values.config,
       '--native-source', values.source],
