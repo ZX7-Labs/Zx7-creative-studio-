@@ -81,8 +81,42 @@ async def exercise(options):
                 await session.initialize()
                 yield session
 
+    # Scripted fixture writes must still enter the trusted source-native
+    # writer. A direct tokenless RPC is correctly rejected by this opt-in
+    # editor; only intentional *negative* direct-CAS tests call it raw.
+    # This fixture picks its own deterministic edits, NOT model creativity.
+    scripted_editorial_admission = {}
+    editorial_fixture_writers = frozenset({
+        "move_clips", "trim_clips", "delete_clips",
+        "add_asset_to_timeline", "add_assets_to_timeline",
+        "set_clip_audio", "set_clip_speed", "update_track",
+        "add_transition", "set_clip_style",
+    })
+
     async def call(session, name, arguments=None):
-        result = await session.call_tool(name, arguments or {})
+        inputs = arguments or {}
+        if (editorial_source and name in editorial_fixture_writers
+                and inputs.get("previewOnly") is False
+                and not hasattr(session, "_gateway")):
+            key = id(session)
+            entry = scripted_editorial_admission.get(key)
+            if entry is None or entry[0] is not session:
+                from studio_next.native_editor_identity import (
+                    pinned_native_editor_identity_policy)
+                from studio_next.capability_gateway import CapabilityGateway
+                from studio_next.capability_mcp_session import (
+                    CapabilityGatewayMcpSession)
+                policy = pinned_native_editor_identity_policy(
+                    options.source, tools, session)
+                assert policy and name in policy["fence"]
+                gateway = CapabilityGateway({"editor": (
+                    session, tools, {}, None, {}, policy)})
+                await gateway.refresh()
+                entry = (session, CapabilityGatewayMcpSession(gateway, "editor"))
+                scripted_editorial_admission[key] = entry
+            result = await entry[1].call_tool(name, inputs)
+        else:
+            result = await session.call_tool(name, inputs)
         assert not result.is_error, (name, result)
         texts = [block.text for block in result.content if block.type == "text"]
         assert len(texts) == 1, (name, result)
@@ -389,8 +423,12 @@ async def exercise(options):
                 pinned_native_editor_identity_policy)
             scene_initial_policy = pinned_native_editor_identity_policy(
                 options.source, tools, session)
-            assert scene_initial_policy and set(scene_initial_policy["fence"]) == {
+            expected_initial_fences = {
                 "update_text_clip", "update_shape_clip", "set_clip_keyframes"}
+            if editorial_source:
+                expected_initial_fences |= set(editorial_fixture_writers)
+            assert scene_initial_policy and set(
+                scene_initial_policy["fence"]) == expected_initial_fences
             scene_initial_gateway = CapabilityGateway({"editor": (
                 session, tools, {}, None, {}, scene_initial_policy)})
             await scene_initial_gateway.refresh()
