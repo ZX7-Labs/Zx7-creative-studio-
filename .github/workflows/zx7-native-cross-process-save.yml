@@ -54,5 +54,11 @@ jobs:
             "$GITHUB_WORKSPACE/third_party/velorn" \
             "$RUNNER_TEMP/zx7-cross-process-inspect" --inspect
           test ! -e "$RUNNER_TEMP/zx7-cross-process-inspect"
+          bash engines/velorn/prepare-native-cross-process-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-cross-process-installed" --install
+          expected=$(python3 -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_cross_process_revision"])')
+          test "$(git -C "$RUNNER_TEMP/zx7-cross-process-installed" rev-parse HEAD)" = "$expected"
+          node --test "$RUNNER_TEMP/zx7-cross-process-installed/electron/nativeProjectCAS.test.cjs"
           test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
           git -C third_party/velorn diff --quiet HEAD --
