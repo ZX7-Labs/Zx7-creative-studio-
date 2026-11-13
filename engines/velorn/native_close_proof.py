@@ -13,7 +13,10 @@ import os
 from pathlib import Path
 import subprocess
 
-from native_pointer_proof import _editor_window, _x11
+if __package__:
+    from .native_pointer_proof import _editor_window, _x11
+else:
+    from native_pointer_proof import _editor_window, _x11
 
 
 _SCRIPT = Path(__file__).with_name("native-close-geometry.mjs")
