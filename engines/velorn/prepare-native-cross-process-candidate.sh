@@ -21,7 +21,8 @@ git -C "$stage/candidate" checkout --quiet --detach "$parent"
 git -C "$stage/candidate" apply --index -- "$root/native-cross-process-save.patch"
 cp -- "$root/nativeProjectCAS.cjs" "$stage/candidate/electron/nativeProjectCAS.cjs"
 cp -- "$root/nativeProjectCAS.test.cjs" "$stage/candidate/electron/nativeProjectCAS.test.cjs"
-git -C "$stage/candidate" add -- electron/nativeProjectCAS.cjs electron/nativeProjectCAS.test.cjs
+cp -- "$root/nativeProjectCAS.bindings.test.mjs" "$stage/candidate/electron/nativeProjectCAS.bindings.test.mjs"
+git -C "$stage/candidate" add -- electron/nativeProjectCAS.cjs electron/nativeProjectCAS.test.cjs electron/nativeProjectCAS.bindings.test.mjs
 tree=$(git -C "$stage/candidate" write-tree)
 rev=$(GIT_AUTHOR_NAME='ZX7 Studio' GIT_AUTHOR_EMAIL='zx7-studio@users.noreply.github.com' \
   GIT_AUTHOR_DATE='2026-11-14T00:00:00Z' GIT_COMMITTER_NAME='ZX7 Studio' \
@@ -33,7 +34,7 @@ git -C "$stage/candidate" diff --quiet HEAD --
 node --check "$stage/candidate/electron/main.js"
 node --check "$stage/candidate/src/services/fileSystem.js"
 node --check "$stage/candidate/electron/nativeProjectCAS.cjs"
-node --test "$stage/candidate/electron/nativeProjectCAS.test.cjs"
+node --test "$stage/candidate/electron/nativeProjectCAS.test.cjs" "$stage/candidate/electron/nativeProjectCAS.bindings.test.mjs"
 printf 'Reproducible ZX7 source-native cross-process CAS revision: %s\n' "$rev"
 if [[ "$3" == "--inspect" ]]; then exit 0; fi
 test -n "$expected" && test "$rev" = "$expected" || {
