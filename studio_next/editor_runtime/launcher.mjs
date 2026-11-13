@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import fs from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
+import { readFileSync, lstatSync } from 'node:fs'
 import path from 'node:path'
 import net from 'node:net'
 import { spawn, execFileSync } from 'node:child_process'
@@ -10,6 +10,37 @@ const sourceLock = JSON.parse(readFileSync(new URL('./source-lock.json', import.
 export const UPSTREAM_COMMIT = sourceLock.upstream_revision
 const trustedRevisions = new Set([UPSTREAM_COMMIT, sourceLock.desktop_revision, sourceLock.collab_revision, sourceLock.collab_scene_revision, sourceLock.collab_editorial_revision, sourceLock.collab_save_revision,
   sourceLock.collab_save_order_revision].filter(Boolean))
+// CI-only exact revision is not an approved general-purpose editor source.
+// It is eligible solely with the synthetic isolated Xvfb fixture and a real
+// native project-save gate; no default installed studio, owner project or
+// public service can opt into its intentional write-failure instrumentation.
+export function isIsolatedNativeSaveInterleaveSource({
+  revision, projectsRoot, xvfbBinary, display, environment = process.env,
+}) {
+  if (revision !== sourceLock.collab_save_interleave_revision ||
+      typeof revision !== 'string' || !/^[a-f0-9]{40}$/.test(revision) ||
+      environment?.CI !== 'true' || xvfbBinary !== '/usr/bin/Xvfb' ||
+      display !== '127.0.0.1:97') return false
+  const gate = environment.ZX7_CI_NATIVE_SAVE_GATE_DIR
+  const allowedRoot = environment.ZX7_CI_NATIVE_SAVE_PROJECTS_ROOT
+  if (typeof projectsRoot !== 'string' || typeof gate !== 'string' ||
+      typeof allowedRoot !== 'string' ||
+      ![projectsRoot, gate, allowedRoot].every(path.isAbsolute) ||
+      allowedRoot !== projectsRoot) return false
+  const testFixture = path.dirname(projectsRoot)
+  if (path.basename(projectsRoot) !== 'projects' ||
+      !path.basename(testFixture).startsWith('zx7-editor-mcp-') ||
+      gate !== path.join(testFixture, 'native-save-interleave-gate')) return false
+  try {
+    const gateInfo = lstatSync(gate)
+    const projectsInfo = lstatSync(projectsRoot)
+    return gateInfo.isDirectory() && !gateInfo.isSymbolicLink() &&
+      projectsInfo.isDirectory() && !projectsInfo.isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
 async function assertFree(port) {
   const server = net.createServer()
@@ -25,7 +56,9 @@ export async function launchVelorn({ source, profileRoot, projectsRoot, stagingR
   const [gitRoot, revision] = execFileSync('git', ['rev-parse', '--show-toplevel', 'HEAD'],
     { cwd: source, encoding: 'utf8' }).trimEnd().split(/\r?\n/)
   if (gitRoot !== await fs.realpath(source)) throw Error('Editor source must be the root of the approved checkout.')
-  if (!trustedRevisions.has(revision)) throw Error(`Expected upstream ${UPSTREAM_COMMIT} or its approved desktop revision; found ${revision}`)
+  if (!trustedRevisions.has(revision) && !isIsolatedNativeSaveInterleaveSource({
+    revision, projectsRoot, xvfbBinary, display,
+  })) throw Error(`Expected upstream ${UPSTREAM_COMMIT} or its approved desktop revision; found ${revision}`)
   execFileSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: source })
   await fs.access(path.join(source, 'dist', 'index.html'))
   const require = createRequire(path.join(source, 'package.json'))
