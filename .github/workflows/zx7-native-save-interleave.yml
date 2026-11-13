@@ -8,6 +8,8 @@ on:
       - 'engines/velorn/prepare-native-interleave-candidate.sh'
       - 'engines/velorn/mcp-e2e.py'
       - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/editor_runtime/launcher.mjs'
+      - 'studio_next/editor_runtime/launcher-save-interleave.test.mjs'
       - 'studio_next/native_editor_source_pin.py'
       - 'studio_next/test_native_save_interleave.py'
   workflow_dispatch:
@@ -30,6 +32,7 @@ jobs:
       - name: Review isolated source overlay and source-level handshake
         run: |
           set -euo pipefail
+          node --test studio_next/editor_runtime/launcher-save-interleave.test.mjs
           bash -n engines/velorn/prepare-native-interleave-candidate.sh
           bash engines/velorn/prepare-native-interleave-candidate.sh \
             "$GITHUB_WORKSPACE/third_party/velorn" \
