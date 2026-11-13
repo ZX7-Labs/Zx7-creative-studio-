@@ -1,0 +1,41 @@
+name: ZX7 G1 — Native Async Save Ordering and No-Loss Close
+
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/native-save-ordering.patch'
+      - 'engines/velorn/prepare-native-save-order-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/editor_runtime/launcher.mjs'
+      - 'scripts/install-zx7-linux.sh'
+      - 'engines/velorn/mcp-e2e.py'
+      - 'studio_next/test_native_save_ordering.py'
+      - '.github/workflows/zx7-native-save-order.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-exact-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Attest clean source overlay, concurrency/close negative tests, no installed changes
+        run: |
+          set -euo pipefail
+          bash -n engines/velorn/prepare-native-save-order-candidate.sh
+          bash engines/velorn/prepare-native-save-order-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-native-save-order-review" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-native-save-order-review"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
