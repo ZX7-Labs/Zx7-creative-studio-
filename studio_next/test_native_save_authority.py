@@ -41,7 +41,8 @@ class NativeSaveSourceIdentityTests(unittest.TestCase):
                 (PINNED_VELORN_EDITORIAL_REVISION, False),
                 ("0" * 40, False),
             ):
-                with self.subTest(revision=revision), (
+                with (
+                    self.subTest(revision=revision),
                     patch(
                         "studio_next.native_editor_source_pin."
                         "_source_matches_pinned_native_editorial",
