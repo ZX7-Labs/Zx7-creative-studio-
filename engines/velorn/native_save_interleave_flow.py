@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import time
 
-from native_pointer_proof import drag_native_clip_pointer
+from native_pointer_proof import drag_native_clip_pointer, _geometry
 from native_save_interleave_proof import kill_exact_editor_during_native_write
 
 
@@ -67,7 +67,19 @@ async def exercise_live_native_save(
         assert digest(native_path) == old_disk_sha
         # IMPORTANT: This changes live native Velorn GUI with an actual mouse
         # while the renderer's earlier source snapshot is pending disk rename.
+        before_geometry = _geometry(pointer_clip_id)
         pointer = await drag_native_clip_pointer(display, pointer_clip_id)
+        after_geometry = _geometry(pointer_clip_id)
+        before_left = float(before_geometry["clip"]["left"])
+        after_left = float(after_geometry["clip"]["left"])
+        print("ACTUAL_NATIVE_DURING_SAVE_X11_GEOMETRY " + json.dumps({
+            "source_clip_id_present_in_read_only_DOM": True,
+            "before_x_px": before_left,
+            "after_x_px": after_left,
+            "geometry_delta_px": after_left - before_left,
+            "physical_pointer_drag_issued": pointer["actual_X11_button_motion_release"],
+            "native_state_not_inferred_from_geometry": True,
+        }, sort_keys=True), flush=True)
         # Do NOT issue a second MCP tool while the first save is waiting.
         # The native adapter may serialize RPCs; the mouse is independent OS
         # input. Verify the resulting clip through a real read after release.
