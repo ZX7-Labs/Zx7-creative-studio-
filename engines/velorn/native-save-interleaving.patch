@@ -80,7 +80,7 @@ diff --git a/electron/nativeSaveBarrier.test.mjs b/electron/nativeSaveBarrier.te
 new file mode 100644
 --- /dev/null
 +++ b/electron/nativeSaveBarrier.test.mjs
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,67 @@
 +'use strict'
 +import test from 'node:test'
 +import assert from 'node:assert/strict'
