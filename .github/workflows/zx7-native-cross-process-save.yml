@@ -33,3 +33,26 @@ jobs:
           node --check engines/velorn/nativeProjectCAS.test.cjs
           command -v flock
           node --test engines/velorn/nativeProjectCAS.test.cjs
+
+  source-child-review:
+    needs: linux-kernel-write-cas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Inspect deterministic pinned Velorn patch and source-integrated writer
+        run: |
+          set -euo pipefail
+          bash -n engines/velorn/prepare-native-cross-process-candidate.sh
+          bash engines/velorn/prepare-native-cross-process-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-cross-process-inspect" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-cross-process-inspect"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
