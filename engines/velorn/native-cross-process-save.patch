@@ -31,10 +31,15 @@ diff --git a/src/services/fileSystem.js b/src/services/fileSystem.js
    }
 -  const savedModified = await saveProject(duplicatePath, duplicatedProject)
 +  // A copied project already exists. Observe its exact destination SHA first.
-+  await loadProject(duplicatePath)
++  await loadProject(duplicatePath, { bindSourceHead: true })
 +  const savedModified = await saveProject(duplicatePath, duplicatedProject)
  
-@@ -375,6 +387,13 @@
+@@ -357,3 +369,3 @@
+  */
+-export const loadProject = async (projectDir) => {
++export const loadProject = async (projectDir, { bindSourceHead = false } = {}) => {
+   if (isElectron()) {
+@@ -375,6 +387,14 @@
      }
 -    return projectData
 -  }
@@ -46,12 +51,26 @@ diff --git a/src/services/fileSystem.js b/src/services/fileSystem.js
 +        (typeof result.sha256 !== 'string' || !NATIVE_SHA.test(result.sha256))) {
 +      throw new Error('Native project read lacks an exact source SHA')
 +    }
-+    nativeProjectSourceHeads.set(projectDir, filePath === primaryPath ? result.sha256 : null)
++    if (bindSourceHead) nativeProjectSourceHeads.set(
+      projectDir, filePath === primaryPath ? result.sha256 : null)
 +    return projectData
 +  }
 +  
 +  // Web fallback: try comfystudio first, then legacy storyflow
    const tryLoad = async (filename) => {
+diff --git a/src/stores/projectStore.js b/src/stores/projectStore.js
+--- a/src/stores/projectStore.js
++++ b/src/stores/projectStore.js
+@@ -346,3 +346,3 @@
+             if (isValid) {
+-              const projectData = await loadProjectFromFile(storedProject)
++              const projectData = await loadProjectFromFile(storedProject, { bindSourceHead: true })
+               if (projectData) {
+@@ -503,3 +503,3 @@
+           // Load project data
+-          const projectData = await loadProjectFromFile(projectHandleOrPath)
++          const projectData = await loadProjectFromFile(projectHandleOrPath, { bindSourceHead: true })
+           if (!projectData) {
 diff --git a/electron/main.js b/electron/main.js
 --- a/electron/main.js
 +++ b/electron/main.js
