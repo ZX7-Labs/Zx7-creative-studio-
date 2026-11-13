@@ -88,7 +88,22 @@ def kill_exact_editor_after_saved_revision(
     if os.environ.get("CI") != "true" or display != "127.0.0.1:97":
         raise PermissionError("Crash proof requires the known isolated CI Xvfb display")
     pid = _candidate_pid(editor_source, state_root)
-    # No soft SIGTERM: test an unexpected process death only *after* a
-    # previously acknowledged, physically verified native save.
-    os.kill(pid, signal.SIGKILL)
+    # Pin the kernel process identity BEFORE signalling. /proc PID alone
+    # cannot prevent the process exiting and its numeric PID being reused
+    # between an identity check and a kill(2) system call.
+    if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
+        raise RuntimeError("Linux pidfd support required; refuse unsafe PID kill")
+    fd = os.pidfd_open(pid, 0)
+    try:
+        proc = Path("/proc") / str(pid)
+        _verify_process_identity(
+            cmdline=(proc / "cmdline").read_bytes(),
+            process_uid=proc.stat().st_uid,
+            editor_source=editor_source, expected_uid=os.getuid(),
+        )
+        # No graceful shutdown: test unexpected native process death
+        # strictly *after* a physically verified save. Never replay a write.
+        signal.pidfd_send_signal(fd, signal.SIGKILL)
+    finally:
+        os.close(fd)
     return pid
