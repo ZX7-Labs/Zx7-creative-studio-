@@ -82,12 +82,13 @@ new file mode 100644
 +++ b/electron/nativeSaveBarrier.test.mjs
 @@ -0,0 +1,66 @@
 +'use strict'
-+const test = require('node:test')
-+const assert = require('node:assert/strict')
-+const os = require('node:os')
-+const fs = require('node:fs/promises')
-+const path = require('node:path')
-+const { maybePauseBeforeNativeProjectRename } = require('./nativeSaveBarrier.cjs')
++import test from 'node:test'
++import assert from 'node:assert/strict'
++import os from 'node:os'
++import fs from 'node:fs/promises'
++import path from 'node:path'
++import barrier from './nativeSaveBarrier.cjs'
++const { maybePauseBeforeNativeProjectRename } = barrier
 +
 +const waitFile = async (file) => {
 +  for (let i = 0; i < 60; i++) {
