@@ -24,7 +24,8 @@ def _button_geometry(target: str) -> tuple[int, int]:
         raise PermissionError("GUI project-close proof is limited to isolated CI")
     raw = subprocess.check_output(
         ["node", str(_SCRIPT), "19393", target],
-        env=os.environ, stderr=subprocess.PIPE, timeout=25)
+        env={**os.environ, "ZX7_POINTER_E2E_CDP_PORT": "19393"},
+        stderr=subprocess.PIPE, timeout=25)
     data = json.loads(raw)
     rect, window = data.get("rect"), data.get("window")
     if (data.get("visible") is not True or data.get("unique") is not True or
