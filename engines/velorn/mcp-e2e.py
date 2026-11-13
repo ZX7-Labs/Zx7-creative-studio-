@@ -2086,6 +2086,68 @@ async def exercise(options):
                     "original_picture_source_untouched": True,
                     "actual_neural_creativity_or_crash_during_write_tested": False,
                 }, sort_keys=True), flush=True)
+                if save_order_source:
+                    # Direct GUI path, not MCP/React emulation. Deliberately
+                    # force the first close's save to fail at the kernel.
+                    # Native UI must *not* discard this original audiovisual
+                    # document on the failed save. A second click with the
+                    # directory writable proves the exact GUI action really
+                    # reaches closeProject, rather than merely losing focus.
+                    from native_close_proof import click_native_project_selection
+                    committed_sha = digest(native_path)
+                    original_source_sha = digest(original)
+                    mode = stat.S_IMODE(project.stat().st_mode)
+                    assert mode & 0o200
+                    os.chmod(project, mode & ~0o222)
+                    try:
+                        gui_denial = await click_native_project_selection(
+                            options.display)
+                        await asyncio.sleep(1)
+                        after_denied_gui_close = await call(
+                            recovered_session, "get_project")
+                        assert after_denied_gui_close.get("mcp", {}).get(
+                            "hasProject") is True, (
+                            "Native UI discarded project despite failed save")
+                        assert digest(native_path) == committed_sha
+                        assert digest(original) == original_source_sha
+                    finally:
+                        os.chmod(project, mode)
+                    gui_success = await click_native_project_selection(
+                        options.display)
+                    await wait(recovered_session, lambda state:
+                        (state.get("mcp") or {}).get("hasProject") is False)
+                    # Reopen exact original project after the native UI
+                    # deliberately closed it. No regenerated files or tool
+                    # writes can stand in for source-on-disk preservation.
+                    await call(recovered_session, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(recovered_session, lambda state:
+                        (state.get("currentTimeline") or {}).get("name") ==
+                        "G1 scene revision source proof" and
+                        (state.get("currentTimeline") or {}).get("clipCount") == 3)
+                    reopened_after_ui = await call(
+                        recovered_session, "get_timeline", {
+                        "includeClips": True})
+                    assert len(reopened_after_ui["clips"]) == 3
+                    assert digest(original) == original_source_sha
+                    assert digest(native_path) != "" and (
+                        recovered_shape["id"] in {
+                            c["id"] for c in reopened_after_ui["clips"]})
+                    assert all(m.get("id") in {
+                        k.get("id") for k in reopened_after_ui["markers"]}
+                        for m in recovered["markers"])
+                    print("ACTUAL_NATIVE_GUI_FAILED_CLOSE_SAFETY " + json.dumps({
+                        **gui_denial,
+                        "same_button_succeeded_when_save_writable": gui_success[
+                            "real_X11_menu_and_project_selection_pointer_clicks"],
+                        "kernel_denied_save_refused_project_close": True,
+                        "native_project_remained_open_after_failed_save": True,
+                        "native_UI_later_closed_after_successful_save": True,
+                        "saved_original_native_project_reopened": True,
+                        "original_picture_source_SHA_unchanged": True,
+                        "new_human_edit_during_inflight_save_tested": False,
+                        "genuine_AI_artistic_choice_tested": False,
+                    }, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":
