@@ -72,7 +72,14 @@ async def exercise(options):
     for name in ("no_sandbox", "software_gpu"):
         if getattr(options, name):
             args += ["--" + name.replace("_", "-")]
-    params = StdioServerParameters(command="node", args=args, cwd=ROOT)
+    # Read-only DOM geometry requires an isolated synthetic CI X11 editor.
+    # No production run exposes a remote debugging endpoint.
+    pointer_inspection_env = (
+        {**os.environ, "ZX7_POINTER_E2E_CDP_PORT": "19393"}
+        if editorial_source and options.xvfb_binary and
+           os.environ.get("CI") == "true" else None)
+    params = StdioServerParameters(
+        command="node", args=args, cwd=ROOT, env=pointer_inspection_env)
 
     @asynccontextmanager
     async def connected():
