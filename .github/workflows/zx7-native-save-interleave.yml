@@ -1,0 +1,39 @@
+name: ZX7 G1 — Live Native Save Interleaving and Interrupted-Write Recovery
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zx7-native-save-interleave.yml'
+      - 'engines/velorn/native-save-interleaving.patch'
+      - 'engines/velorn/prepare-native-interleave-candidate.sh'
+      - 'engines/velorn/mcp-e2e.py'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/test_native_save_interleave.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Review isolated source overlay and source-level handshake
+        run: |
+          set -euo pipefail
+          bash -n engines/velorn/prepare-native-interleave-candidate.sh
+          bash engines/velorn/prepare-native-interleave-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-native-interleave-review" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-native-interleave-review"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
