@@ -1,0 +1,83 @@
+diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
+--- a/src/services/mcpActions.js
++++ b/src/services/mcpActions.js
+@@ -8931,7 +8931,12 @@
+   }
+ }
+ 
+-export async function runMcpAction(action, payload = {}) {
++// These ten native editorial operations are synchronous through the pinned
++// renderer store: no awaits intervene between entry CAS and timeline mutation.
++// New asynchronous native operations must be audited separately before inclusion.
++const zx7FencedEditorialActions = new Set(["move_clips","trim_clips","delete_clips","add_asset_to_timeline","add_assets_to_timeline","set_clip_audio","set_clip_speed","update_track","add_transition","set_clip_style"])
++
++export async function runMcpAction(action, payload = {}) {
+   // Synchronous renderer commit entry, NOT Electron's debounced snapshot.
+   // GUI store mutations increment the source revision without a model token.
+   // Missing tokens on this patched MCP write path fail closed.
+@@ -8938,7 +8943,8 @@
+   const commitFenced = (
+     ((action === 'update_text_clip' || action === 'update_shape_clip') &&
+       payload?.previewOnly !== true) ||
+-    (action === 'set_clip_keyframes' && payload?.previewOnly === false)
++    (action === 'set_clip_keyframes' && payload?.previewOnly === false) ||
++    (zx7FencedEditorialActions.has(action) && payload?.previewOnly === false)
+   )
+   if (commitFenced) {
+     const current = getZX7NativeRevision()
+diff --git a/electron/mcpServer.js b/electron/mcpServer.js
+--- a/electron/mcpServer.js
++++ b/electron/mcpServer.js
+@@ -10763,8 +10763,9 @@
+       return errorResult('No Velorn project is open yet.')
+     }
+ 
+-    switch (name) {
+-      case 'get_project':
++    try {
++      switch (name) {
++      case 'get_project':
+         return textResult({
+           app: snapshot.app,
+           project: snapshot.project,
+@@ -11065,12 +11066,20 @@
+         return this.exportDeliveryBatch(snapshot, args)
+       case 'export_fcpxml':
+         return this.exportFcpXml(snapshot, args)
+-      default:
+-        return errorResult(`Unknown tool: ${name}`)
+-    }
+-  }
+-
+-  async runComfyUIConnectionDiagnosis
++      default:
++        return errorResult(`Unknown tool: ${name}`)
++      }
++    } catch (error) {
++      // Only a reviewed source-native renderer CAS yields this categorical
++      // no-write rejection. Other failures preserve their old error behavior.
++      if (error?.message === 'ZX7_STALE_NATIVE_REVISION') {
++        return errorResult('ZX7_STALE_NATIVE_REVISION')
++      }
++      throw error
++    }
++  }
++
++  async runComfyUIConnectionDiagnosis
+     if (!this.diagnoseComfyUIConnection) {
+       return errorResult('ComfyUI connection diagnostics are not available. Restart Velorn and try again.')
+     }
+@@ -11561,8 +11570,11 @@
+           },
+         } : undefined,
+       })
+-    } catch (error) {
+-      return errorResult(`${suggestedTool} failed: ${error?.message || String(error)}`)
++    } catch (error) {
++      if (error?.message === 'ZX7_STALE_NATIVE_REVISION') {
++        return errorResult('ZX7_STALE_NATIVE_REVISION')
++      }
++      return errorResult(`${suggestedTool} failed: ${error?.message || String(error)}`)
+     }
+   }
+ 
