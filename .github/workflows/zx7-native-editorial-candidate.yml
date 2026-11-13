@@ -12,6 +12,10 @@ on:
       - 'studio_next/capability_gateway.py'
       - 'studio_next/test_native_editorial_revision.py'
       - 'engines/velorn/mcp-e2e.py'
+      - 'engines/velorn/native-pointer-geometry.mjs'
+      - 'engines/velorn/native_pointer_proof.py'
+      - 'studio_next/editor_runtime/mcp.mjs'
+      - 'studio_next/test_native_pointer_proof.py'
       - 'scripts/install-zx7-linux.sh'
       - '.github/workflows/zx7-native-editorial-candidate.yml'
   workflow_dispatch:
@@ -35,6 +39,9 @@ jobs:
         run: |
           set -euo pipefail
           bash -n scripts/install-zx7-linux.sh
+          node --check engines/velorn/native-pointer-geometry.mjs
+          node --check studio_next/editor_runtime/mcp.mjs
+          node --check studio_next/editor_runtime/launcher.mjs
           bash -n engines/velorn/prepare-native-editorial-candidate.sh
           bash engines/velorn/prepare-native-editorial-candidate.sh \
             "$GITHUB_WORKSPACE/third_party/velorn" \
@@ -68,6 +75,7 @@ jobs:
         run: |
           python -m unittest \
             studio_next.test_native_editorial_revision \
+            studio_next.test_native_pointer_proof \
             studio_next.test_native_revision_fence \
             studio_next.test_native_scene_revision -v
       - name: Install reviewed editorial Git source variant into isolated root
