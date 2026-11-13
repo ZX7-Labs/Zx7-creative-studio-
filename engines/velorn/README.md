@@ -67,13 +67,20 @@ bash scripts/install-zx7-linux.sh --editorial-collaboration "$HOME/.local/opt/zx
 ```
 
 The installer builds an independent source tree from the reviewed
-scene/editorial revisions, then applies `native-save-timestamp.patch` from
-`prepare-native-save-candidate.sh` and checks exact `collab_save_revision`.
-The source write returns its actual serialized `project.comfystudio.modified`
-to create/save/duplicate and MCP acknowledgments. This fixes the observed
-two-timestamp ambiguity; it does **not** certify concurrent-save ordering or
-recovery from an interrupted write. The original/default/scene and previously
-pinned editorial revisions remain trusted and untouched. A model-facing
+scene/editorial revisions, applies `native-save-timestamp.patch` and then the
+new `native-save-ordering.patch` through
+`prepare-native-save-order-candidate.sh`. The exact `collab_save_order_revision`
+must match the pinned child SHA. The earlier source-saved timestamp still
+matches `project.comfystudio.modified` in the UI/create/duplicate/MCP
+acknowledgment; this child also serializes asynchronous saves, preserves later
+unsaved human edits through a dirty epoch and refuses project close on failed
+save or edits arriving during an in-flight save. Original/default/scene,
+editorial and prior save-only revisions remain trusted and unmodified.
+Synthetic installed Electron/X11 acceptance covers kernel-rejected saves,
+overlapping native requests, actual project-selection GUI close on denied
+persistence, original picture+sound and native reopen. This does **not**
+certify power-cut fsync, crash in the middle of a write, cross-process saves,
+all unguarded native writer families or creative professional acceptance. A model-facing
 native creative session checks the **model's actual last observed get_project
 revision** before any of these commits, uses a fresh host-owned object inventory
 and has the installed editor compare the revision again at its synchronous

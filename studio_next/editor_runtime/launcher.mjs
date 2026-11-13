@@ -8,7 +8,8 @@ import { createRequire } from 'node:module'
 import { VelornClient } from './client.mjs'
 const sourceLock = JSON.parse(readFileSync(new URL('./source-lock.json', import.meta.url), 'utf8'))
 export const UPSTREAM_COMMIT = sourceLock.upstream_revision
-const trustedRevisions = new Set([UPSTREAM_COMMIT, sourceLock.desktop_revision, sourceLock.collab_revision, sourceLock.collab_scene_revision, sourceLock.collab_editorial_revision, sourceLock.collab_save_revision].filter(Boolean))
+const trustedRevisions = new Set([UPSTREAM_COMMIT, sourceLock.desktop_revision, sourceLock.collab_revision, sourceLock.collab_scene_revision, sourceLock.collab_editorial_revision, sourceLock.collab_save_revision,
+  sourceLock.collab_save_order_revision].filter(Boolean))
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
 async function assertFree(port) {
   const server = net.createServer()

@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import struct
 import sys
@@ -37,12 +38,15 @@ async def exercise(options):
         _source_matches_pinned_native_collaboration,
         _source_matches_pinned_native_scene,
         _source_matches_pinned_native_editorial,
-        _source_matches_pinned_native_save)
+        _source_matches_pinned_native_save,
+        _source_matches_pinned_native_save_order)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
     editorial_source = _source_matches_pinned_native_editorial(options.source)
     save_source = _source_matches_pinned_native_save(options.source)
+    save_order_source = _source_matches_pinned_native_save_order(options.source)
+    assert not save_order_source or save_source
     assert not save_source or editorial_source
     assert not editorial_source or scene_source
     assert not scene_source or collaboration_source, (
@@ -422,6 +426,61 @@ async def exercise(options):
                 "distinct_save_timestamps": True,
                 "native_writes_not_replayed_on_uncertainty": True,
                 "creative_model_or_crash_during_write_tested": False,
+            }, sort_keys=True), flush=True)
+        if save_order_source and os.environ.get("CI") == "true":
+            # Real *kernel permission* failure on this isolated CI project:
+            # the original atomic temp+rename writer must reject saving and
+            # leave its last committed document + active project untouched.
+            native_document = project / "project.comfystudio"
+            before_failure = digest(native_document)
+            before_mode = stat.S_IMODE(project.stat().st_mode)
+            assert (before_mode & 0o200) and not native_document.is_symlink()
+            os.chmod(project, before_mode & ~0o222)
+            try:
+                assert not os.access(project, os.W_OK), (
+                    "CI test user unexpectedly retained native save permission")
+                denied_save = await session.call_tool(
+                    "save_project", {"previewOnly": False})
+                assert denied_save.is_error, (
+                    "Read-only project directory unexpectedly admitted native save")
+                assert digest(native_document) == before_failure, (
+                    "Rejected write corrupted the last saved native document")
+                live = await call(session, "get_project")
+                assert live.get("mcp", {}).get("hasProject") is True
+                assert live.get("project", {}).get("path") == str(project), (
+                    "Failed native save evicted the active project")
+            finally:
+                os.chmod(project, before_mode)
+            # A failed save must not poison later *independent* saves. The
+            # new source serialize function does not replay the failed one.
+            after_failure = await call(session, "save_project", {
+                "previewOnly": False})
+            assert (after_failure["result"]["project"]["modified"] ==
+                    json.loads(native_document.read_text())["modified"])
+            # Three genuinely overlapping MCP requests. Native writer queues
+            # state acquisition + thumbnail + file I/O. Do not infer that
+            # MCP transport's own scheduling is a cross-process lock.
+            concurrent = await asyncio.gather(*(
+                call(session, "save_project", {"previewOnly": False})
+                for _ in range(3)))
+            receipts = [r["result"]["project"]["modified"] for r in concurrent]
+            final_disk = json.loads(native_document.read_text())
+            assert final_disk["modified"] in receipts
+            await wait(session, lambda p:
+                (p.get("project") or {}).get("modified") ==
+                final_disk["modified"])
+            assert len(concurrent) == 3 and digest(native_document) != before_failure
+            print("ACTUAL_NATIVE_SAVE_ERROR_AND_CONCURRENCY " + json.dumps({
+                "pinned_native_serialized_save_revision": True,
+                "real_kernel_denied_native_save": True,
+                "last_committed_project_file_unchanged_on_failure": True,
+                "active_project_survived_failed_save": True,
+                "independent_save_after_error_succeeded": True,
+                "three_overlapping_native_save_requests": True,
+                "final_saved_timestamp_from_acknowledged_requests": True,
+                "intervening_human_edit_during_save_physically_tested": False,
+                "real_UI_close_after_failed_save_tested": False,
+                "true_neural_filmmaking_tested": False,
             }, sort_keys=True), flush=True)
         blocked_output = outputs / "no-source.mp4"
         unready = await session.call_tool("export_timeline", {
@@ -2027,6 +2086,68 @@ async def exercise(options):
                     "original_picture_source_untouched": True,
                     "actual_neural_creativity_or_crash_during_write_tested": False,
                 }, sort_keys=True), flush=True)
+                if save_order_source:
+                    # Direct GUI path, not MCP/React emulation. Deliberately
+                    # force the first close's save to fail at the kernel.
+                    # Native UI must *not* discard this original audiovisual
+                    # document on the failed save. A second click with the
+                    # directory writable proves the exact GUI action really
+                    # reaches closeProject, rather than merely losing focus.
+                    from native_close_proof import click_native_project_selection
+                    committed_sha = digest(native_path)
+                    original_source_sha = digest(original)
+                    mode = stat.S_IMODE(project.stat().st_mode)
+                    assert mode & 0o200
+                    os.chmod(project, mode & ~0o222)
+                    try:
+                        gui_denial = await click_native_project_selection(
+                            options.display)
+                        await asyncio.sleep(1)
+                        after_denied_gui_close = await call(
+                            recovered_session, "get_project")
+                        assert after_denied_gui_close.get("mcp", {}).get(
+                            "hasProject") is True, (
+                            "Native UI discarded project despite failed save")
+                        assert digest(native_path) == committed_sha
+                        assert digest(original) == original_source_sha
+                    finally:
+                        os.chmod(project, mode)
+                    gui_success = await click_native_project_selection(
+                        options.display)
+                    await wait(recovered_session, lambda state:
+                        (state.get("mcp") or {}).get("hasProject") is False)
+                    # Reopen exact original project after the native UI
+                    # deliberately closed it. No regenerated files or tool
+                    # writes can stand in for source-on-disk preservation.
+                    await call(recovered_session, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(recovered_session, lambda state:
+                        (state.get("currentTimeline") or {}).get("name") ==
+                        "G1 scene revision source proof" and
+                        (state.get("currentTimeline") or {}).get("clipCount") == 3)
+                    reopened_after_ui = await call(
+                        recovered_session, "get_timeline", {
+                        "includeClips": True})
+                    assert len(reopened_after_ui["clips"]) == 3
+                    assert digest(original) == original_source_sha
+                    assert digest(native_path) != "" and (
+                        recovered_shape["id"] in {
+                            c["id"] for c in reopened_after_ui["clips"]})
+                    assert all(m.get("id") in {
+                        k.get("id") for k in reopened_after_ui["markers"]}
+                        for m in recovered["markers"])
+                    print("ACTUAL_NATIVE_GUI_FAILED_CLOSE_SAFETY " + json.dumps({
+                        **gui_denial,
+                        "same_button_succeeded_when_save_writable": gui_success[
+                            "real_X11_menu_and_project_selection_pointer_clicks"],
+                        "kernel_denied_save_refused_project_close": True,
+                        "native_project_remained_open_after_failed_save": True,
+                        "native_UI_later_closed_after_successful_save": True,
+                        "saved_original_native_project_reopened": True,
+                        "original_picture_source_SHA_unchanged": True,
+                        "new_human_edit_during_inflight_save_tested": False,
+                        "genuine_AI_artistic_choice_tested": False,
+                    }, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":

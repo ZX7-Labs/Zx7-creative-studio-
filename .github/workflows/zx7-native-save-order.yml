@@ -1,0 +1,112 @@
+name: ZX7 G1 — Native Async Save Ordering and No-Loss Close
+
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/native-save-ordering.patch'
+      - 'engines/velorn/prepare-native-save-order-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/editor_runtime/launcher.mjs'
+      - 'scripts/install-zx7-linux.sh'
+      - 'engines/velorn/mcp-e2e.py'
+      - 'engines/velorn/native-close-geometry.mjs'
+      - 'engines/velorn/native_close_proof.py'
+      - 'studio_next/test_native_close_proof.py'
+      - 'studio_next/test_native_save_ordering.py'
+      - '.github/workflows/zx7-native-save-order.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-exact-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Attest clean source overlay, concurrency/close negative tests, no installed changes
+        run: |
+          set -euo pipefail
+          bash -n engines/velorn/prepare-native-save-order-candidate.sh
+          node --check engines/velorn/native-close-geometry.mjs
+          python -m py_compile engines/velorn/native_close_proof.py
+          bash engines/velorn/prepare-native-save-order-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-native-save-order-review" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-native-save-order-review"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
+
+  installed-serial-save:
+    needs: inspect-exact-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install original Electron, X11 and independent audiovisual decoders
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Source identity, unsafe process crash and no-loss close negative tests
+        run: |
+          python -m unittest \
+            studio_next.test_native_save_ordering \
+            studio_next.test_native_close_proof \
+            studio_next.test_native_save_authority \
+            studio_next.test_native_crash_proof \
+            studio_next.test_native_pointer_proof \
+            studio_next.test_native_editorial_revision \
+            studio_next.test_native_revision_fence \
+            studio_next.test_native_scene_revision -v
+      - name: Install exact source-pinned serialized-saving Electron candidate
+        run: |
+          editor="$RUNNER_TEMP/zx7-native-save-order-installed"
+          bash engines/velorn/prepare-native-save-order-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
+          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_save_order_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --quiet HEAD --
+          echo "ZX7_SAVE_ORDER_EDITOR=$editor" >> "$GITHUB_ENV"
+      - name: Build actual source-installed pinned Electron desktop
+        run: |
+          cd "$ZX7_SAVE_ORDER_EDITOR"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
+          npm run build
+          test -s dist/index.html
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+      - name: Real denied save + X11 UI rejected close; overlapping writes, original A/V and crash recovery
+        run: |
+          python -u engines/velorn/mcp-e2e.py \
+            --source "$ZX7_SAVE_ORDER_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:97
+      - name: Original editor submodule untouched
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
