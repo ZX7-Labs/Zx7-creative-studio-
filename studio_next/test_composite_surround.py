@@ -283,6 +283,21 @@ class PhysicalSurroundProductionTests(unittest.TestCase):
                 document, root, root / "vault", movie)
             self.assertTrue(result["full_picture_and_sound_decoder_completed"])
             self.assertEqual(result["audio_channels"], 6)
+            # Also exercise the real discoverable/permissioned BODY entry,
+            # not only the isolated FFmpeg compositor test helper. A future
+            # replaceable Brain uses this host-owned typed operation.
+            from studio_next.body_integration import body_catalog
+            from studio_next.media_vault import sha256_file
+            catalog = body_catalog(root)
+            exposed = {tool["id"]: tool for tool in catalog.discover()}
+            self.assertEqual(exposed["body.composite_mix"]["status"], "installed")
+            gateway_movie = root / "gateway-dialogue-score-surround.mp4"
+            authorized = catalog.invoke("body.composite_mix", {
+                "plan":document.name, "out":gateway_movie.name,
+            }, allowed_access={"write"})
+            self.assertEqual(authorized["sha256"], sha256_file(gateway_movie))
+            self.assertEqual(_probe_channels(gateway_movie)["channels"], 6)
+            self.assertTrue(gateway_movie.stat().st_size > 1000)
             encoded = subprocess.check_output([
                 "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
                 "-i", str(movie), "-map", "0:a:0", "-ac", "6",
@@ -315,7 +330,7 @@ class PhysicalSurroundProductionTests(unittest.TestCase):
             if os.environ.get("ZX7_SURROUND_PROOF_DIR"):
                 destination = Path(os.environ["ZX7_SURROUND_PROOF_DIR"])
                 destination.mkdir(parents=True, exist_ok=True)
-                for item in (ambience, voice, music, document, movie):
+                for item in (ambience, voice, music, document, movie, gateway_movie):
                     shutil.copy2(item, destination / item.name)
                 (destination / "source-aware-5.1-mix.json").write_text(
                     json.dumps({
