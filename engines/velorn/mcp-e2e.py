@@ -956,7 +956,7 @@ async def exercise(options):
         # previewOnly; independent timeline readback proves actual mutation.
         assert applied.get("success") is True and applied.get("action") == "add_assets_to_timeline"
         await wait(session, lambda state:
-            (state.get("currentTimeline") or {}).get("clipCount") == 4)
+            (state.get("currentTimeline") or {}).get("clipCount") == 5)
         after = await call(session, "get_timeline", {"includeClips": True})
         assert len(after["clips"]) == 4
         assert sum(c.get("assetId") == video_ids[0] for c in after["clips"]) == 2
@@ -2301,6 +2301,9 @@ async def exercise(options):
                     source_video = next(c for c in authored["clips"]
                                         if c["id"] == pointer_clip_id)
                     assert len(source_video["keyframes"]["opacity"]) == 2
+                    source_audio = next(c for c in authored["clips"]
+                                        if c["type"] == "audio")
+                    assert source_audio["id"] != source_video["id"]
                     before_cut_save = await call(cut_session, "save_project", {
                         "previewOnly": False})
                     before_cut_export = outputs / "before-loss-aware-native-razor.mp4"
@@ -2308,7 +2311,9 @@ async def exercise(options):
                         cut_session, before_cut_export, before_cut_save)
                     cut_seconds = round((source_video["startTime"] +
                                          source_video["duration"] / 2) * 24) / 24
-                    intent = {"clipId": pointer_clip_id,
+                    assert (source_audio["startTime"] < cut_seconds <
+                            source_audio["startTime"] + source_audio["duration"])
+                    intent = {"clipIds": [pointer_clip_id, source_audio["id"]],
                               "timeSeconds": cut_seconds}
                     preview = await call(cut_session, "split_clip", {
                         **intent, "previewOnly": True})
@@ -2322,11 +2327,23 @@ async def exercise(options):
                     assert len(live_before["clips"]) == 3
                     cut = await call(cut_session, "split_clip", {
                         **intent, "previewOnly": False})
-                    assert cut["success"] is True and len(cut["result"]["splits"]) == 1
-                    right_id = cut["result"]["splits"][0]["rightClipId"]
+                    assert cut["success"] is True and len(cut["result"]["splits"]) == 2
+                    split_ids = {item["leftClipId"]: item["rightClipId"]
+                                 for item in cut["result"]["splits"]}
+                    right_id = split_ids[pointer_clip_id]
+                    audio_right_id = split_ids[source_audio["id"]]
                     after = await call(cut_session, "get_timeline", {
                         "includeClips": True})
-                    assert len(after["clips"]) == 4
+                    assert len(after["clips"]) == 5
+                    left_audio = next(c for c in after["clips"]
+                                      if c["id"] == source_audio["id"])
+                    right_audio = next(c for c in after["clips"]
+                                       if c["id"] == audio_right_id)
+                    assert (left_audio["assetId"] == right_audio["assetId"] ==
+                            source_audio["assetId"])
+                    assert abs(left_audio["duration"] + right_audio["duration"] -
+                               source_audio["duration"]) < 0.0001
+                    assert abs(right_audio["startTime"] - cut_seconds) < 0.0001
                     left = next(c for c in after["clips"] if c["id"] == pointer_clip_id)
                     right = next(c for c in after["clips"] if c["id"] == right_id)
                     assert left["assetId"] == right["assetId"] == video["assetId"]
@@ -2347,6 +2364,8 @@ async def exercise(options):
                     source_timeline = next(t for t in physical["timelines"]
                                            if t["id"] == native_timeline_id)
                     assert any(c["id"] == right_id and c["keyframes"] == right["keyframes"]
+                               for c in source_timeline["clips"])
+                    assert any(c["id"] == audio_right_id and c["assetId"] == source_audio["assetId"]
                                for c in source_timeline["clips"])
                     after_cut_export = outputs / "loss-aware-native-razor.mp4"
                     _id, rendered_sha, _streams, _native_capture = await render_and_verify(
@@ -2378,12 +2397,15 @@ async def exercise(options):
                                       if c["id"] == right_id)
                     assert live_right["keyframes"] == right["keyframes"]
                     assert live_right["assetId"] == video["assetId"]
+                    assert next(c for c in reopened_cut["clips"]
+                                if c["id"] == audio_right_id)["assetId"] == source_audio["assetId"]
                     assert digest(native_path) == saved_sha
                     assert digest(original) == original_hash
                 print("ACTUAL_NATIVE_LOSS_AWARE_RAZOR " + json.dumps({
                     "real_pinned_Electron_and_Body_CAS": True,
                     "non_fenced_direct_edit_denied": True,
                     "animated_source_and_retained_right_curve_verified": True,
+                    "original_independent_audio_track_actually_split": True,
                     "native_project_physically_saved_and_fresh_reopened": True,
                     "original_A_V_source_SHA_unchanged": True,
                     "independent_full_encoded_picture_sound_decode": True,
