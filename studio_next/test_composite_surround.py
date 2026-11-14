@@ -311,6 +311,23 @@ class PhysicalSurroundProductionTests(unittest.TestCase):
                     originals[path.name])
             self.assertEqual(json.loads(document.read_text()), plan)
             self.assertEqual(_probe_channels(movie)["channel_layout"], "5.1")
+            # Retain exact bytes for independent A/V and speaker evaluation.
+            if os.environ.get("ZX7_SURROUND_PROOF_DIR"):
+                destination = Path(os.environ["ZX7_SURROUND_PROOF_DIR"])
+                destination.mkdir(parents=True, exist_ok=True)
+                for item in (ambience, voice, music, document, movie):
+                    shutil.copy2(item, destination / item.name)
+                (destination / "source-aware-5.1-mix.json").write_text(
+                    json.dumps({
+                        "original_cas_sha256": originals,
+                        "source_channels": {"ambience":6, "dialogue":1, "music":2},
+                        "speaker_assignments": {
+                            "dialogue":{"FC":0},
+                            "music":{"FL":0, "FR":1}},
+                        "physically_decoded": True,
+                        "model_artistic_judgment_verified": False,
+                        "human_mastering_acceptance": False,
+                    }, indent=2) + "\n", encoding="utf-8")
 
     def test_surround_source_routing_requires_explicit_bounded_one_to_one_mapping(self):
         with tempfile.TemporaryDirectory() as scratch:

@@ -61,7 +61,9 @@ _AUDIO = obj({"id": TEXT, **_SOURCE_FIELDS, **_TIMING, "gain_db": number(-120, 1
     "gain_keyframes": array(obj({"at_seconds": TIME, "gain_db": number(-120, 120)})),
     "stereo_balance": number(-1, 1),
     "speaker_gains_db": obj({}, {speaker: number(-96, 24)
-                                  for speaker in ("FL", "FR", "FC", "LFE", "BL", "BR")})})
+                                  for speaker in ("FL", "FR", "FC", "LFE", "BL", "BR")}),
+    "speaker_map": obj({}, {speaker: number(0, 5, integer=True)
+                             for speaker in ("FL", "FR", "FC", "LFE", "BL", "BR")})})
 _SEQUENCE = obj({"frame_rate": RATE, "frame_size": obj({"width": SIZE, "height": SIZE}),
     "clips": array(obj({**_SOURCE_FIELDS, "first_frame": number(0, integer=True),
                        "end_frame": SIZE, "audio": SOUND}), minItems=1, maxItems=128)})

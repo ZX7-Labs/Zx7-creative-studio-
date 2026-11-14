@@ -239,7 +239,7 @@ def validate_composition(plan,workspace,vault):
                       if kind=="video" else
                       {"id","source","asset_id","attestation_id","start","source_in","duration","gain_db"})
             supported=required|({"motion","fade_in_seconds","fade_out_seconds","chroma_key","source_kind","matte"}
-                                if kind=="video" else {"gain_keyframes","stereo_balance","speaker_gains_db"})
+                                if kind=="video" else {"gain_keyframes","stereo_balance","speaker_gains_db","speaker_map"})
             if not required.issubset(layer) or not set(layer).issubset(supported):
                 raise ValueError("Director-specified "+kind+" layer is incomplete or uses untrusted effects")
             identifier=layer["id"]
@@ -304,11 +304,31 @@ def validate_composition(plan,workspace,vault):
                 # Legacy stereo accepts mono/stereo as before, but must NEVER
                 # silently downmix an actual multichannel source. Require the
                 # director to explicitly choose a physically supported bus.
-                if bus_layout == "stereo" and native_channels > 2:
-                    raise ValueError("Explicit multichannel audio bus required; no silent downmix")
-                if bus_layout == "5.1" and (
-                        native_channels != 6 or native_layout != "5.1"):
-                    raise ValueError("5.1 audio bus requires physical 5.1 source channels; no upmix")
+                speaker_map = layer.get("speaker_map")
+                if bus_layout == "stereo":
+                    if native_channels > 2:
+                        raise ValueError("Explicit multichannel audio bus required; no silent downmix")
+                    if speaker_map is not None:
+                        raise ValueError("Speaker map requires explicit surround bus, not legacy stereo")
+                elif native_channels == 6 and native_layout == "5.1":
+                    if speaker_map is not None:
+                        raise ValueError("Native 5.1 channel identity must not be remapped")
+                elif native_channels in (1, 2) and native_layout == (
+                        "mono" if native_channels == 1 else "stereo"):
+                    # A declared source-channel assignment is a deliberate
+                    # artistic routing decision, not permission for the codec
+                    # to invent a surround spatialization. Every real input
+                    # channel must appear exactly once; other output speakers
+                    # remain silent on this track.
+                    if (type(speaker_map) is not dict
+                            or len(speaker_map) != native_channels
+                            or not set(speaker_map).issubset(_SURROUND_SPEAKERS)
+                            or any(type(index) is not int
+                                   for index in speaker_map.values())
+                            or set(speaker_map.values()) != set(range(native_channels))):
+                        raise ValueError("Explicit complete speaker map required for mono/stereo in 5.1")
+                else:
+                    raise ValueError("5.1 audio bus requires physical 5.1 or explicitly mapped mono/stereo source")
             if kind=="video" and contract is not None:
                 # This is not a silent metadata label. Every incoming
                 # picture must physically carry the declared SDR VUI, or
@@ -483,9 +503,19 @@ def actual_composite_command(plan,workspace,vault,out):
             source_end=source_first+source_length
             lag_samples=_audio_sample_index(start,bus_rate)
             effects=(f"[{source_index}:a:0]atrim=start_sample={source_first}:"
-                f"end_sample={source_end},"
-                f"asetpts=PTS-STARTPTS,aresample={bus_rate},"
-                f"aformat=channel_layouts={bus_layout},volume={layer['gain_db']}dB")
+                f"end_sample={source_end},asetpts=PTS-STARTPTS")
+            mapping = layer.get("speaker_map")
+            if mapping is not None:
+                # Route *before* channel-layout normalization, while c0/c1
+                # still mean the actual source's mono/stereo channels. This
+                # never implicitly spreads voice or score to 5.1 speakers.
+                routes="|".join(
+                    f"{speaker}=c{mapping[speaker]}"
+                    for speaker in _SURROUND_SPEAKERS if speaker in mapping)
+                effects += ",pan=5.1|" + routes
+            effects+=(f",aresample={bus_rate},"
+                      f"aformat=channel_layouts={bus_layout},"
+                      f"volume={layer['gain_db']}dB")
             balance=float(layer.get("stereo_balance",0))
             if balance:
                 # Per-channel post-upmix balance, not invented 3D sound or
