@@ -113,13 +113,38 @@ export function planLossAwareNativeExtract({
   // Unknown source links may live on excluded tracks. Never let a selected
   // clip write orphan its nonselected A/V partner. The razor itself verifies
   // that an actual boundary cuts complete groups or refuses.
-  const selectedClips = clips.filter(c => selected.has(c.trackId))
+  const oldById = new Map(clips.map(c => [c.id, c]))
+  const touched = c => selected.has(c.trackId) &&
+    ((c.startTime < end - EPS && c.startTime + c.duration > start + EPS) ||
+     (ripple && c.startTime >= end - EPS))
+  // Before any native write, reject scoped edits that detach or desynchronize
+  // an original linked sound/picture pair. No silent per-track permission expansion.
+  const groups = new Map()
+  for (const c of clips) {
+    if (typeof c.linkGroupId === 'string' && c.linkGroupId.trim()) {
+      if (!groups.has(c.linkGroupId)) groups.set(c.linkGroupId, [])
+      groups.get(c.linkGroupId).push(c)
+    }
+    for (const field of ['linkedVideoClipId', 'linkedAudioClipId']) {
+      const partnerId = c.metadata?.[field]
+      if (partnerId != null) {
+        const partner = oldById.get(partnerId)
+        if (!partner || touched(partner) !== touched(c))
+          return fail('Range would detach or desynchronize original linked audio/video')
+      }
+    }
+  }
+  for (const members of groups.values()) {
+    if (members.some(touched) && members.some(c => !touched(c)))
+      return fail('Range would edit only part of a linked native source group')
+  }
   const crossings = (current, time) => current.filter(c =>
     selected.has(c.trackId) && c.startTime + EPS < time
     && c.startTime + c.duration > time + EPS).map(c => c.id)
 
   let stage = structuredClone(clips)
   let counter = clipCounter
+  const selectedRightPieces = new Set()
   const splitAtStart = crossings(stage, start)
   if (splitAtStart.length) {
     const planned = planLossAwareNativeSplit({
@@ -139,6 +164,7 @@ export function planLossAwareNativeExtract({
     if (!planned.ok) return fail('End boundary: ' + planned.reason)
     stage = planned.clips
     counter = planned.clipCounter
+    for (const split of planned.splits) selectedRightPieces.add(split.rightClipId)
   }
 
   const kept = []
@@ -161,7 +187,7 @@ export function planLossAwareNativeExtract({
       } else {
         kept.push(clip)
       }
-      selectedClipIds.push(clip.id)
+      if (selectedRightPieces.has(clip.id)) selectedClipIds.push(clip.id)
     } else if (clip.startTime >= start - EPS && clipEnd <= end + EPS) {
       removedClipIds.push(clip.id)
     } else {

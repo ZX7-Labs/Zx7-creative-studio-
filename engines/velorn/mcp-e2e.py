@@ -42,7 +42,8 @@ async def exercise(options):
         _source_matches_pinned_native_save_order,
         _source_matches_pinned_native_save_interleave,
         _source_matches_pinned_native_cross_process,
-        _source_matches_pinned_native_loss_aware_editorial)
+        _source_matches_pinned_native_loss_aware_editorial,
+        _source_matches_pinned_native_loss_aware_extract)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
@@ -52,6 +53,8 @@ async def exercise(options):
     interleave_source = _source_matches_pinned_native_save_interleave(options.source)
     cross_process_source = _source_matches_pinned_native_cross_process(options.source)
     loss_aware_source = _source_matches_pinned_native_loss_aware_editorial(options.source)
+    loss_aware_range_source = _source_matches_pinned_native_loss_aware_extract(options.source)
+    assert not loss_aware_range_source or loss_aware_source
     assert not loss_aware_source or cross_process_source
     assert not (interleave_source and cross_process_source)
     assert not cross_process_source or save_order_source
@@ -122,6 +125,7 @@ async def exercise(options):
         "set_clip_audio", "set_clip_speed", "update_track",
         "add_transition", "set_clip_style",
         *(( "split_clip", ) if loss_aware_source else ()),
+        *(( "extract_range", ) if loss_aware_range_source else ()),
     })
 
     async def call(session, name, arguments=None):
@@ -1474,6 +1478,8 @@ async def exercise(options):
                 })
             if loss_aware_source:
                 scene_fences.add("split_clip")
+            if loss_aware_range_source:
+                scene_fences.add("extract_range")
             assert scene_policy and set(scene_policy["fence"]) == scene_fences
             native_gateway = CapabilityGateway({"editor": (
                 session, tools, {}, None, {}, scene_policy)})
@@ -2443,6 +2449,177 @@ async def exercise(options):
                     "genuine_model_creativity_or_all_native_effects_proven": False,
                 }, sort_keys=True), flush=True)
 
+
+            if loss_aware_range_source:
+                # A separately authored native timeline avoids altering the
+                # previously saved human-pointer project and original markers.
+                # This is source-native physical test logic, not neural art.
+                prev_native = json.loads(native_path.read_text(encoding="utf-8"))
+                prior_owner_timeline = next(t for t in prev_native["timelines"]
+                                            if t["id"] == native_timeline_id)
+                prior_owner_clips = json.loads(json.dumps(prior_owner_timeline["clips"]))
+                async with connected() as edit_session:
+                    await call(edit_session, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(edit_session, lambda x:
+                        (x.get("currentTimeline") or {}).get("clipCount") == 5)
+                    await call(edit_session, "create_timeline", {
+                        "name": "ZX7 frame-exact source range",
+                        "width": 320, "height": 180, "fps": 24,
+                        "switchToTimeline": True, "previewOnly": False})
+                    await wait(edit_session, lambda x:
+                        (x.get("currentTimeline") or {}).get("name")
+                        == "ZX7 frame-exact source range"
+                        and (x.get("currentTimeline") or {}).get("clipCount") == 0)
+                    await call(edit_session, "add_asset_to_timeline", {
+                        "assetId": video_ids[0], "startSeconds": 0,
+                        "includeAudio": False, "previewOnly": False})
+                    await wait(edit_session, lambda x:
+                        (x.get("currentTimeline") or {}).get("clipCount") == 1)
+                    await call(edit_session, "add_asset_to_timeline", {
+                        "assetName": "tone.wav", "startSeconds": 0,
+                        "previewOnly": False})
+                    await wait(edit_session, lambda x:
+                        (x.get("currentTimeline") or {}).get("clipCount") == 2)
+                    before = await call(edit_session, "get_timeline", {
+                        "includeClips": True, "includeTransitions": True,
+                        "limit": 1000})
+                    assert len(before["clips"]) == 2
+                    assert before["clipLimitApplied"] is False
+                    assert before.get("transitions") in (None, [])
+                    initial_video = next(c for c in before["clips"]
+                                         if c["type"] == "video")
+                    initial_audio = next(c for c in before["clips"]
+                                         if c["type"] == "audio")
+                    assert initial_video["startTime"] == initial_audio["startTime"] == 0
+                    assert min(initial_video["duration"], initial_audio["duration"]) >= 1.5
+                    policy = pinned_native_editor_identity_policy(
+                        options.source, tools, edit_session)
+                    assert policy and "extract_range" in policy["fence"]
+                    gateway = CapabilityGateway({"editor": (
+                        edit_session, tools, {}, None, {}, policy)})
+                    await gateway.refresh()
+                    operator = CapabilityGatewayMcpSession(gateway, "editor")
+                    await call(operator, "set_clip_keyframes", {
+                        "clipId": initial_video["id"],
+                        "keyframes": [
+                            {"property": "opacity", "timeSeconds": 0,
+                             "value": 40, "easing": "easeInOut"},
+                            {"property": "opacity", "timeSeconds": 2,
+                             "value": 95, "easing": "linear"},
+                        ], "previewOnly": False})
+                    deadline = time.monotonic() + 20
+                    while time.monotonic() < deadline:
+                        authoring = await call(edit_session, "get_timeline", {
+                            "includeClips": True, "limit": 1000})
+                        authored = next(c for c in authoring["clips"]
+                                        if c["id"] == initial_video["id"])
+                        if len((authored.get("keyframes") or {}).get("opacity", [])) == 2:
+                            break
+                        await asyncio.sleep(.15)
+                    else:
+                        raise AssertionError("Native source keyframes never published")
+                    saved_before = await call(edit_session, "save_project", {
+                        "previewOnly": False})
+                    before_movie = outputs / "before-atomic-range.mp4"
+                    await render_and_verify(edit_session, before_movie, saved_before)
+                    request = {"startSeconds": 0.5, "endSeconds": 0.75,
+                               "ripple": True}
+                    preview = await call(edit_session, "extract_range", {
+                        **request, "previewOnly": True})
+                    assert preview["previewOnly"] is True
+                    assert preview["result"]["plan"]["removeCount"] == 2
+                    assert preview["result"]["plan"]["shiftCount"] == 2
+                    before_sha = digest(native_path)
+                    unauthorized = await edit_session.call_tool("extract_range", {
+                        **request, "previewOnly": False})
+                    assert unauthorized.is_error, "Raw MCP bypassed native revision fence"
+                    invalid = await edit_session.call_tool("extract_range", {
+                        **request, "trackIds": ["unknown-editor-track"],
+                        "previewOnly": True})
+                    assert invalid.is_error, "Invented native track was accepted"
+                    assert digest(native_path) == before_sha
+                    assert len((await call(edit_session, "get_timeline", {
+                        "includeClips": True}))["clips"]) == 2
+                    result = await call(edit_session, "extract_range", {
+                        **request, "previewOnly": False})
+                    assert result["success"] is True
+                    assert result["result"]["shiftedClipCount"] == 2
+                    assert len(result["result"]["removedClipIds"]) == 2
+                    await wait(edit_session, lambda x:
+                        (x.get("currentTimeline") or {}).get("clipCount") == 4)
+                    edited = await call(edit_session, "get_timeline", {
+                        "includeClips": True, "limit": 1000})
+                    assert len(edited["clips"]) == 4
+                    pics = sorted((c for c in edited["clips"]
+                                   if c["assetId"] == initial_video["assetId"]),
+                                  key=lambda c: c["startTime"])
+                    sounds = sorted((c for c in edited["clips"]
+                                     if c["assetId"] == initial_audio["assetId"]),
+                                    key=lambda c: c["startTime"])
+                    assert len(pics) == len(sounds) == 2
+                    for pair in (pics, sounds):
+                        assert abs(pair[0]["startTime"]) < 1e-6
+                        assert abs(pair[0]["duration"] - 0.5) < 1e-5
+                        assert abs(pair[1]["startTime"] - 0.5) < 1e-5
+                        assert abs(pair[1]["trimStart"] - 0.75) < 1e-4
+                        assert abs(pair[1]["duration"] - 1.25) < 1e-4
+                    expected_curve = authored["keyframes"]["opacity"]
+                    actual_curve = pics[1]["keyframes"]["opacity"]
+                    assert [k["easing"] for k in actual_curve] == [
+                        k["easing"] for k in expected_curve]
+                    assert [round(k["time"], 6) for k in actual_curve] == [-0.75, 1.25]
+                    saved_after = await call(edit_session, "save_project", {
+                        "previewOnly": False})
+                    persisted = json.loads(native_path.read_text(encoding="utf-8"))
+                    assert persisted["modified"] == (
+                        saved_after["result"]["project"]["modified"])
+                    prior_saved_timeline = next(t for t in persisted["timelines"]
+                                                if t["id"] == native_timeline_id)
+                    assert prior_saved_timeline["clips"] == prior_owner_clips, (
+                        "Video extract silently modified accepted earlier human work")
+                    new_timeline = next(t for t in persisted["timelines"]
+                                        if t["name"] == "ZX7 frame-exact source range")
+                    assert len(new_timeline["clips"]) == 4
+                    new_timeline_id = new_timeline["id"]
+                    after_movie = outputs / "after-atomic-range.mp4"
+                    _, media_sha, _, _ = await render_and_verify(
+                        edit_session, after_movie, saved_after)
+                    assert len(media_sha) == 64
+                    assert decoded_media_sha(before_movie, audio=False) != (
+                        decoded_media_sha(after_movie, audio=False))
+                    assert decoded_media_sha(before_movie, audio=True) != (
+                        decoded_media_sha(after_movie, audio=True))
+                    assert digest(original) == original_hash
+                    final_sha = digest(native_path)
+                async with connected() as restarted:
+                    await call(restarted, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(restarted, lambda x:
+                        (x.get("currentTimeline") or {}).get("clipCount") == 4)
+                    actual = await call(restarted, "get_timeline", {
+                        "includeClips": True})
+                    assert len(actual["clips"]) == 4
+                    reopened_piece = next(c for c in actual["clips"]
+                                          if c["id"] == pics[1]["id"])
+                    assert reopened_piece["keyframes"] == pics[1]["keyframes"]
+                    assert (await call(restarted, "get_project"))[
+                        "currentTimeline"]["id"] == new_timeline_id
+                    assert digest(native_path) == final_sha
+                    assert digest(original) == original_hash
+                print("ACTUAL_NATIVE_ATOMIC_AV_RANGE " + json.dumps({
+                    "source_pinned_real_Electron_and_Body_CAS": True,
+                    "direct_unfenced_write_and_fake_track_refused": True,
+                    "actual_two_track_picture_sound_ripple_applied": True,
+                    "source_window_frame_edges_and_timing_verified": True,
+                    "original_animated_video_keyframes_retained": True,
+                    "original_sound_windows_retained": True,
+                    "prior_human_pointer_timeline_clips_preserved": True,
+                    "native_project_physically_saved_and_reopened": True,
+                    "original_media_SHA_unchanged": True,
+                    "final_encoded_video_and_audio_independently_decoded": True,
+                    "genuine_neural_brain_or_professional_art_certified": False,
+                }, sort_keys=True), flush=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

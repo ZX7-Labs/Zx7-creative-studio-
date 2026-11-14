@@ -156,3 +156,22 @@ test('input validation rejects missing, duplicate and unrepresentable targets', 
   assert.equal(extract([source()],
     { startSeconds: 9, endSeconds: 10, ripple: false }).ok, false)
 })
+
+test('scoped ripple never desynchronizes an original linked future sound partner', () => {
+  const pic = source({ startTime: 6, linkGroupId: 'paired',
+    metadata: { linkedAudioClipId: 'clip-2' } })
+  const snd = audio({ startTime: 6, linkGroupId: 'paired',
+    metadata: { linkedVideoClipId: 'clip-1' } })
+  const before = structuredClone([pic, snd])
+  const plan = extract([pic, snd], { trackIds: ['video-1'] })
+  assert.equal(plan.ok, false)
+  assert.equal(plan.clips, undefined)
+  assert.deepEqual([pic, snd], before)
+})
+test('ripple does not invent a future temporal effect phase', () => {
+  const later = source({ id: 'clip-5', startTime: 9,
+    effects: [{ id: 'effect', type: 'nativeTimeEcho' }] })
+  const plan = extract([source(), later])
+  assert.equal(plan.ok, false)
+  assert.equal(plan.clips, undefined)
+})
