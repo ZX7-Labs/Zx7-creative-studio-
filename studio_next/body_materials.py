@@ -44,6 +44,8 @@ _SOURCE_FIELDS={
     "body.asset_vault":("source",),
     "body.composite_mix":("plan",),
     "body.visual_graph":("plan",),
+    "body.visual_author":("base",),
+    "body.visual_document":("plan",),
     "body.motion_project":("plan",),
     "body.motion_export":("bundle",),
     "body.film_finish":("plan",),
