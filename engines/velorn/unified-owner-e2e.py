@@ -65,7 +65,10 @@ def graphic_plan():
     }
 
 
-async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False):
+async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
+                   with_atomic_range=False):
+    if with_atomic_range and not with_blender:
+        raise ValueError("Atomic cross-engine range acceptance requires real Blender footage")
     assert shutil.which("ffmpeg") and shutil.which("ffprobe")
     assert source.is_dir() and (source / "dist/index.html").is_file()
     with tempfile.TemporaryDirectory(prefix="zx7-unified-owner-native-") as temp:
@@ -80,7 +83,8 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
         revised_image = root / "staging" / "revised-art.png"
         tone = root / "staging" / "original-tone.wav"
         decode(["ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi",
-                "-i", "sine=f=440:sample_rate=48000:duration=2",
+                "-i", "sine=f=440:sample_rate=48000:duration=3" if with_atomic_range else
+                 "sine=f=440:sample_rate=48000:duration=2",
                 "-ac", "2", str(tone)])
         tone_sha = digest(tone)
         if with_blender:
@@ -167,6 +171,9 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
                             "export_timeline", "zx7_verify_native_export"}.issubset(discovered), discovered
                     assert "body.research_assets" not in discovered, (
                         "This local creative-source mode cannot silently authorize network research")
+                    if with_atomic_range:
+                        assert "extract_range" in discovered and "extract_range" in identity["fence"], (
+                            "Current source-native atomic editor and trusted commit fence required")
                     if with_blender:
                         assert {"body.motion_project", "body.motion_export"}.issubset(
                             discovered), ("Installed Blender 4.5+ and native source controls required", discovered)
@@ -410,9 +417,9 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
                 "projectPath": str(project), "previewOnly": False})
             await read_until(reopened, lambda s:
                 (s.get("currentTimeline") or {}).get("clipCount") == (
-                    3 if with_blender else 2))
+                    5 if with_atomic_range else 3 if with_blender else 2))
             actual = await invoke(reopened, "get_timeline", {"includeClips": True})
-            assert len(actual["clips"]) == (3 if with_blender else 2)
+            assert len(actual["clips"]) == (5 if with_atomic_range else 3 if with_blender else 2)
             if with_blender:
                 assert any(abs(c.get("startTime", -1) - 2) < .001
                            and c["type"] == "video" for c in actual["clips"])
@@ -422,7 +429,8 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
                        for c in actual["clips"])
             assert digest(document) == saved_sha
             assert digest(original) == image_sha and digest(tone) == tone_sha
-        print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
+        print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_ATOMIC_AV "
+               if with_atomic_range else "ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
                if with_blender else "ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV ") + json.dumps({
             "actual_editable_blender_3d_and_native_revision_preserved": (
                 True if with_blender else None),
@@ -435,7 +443,11 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
             "original_generated_picture_and_audio_sha_preserved": True,
             "native_editor_imported_generated_media_and_sound": True,
             "native_editable_project_saved_and_fresh_Electron_reopened": True,
-            "fully_decoded_48_video_frames_and_original_sound": True,
+            "fully_decoded_native_video_frame_count": (
+                66 if with_atomic_range else 72 if with_blender else 48),
+            "original_sound_independently_decoded": True,
+            "native_atomic_cross_engine_range_preserved_sources": (
+                True if with_atomic_range else None),
             "native_decoded_picture_matches_body_authored_pixels": True,
             "native_export_source_bound_verification": True,
             "genuine_model_artistry_or_professional_VFX_approved": False,
@@ -449,7 +461,10 @@ if __name__ == "__main__":
     parser.add_argument("--display", required=True)
     parser.add_argument("--with-blender", action="store_true",
                         help="Also prove genuine editable Blender 4.5+ motion in native Studio")
+    parser.add_argument("--with-atomic-range", action="store_true",
+                        help="Cross-engine source-native ripple, double export and editable reopen")
     args = parser.parse_args()
     asyncio.run(exercise(args.source.resolve(strict=True),
                          args.xvfb_binary, args.display,
-                         with_blender=args.with_blender))
+                         with_blender=args.with_blender,
+                         with_atomic_range=args.with_atomic_range))
