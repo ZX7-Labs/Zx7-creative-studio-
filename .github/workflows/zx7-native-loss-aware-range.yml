@@ -1,0 +1,65 @@
+name: ZX7 Native Atomic Range — Exact Source and Physical Media
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/zx7-loss-aware-extract*'
+      - 'engines/velorn/native-loss-aware-extract.patch'
+      - 'engines/velorn/prepare-native-loss-aware-extract-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/body_editor_client.py'
+      - 'studio_next/body_editor_mcp.py'
+      - 'studio_next/native_editor_identity.py'
+      - 'engines/velorn/mcp-e2e.py'
+      - 'scripts/install-zx7-linux.sh'
+      - '.github/workflows/zx7-native-loss-aware-range.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-native-range-proof
+  cancel-in-progress: true
+jobs:
+  editorial-planner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Source, audio, keyframes, ripple, linked-media and adversarial regression
+        run: |
+          node --check engines/velorn/zx7-loss-aware-extract.mjs
+          node --check engines/velorn/zx7-loss-aware-extract.test.mjs
+          node --test engines/velorn/zx7-loss-aware-split.test.mjs \
+            engines/velorn/zx7-loss-aware-extract.test.mjs
+  inspect-exact-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Compile host and shell, apply source overlay, attest pinned original
+        run: |
+          set -euo pipefail
+          python3 -m py_compile studio_next/native_editor_source_pin.py \
+            studio_next/native_editor_identity.py studio_next/body_editor_client.py \
+            studio_next/body_editor_mcp.py
+          bash -n scripts/install-zx7-linux.sh
+          bash -n engines/velorn/prepare-native-loss-aware-extract-candidate.sh
+          bash engines/velorn/prepare-native-loss-aware-extract-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-loss-aware-range-source" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-loss-aware-range-source"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = \
+            b3c02adbd5c0779feb8abf34978299e9502cc0e7
+          git -C third_party/velorn diff --exit-code HEAD --
