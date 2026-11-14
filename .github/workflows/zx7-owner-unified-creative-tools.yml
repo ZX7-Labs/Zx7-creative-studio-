@@ -73,13 +73,13 @@ jobs:
             libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
             libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
           python -m pip install --no-cache-dir '.[editor,production]' numpy Pillow
-      - name: Rebuild and attest the existing stable Linux cross-process source child
+      - name: Rebuild and attest the same loss-aware native CGI/audio/editorial source
         run: |
           set -euo pipefail
           editor="$RUNNER_TEMP/zx7-owner-unified-source"
-          bash engines/velorn/prepare-native-cross-process-candidate.sh \
+          bash engines/velorn/prepare-native-loss-aware-extract-candidate.sh \
             "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
-          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_cross_process_revision"])')
+          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_extract_revision"])')
           test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
           git -C "$editor" diff --exit-code HEAD --
           echo "ZX7_UNIFIED_EDITOR=$editor" >> "$GITHUB_ENV"
@@ -114,13 +114,13 @@ jobs:
           test -x "$binary"
           test "$("$binary" --version | head -n 1)" = "Blender 4.5.16 LTS"
           echo "$temp/blender-$version-linux-x64" >> "$GITHUB_PATH"
-      - name: Physically verify actual Blender CGI, local visual graph, native A/V import and fresh editable Electron reopen
+      - name: Verify same original Blender/graph/sound native timeline, source-safe A/V ripple, two exports and fresh reopen
         run: |
           python -m py_compile engines/velorn/unified-owner-e2e.py
           python -u engines/velorn/unified-owner-e2e.py \
             --source "$ZX7_UNIFIED_EDITOR" \
             --xvfb-binary /usr/bin/Xvfb \
-            --display 127.0.0.1:96 --with-blender
+            --display 127.0.0.1:96 --with-blender --with-atomic-range
       - name: Never mutate original checked-out editor or pinned child
         if: always()
         run: |
