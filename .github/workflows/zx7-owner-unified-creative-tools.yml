@@ -1,0 +1,106 @@
+name: ZX7 Owner — Unified Installed Creative Tools (Offline)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zx7-owner-unified-creative-tools.yml'
+      - 'studio_next/native_editor_session.py'
+      - 'studio_next/studio_cli.py'
+      - 'studio_next/test_owner_body_tools.py'
+      - 'studio_next/test_studio_cli.py'
+      - 'studio_next/body_capability_adapter.py'
+      - 'studio_next/capability_gateway.py'
+      - 'studio_next/capability_mcp_session.py'
+      - 'engines/velorn/unified-owner-e2e.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-owned-unified-gateway:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local physical media decoder and real BODY pixel engine
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --no-cache-dir '.[editor,production]' numpy Pillow
+          ffmpeg -version | head -n 1
+      - name: Prove shared actual installed BODY catalog + native editor contracts
+        run: |
+          set -euo pipefail
+          python -m py_compile studio_next/native_editor_session.py \
+            studio_next/studio_cli.py studio_next/test_owner_body_tools.py \
+            studio_next/test_studio_cli.py
+          python -m unittest studio_next.test_owner_body_tools \
+            studio_next.test_studio_cli \
+            studio_next.test_body_capability_adapter \
+            studio_next.test_capability_mcp_session -v
+          test -z "${NVIDIA_API_KEY:-}"
+
+  real-native-creative-handoff:
+    needs: host-owned-unified-gateway
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install actual sandboxed Linux Electron, media and BODY dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]' numpy Pillow
+      - name: Rebuild and attest the existing stable Linux cross-process source child
+        run: |
+          set -euo pipefail
+          editor="$RUNNER_TEMP/zx7-owner-unified-source"
+          bash engines/velorn/prepare-native-cross-process-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
+          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_cross_process_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --exit-code HEAD --
+          echo "ZX7_UNIFIED_EDITOR=$editor" >> "$GITHUB_ENV"
+          cd "$editor"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
+          npm run build
+          test -s dist/index.html
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+      - name: Physically verify local visual graph, native A/V import and fresh editable Electron reopen
+        run: |
+          python -m py_compile engines/velorn/unified-owner-e2e.py
+          python -u engines/velorn/unified-owner-e2e.py \
+            --source "$ZX7_UNIFIED_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:96
+      - name: Never mutate original checked-out editor or pinned child
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+          if [[ -n "${ZX7_UNIFIED_EDITOR:-}" ]]; then
+            git -C "$ZX7_UNIFIED_EDITOR" diff --exit-code HEAD --
+          fi

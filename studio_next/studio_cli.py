@@ -310,7 +310,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                   reviewed_revision=False, reviewed_av_revision=False,
                   allow_cloud_audio_diagnostics=False, allow_cloud_original_wav_upload=False,
                   allow_public_research=False, searxng_url=None,
-                  xvfb_binary=None, display=None):
+                  xvfb_binary=None, display=None,
+                  enable_installed_body=False):
     from .native_editor_session import build_parser, run_native_session
     root, config, grants = load_workspace(path)
     if not isinstance(brief, str) or not 1 <= len(brief.strip()) <= 24000:
@@ -321,6 +322,10 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                        timeout_seconds=model_timeout)
     if type(max_turns) is not int or not 1 <= max_turns <= 128:
         raise ValueError("Model turn budget must be between 1 and 128")
+    if type(enable_installed_body) is not bool:
+        raise ValueError("Installed BODY tools require an explicit host boolean")
+    if enable_installed_body and config["provider"] != "local":
+        raise ValueError("Installed full creative BODY tools are local-only; no unreviewed cloud source exposure")
     if reviewed_revision and reviewed_av_revision:
         raise ValueError("Choose one reviewed revision evidence mode")
     if (type(reviewed_av_revision) is not bool or
@@ -419,6 +424,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 # function request admits. Both providers discover the same
                 # current schemas in bounded groups, without reducing grants.
                 argv.append("--indexed-catalog")
+                if enable_installed_body:
+                    argv.extend(["--body-workspace", str(root)])
                 if project_path is not None:
                     argv.extend(["--project", str(project_path)])
                 if allow_cloud_image_upload:
@@ -522,6 +529,8 @@ def main(argv=None):
     prompt.add_argument("--brief")
     prompt.add_argument("--brief-file", type=Path)
     run.add_argument("--asset", action="append", default=[], type=Path)
+    run.add_argument("--enable-installed-body-tools", action="store_true",
+                     help="Explicitly allow local Brain access to host-installed graphics, CGI, VFX, color and sound BODY tools; no network grants")
     run.add_argument("--rights")
     run.add_argument("--project", type=Path)
     run.add_argument("--max-turns", type=int, default=32)
@@ -576,7 +585,8 @@ def main(argv=None):
                 reviewed_av_revision=args.reviewed_av_revision,
                 allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics,
                 allow_cloud_original_wav_upload=args.allow_cloud_original_wav_upload,
-                xvfb_binary=args.xvfb_binary, display=args.display)
+                xvfb_binary=args.xvfb_binary, display=args.display,
+                enable_installed_body=args.enable_installed_body_tools)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.command == "doctor":
             return 0 if result["ready"] else 2

@@ -39,6 +39,45 @@ from studio_next.native_editor_identity import pinned_native_editor_identity_pol
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def attest_owner_body_source(workspace, *, configuration, provider,
+                             allowed_access=("read", "write")):
+    """Admit already-installed creative BODY instruments from one owner workspace.
+
+    The trusted owner process supplies this path, not the model. A separate
+    projects/staging/outputs root, changed symlink or hosted model cannot
+    silently attach another user's native media or unlock private tools.
+    """
+    if workspace is None:
+        return None
+    if provider != "local":
+        raise ValueError("Full installed BODY source is local-only until distinct cloud consent review")
+    if not isinstance(configuration, dict) or not isinstance(workspace, (str, Path)):
+        raise ValueError("Installed BODY requires trusted owner workspace and roots")
+    candidate = Path(workspace)
+    if not candidate.is_absolute() or candidate.is_symlink():
+        raise ValueError("Installed BODY workspace must be an absolute non-symlink owner root")
+    try:
+        root = candidate.resolve(strict=True)
+        if not root.is_dir():
+            raise ValueError("Owner workspace is not a directory")
+        project_root = Path(configuration["projects_root"]).resolve(strict=True)
+        staging_root = Path(configuration["staging_root"]).resolve(strict=True)
+        outputs_root = Path(configuration["outputs_root"]).resolve(strict=True)
+        if (project_root != root / "projects" or
+                not staging_root.is_relative_to(root / "staging") or
+                not outputs_root.is_relative_to(root / "outputs") or
+                not staging_root.is_dir() or not outputs_root.is_dir()):
+            raise ValueError("Native editor roots disagree with installed BODY workspace")
+        for child in ("projects", "staging", "outputs"):
+            if (root / child).is_symlink():
+                raise ValueError("Owner workspace media boundary cannot be redirected")
+    except (OSError, KeyError, TypeError) as exc:
+        raise ValueError("Owner workspace roots are missing or invalid") from exc
+    from .body_capability_adapter import InstalledBodyAdapter
+    return InstalledBodyAdapter(root, allowed_access=allowed_access)
+
+
+
 def editor_runtime_path(name: str) -> Path:
     """Locate the shipped GPL runtime independently of the source checkout."""
     if name not in {"mcp.mjs", "launcher.mjs", "client.mjs", "editor.example.json", "LICENSE", "NOTICE"}:
@@ -207,6 +246,12 @@ async def run_native_session(args):
     No model or editor is installed implicitly. The caller owns the brief,
     grants, private state and whether a remote model may receive images.
     """
+    # Source-root admission must happen BEFORE constructing/verifying any
+    # hosted provider. An operator calling this runner directly must not
+    # bypass zx7-studio CLI's explicit local-only creative BODY boundary.
+    if (getattr(args, "body_workspace", None) is not None
+            and args.provider != "local"):
+        raise ValueError("Installed BODY tools are local-only: external provider is not authorized")
     for path in (args.source, args.config, args.brief_file):
         if not path.exists():
             raise ValueError("Missing native source/config/creative brief file: " + str(path))
@@ -354,6 +399,15 @@ async def run_native_session(args):
                     native_revision_source, native_revision_source.grants)
             if research is not None:
                 bindings["research"] = (research, research.grants)
+            installed_body = attest_owner_body_source(
+                getattr(args, "body_workspace", None),
+                configuration=configuration, provider=args.provider)
+            if installed_body is not None:
+                # Real installed tools only: the source dynamically excludes
+                # absent renderers and never grants the network permission.
+                # Native editor and local BODY share the original host gateway,
+                # session budget and model view. No second writer or scheduler.
+                bindings["zx7"] = (installed_body, installed_body.trusted_grants)
             gateway = CapabilityGateway(bindings, session_budget=budget)
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
@@ -374,6 +428,8 @@ async def run_native_session(args):
                 model_grants.update(native_revision_source.grants)
             if research is not None:
                 model_grants.update(research.grants)
+            if installed_body is not None:
+                model_grants.update(installed_body.trusted_grants())
             selected_project_setup = None
             if getattr(args, "project", None) is not None:
                 from .native_editor_project import open_selected_native_project
@@ -456,6 +512,8 @@ def build_parser():
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--config", type=Path, required=True,
                    help="Owner-controlled native MCP grants/root paths")
+    p.add_argument("--body-workspace", type=Path,
+                   help="Host-only local owner workspace; opt into installed non-network creative BODY tools")
     p.add_argument("--project", type=Path, help="Open and verify this owner-selected project before model editing")
     p.add_argument("--state", type=Path, required=True)
     p.add_argument("--brief-file", type=Path, required=True)

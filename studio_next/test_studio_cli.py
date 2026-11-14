@@ -138,6 +138,55 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(ledger[0]["rights"], "I own this fixture")
         self.assertFalse(ledger[0]["rights_independently_verified"])
 
+    def test_owner_opt_in_local_installed_body_reaches_same_native_session(self):
+        from studio_next import native_editor_session
+        self.init()
+        mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked):
+            report = studio.run_workspace(
+                self.root, brief="Use installed CGI and visual tools",
+                enable_installed_body=True)
+        self.assertEqual(report["state"], "needs_attention")
+        args = mocked.await_args.args[0]
+        self.assertEqual(args.body_workspace, self.root.resolve())
+        self.assertTrue(args.indexed_catalog)
+        self.assertEqual(args.provider, "local")
+        self.assertEqual(mocked.await_count, 1)
+
+    def test_owner_cli_explicit_body_flag_and_default_absence(self):
+        from studio_next import native_editor_session
+        self.init()
+        mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(studio.main([
+                "run", str(self.root), "--brief", "Make editable art",
+                "--enable-installed-body-tools"]), 3)
+            self.assertEqual(mocked.await_args.args[0].body_workspace,
+                             self.root.resolve())
+            self.assertEqual(studio.main([
+                "run", str(self.root), "--brief", "Keep existing editor-only mode"]), 3)
+            self.assertIsNone(mocked.await_args.args[0].body_workspace)
+
+    def test_unreviewed_cloud_model_cannot_enable_private_body_tool_source(self):
+        from studio_next import native_editor_session
+        self.init(provider="nvidia", model_id="hosted-fixture")
+        mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked):
+            with self.assertRaisesRegex(ValueError, "local-only"):
+                studio.run_workspace(
+                    self.root, brief="Do not transmit private rendering inputs",
+                    enable_installed_body=True)
+            with self.assertRaisesRegex(ValueError, "explicit host boolean"):
+                studio.run_workspace(
+                    self.root, brief="Invalid host grant",
+                    enable_installed_body="true")
+            mocked.assert_not_awaited()
+        self.assertEqual(list((self.root / "sessions").iterdir()), [])
+
     def test_owner_revision_passes_selected_project_to_canonical_session(self):
         from studio_next import native_editor_session
         self.init()
