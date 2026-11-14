@@ -11,6 +11,7 @@ _ARG_TYPES={
     "asset_id":"string","attestation_id":"string",
     "scene_json":"string","original_film_ir":"string","voice_assets":"string",
     "assets_root":"string","edit":"string","plan":"string","operation":"string","video_job":"string","out":"string",
+    "document":"object","base":"string","expected_sha256":"string",
     "width":"integer","height":"integer","fps":"integer",
     "bundle":"string","bundle_sha256":"string","frame_index":"integer",
     "before_bundle":"string","before_sha256":"string",
@@ -40,6 +41,7 @@ def real_operation_schema(tool_id,required):
         props[name]=meta
     optional={
         "body.motion2d":("voice_assets",),
+        "body.visual_author":("base","expected_sha256"),
         "body.blender3d":("assets_root",),
         "body.exr_passes":("assets_root",),
         "body.full_decode":("expected",),
@@ -47,7 +49,9 @@ def real_operation_schema(tool_id,required):
         "body.mlt_owned_compare":("focus",),
     }.get(tool_id,())
     for name in optional:
-        props[name]=({"type":"string","pattern":"^#[0-9a-fA-F]{6}$"}
+        props[name]=({"type":"string","pattern":"^[a-f0-9]{64}$"}
+                     if name=="expected_sha256" else
+                     {"type":"string","pattern":"^#[0-9a-fA-F]{6}$"}
                      if name=="gap_color" else
                      {"type":"string","pattern":"^(?:summary|all|picture:[0-7]|sound:[0-3])$"}
                      if name=="focus" else {"type":_ARG_TYPES[name]})
