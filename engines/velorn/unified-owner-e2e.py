@@ -194,7 +194,10 @@ async def exercise(source: Path, xvfb: str, display: str):
                 s.get("currentTimeline", {}).get("clipCount") == 2)
             timeline = await invoke(studio, "get_timeline", {"includeClips": True})
             assert len(timeline["clips"]) == 2
-            assert {c["type"] for c in timeline["clips"]} == {"video", "audio"}
+            clip_types = {c["type"] for c in timeline["clips"]}
+            assert "audio" in clip_types and clip_types.intersection({"image", "video"}), (
+                "Native imported PNG and original tone must remain separate editable tracks",
+                clip_types)
             assert digest(original) == image_sha and digest(tone) == tone_sha
             save = await invoke(studio, "save_project", {"previewOnly": False})
             document = project / "project.comfystudio"
