@@ -19,6 +19,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: zx7-native-loss-aware-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   inspect-native-source:
     runs-on: ubuntu-24.04
