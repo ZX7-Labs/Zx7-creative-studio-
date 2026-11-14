@@ -1,6 +1,6 @@
 # ZX7 — current engineering STATE
 
-**Verified main · 2026-11-14 IST:** `441f27503785c765f6da40bff1361b7fcedf33b6`. [#332](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/332) merged at `840f782c03fe1bfc468b7191b1e94403f251f438`; [#333](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/333) merged at current head. The previously completed [#330](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/330) source-native in-flight X11 edit and pre-rename interrupted-write proof remains integrated. The historical [STATUS](../docs/continuity/STATUS.md) is an archive, **not** another current checkpoint.
+**Verified main · 2026-11-14 IST:** `148375eeba2c482fc3b471b9cc868a6510fe6903` after [#334](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/334) canonical checkpoint; [#332](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/332) merged at `840f782c03fe1bfc468b7191b1e94403f251f438`; [#333](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/333) merged at `441f27503785c765f6da40bff1361b7fcedf33b6`. The previously completed [#330](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/330) source-native in-flight X11 edit and pre-rename interrupted-write proof remains integrated. The historical [STATUS](../docs/continuity/STATUS.md) is an archive, **not** another current checkpoint.
 
 ## Integrated, source-verified G1 native project safety
 
@@ -10,43 +10,21 @@
 - **Owner-installable, separate Linux native runtime:** #333 exact head `88718fefc84ae9b875944d0932ae55ac586b9bd8` passed **6/6 exact-head workflows**, including actual Ubuntu 24.04 source installation [#43502720838](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43502720838): separate fresh-prefix `--cross-process-collaboration` profile, exact approved native source SHA `4d12ecd8017fecba478798671af7ee6aa9cc9ad4`, installed pinned Node 24, Linux lock and source-hydration tests, refusal to replace existing install, sandboxed Electron X11 selected-image decoding, installed owner CLI/native video create/export/reopen and unchanged upstream sources. Stable/default/scene/editorial profiles remain unchanged. The opt-in installed source remains cooperative-writer, same-host Linux scope; a second *simultaneous GUI application* was **not** physically proven.
 - **Negative evidence retained:** #332 [earlier native #43491085776](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43491085776) failed (native revision refusal, then display mismatch); an old native collaboration attempt initially failed and passed a same-head rerun. #333 [installer #43499152565](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43499152565) failed nonblocking lock expectation using the runner Node (root cause of its runner-dependent outcome not proven); [#43502301778](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43502301778) then passed pinned installed Node lock tests but failed physical owner CLI discovery without the installed `bin` on PATH. Corrected installer head passed both stages without loosening source/write refusal assertions. Some post-merge main workflows are independently running; their status is not inferred from PR CI.
 
-## In-flight G1 editorial implementation (not merged or accepted)
+## In-flight G1 loss-aware native editing (draft #335; NOT field-C acceptance)
 
-- **Draft [#335](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/335)**,
-  branch `work/g1-loss-aware-native-editorial-20261114`: one pure loss-aware
-  native video/audio razor plan with tests, source-overlay on the previously
-  verified Linux cross-process CAS child, isolated `--loss-aware-editorial`
-  owner install mode, strict host clip-identity and native revision fences,
-  and native Electron before/after original-video/audio decoder comparison
-  and saved/reopened editability assertions. Legacy native source and GUI
-  razor remain unchanged, while unsafe `extract_range` remains BODY guarded.
-- **Verified intermediate CI, not final acceptance:** initial test-first
-  expected RED [#43543604774](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43543604774);
-  pure tests GREEN [#43543774830](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43543774830);
-  reproducible exact earlier native overlay and tests GREEN
-  [#43544302968](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43544302968);
-  repeated edited-animation cut GREEN
-  [#43544624665](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43544624665).
-  Original patch header and native CAS insertion errors were reproduced,
-  corrected and retained as negative evidence. Later source descriptor and
-  actual batch-placement metadata changes **change the deterministic child
-  SHA**. The branch's `loss_aware_editorial_revision` lock must be replaced
-  with the latest inspected child SHA; fail-closed `--install` refuses a
-  mismatched source pin.
-- **Still OPEN / blocker:** latest
-  [source inspection/Node CI #43546138396](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43546138396)
-  was queued at checkpoint; no latest SHA proof, source-pin update, actual
-  installed Electron edited project/reopen, pre/post decoded video+audio
-  equality, or fresh Ubuntu owner installation has passed at this checkpoint.
-  Do NOT merge, mark ready, or claim this slice complete until those physical
-  gates pass. No paid inference or private owner media sent.
-- **Continuation without replanning:** read #335 latest head and job logs;
-  obtain final clean child SHA from inspect, pin it; run/examine physical
-  Electron and fresh-owner installation workflows, correct real failures
-  without softening tests, merge once checked. Next coherent editorial area:
-  native GUI/MCP razor parity and genuinely loss-aware ripple/extract with
-  timed effect/transition source semantics, then actual replaceable-Brain
-  source-informed editing, independent perceptual evaluation and A–L work.
+- Branch [PR #335](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/335) `work/g1-loss-aware-native-editorial-20261114`. Pure loss-aware plan + tests, exact opt-in Velorn child source `ff7cf1194b4bb5aca1b512af7c32a55f6e500242` from Linux cross-process parent `4d12ecd8017fecba478798671af7ee6aa9cc9ad4`. Separate fresh `--loss-aware-editorial` Ubuntu owner installer. Native MCP `split_clip` supports bounded source/easing/linear retime/safe audio and same-commit video+audio tracks; refuses known destructive effects/locks/transition/unknown state without partial writes. Original source, older editor profiles, GUI razor, and guarded `extract_range` unchanged.
+- **Security and real state fixes:** BODY live clip identity validation, exact clean source attestation, host-only revision token at native synchronous CAS boundary. Prior gap: the `split_clip` writer was fenced at the native source but missing from gateway commit-intent; source-scoped regression + gateway implementation now supply CAS on applied edits, never on preview. Native post-cut read diagnostics preserve legitimate negative-time easing curve keys. Read-only waits now check authentic debounced MCP state rather than treating a write ACK as instant publication.
+- **Verified earlier branch-head source/installer:** [#43548116886](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43548116886) exact source reconstruction `ff7cf119...`, 10/10 isolated razor cases + original CAS/source tests PASS, but its installed native full run later **FAILED** on a legacy shared scene-fence assertion; source-specific assertion corrected, not weakened. [#43547626776](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43547626776) and [#43548116974](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43548116974) passed all three owner installation variants; genuine Ubuntu source install, sandboxed Electron, media, owner CLI, exact native source SHA/immutable source, overwrite refusal. These are **not** proof of physical razor A/V equivalence.
+- **Retained negative evidence:** initial source patch-hunk, wrong source pin and unrecognized C.A.S.-intent corrections; [#43548720938](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43548720938) installed E2E failed due *test* accidentally expecting 5 clips after existing batch placement (real baseline is 4); corrected that, and separate later five-clip post-video+audio razor acceptance. [#43549103939](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43549103939) installed physical run previously failed on unrelated older scene role fence count: corrected for 11th editor operation in approved child only. Do not pretend these runs passed.
+- **Still OPEN:** latest [exact-head loss-aware source/physical test #43550026877](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43550026877) and [newest fresh Ubuntu install #43550026952](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43550026952) were queued/running at this checkpoint. A physically saved + fresh-reopened animated video **and original tone.wav audio** cut, with unchanged fully decoded RGB picture and PCM sound before/after, has NOT passed on latest head. Do not merge/mark ready or call this area complete without reading exact-head physical logs and repairing real failures.
+- **Continuity:** Refresh latest #335 head and relevant runs. Native source SHA must remain `ff7cf119...` until source overlay actually changes. Only after exact-head native Electron+source+owner installation acceptance, merge this bounded revision. Then undertake whole coherent creative-domain integration, not another catalog: connect already-implemented `studio_next/body_capability_adapter.py` and `body_catalog` in the **same host-budgeted native model gateway and owner workspace**, with real native Blender/VFX/graphics/audio source output import, editable reopen, independent picture/audio verification and permissions.
+
+## A–L master plan / professional gap audit (source not marketing)
+
+- Reviewed [Master Plan](../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md), [CAPABILITIES](../CAPABILITIES.md), [ENGINEERING_STANDARD](../ENGINEERING_STANDARD.md), [G0 coverage](EVIDENCE/2026-11-12-G0-COVERAGE.md) and native tool code. **No A–L field is professionally certified**, even when physical technical fixtures pass. Keep G0–G4 and F01–F14 acceptance gates intact.
+- Registered trusted BODY operations exist for Blender/3D, EXR, visual graph, FFmpeg/MLT, compositing, color, audio, motion and source/rights. `studio_next/creative_tool_registry.py` discovers more FOSS executable candidates (GIMP/Krita/Natron/Godot/etc), but most have **no executable ZX7 adapter**; installation/discovery is NOT working user capability.
+- `studio_next/native_editor_session.py` model gateway exposes editor + optional native_review/research, **not** `InstalledBodyAdapter`/complete installed creative-body catalog. Cross-engine tool availability does not equate to one source-proven editable user workflow. This is the major next G1/G3 owner-usability integration gap, along with GUI/MCP razor parity, safe extract/ripple, effects/transition fidelity, semantic audio/visual perception, genuine replaceable-Brain creative decisions, full rights/recovery and independent professional evaluation.
+- No NVIDIA calls, external private owner-media egress, unapproved paid inference, or public release. Do not describe engineering CI as autonomous creative or professional acceptance.
 
 ## Next highest-value coherent capability: professional native editorial fidelity and actual creative control
 
