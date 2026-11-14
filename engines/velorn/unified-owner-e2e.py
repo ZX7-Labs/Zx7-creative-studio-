@@ -234,6 +234,17 @@ async def exercise(source: Path, xvfb: str, display: str):
             assert len(audio_pcm) >= 48000 and any(audio_pcm), (
                 "The original authored sound source was absent/silent")
             assert len(set(video_pcm[:320 * 180 * 3])) > 64
+            # The encoded first frame must *visually correspond* to BODY's
+            # independently decoded original graphic, not just be nonblank.
+            # Lossy H.264 chroma/resampling may differ slightly by design.
+            first_frame = video_pcm[:len(image_decoded)]
+            assert len(first_frame) == len(image_decoded)
+            mean_abs_pixel_error = sum(
+                abs(a - b) for a, b in zip(first_frame, image_decoded)
+            ) / len(image_decoded)
+            assert mean_abs_pixel_error < 25, (
+                "The native picture does not resemble the BODY-authored graphic",
+                round(mean_abs_pixel_error, 2))
             verification = await invoke(studio, "zx7_verify_native_export", {
                 "path": str(export), "expected": {
                     "width": 320, "height": 180,
@@ -263,6 +274,7 @@ async def exercise(source: Path, xvfb: str, display: str):
             "native_editor_imported_generated_media_and_sound": True,
             "native_editable_project_saved_and_fresh_Electron_reopened": True,
             "fully_decoded_48_video_frames_and_original_sound": True,
+            "native_decoded_picture_matches_body_authored_pixels": True,
             "native_export_source_bound_verification": True,
             "genuine_model_artistry_or_professional_VFX_approved": False,
         }, sort_keys=True), flush=True)
