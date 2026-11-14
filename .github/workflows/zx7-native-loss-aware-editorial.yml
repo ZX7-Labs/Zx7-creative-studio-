@@ -1,0 +1,28 @@
+name: ZX7 Loss-Aware Native Editorial — Offline Tests
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/zx7-loss-aware-split*'
+      - 'engines/velorn/native-loss-aware-editorial.patch'
+      - 'engines/velorn/prepare-native-loss-aware-editorial-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/body_editor_client.py'
+      - '.github/workflows/zx7-native-loss-aware-editorial.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-planner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check actual source-independent native editorial decisions
+        run: node --test engines/velorn/zx7-loss-aware-split.test.mjs
