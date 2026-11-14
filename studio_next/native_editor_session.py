@@ -393,6 +393,15 @@ async def run_native_session(args):
                     native_revision_source, native_revision_source.grants)
             if research is not None:
                 bindings["research"] = (research, research.grants)
+            installed_body = attest_owner_body_source(
+                getattr(args, "body_workspace", None),
+                configuration=configuration, provider=args.provider)
+            if installed_body is not None:
+                # Real installed tools only: the source dynamically excludes
+                # absent renderers and never grants the network permission.
+                # Native editor and local BODY share the original host gateway,
+                # session budget and model view. No second writer or scheduler.
+                bindings["zx7"] = (installed_body, installed_body.trusted_grants)
             gateway = CapabilityGateway(bindings, session_budget=budget)
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
@@ -413,6 +422,8 @@ async def run_native_session(args):
                 model_grants.update(native_revision_source.grants)
             if research is not None:
                 model_grants.update(research.grants)
+            if installed_body is not None:
+                model_grants.update(installed_body.trusted_grants())
             selected_project_setup = None
             if getattr(args, "project", None) is not None:
                 from .native_editor_project import open_selected_native_project
@@ -495,6 +506,8 @@ def build_parser():
     p.add_argument("--source", type=Path, required=True)
     p.add_argument("--config", type=Path, required=True,
                    help="Owner-controlled native MCP grants/root paths")
+    p.add_argument("--body-workspace", type=Path,
+                   help="Host-only local owner workspace; opt into installed non-network creative BODY tools")
     p.add_argument("--project", type=Path, help="Open and verify this owner-selected project before model editing")
     p.add_argument("--state", type=Path, required=True)
     p.add_argument("--brief-file", type=Path, required=True)
