@@ -2,6 +2,34 @@
 
 This directory launches the complete pinned [Velorn source](../../third_party/velorn) and calls its native MCP interface. It does not implement a timeline, compositor, audio mixer or renderer. Upstream commit `b3c02adbd5c0779feb8abf34978299e9502cc0e7`, version 0.3.37; this integration is GPL-3.0-only. Preserve [LICENSE](LICENSE), [NOTICE](NOTICE) and full upstream source with distributions.
 
+## Opt-in atomic native range/ripple video+audio editor
+
+The **separately source-pinned** `--loss-aware-range` Ubuntu 24.04 profile
+extends the prior loss-aware razor. It does **not** replace installed stable
+editors or alter original sources. Install only to a new prefix:
+
+```sh
+bash scripts/install-zx7-linux.sh --loss-aware-range "$HOME/.local/opt/zx7-studio-range"
+```
+
+Its real editor MCP `extract_range` applies an entire source-trim + range
+deletion + optional ripple across native video/audio tracks in **one**
+revision-fenced store commit and undo history step. The editor retains the
+original media handles, source window trim coordinates, keyframed visual
+curves, reviewed audio envelopes/gain/EQ and linked A/V source identities.
+Preview is read-only. Untrusted direct writes without the native revision
+token are denied; old installed source variants retain their conservative
+extract guard.
+
+Unsupported native transition phase, timed effect/mask/cache behavior,
+unsafe fade cuts, unknown creative fields, timeline-marker ripple, mixed
+locked tracks and scoped edits that would desynchronize linked A/V all
+**refuse before mutation**, not silently flatten. The independent legacy GUI
+extract remains unreviewed; this is the native MCP range editor, not a
+claim of full GUI command parity. Actual installed Linux Electron picture,
+sound, native edit, save and fresh reopen must pass before the branch can be
+merged. This is **not** a neural-creativity or professional artistic signoff.
+
 ## Opt-in native loss-aware video/audio editorial source
 
 The source-pinned experimental `--loss-aware-editorial` profile extends the

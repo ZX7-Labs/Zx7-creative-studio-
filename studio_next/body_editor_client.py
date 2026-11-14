@@ -227,10 +227,14 @@ class LocalEditorClient:
         # Source path is a trusted host-only construction argument, NEVER an
         # MCP tool or model field. Legacy readers retain the strict split guard.
         from .native_editor_source_pin import (
-            _source_matches_pinned_native_loss_aware_editorial)
+            _source_matches_pinned_native_loss_aware_editorial,
+            _source_matches_pinned_native_loss_aware_extract)
         self._loss_aware_split_source = bool(
             native_source is not None and
             _source_matches_pinned_native_loss_aware_editorial(native_source))
+        self._loss_aware_extract_source = bool(
+            native_source is not None and
+            _source_matches_pinned_native_loss_aware_extract(native_source))
 
     @property
     def endpoint(self) -> str:
@@ -314,7 +318,8 @@ class LocalEditorClient:
             for clip_id in inspection["preflighted_plain_source_clips"]:
                 assert_plain_source_in_full_timeline(
                     self, clip_id, allowed_access=allowed_access, timeline=timeline)
-        elif tool_name == "extract_range" and arguments.get("previewOnly") is False:
+        elif (tool_name == "extract_range" and arguments.get("previewOnly") is False
+                and not self._loss_aware_extract_source):
             # Extract internally splits at both range boundaries. A native
             # preview is used to discover actual split targets, not to mutate.
             from .body_editor_extract_guard import preflight_non_destructive_native_extract

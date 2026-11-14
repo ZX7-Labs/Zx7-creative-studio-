@@ -195,3 +195,15 @@ class LossAwareNativeRazorIntentTests(IsolatedAsyncioTestCase):
             self.assertFalse(_source_native_commit_intent("split_clip", intent))
         # An unrelated ungranted tool cannot gain revision semantics from its name.
         self.assertFalse(_source_native_commit_intent("fictitious_razor", {"previewOnly": False}))
+
+    async def test_atomic_native_range_cas_dispatch_intent_only_for_commit(self):
+        # Previously the host never injected the validated revision token, yet
+        # the editor bridge correctly refused raw range writes. This test
+        # catches that exact mismatch before running the physical Electron.
+        request = {"startSeconds": .5, "endSeconds": .75, "ripple": True}
+        self.assertTrue(_source_native_commit_intent(
+            "extract_range", {**request, "previewOnly": False}))
+        for candidate in ({}, {"previewOnly": True}, {"previewOnly": "false"}):
+            self.assertFalse(_source_native_commit_intent(
+                "extract_range", {**request, **candidate}))
+

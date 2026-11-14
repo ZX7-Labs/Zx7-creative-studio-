@@ -32,7 +32,7 @@ _SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS = frozenset((
     "move_clips", "trim_clips", "delete_clips",
     "add_asset_to_timeline", "add_assets_to_timeline",
     "set_clip_audio", "set_clip_speed", "update_track",
-    "add_transition", "set_clip_style", "split_clip",
+    "add_transition", "set_clip_style", "split_clip", "extract_range",
 ))
 
 
