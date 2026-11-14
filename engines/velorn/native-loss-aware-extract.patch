@@ -1,12 +1,12 @@
 diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
 --- a/src/services/mcpActions.js
 +++ b/src/services/mcpActions.js
-@@ -15,6 +15,7 @@
+@@ -15,3 +15,4 @@
  import { buildAudioClipSplitState } from '../utils/audioClipSplit'
  import { planLossAwareNativeSplit } from '../utils/zx7-loss-aware-split.mjs'
 +import { planLossAwareNativeExtract } from '../utils/zx7-loss-aware-extract.mjs'
  import { getProjectAssetReferences } from '../utils/projectAssetReferences.mjs'
-@@ -3451,7 +3452,58 @@
+@@ -3451,2 +3452,57 @@
 -function handleExtractRange(payload = {}) {
 +function handleExtractRange(payload = {}) {
 +  // The legacy path below executed separate split/remove/move store mutations.
