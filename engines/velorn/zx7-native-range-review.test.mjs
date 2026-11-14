@@ -45,7 +45,7 @@ test('an in-place original source mutation cannot silently change the confirmed 
 })
 test('a concurrent human edit, different timeline or new marker invalidates preview', () => {
   const changes=[
-    s=>{s.clips=[...s.clips]},
+    s=>{s.clips=[...s.clips, {...s.clips[0],id:'clip-extra',startTime:3}]},
     s=>{s.timelineSessionId++},
     s=>{s.timelineId='other-timeline'},
     s=>{s.markers.push({id:'beat',time:1})},
