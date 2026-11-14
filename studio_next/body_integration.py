@@ -39,6 +39,7 @@ from .creative_asset_ops import rasterize_original_svg,extract_director_selected
 from .native_body_engines import render_original_blender,render_original_motion
 from .body_cgi import render_cgi_plan
 from .body_visual_render import render_visual_graph
+from .body_visual_document import author_visual_document, read_visual_document
 from .body_motion_project import run_motion_project,export_motion_media,verify_motion_bundle,motion_runtime_ready
 from .body_planar import render_planar_insert
 from .delivery_audit import audit_delivered_movie,_probe_details
@@ -197,6 +198,8 @@ def _trusted_body_revision(tool_id):
         "body.film_thumbnail":["creative_asset_ops.py","delivery_audit.py"],
         "body.asset_vault":["media_vault.py"],
         "body.composite_mix":["composite_mix.py","media_vault.py","production_qc.py"],
+        "body.visual_author":["body_visual_document.py","body_visual_graph.py","body_pixel_math.py","media_vault.py"],
+        "body.visual_document":["body_visual_document.py","body_visual_graph.py","body_pixel_math.py","media_vault.py"],
         "body.visual_graph":["body_visual_graph.py","body_visual_render.py","body_visual_contract.py","body_visual_exr.py",
                              "body_pixel_math.py","body_animation.py","composite_mix.py","media_vault.py","production_qc.py"],
         "body.motion_project":["body_motion_project.py","body_motion_worker.py"],
@@ -247,6 +250,8 @@ def _trusted_body_revision(tool_id):
         "body.film_thumbnail":["ffmpeg","ffprobe"],
         "body.asset_vault":[],
         "body.composite_mix":["ffmpeg","ffprobe"],
+        "body.visual_author":[],
+        "body.visual_document":[],
         "body.visual_graph":["ffmpeg","ffprobe"],
         "body.motion_project":["blender"],
         "body.motion_export":["ffmpeg","ffprobe"],
@@ -440,6 +445,14 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     def inspect(inputs):
         path=_path_within(root,inputs["source"],exists=True)
         return _witness(path)
+
+    def author_visual(inputs):
+        return author_visual_document(
+            root, document=inputs["document"], out=inputs["out"],
+            base=inputs.get("base"), expected_sha256=inputs.get("expected_sha256"))
+
+    def read_authored_visual(inputs):
+        return read_visual_document(root, plan=inputs["plan"])
 
     def render_visual(inputs):
         plan=_path_within(root,inputs["plan"],exists=True)
@@ -934,6 +947,12 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Actual physical rights-verified layered FFmpeg compositor from model-owned canvas",
         "write",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
         ["plan","out"],composite)
+    add("body.visual_author","author original editable native photo/motion/VFX graph",
+        "Create a fully model-authored source-validated visual graph with bounded expression/math, exact existing-source rights and atomic no-overwrite revision ancestry in one owner workspace; accepts complete native graph data, never executable Python",
+        "write",True,["document","out"],author_visual,idempotent=False)
+    add("body.visual_document","read exact editable source for selective artistic revision",
+        "Read only an owner-owned source graph from private creative-graphs/, with SHA and complete authored node/curve data for new non-destructive revisions; no arbitrary owner JSON or executable file read",
+        "read",True,["plan"],read_authored_visual)
     add("body.visual_graph","editable native photo, motion graphic and VFX pixel graph",
         "Authored mathematical pixels, masks, original-frame curves, inverse spatial sampling, convolution and alpha compositing; "
         "float32 linear-sRGB internals, sealed sources, exact RGBA PNG/MOV or float32 EXR (requires OpenEXR 3.3+); separate editable audio",
