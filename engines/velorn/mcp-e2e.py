@@ -2301,6 +2301,11 @@ async def exercise(options):
                     source_video = next(c for c in authored["clips"]
                                         if c["id"] == pointer_clip_id)
                     assert len(source_video["keyframes"]["opacity"]) == 2
+                    before_cut_save = await call(cut_session, "save_project", {
+                        "previewOnly": False})
+                    before_cut_export = outputs / "before-loss-aware-native-razor.mp4"
+                    await render_and_verify(
+                        cut_session, before_cut_export, before_cut_save)
                     cut_seconds = round((source_video["startTime"] +
                                          source_video["duration"] / 2) * 24) / 24
                     intent = {"clipId": pointer_clip_id,
@@ -2343,9 +2348,23 @@ async def exercise(options):
                                            if t["id"] == native_timeline_id)
                     assert any(c["id"] == right_id and c["keyframes"] == right["keyframes"]
                                for c in source_timeline["clips"])
+                    after_cut_export = outputs / "loss-aware-native-razor.mp4"
                     _id, rendered_sha, _streams, _native_capture = await render_and_verify(
-                        cut_session, outputs / "loss-aware-native-razor.mp4", persisted)
+                        cut_session, after_cut_export, persisted)
                     assert len(rendered_sha) == 64
+                    # Compare decoded picture AND sound, not MP4 container
+                    # bytes (which may vary in codec metadata). A split that
+                    # changes visible picture/audio content fails this gate.
+                    def decoded_media_sha(path, *, audio):
+                        cmd = [ffmpeg, "-v", "error", "-i", str(path)]
+                        cmd += (["-vn", "-ar", "16000", "-ac", "1",
+                                 "-f", "s16le", "-"] if audio else
+                                ["-an", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
+                        return hashlib.sha256(run(cmd)).hexdigest()
+                    for audio in (False, True):
+                        assert decoded_media_sha(before_cut_export, audio=audio) == (
+                            decoded_media_sha(after_cut_export, audio=audio)), (
+                            "A native razor changed decoded picture or sound")
                     assert digest(original) == original_hash
                     saved_sha = digest(native_path)
                 async with connected() as cut_reopened:
@@ -2368,6 +2387,7 @@ async def exercise(options):
                     "native_project_physically_saved_and_fresh_reopened": True,
                     "original_A_V_source_SHA_unchanged": True,
                     "independent_full_encoded_picture_sound_decode": True,
+                    "decoded_picture_and_sound_same_before_after_split": True,
                     "genuine_model_creativity_or_all_native_effects_proven": False,
                 }, sort_keys=True), flush=True)
 
