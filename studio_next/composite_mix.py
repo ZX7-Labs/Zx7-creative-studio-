@@ -27,6 +27,7 @@ from .production_qc import full_decode_inspection
 
 _COLOR=re.compile(r"^#[a-fA-F0-9]{6}$")
 _ID=re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+_SURROUND_SPEAKERS = ("FL", "FR", "FC", "LFE", "BL", "BR")
 
 
 def _positive(value,label,*,allow_zero=False):
@@ -360,6 +361,14 @@ def validate_composition(plan,workspace,vault):
                     raise ValueError("Audio stereo balance must be a finite authored value in [-1,1]")
                 if bus_layout != "stereo" and balance:
                     raise ValueError("Stereo balance cannot silently remap surround channels")
+                speaker_gains = layer.get("speaker_gains_db")
+                if speaker_gains is not None:
+                    if (bus_layout != "5.1" or type(speaker_gains) is not dict
+                            or set(speaker_gains) - set(_SURROUND_SPEAKERS)
+                            or any(type(gain) not in (int, float)
+                                   or not math.isfinite(gain) or not -96 <= gain <= 24
+                                   for gain in speaker_gains.values())):
+                        raise ValueError("Surround speaker gains require typed 5.1 dB controls")
                 envelope=layer.get("gain_keyframes",[])
                 if not isinstance(envelope,list) or len(envelope)>64:
                     raise ValueError("Original audio envelope must be a bounded list")
@@ -486,6 +495,15 @@ def actual_composite_command(plan,workspace,vault,out):
                 right=1+min(0.0,balance)
                 effects+=(f",pan=stereo|c0={left:.9g}*c0"
                           f"|c1={right:.9g}*c1")
+            speaker_gains = layer.get("speaker_gains_db")
+            if speaker_gains:
+                # FFmpeg pan executes per-sample and preserves six native
+                # source speakers. Coefficients come only from typed finite dB,
+                # not a model-supplied filter expression or implicit downmix.
+                matrix = "|".join(
+                    f"{speaker}={10 ** (float(speaker_gains.get(speaker, 0)) / 20):.12g}*c{index}"
+                    for index, speaker in enumerate(_SURROUND_SPEAKERS))
+                effects += ",pan=5.1|" + matrix
             envelope=_gain_automation_expression(layer)
             if envelope is not None:
                 effects+=","+envelope
