@@ -1,6 +1,6 @@
 # ZX7 — current engineering STATE
 
-**Verified main · 2026-11-14 IST:** `6b5d46725a29866b1889b7cf8f6477f82921b4dd` after [#340](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/340) source-pinned Blender CGI/motion → one native editable Electron A/V timeline, exact tested head `a8f559a42e59e719cf8dea4039f89ce0fe9a751c`. Earlier merged #339 editable visual-graph authoring, #338 visual source revisions, #336 shared local BODY/editor gateway, #335 loss-aware native razor, #332 cooperative cross-process save and #333 Ubuntu owner runtime remain integrated. Historical [STATUS](../docs/continuity/STATUS.md) remains an archive, not a competing current state.
+**Prior verified main (before #342):** `305761c1faf95c3d5c82002aed06d78aee3e615e` after #340 Blender/native A/V and #341 continuity. Earlier #339 graph, #338 authoring, #336 local BODY, #335 razor, #332 cross-process save, #333 installer remain merged; historical STATUS is archive-only.
 
 ## G3 integrated graphics / real native Blender handoff
 
@@ -24,6 +24,10 @@
 - **Negative evidence:** initial native patch-hunk/source-pin/CAS integration failures, physical native source [#43550244318](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43550244318) failed because test mistakenly assumed preexisting human-moved picture shared audio cut time; fixed by reading authentic independent clip positions and splitting each without changing human edits. Previous source-level and fixture assertion failures remain in PR/CI history.
 - **Explicit limits:** only bounded source-native MCP razor, **not** native GUI razor parity, enhanced `extract_range`/ripple or all transition/effect phase semantics; simultaneous multi-GUI, real model creativity, semantic listening, independent professional/security/rights certification and whole field C / A–L are OPEN.
 
+## G1 native atomic A/V range — scoped technical pass
+
+- [#342](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/342) code `9795e99`, [physical Electron #43607787773](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43607787773): **3/3 jobs PASS**. CAS, source SHA/keyframes, actual X11 Undo/Redo, independently decoded A/V and fresh native reopen; exact source `2e3a5ec`. Negative runs/fixes in [EVIDENCE](EVIDENCE/INDEX.md). GUI parity, effect/transition phase, neural art and external professional review remain OPEN.
+
 ## G3 integrated creative authoring and remaining owner-usability gap
 
 - #336/#338/#339/#340 are **merged technical integrations**, not mere installed-tool discovery. The source-attested local BODY and editor share one host-granted session and budget, typed visual graph native source, immutable Blender motion source and real original picture/sound handoff. Private BODY access by unreviewed hosted models remains denied.
@@ -38,7 +42,7 @@
 
 ## Next major owner-facing domain and remaining professional native editorial work
 
-**Next highest-value offline dependency:** source-native GUI/MCP **razor, ripple/extract and effects/transition phase parity** in professional video editing. Define comparable genuine GUI and typed MCP actions and a counterexample that would expose loss of source, keyframes, audio timing, transition phase or edit history. Verify authentic native editable save/reopen and full decoded picture/PCM, permission/CAS stale-write refusal and original SHA. Fix the pinned responsible layer rather than making another hard-coded creative fixture. Continue using the existing source-attested Blender/graph/EXR/color/sound tools for adjacent field-C work. Genuine model-directed audiovisual self-revision and independent artistic/rights/security review remain separate unpassed gates; no paid NVIDIA use without separate authorization.
+**Next highest-value offline dependency:** source-native **GUI/MCP parity for razor/extract/ripple, genuine temporal effects/transition phase semantics and sample-accurate sound-clock preservation** in professional video editing. The separate, opt-in native MCP loss-aware razor and range paths now pass their scoped physical technical acceptance; the existing GUI commands and unsupported editorial states are not equivalent. Define comparable genuine GUI and typed MCP actions and a counterexample that would expose loss of source, keyframes, audio timing, transition phase or edit history. Verify authentic native editable save/reopen and full decoded picture/PCM, permission/CAS stale-write refusal and original SHA. Fix the pinned responsible layer rather than making another hard-coded creative fixture. Continue using the existing source-attested Blender/graph/EXR/color/sound tools for adjacent field-C work. Genuine model-directed audiovisual self-revision and independent artistic/rights/security review remain separate unpassed gates; no paid NVIDIA use without separate authorization.
 
 
 **Full G1 exit remains OPEN:** a genuine replaceable model independently chooses nontrivial original video **and sound** editing, observes real meaningful time-aligned picture/audio, selects and persists an improvement, produces two independently verified conformant outputs, survives human interference without lost work, and earns independent professional artistic/user/security/rights review. The former genuine NVIDIA and weak local CPU trials failed; model autonomy, semantic listening and artistic quality remain **UNPROVEN**. Owner explicitly defers NVIDIA API use in current offline/native work; no paid inference, private owner-media egress or public launch is authorized.

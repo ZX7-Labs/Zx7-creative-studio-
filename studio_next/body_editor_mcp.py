@@ -71,6 +71,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         _source_matches_pinned_native_collaboration,
         _source_matches_pinned_native_scene,
         _source_matches_pinned_native_loss_aware_editorial,
+        _source_matches_pinned_native_loss_aware_extract,
     )
     has_revision_reads = all(grants.get(x) == "read" for x in (
         "get_project", "get_timeline", "get_assets"))
@@ -80,11 +81,14 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                          _source_matches_pinned_native_scene(native_source))
     trusted_loss_aware = bool(trusted_collab and
                               _source_matches_pinned_native_loss_aware_editorial(native_source))
+    trusted_extract = bool(trusted_loss_aware and
+                           _source_matches_pinned_native_loss_aware_extract(native_source))
     revision_bridge_tools = frozenset(
         name for name in (
             (("update_text_clip",) if trusted_collab else ()) +
             (("update_shape_clip", "set_clip_keyframes") if trusted_scene else ()) +
-            (("split_clip",) if trusted_loss_aware else ())
+            (("split_clip",) if trusted_loss_aware else ()) +
+            (("extract_range",) if trusted_extract else ())
         ) if has_revision_reads and grants.get(name) == "write")
     if set(grants) - set(native):
         raise ValueError("Host-granted native editor tool is absent from discovery")
@@ -385,7 +389,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             isinstance(arguments, dict) and (
                 (name in ("update_text_clip", "update_shape_clip") and
                  arguments.get("previewOnly") is not True) or
-                (name in ("set_clip_keyframes", "split_clip") and
+                (name in ("set_clip_keyframes", "split_clip", "extract_range") and
                  arguments.get("previewOnly") is False)))
         if requires_source_revision:
             token = arguments.get("__zx7ExpectedRevision")
