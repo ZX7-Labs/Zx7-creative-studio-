@@ -2296,13 +2296,25 @@ async def exercise(options):
                     fenced_session = CapabilityGatewayMcpSession(
                         native_gateway, "editor")
                     await call(fenced_session, "set_clip_keyframes", first_keyframe)
-                    await wait(cut_session, lambda state:
-                        (state.get("currentTimeline") or {}).get("clipCount") == 3)
-                    authored = await call(cut_session, "get_timeline", {
-                        "includeClips": True})
+                    # The pinned MCP publisher deliberately debounces native
+                    # snapshots. An ACK is not yet a complete readback.
+                    authored = None
+                    deadline = time.monotonic() + 20
+                    while time.monotonic() < deadline:
+                        candidate = await call(cut_session, "get_timeline", {
+                            "includeClips": True})
+                        present = next((c for c in candidate["clips"]
+                                        if c["id"] == pointer_clip_id), None)
+                        curve = (present or {}).get("keyframes") or {}
+                        if (len(curve.get("opacity") or []) == 2 and
+                                [k["value"] for k in curve["opacity"]] == [35, 95]):
+                            authored = candidate
+                            break
+                        await asyncio.sleep(.15)
+                    assert authored is not None, (
+                        "Native keyframed picture never appeared in complete readback")
                     source_video = next(c for c in authored["clips"]
                                         if c["id"] == pointer_clip_id)
-                    assert len(source_video["keyframes"]["opacity"]) == 2
                     source_audio = next(c for c in authored["clips"]
                                         if c["type"] == "audio")
                     assert source_audio["id"] != source_video["id"]
@@ -2334,6 +2346,8 @@ async def exercise(options):
                                  for item in cut["result"]["splits"]}
                     right_id = split_ids[pointer_clip_id]
                     audio_right_id = split_ids[source_audio["id"]]
+                    await wait(cut_session, lambda state:
+                        (state.get("currentTimeline") or {}).get("clipCount") == 5)
                     after = await call(cut_session, "get_timeline", {
                         "includeClips": True})
                     assert len(after["clips"]) == 5
