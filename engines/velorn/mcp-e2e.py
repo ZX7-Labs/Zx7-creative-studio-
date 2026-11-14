@@ -2390,7 +2390,7 @@ async def exercise(options):
                     await call(cut_reopened, "open_project", {
                         "projectPath": str(project), "previewOnly": False})
                     await wait(cut_reopened, lambda state:
-                        (state.get("currentTimeline") or {}).get("clipCount") == 4)
+                        (state.get("currentTimeline") or {}).get("clipCount") == 5)
                     reopened_cut = await call(cut_reopened, "get_timeline", {
                         "includeClips": True})
                     live_right = next(c for c in reopened_cut["clips"]
