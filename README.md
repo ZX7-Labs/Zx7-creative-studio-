@@ -76,6 +76,24 @@ The `--source` override is optional when a built editor is already present at
 `share/zx7-studio/velorn` under the active Python installation or in the
 matching source checkout.
 
+For an **opt-in local-only** combined creative-tool session (same Brain, same
+host gateway and budget), enable the actual installed BODY catalog:
+
+```sh
+zx7-studio run ./my-studio --brief-file ./brief.txt --enable-installed-body-tools
+```
+
+This exposes real installed/host-granted visual-graph, motion, Blender/CGI/VFX,
+color, audio, MLT/OTIO and other BODY tools alongside the native editor; missing
+runtime dependencies are **not** advertised as working tools. It does not
+install Blender, licensed fonts, voices, OpenEXR or model weights, and it does not
+turn produced renders into automatically editable Velorn clips. The original
+BODY keeps workspace-scoped input validation, rights/source custody and output
+publication. Network-only BODY research tools are not granted by this flag.
+NVIDIA or other hosted-model use is rejected in this combined mode until a
+distinct privacy/egress review. Full creative integration, real model judgment,
+cross-engine interchange and professional artistic quality remain open gates.
+
 `doctor` checks installed runtime files, the source pin, editor build and actual
 local model inventory before inference. Sessions discover the granted native
 capabilities in bounded groups to fit the current tool request. It reports
