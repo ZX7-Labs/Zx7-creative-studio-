@@ -104,7 +104,9 @@ _SCHEMAS = {
     "body.composite_mix": ("plan", obj({
         "canvas": obj({"width": SIZE, "height": SIZE, "fps": SIZE,
                        "duration": POSITIVE, "background": COLOR}, {
-            "color_semantics": obj({"input": choice("bt709"), "output": choice("bt709")})}),
+            "color_semantics": obj({"input": choice("bt709"), "output": choice("bt709")}),
+            "audio_bus": obj({"sample_rate": choice(48000, 96000),
+                              "channel_layout": choice("stereo", "5.1")})}),
         "video_layers": array(_VIDEO), "audio_tracks": array(_AUDIO)})),
     "body.sequence_cuts": ("plan", _SEQUENCE),
     "body.mlt_owned_export": ("plan", obj({

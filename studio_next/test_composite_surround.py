@@ -166,7 +166,8 @@ class PhysicalSurroundProductionTests(unittest.TestCase):
             ):
                 bad = json.loads(json.dumps(plan))
                 bad["canvas"]["audio_bus"] = bus
-                self.assertFalse(validate_document("body.composite_mix", bad, "plan"))
+                with self.assertRaises(ValueError):
+                    validate_document("body.composite_mix", bad, "plan")
                 with self.assertRaises(ValueError):
                     actual_composite_command(bad, root, vault, root / "never.mp4")
             bad_balance = json.loads(json.dumps(plan))
