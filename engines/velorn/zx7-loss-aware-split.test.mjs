@@ -134,3 +134,23 @@ test('preview and invalid request never allocate ids or mutate the store', () =>
   assert.equal(b.ok, false)
   assert.equal(clip.duration, 8)
 })
+
+test('a second razor on the retained right clip preserves earlier eased timing', () => {
+  const first = call([base({ keyframes: {
+    positionX: [
+      { time: 0, value: 0, easing: 'cubic-bezier(0.2,0,0.8,1)' },
+      { time: 8, value: 100, easing: 'linear' },
+    ],
+  } })])
+  assert.equal(first.ok, true)
+  const second = planLossAwareNativeSplit({
+    clips: first.clips, tracks, transitions: [], timeSeconds: 5,
+    clipIds: [first.splits[0].rightClipId], fps: 24, clipCounter: first.clipCounter,
+  })
+  assert.equal(second.ok, true, second.reason)
+  const retained = second.clips.find(c => c.id === second.splits[0].rightClipId)
+  assert.deepEqual(retained.keyframes.positionX.map(point => point.time), [-5, 3])
+  assert.equal(retained.keyframes.positionX[0].easing, 'cubic-bezier(0.2,0,0.8,1)')
+  near(retained.startTime, 5)
+  near(retained.duration, 3)
+})
