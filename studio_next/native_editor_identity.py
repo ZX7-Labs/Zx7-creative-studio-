@@ -46,6 +46,7 @@ _NATIVE_REFERENCES = {
         "/clipId": "clips", "/trackId": "tracks",
         "/clips/*/clipId": "clips", "/clips/*/trackId": "tracks"},
     "trim_clips": {"/clipId": "clips", "/clips/*/clipId": "clips"},
+    "split_clip": {"/clipId": "clips", "/clipIds/*": "clips"},
     "delete_clips": {"/clipId": "clips", "/clipIds/*": "clips"},
     "add_transition": {
         "/clipAId": "clips", "/clipBId": "clips", "/clipId": "clips"},
