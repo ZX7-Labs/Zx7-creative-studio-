@@ -956,7 +956,7 @@ async def exercise(options):
         # previewOnly; independent timeline readback proves actual mutation.
         assert applied.get("success") is True and applied.get("action") == "add_assets_to_timeline"
         await wait(session, lambda state:
-            (state.get("currentTimeline") or {}).get("clipCount") == 5)
+            (state.get("currentTimeline") or {}).get("clipCount") == 4)
         after = await call(session, "get_timeline", {"includeClips": True})
         assert len(after["clips"]) == 4
         assert sum(c.get("assetId") == video_ids[0] for c in after["clips"]) == 2
