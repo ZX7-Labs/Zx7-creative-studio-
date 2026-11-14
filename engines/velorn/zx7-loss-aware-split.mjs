@@ -48,7 +48,7 @@ function validateCurve(keyframes, duration) {
     for (const point of points) {
       if (!point || typeof point !== 'object' || Array.isArray(point)
         || !finite(point.time) || !finite(point.value)
-        || point.time < 0 || point.time > duration + EPS || point.time <= prev
+        || point.time <= prev
         || (point.easing != null && typeof point.easing !== 'string')
         || Object.keys(point).some(key => !['time', 'value', 'easing'].includes(key))) return false
       prev = point.time
