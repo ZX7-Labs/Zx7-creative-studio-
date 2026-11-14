@@ -2325,29 +2325,43 @@ async def exercise(options):
                         cut_session, before_cut_export, before_cut_save)
                     cut_seconds = round((source_video["startTime"] +
                                          source_video["duration"] / 2) * 24) / 24
-                    assert (source_audio["startTime"] < cut_seconds <
+                    audio_cut_seconds = round((
+                        source_audio["startTime"] + source_audio["duration"] / 2) * 24) / 24
+                    # A preceding real X11 human-style drag has moved the
+                    # picture on its own timeline; audio remains separately
+                    # authored. Do not invent a shared cut or overwrite that
+                    # human edit merely to satisfy a fixture. Physically cut
+                    # both sources at their *actual* independent midpoints.
+                    assert (source_audio["startTime"] < audio_cut_seconds <
                             source_audio["startTime"] + source_audio["duration"])
-                    intent = {"clipIds": [pointer_clip_id, source_audio["id"]],
-                              "timeSeconds": cut_seconds}
-                    preview = await call(cut_session, "split_clip", {
-                        **intent, "previewOnly": True})
-                    assert preview["previewOnly"] is True
-                    no_token = await cut_session.call_tool("split_clip", {
-                        **intent, "previewOnly": False})
-                    assert no_token.is_error, (
-                        "Untrusted direct MCP bypassed source commit fence")
-                    live_before = await call(cut_session, "get_timeline", {
-                        "includeClips": True})
-                    assert len(live_before["clips"]) == 3
-                    cut = await call(cut_session, "split_clip", {
-                        **intent, "previewOnly": False})
-                    assert cut["success"] is True and len(cut["result"]["splits"]) == 2
-                    split_ids = {item["leftClipId"]: item["rightClipId"]
-                                 for item in cut["result"]["splits"]}
-                    right_id = split_ids[pointer_clip_id]
-                    audio_right_id = split_ids[source_audio["id"]]
-                    await wait(cut_session, lambda state:
-                        (state.get("currentTimeline") or {}).get("clipCount") == 5)
+                    cut_intents = (
+                        {"clipId": pointer_clip_id, "timeSeconds": cut_seconds},
+                        {"clipId": source_audio["id"], "timeSeconds": audio_cut_seconds},
+                    )
+                    native_splits = {}
+                    for index, intent in enumerate(cut_intents):
+                        preview = await call(cut_session, "split_clip", {
+                            **intent, "previewOnly": True})
+                        assert preview["previewOnly"] is True
+                        no_token = await cut_session.call_tool("split_clip", {
+                            **intent, "previewOnly": False})
+                        assert no_token.is_error, (
+                            "Untrusted direct MCP bypassed source commit fence")
+                        live_before = await call(cut_session, "get_timeline", {
+                            "includeClips": True})
+                        assert len(live_before["clips"]) == 3 + index
+                        cut = await call(cut_session, "split_clip", {
+                            **intent, "previewOnly": False})
+                        assert cut["success"] is True
+                        assert len(cut["result"]["splits"]) == 1
+                        split = cut["result"]["splits"][0]
+                        assert split["leftClipId"] == intent["clipId"]
+                        native_splits[split["leftClipId"]] = split["rightClipId"]
+                        await wait(cut_session, lambda state:
+                            (state.get("currentTimeline") or {}).get(
+                                "clipCount") == 4 + index)
+                    right_id = native_splits[pointer_clip_id]
+                    audio_right_id = native_splits[source_audio["id"]]
                     after = await call(cut_session, "get_timeline", {
                         "includeClips": True})
                     assert len(after["clips"]) == 5
@@ -2359,7 +2373,7 @@ async def exercise(options):
                             source_audio["assetId"])
                     assert abs(left_audio["duration"] + right_audio["duration"] -
                                source_audio["duration"]) < 0.0001
-                    assert abs(right_audio["startTime"] - cut_seconds) < 0.0001
+                    assert abs(right_audio["startTime"] - audio_cut_seconds) < 0.0001
                     left = next(c for c in after["clips"] if c["id"] == pointer_clip_id)
                     right = next(c for c in after["clips"] if c["id"] == right_id)
                     assert left["assetId"] == right["assetId"] == video["assetId"]
