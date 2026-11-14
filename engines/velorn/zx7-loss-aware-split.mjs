@@ -113,6 +113,7 @@ function editableClip(clip, track, offset, rightDuration) {
     !clip.metadata || typeof clip.metadata !== 'object' || Array.isArray(clip.metadata)
     || Object.keys(clip.metadata).some(key => ![
       'addedByMcp', 'addedAt', 'sourceTool', 'linkedAudioClipId', 'linkedVideoClipId',
+      'batchIndex', 'batchLayout', 'embeddedAudioFromVideoAsset', 'solidColor',
     ].includes(key)))) return fail('Unreviewed linked source metadata')
   if (clip.adjustments != null && typeof clip.adjustments !== 'object') return fail('Invalid static color adjustments')
   const bounds = sourceRange(clip)
