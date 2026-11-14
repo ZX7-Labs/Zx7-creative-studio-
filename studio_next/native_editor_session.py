@@ -246,6 +246,12 @@ async def run_native_session(args):
     No model or editor is installed implicitly. The caller owns the brief,
     grants, private state and whether a remote model may receive images.
     """
+    # Source-root admission must happen BEFORE constructing/verifying any
+    # hosted provider. An operator calling this runner directly must not
+    # bypass zx7-studio CLI's explicit local-only creative BODY boundary.
+    if (getattr(args, "body_workspace", None) is not None
+            and args.provider != "local"):
+        raise ValueError("Installed BODY tools are local-only: external provider is not authorized")
     for path in (args.source, args.config, args.brief_file):
         if not path.exists():
             raise ValueError("Missing native source/config/creative brief file: " + str(path))
