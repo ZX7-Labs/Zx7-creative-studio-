@@ -20,6 +20,20 @@ test "$(git -C "$stage/parent" rev-parse HEAD)" = "$parent"
 git clone --quiet --no-local --no-checkout -- "$stage/parent" "$stage/candidate"
 git -C "$stage/candidate" checkout --quiet --detach "$parent"
 git -C "$stage/candidate" apply --index -- "$root/native-loss-aware-editorial.patch"
+# An exact one-line native renderer CAS extension; refuse unexpected source.
+python3 - "$stage/candidate/src/services/mcpActions.js" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+source = p.read_text(encoding="utf-8")
+old = 'const zx7FencedEditorialActions = new Set(["move_clips","trim_clips","delete_clips","add_asset_to_timeline","add_assets_to_timeline","set_clip_audio","set_clip_speed","update_track","add_transition","set_clip_style"])'
+new = old[:-2] + ',"split_clip"])'
+if source.count(old) != 1 or 'These ten native editorial operations' not in source:
+    raise SystemExit("Unreviewed native CAS source; refusing loss-aware install")
+source = source.replace(old, new)
+source = source.replace('These ten native editorial operations', 'These eleven native editorial operations', 1)
+p.write_text(source, encoding="utf-8")
+PY
 cp -- "$root/zx7-loss-aware-split.mjs" "$stage/candidate/src/utils/zx7-loss-aware-split.mjs"
 cp -- "$root/zx7-loss-aware-split.test.mjs" "$stage/candidate/src/utils/zx7-loss-aware-split.test.mjs"
 git -C "$stage/candidate" add -- src/services/mcpActions.js src/utils/zx7-loss-aware-split.mjs src/utils/zx7-loss-aware-split.test.mjs
