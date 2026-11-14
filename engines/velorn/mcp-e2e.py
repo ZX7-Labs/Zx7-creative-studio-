@@ -1472,6 +1472,8 @@ async def exercise(options):
                     "set_clip_audio", "set_clip_speed", "update_track",
                     "add_transition", "set_clip_style",
                 })
+            if loss_aware_source:
+                scene_fences.add("split_clip")
             assert scene_policy and set(scene_policy["fence"]) == scene_fences
             native_gateway = CapabilityGateway({"editor": (
                 session, tools, {}, None, {}, scene_policy)})
