@@ -168,8 +168,8 @@ def _source_matches_pinned_native_scene(source: Path) -> bool:
                                       PINNED_VELORN_SAVE_ORDER_REVISION,
                                       PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
                                       PINNED_VELORN_CROSS_PROCESS_REVISION,
-                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION})
-                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION})
 
 
 def _source_matches_pinned_native_editorial(source: Path) -> bool:
@@ -191,8 +191,8 @@ def _source_matches_pinned_native_editorial(source: Path) -> bool:
                                       PINNED_VELORN_SAVE_ORDER_REVISION,
                                       PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
                                       PINNED_VELORN_CROSS_PROCESS_REVISION,
-                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION})
-                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION})
 
 
 
@@ -214,8 +214,8 @@ def _source_matches_pinned_native_save(source: Path) -> bool:
                                       PINNED_VELORN_SAVE_ORDER_REVISION,
                                       PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
                                       PINNED_VELORN_CROSS_PROCESS_REVISION,
-                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION})
-                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION})
 
 
 def _source_matches_pinned_native_save_order(source: Path) -> bool:
@@ -235,8 +235,8 @@ def _source_matches_pinned_native_save_order(source: Path) -> bool:
             actual.stdout.strip() in {PINNED_VELORN_SAVE_ORDER_REVISION,
                                       PINNED_VELORN_SAVE_INTERLEAVE_REVISION,
                                       PINNED_VELORN_CROSS_PROCESS_REVISION,
-                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION})
-                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION})
 
 
 def _source_matches_pinned_native_save_interleave(source: Path) -> bool:
@@ -277,8 +277,8 @@ def _source_matches_pinned_native_cross_process(source: Path) -> bool:
         return False
     return (actual.returncode == 0 and
             actual.stdout.strip() in {PINNED_VELORN_CROSS_PROCESS_REVISION,
-                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION})
-                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EDITORIAL_REVISION,
+                                      PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION})
 
 
 def pinned_electron_marker_previews(source: Path, grants: dict) -> tuple[str, ...]:
