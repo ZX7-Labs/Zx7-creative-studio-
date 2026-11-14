@@ -39,6 +39,45 @@ from studio_next.native_editor_identity import pinned_native_editor_identity_pol
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def attest_owner_body_source(workspace, *, configuration, provider,
+                             allowed_access=("read", "write")):
+    """Admit already-installed creative BODY instruments from one owner workspace.
+
+    The trusted owner process supplies this path, not the model. A separate
+    projects/staging/outputs root, changed symlink or hosted model cannot
+    silently attach another user's native media or unlock private tools.
+    """
+    if workspace is None:
+        return None
+    if provider != "local":
+        raise ValueError("Full installed BODY source is local-only until distinct cloud consent review")
+    if not isinstance(configuration, dict) or not isinstance(workspace, (str, Path)):
+        raise ValueError("Installed BODY requires trusted owner workspace and roots")
+    candidate = Path(workspace)
+    if not candidate.is_absolute() or candidate.is_symlink():
+        raise ValueError("Installed BODY workspace must be an absolute non-symlink owner root")
+    try:
+        root = candidate.resolve(strict=True)
+        if not root.is_dir():
+            raise ValueError("Owner workspace is not a directory")
+        project_root = Path(configuration["projects_root"]).resolve(strict=True)
+        staging_root = Path(configuration["staging_root"]).resolve(strict=True)
+        outputs_root = Path(configuration["outputs_root"]).resolve(strict=True)
+        if (project_root != root / "projects" or
+                not staging_root.is_relative_to(root / "staging") or
+                not outputs_root.is_relative_to(root / "outputs") or
+                not staging_root.is_dir() or not outputs_root.is_dir()):
+            raise ValueError("Native editor roots disagree with installed BODY workspace")
+        for child in ("projects", "staging", "outputs"):
+            if (root / child).is_symlink():
+                raise ValueError("Owner workspace media boundary cannot be redirected")
+    except (OSError, KeyError, TypeError) as exc:
+        raise ValueError("Owner workspace roots are missing or invalid") from exc
+    from .body_capability_adapter import InstalledBodyAdapter
+    return InstalledBodyAdapter(root, allowed_access=allowed_access)
+
+
+
 def editor_runtime_path(name: str) -> Path:
     """Locate the shipped GPL runtime independently of the source checkout."""
     if name not in {"mcp.mjs", "launcher.mjs", "client.mjs", "editor.example.json", "LICENSE", "NOTICE"}:
