@@ -154,3 +154,19 @@ test('a second razor on the retained right clip preserves earlier eased timing',
   near(retained.startTime, 5)
   near(retained.duration, 3)
 })
+
+test('real pinned batch-insert provenance metadata is retained without granting arbitrary fields', () => {
+  const video = base({
+    metadata: {
+      addedByMcp: true, addedAt: '2026-11-14T00:00:00Z',
+      sourceTool: 'add_assets_to_timeline', batchIndex: 0,
+      batchLayout: 'stacked',
+    },
+  })
+  const planned = call([video])
+  assert.equal(planned.ok, true, planned.reason)
+  assert.deepEqual(planned.clips[1].metadata, video.metadata)
+  planned.clips[1].metadata.batchIndex = 9
+  assert.equal(video.metadata.batchIndex, 0)
+  assert.equal(call([base({ metadata: { newlyIntroducedShaderTiming: 5 } })]).ok, false)
+})
