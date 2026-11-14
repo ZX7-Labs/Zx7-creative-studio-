@@ -142,7 +142,7 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         from studio_next import native_editor_session
         self.init()
         mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
-        with patch.object(studio, "doctor", return_value={"ready": True}), \\
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
                 patch.object(native_editor_session, "run_native_session", mocked):
             report = studio.run_workspace(
                 self.root, brief="Use installed CGI and visual tools",
@@ -158,8 +158,8 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         from studio_next import native_editor_session
         self.init()
         mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
-        with patch.object(studio, "doctor", return_value={"ready": True}), \\
-                patch.object(native_editor_session, "run_native_session", mocked), \\
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(studio.main([
                 "run", str(self.root), "--brief", "Make editable art",
@@ -174,7 +174,7 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         from studio_next import native_editor_session
         self.init(provider="nvidia", model_id="hosted-fixture")
         mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
-        with patch.object(studio, "doctor", return_value={"ready": True}), \\
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
                 patch.object(native_editor_session, "run_native_session", mocked):
             with self.assertRaisesRegex(ValueError, "local-only"):
                 studio.run_workspace(
