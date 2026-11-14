@@ -7,6 +7,7 @@ on:
       - 'engines/velorn/prepare-native-loss-aware-extract-candidate.sh'
       - 'studio_next/editor_runtime/source-lock.json'
       - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/editor_runtime/launcher.mjs'
       - 'studio_next/body_editor_client.py'
       - 'studio_next/body_editor_mcp.py'
       - 'studio_next/native_editor_identity.py'

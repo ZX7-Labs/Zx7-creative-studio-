@@ -10,7 +10,7 @@ const sourceLock = JSON.parse(readFileSync(new URL('./source-lock.json', import.
 export const UPSTREAM_COMMIT = sourceLock.upstream_revision
 const trustedRevisions = new Set([UPSTREAM_COMMIT, sourceLock.desktop_revision, sourceLock.collab_revision, sourceLock.collab_scene_revision, sourceLock.collab_editorial_revision, sourceLock.collab_save_revision,
   sourceLock.collab_save_order_revision, sourceLock.collab_cross_process_revision,
-  sourceLock.loss_aware_editorial_revision].filter(Boolean))
+  sourceLock.loss_aware_editorial_revision, sourceLock.loss_aware_extract_revision].filter(Boolean))
 // CI-only exact revision is not an approved general-purpose editor source.
 // It is eligible solely with the synthetic isolated Xvfb fixture and a real
 // native project-save gate; no default installed studio, owner project or
