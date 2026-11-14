@@ -83,6 +83,8 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as root:
             adapter = InstalledBodyAdapter(root, allowed_access=("read", "write"))
             with patch("studio_next.body_integration.motion_runtime_ready", return_value=True), \
+                 patch("studio_next.body_integration._trusted_body_revision",
+                       return_value="sha256:" + "a" * 64), \
                  patch("studio_next.body_integration.run_body_project",
                        return_value={"status": "blocked", "errors": ["fixture denial"]}) as graph, \
                  patch("studio_next.registry.ToolCatalog.invoke",
@@ -99,6 +101,8 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as root:
             adapter = InstalledBodyAdapter(root, allowed_access=("read",))
             with patch("studio_next.body_integration.motion_runtime_ready", return_value=True), \
+                 patch("studio_next.body_integration._trusted_body_revision",
+                       return_value="sha256:" + "a" * 64), \
                  patch("studio_next.body_integration.run_body_project") as graph:
                 with self.assertRaises(PermissionError):
                     await adapter.call_tool("body.motion_project", {
