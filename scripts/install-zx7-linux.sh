@@ -15,8 +15,10 @@ for argument in "$@"; do
     profile=editorial
   elif [[ "$argument" == "--cross-process-collaboration" && "$profile" == stable ]]; then
     profile=cross-process
+  elif [[ "$argument" == "--loss-aware-editorial" && "$profile" == stable ]]; then
+    profile=loss-aware
   elif [[ "$argument" == -* || -n "$install_prefix" ]]; then
-    echo "Usage: bash scripts/install-zx7-linux.sh [--scene-collaboration|--editorial-collaboration|--cross-process-collaboration] [INSTALL_PREFIX]" >&2
+    echo "Usage: bash scripts/install-zx7-linux.sh [--scene-collaboration|--editorial-collaboration|--cross-process-collaboration|--loss-aware-editorial] [INSTALL_PREFIX]" >&2
     exit 2
   else
     install_prefix=$argument
@@ -82,7 +84,12 @@ python3 -m venv "$candidate/venv"
 "$candidate/venv/bin/python" -m pip --isolated install --disable-pip-version-check "$checkout[editor,production]"
 mkdir -p "$candidate/venv/share/zx7-studio"
 editor="$candidate/venv/share/zx7-studio/velorn"
-if [[ "$profile" == cross-process ]]; then
+if [[ "$profile" == loss-aware ]]; then
+  # Explicitly separate new production source, never overwrite old installations.
+  command -v flock >/dev/null || { echo "Linux flock is required" >&2; exit 1; }
+  bash "$checkout/engines/velorn/prepare-native-loss-aware-editorial-candidate.sh" \
+    "$upstream" "$editor" --install
+elif [[ "$profile" == cross-process ]]; then
   # Linux-only, explicitly opted-in cooperative native writer. Preserve
   # installed/stable sources, other profiles, and all existing owner data.
   command -v flock >/dev/null || { echo "Linux flock is required" >&2; exit 1; }

@@ -2,6 +2,38 @@
 
 This directory launches the complete pinned [Velorn source](../../third_party/velorn) and calls its native MCP interface. It does not implement a timeline, compositor, audio mixer or renderer. Upstream commit `b3c02adbd5c0779feb8abf34978299e9502cc0e7`, version 0.3.37; this integration is GPL-3.0-only. Preserve [LICENSE](LICENSE), [NOTICE](NOTICE) and full upstream source with distributions.
 
+## Opt-in native loss-aware video/audio editorial source
+
+The source-pinned experimental `--loss-aware-editorial` profile extends the
+separately pinned cooperative Linux cross-process editor, without replacing
+the stable, scene, previous editorial, or cross-process profile. Install it
+into a **fresh** Ubuntu 24.04 x86-64 prefix:
+
+```sh
+bash scripts/install-zx7-linux.sh --loss-aware-editorial "$HOME/.local/opt/zx7-studio-loss-aware"
+```
+
+The actual editor's MCP `split_clip` can frame-snap a video/audio razor in
+one native timeline-store mutation and one undo checkpoint. It retains
+original source references, transforms, reviewed static adjustments, clip-
+relative visual keyframe interpolation, gain/EQ/volume envelopes, edge fades
+that the cut does not cross, linear retime/reverse, and explicitly supplied
+complete linked A/V groups. The source-native revision fence refuses stale
+AI edits. Preview does not mutate the project. Unsupported effects/masks,
+time-remap, optical-flow, transition-adjacent edits, unknown clip fields,
+linked groups with missing partners and unsafe audio fade crossings **refuse
+before mutation**. Previous editor revisions retain BODY's stricter
+loss-avoidance guard.
+
+This replaces only the native **MCP** razor. The independent GUI razor and
+`extract_range` remain separately guarded/unreviewed for enhanced clips;
+neither may be described as lossless. For acceptance, the Linux Electron CI
+must verify the exact clean child SHA, save/reopen of editable source and
+identical fully decoded picture/audio before and after the cut, and clean
+source custody. The scripted fixture is not autonomous model filmmaking,
+semantic listening or professional artistic approval. No NVIDIA API is
+needed for this native work.
+
 ## Setup
 
 Use Linux, Node.js/npm, normal Electron runtime libraries, and a desktop display or Xvfb. Run as a regular user with the Electron sandbox enabled.

@@ -1,0 +1,127 @@
+name: ZX7 Loss-Aware Native Editorial — Offline Tests
+on:
+  pull_request:
+    paths:
+      - 'engines/velorn/zx7-loss-aware-split*'
+      - 'engines/velorn/native-loss-aware-editorial.patch'
+      - 'engines/velorn/prepare-native-loss-aware-editorial-candidate.sh'
+      - 'studio_next/editor_runtime/source-lock.json'
+      - 'studio_next/native_editor_source_pin.py'
+      - 'studio_next/body_editor_client.py'
+      - 'studio_next/body_editor_policy.py'
+      - 'studio_next/body_editor_mcp.py'
+      - 'studio_next/native_editor_identity.py'
+      - 'studio_next/native_editor_diagnostics.py'
+      - 'studio_next/test_native_editor_diagnostics.py'
+      - 'studio_next/editor_runtime/launcher.mjs'
+      - 'engines/velorn/mcp-e2e.py'
+      - '.github/workflows/zx7-native-loss-aware-editorial.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zx7-native-loss-aware-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  inspect-native-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Inspect loss-aware source overlay and test exact descendant
+        run: |
+          set -euo pipefail
+          bash -n engines/velorn/prepare-native-loss-aware-editorial-candidate.sh
+          bash engines/velorn/prepare-native-loss-aware-editorial-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-loss-aware-source" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-loss-aware-source"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+  offline-planner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check actual source-independent native editorial decisions
+        run: node --test engines/velorn/zx7-loss-aware-split.test.mjs
+
+  installed-native-editor:
+    needs: [inspect-native-source, offline-planner]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install real sandboxed Electron, X11, FFmpeg, BODY and native dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Regression against trusted host source, policies and loss guards
+        run: |
+          python -m py_compile studio_next/native_editor_source_pin.py \
+            studio_next/native_editor_identity.py studio_next/body_editor_client.py \
+            studio_next/body_editor_policy.py studio_next/body_editor_mcp.py \
+            engines/velorn/mcp-e2e.py
+          python -m unittest studio_next.test_body_editor_split_guard \
+            studio_next.test_body_editor_extract_guard \
+            studio_next.test_native_editor_identity \
+            studio_next.test_native_editorial_revision \
+            studio_next.test_native_editor_diagnostics -v
+      - name: Build exact source-native loss-aware Linux Electron child
+        run: |
+          set -euo pipefail
+          editor="$RUNNER_TEMP/zx7-native-loss-aware-installed"
+          bash engines/velorn/prepare-native-loss-aware-editorial-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
+          expected=$(python3 -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_editorial_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --quiet HEAD --
+          echo "ZX7_LOSS_AWARE_EDITOR=$editor" >> "$GITHUB_ENV"
+          cd "$editor"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
+          npm run build
+          test -s dist/index.html
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+      - name: Actual native razor, human/AI state, save/reopen and independently decoded A/V
+        run: |
+          python -u engines/velorn/mcp-e2e.py \
+            --source "$ZX7_LOSS_AWARE_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:97
+      - name: Neither pinned original nor installed source was modified
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
+          if [[ -n "${ZX7_LOSS_AWARE_EDITOR:-}" ]]; then
+            git -C "$ZX7_LOSS_AWARE_EDITOR" diff --exit-code HEAD --
+          fi

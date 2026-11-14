@@ -70,6 +70,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     from .native_editor_source_pin import (
         _source_matches_pinned_native_collaboration,
         _source_matches_pinned_native_scene,
+        _source_matches_pinned_native_loss_aware_editorial,
     )
     has_revision_reads = all(grants.get(x) == "read" for x in (
         "get_project", "get_timeline", "get_assets"))
@@ -77,10 +78,13 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                           _source_matches_pinned_native_collaboration(native_source))
     trusted_scene = bool(trusted_collab and
                          _source_matches_pinned_native_scene(native_source))
+    trusted_loss_aware = bool(trusted_collab and
+                              _source_matches_pinned_native_loss_aware_editorial(native_source))
     revision_bridge_tools = frozenset(
         name for name in (
             (("update_text_clip",) if trusted_collab else ()) +
-            (("update_shape_clip", "set_clip_keyframes") if trusted_scene else ())
+            (("update_shape_clip", "set_clip_keyframes") if trusted_scene else ()) +
+            (("split_clip",) if trusted_loss_aware else ())
         ) if has_revision_reads and grants.get(name) == "write")
     if set(grants) - set(native):
         raise ValueError("Host-granted native editor tool is absent from discovery")
@@ -381,7 +385,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             isinstance(arguments, dict) and (
                 (name in ("update_text_clip", "update_shape_clip") and
                  arguments.get("previewOnly") is not True) or
-                (name == "set_clip_keyframes" and
+                (name in ("set_clip_keyframes", "split_clip") and
                  arguments.get("previewOnly") is False)))
         if requires_source_revision:
             token = arguments.get("__zx7ExpectedRevision")
@@ -689,7 +693,7 @@ def main(argv=None):
                 path, policy=config._policy, verified_sha256=verified_sha256,
                 start_seconds=start_seconds, duration_seconds=duration_seconds,
                 bins=bins)
-        server = create_editor_server(config.client(), allowed_access=config.allowed_access,
+        server = create_editor_server(config.client(native_source=options.native_source), allowed_access=config.allowed_access,
                                       export_verifier=export_verifier, frame_observer=frame_observer,
                                       audio_observer=audio_observer,
                                       audio_timeline_observer=audio_timeline_observer,

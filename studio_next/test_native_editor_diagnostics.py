@@ -44,6 +44,22 @@ class NativeContentDiagnosticsTests(unittest.TestCase):
                 self.assertFalse(report["physical_output_inspected"])
                 self.assertFalse(report["artistic_quality_approved"])
 
+    def test_native_razor_shifted_offscreen_keyframes_are_valid_not_malformed(self):
+        # The native keyframe evaluator samples the eased segment using
+        # clip-relative time. A second-half razor shifts the original
+        # left endpoint negative rather than resampling a new curve.
+        data = timeline()
+        data["clips"][0]["keyframes"] = {"opacity": [
+            {"time": -3.0, "value": 0, "easing": "easeInOut"},
+            {"time": 5.0, "value": 0, "easing": "hold"},
+        ]}
+        zero = inspect_native_content(receipt(data))
+        self.assertEqual(zero["warning_counts"]["opacity_envelope_zero"], 1)
+        data["clips"][0]["keyframes"]["opacity"][1]["value"] = 100
+        live = inspect_native_content(receipt(data))
+        self.assertEqual(live["warning_counts"].get("opacity_envelope_zero", 0), 0)
+        self.assertFalse(live["physical_output_inspected"])
+
     def test_hidden_disabled_muted_and_absent_lanes_are_reported_without_claiming_silence(self):
         data = timeline()
         data["clips"][0]["enabled"] = False
@@ -103,7 +119,7 @@ class NativeContentDiagnosticsTests(unittest.TestCase):
             lambda d: d["clips"][0].update(keyframes=[]),
             lambda d: d["clips"][0].update(keyframes={"opacity": [{"time": 0, "value": None}]}),
             lambda d: d["clips"][0].update(keyframes={"opacity": "zero"}),
-            lambda d: d["clips"][0].update(keyframes={"opacity": [{"time": -1, "value": 0}]}),
+            lambda d: d["clips"][0].update(keyframes={"opacity": [{"time": float("nan"), "value": 0}]}),
         ]
         for change in changes:
             data = timeline()

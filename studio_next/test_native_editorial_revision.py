@@ -13,7 +13,7 @@ from pathlib import Path
 
 from studio_next.body_editor_client import (
     host_pre_dispatch_rejection, host_native_revision_rejection)
-from studio_next.capability_gateway import CapabilityGateway
+from studio_next.capability_gateway import CapabilityGateway, _source_native_commit_intent
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.native_editor_identity import pinned_native_editor_identity_policy
 from studio_next.test_native_scene_revision import SourceSceneRenderer, result
@@ -186,3 +186,12 @@ class NativeEditorialCASProtocolTests(IsolatedAsyncioTestCase):
             failed, "move_clips", params))
         self.assertEqual(gateway.evidence()[-1]["state"],
                          "write_uncertain_reconciliation_required")
+
+class LossAwareNativeRazorIntentTests(IsolatedAsyncioTestCase):
+    async def test_exact_new_razor_commit_requires_source_cas_token(self):
+        self.assertTrue(_source_native_commit_intent(
+            "split_clip", {"clipIds": ["clip-1", "clip-3"], "timeSeconds": 1, "previewOnly": False}))
+        for intent in ({}, {"previewOnly": True}, {"previewOnly": "false"}):
+            self.assertFalse(_source_native_commit_intent("split_clip", intent))
+        # An unrelated ungranted tool cannot gain revision semantics from its name.
+        self.assertFalse(_source_native_commit_intent("fictitious_razor", {"previewOnly": False}))

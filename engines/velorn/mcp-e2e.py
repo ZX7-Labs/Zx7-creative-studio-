@@ -41,7 +41,8 @@ async def exercise(options):
         _source_matches_pinned_native_save,
         _source_matches_pinned_native_save_order,
         _source_matches_pinned_native_save_interleave,
-        _source_matches_pinned_native_cross_process)
+        _source_matches_pinned_native_cross_process,
+        _source_matches_pinned_native_loss_aware_editorial)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
@@ -50,6 +51,8 @@ async def exercise(options):
     save_order_source = _source_matches_pinned_native_save_order(options.source)
     interleave_source = _source_matches_pinned_native_save_interleave(options.source)
     cross_process_source = _source_matches_pinned_native_cross_process(options.source)
+    loss_aware_source = _source_matches_pinned_native_loss_aware_editorial(options.source)
+    assert not loss_aware_source or cross_process_source
     assert not (interleave_source and cross_process_source)
     assert not cross_process_source or save_order_source
     assert not interleave_source or save_order_source
@@ -118,6 +121,7 @@ async def exercise(options):
         "add_asset_to_timeline", "add_assets_to_timeline",
         "set_clip_audio", "set_clip_speed", "update_track",
         "add_transition", "set_clip_style",
+        *(( "split_clip", ) if loss_aware_source else ()),
     })
 
     async def call(session, name, arguments=None):
@@ -918,7 +922,9 @@ async def exercise(options):
         # new right-hand clip. Never silently let BODY split an animated title.
         forbidden = await session.call_tool("split_clip", {
             "clipId": title_id, "timeSeconds": 1, "previewOnly": False})
-        assert forbidden.is_error and "discard editable clip state" in forbidden.content[0].text, forbidden
+        assert forbidden.is_error and (
+            loss_aware_source or "discard editable clip state" in forbidden.content[0].text
+        ), forbidden
         unchanged = await call(session, "get_timeline", {"includeClips": True})
         assert len(unchanged["clips"]) == 3
         preserved = next(clip for clip in unchanged["clips"] if clip["id"] == title_id)
@@ -1466,6 +1472,8 @@ async def exercise(options):
                     "set_clip_audio", "set_clip_speed", "update_track",
                     "add_transition", "set_clip_style",
                 })
+            if loss_aware_source:
+                scene_fences.add("split_clip")
             assert scene_policy and set(scene_policy["fence"]) == scene_fences
             native_gateway = CapabilityGateway({"editor": (
                 session, tools, {}, None, {}, scene_policy)})
@@ -2252,6 +2260,188 @@ async def exercise(options):
                         "independent_creative_art_quality_proven": False,
                         "kernel_powercut_fsync_tested": False,
                     }, sort_keys=True), flush=True)
+
+
+            if loss_aware_source:
+                # A genuine reopened Linux Electron, original imported A/V,
+                # BODY-attested CAS and the actual editable project document.
+                # This tests a real split, unlike the pure offline planner.
+                async with connected() as cut_session:
+                    await call(cut_session, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(cut_session, lambda state:
+                        (state.get("currentTimeline") or {}).get("clipCount") == 3)
+                    before = await call(cut_session, "get_timeline", {
+                        "includeClips": True})
+                    video = next(c for c in before["clips"]
+                                 if c["id"] == pointer_clip_id)
+                    assert video["type"] == "video"
+                    first_keyframe = {"clipId": video["id"], "keyframes": [
+                        {"property": "opacity", "timeSeconds": 0,
+                         "value": 35, "easing": "easeInOut"},
+                        {"property": "opacity", "timeSeconds": video["duration"],
+                         "value": 95, "easing": "linear"},
+                    ], "previewOnly": False}
+                    from studio_next.native_editor_identity import (
+                        pinned_native_editor_identity_policy)
+                    native_policy = pinned_native_editor_identity_policy(
+                        options.source, tools, cut_session)
+                    assert native_policy and "split_clip" in native_policy["fence"]
+                    from studio_next.capability_gateway import CapabilityGateway
+                    from studio_next.capability_mcp_session import (
+                        CapabilityGatewayMcpSession)
+                    native_gateway = CapabilityGateway({"editor": (
+                        cut_session, tools, {}, None, {}, native_policy)})
+                    await native_gateway.refresh()
+                    fenced_session = CapabilityGatewayMcpSession(
+                        native_gateway, "editor")
+                    await call(fenced_session, "set_clip_keyframes", first_keyframe)
+                    # The pinned MCP publisher deliberately debounces native
+                    # snapshots. An ACK is not yet a complete readback.
+                    authored = None
+                    deadline = time.monotonic() + 20
+                    while time.monotonic() < deadline:
+                        candidate = await call(cut_session, "get_timeline", {
+                            "includeClips": True})
+                        present = next((c for c in candidate["clips"]
+                                        if c["id"] == pointer_clip_id), None)
+                        curve = (present or {}).get("keyframes") or {}
+                        if (len(curve.get("opacity") or []) == 2 and
+                                [k["value"] for k in curve["opacity"]] == [35, 95]):
+                            authored = candidate
+                            break
+                        await asyncio.sleep(.15)
+                    assert authored is not None, (
+                        "Native keyframed picture never appeared in complete readback")
+                    source_video = next(c for c in authored["clips"]
+                                        if c["id"] == pointer_clip_id)
+                    source_audio = next(c for c in authored["clips"]
+                                        if c["type"] == "audio")
+                    assert source_audio["id"] != source_video["id"]
+                    before_cut_save = await call(cut_session, "save_project", {
+                        "previewOnly": False})
+                    before_cut_export = outputs / "before-loss-aware-native-razor.mp4"
+                    await render_and_verify(
+                        cut_session, before_cut_export, before_cut_save)
+                    cut_seconds = round((source_video["startTime"] +
+                                         source_video["duration"] / 2) * 24) / 24
+                    audio_cut_seconds = round((
+                        source_audio["startTime"] + source_audio["duration"] / 2) * 24) / 24
+                    # A preceding real X11 human-style drag has moved the
+                    # picture on its own timeline; audio remains separately
+                    # authored. Do not invent a shared cut or overwrite that
+                    # human edit merely to satisfy a fixture. Physically cut
+                    # both sources at their *actual* independent midpoints.
+                    assert (source_audio["startTime"] < audio_cut_seconds <
+                            source_audio["startTime"] + source_audio["duration"])
+                    cut_intents = (
+                        {"clipId": pointer_clip_id, "timeSeconds": cut_seconds},
+                        {"clipId": source_audio["id"], "timeSeconds": audio_cut_seconds},
+                    )
+                    native_splits = {}
+                    for index, intent in enumerate(cut_intents):
+                        preview = await call(cut_session, "split_clip", {
+                            **intent, "previewOnly": True})
+                        assert preview["previewOnly"] is True
+                        no_token = await cut_session.call_tool("split_clip", {
+                            **intent, "previewOnly": False})
+                        assert no_token.is_error, (
+                            "Untrusted direct MCP bypassed source commit fence")
+                        live_before = await call(cut_session, "get_timeline", {
+                            "includeClips": True})
+                        assert len(live_before["clips"]) == 3 + index
+                        cut = await call(cut_session, "split_clip", {
+                            **intent, "previewOnly": False})
+                        assert cut["success"] is True
+                        assert len(cut["result"]["splits"]) == 1
+                        split = cut["result"]["splits"][0]
+                        assert split["leftClipId"] == intent["clipId"]
+                        native_splits[split["leftClipId"]] = split["rightClipId"]
+                        await wait(cut_session, lambda state:
+                            (state.get("currentTimeline") or {}).get(
+                                "clipCount") == 4 + index)
+                    right_id = native_splits[pointer_clip_id]
+                    audio_right_id = native_splits[source_audio["id"]]
+                    after = await call(cut_session, "get_timeline", {
+                        "includeClips": True})
+                    assert len(after["clips"]) == 5
+                    left_audio = next(c for c in after["clips"]
+                                      if c["id"] == source_audio["id"])
+                    right_audio = next(c for c in after["clips"]
+                                       if c["id"] == audio_right_id)
+                    assert (left_audio["assetId"] == right_audio["assetId"] ==
+                            source_audio["assetId"])
+                    assert abs(left_audio["duration"] + right_audio["duration"] -
+                               source_audio["duration"]) < 0.0001
+                    assert abs(right_audio["startTime"] - audio_cut_seconds) < 0.0001
+                    left = next(c for c in after["clips"] if c["id"] == pointer_clip_id)
+                    right = next(c for c in after["clips"] if c["id"] == right_id)
+                    assert left["assetId"] == right["assetId"] == video["assetId"]
+                    assert left["keyframes"]["opacity"] == source_video["keyframes"]["opacity"]
+                    offset = cut_seconds - source_video["startTime"]
+                    for old, shifted in zip(source_video["keyframes"]["opacity"],
+                                            right["keyframes"]["opacity"], strict=True):
+                        assert abs(shifted["time"] - (old["time"] - offset)) < 0.0001
+                        assert shifted["easing"] == old["easing"]
+                    assert abs(left["duration"] + right["duration"] -
+                               source_video["duration"]) < 0.0001
+                    assert abs(right["startTime"] - cut_seconds) < 0.0001
+                    assert digest(original) == original_hash
+                    persisted = await call(cut_session, "save_project", {
+                        "previewOnly": False})
+                    physical = json.loads(native_path.read_text(encoding="utf-8"))
+                    assert physical["modified"] == persisted["result"]["project"]["modified"]
+                    source_timeline = next(t for t in physical["timelines"]
+                                           if t["id"] == native_timeline_id)
+                    assert any(c["id"] == right_id and c["keyframes"] == right["keyframes"]
+                               for c in source_timeline["clips"])
+                    assert any(c["id"] == audio_right_id and c["assetId"] == source_audio["assetId"]
+                               for c in source_timeline["clips"])
+                    after_cut_export = outputs / "loss-aware-native-razor.mp4"
+                    _id, rendered_sha, _streams, _native_capture = await render_and_verify(
+                        cut_session, after_cut_export, persisted)
+                    assert len(rendered_sha) == 64
+                    # Compare decoded picture AND sound, not MP4 container
+                    # bytes (which may vary in codec metadata). A split that
+                    # changes visible picture/audio content fails this gate.
+                    def decoded_media_sha(path, *, audio):
+                        cmd = [ffmpeg, "-v", "error", "-i", str(path)]
+                        cmd += (["-vn", "-ar", "16000", "-ac", "1",
+                                 "-f", "s16le", "-"] if audio else
+                                ["-an", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
+                        return hashlib.sha256(run(cmd)).hexdigest()
+                    for audio in (False, True):
+                        assert decoded_media_sha(before_cut_export, audio=audio) == (
+                            decoded_media_sha(after_cut_export, audio=audio)), (
+                            "A native razor changed decoded picture or sound")
+                    assert digest(original) == original_hash
+                    saved_sha = digest(native_path)
+                async with connected() as cut_reopened:
+                    await call(cut_reopened, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await wait(cut_reopened, lambda state:
+                        (state.get("currentTimeline") or {}).get("clipCount") == 5)
+                    reopened_cut = await call(cut_reopened, "get_timeline", {
+                        "includeClips": True})
+                    live_right = next(c for c in reopened_cut["clips"]
+                                      if c["id"] == right_id)
+                    assert live_right["keyframes"] == right["keyframes"]
+                    assert live_right["assetId"] == video["assetId"]
+                    assert next(c for c in reopened_cut["clips"]
+                                if c["id"] == audio_right_id)["assetId"] == source_audio["assetId"]
+                    assert digest(native_path) == saved_sha
+                    assert digest(original) == original_hash
+                print("ACTUAL_NATIVE_LOSS_AWARE_RAZOR " + json.dumps({
+                    "real_pinned_Electron_and_Body_CAS": True,
+                    "non_fenced_direct_edit_denied": True,
+                    "animated_source_and_retained_right_curve_verified": True,
+                    "original_independent_audio_track_actually_split": True,
+                    "native_project_physically_saved_and_fresh_reopened": True,
+                    "original_A_V_source_SHA_unchanged": True,
+                    "independent_full_encoded_picture_sound_decode": True,
+                    "decoded_picture_and_sound_same_before_after_split": True,
+                    "genuine_model_creativity_or_all_native_effects_proven": False,
+                }, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":

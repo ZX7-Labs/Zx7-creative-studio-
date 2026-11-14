@@ -202,7 +202,8 @@ class LocalEditorClient:
 
     def __init__(self, endpoint: str, *, allowed_tools: Mapping[str, str],
                  policy: Callable[[str, dict, str], bool] | None = None,
-                 timeout: float = 30.0, max_response_bytes: int = 8 * 1024 * 1024):
+                 timeout: float = 30.0, max_response_bytes: int = 8 * 1024 * 1024,
+                 native_source: Path | None = None):
         match = re.fullmatch(r"http://(127\.0\.0\.1|\[::1\]):([0-9]+)/mcp", endpoint) if isinstance(endpoint, str) else None
         if match is None or not 1 <= int(match[2]) <= 65535:
             raise ValueError("Editor endpoint must be http://127.0.0.1:PORT/mcp or http://[::1]:PORT/mcp")
@@ -223,6 +224,13 @@ class LocalEditorClient:
         self._policy = policy
         self._timeout = timeout
         self._max_response_bytes = max_response_bytes
+        # Source path is a trusted host-only construction argument, NEVER an
+        # MCP tool or model field. Legacy readers retain the strict split guard.
+        from .native_editor_source_pin import (
+            _source_matches_pinned_native_loss_aware_editorial)
+        self._loss_aware_split_source = bool(
+            native_source is not None and
+            _source_matches_pinned_native_loss_aware_editorial(native_source))
 
     @property
     def endpoint(self) -> str:
@@ -291,7 +299,8 @@ class LocalEditorClient:
         arguments = _json_arguments(arguments)
         if self._policy is not None and self._policy(tool_name, arguments, access) is not True:
             raise EditorPreDispatchError("host_policy_denied")
-        if tool_name == "split_clip" and arguments.get("previewOnly") is False:
+        if (tool_name == "split_clip" and arguments.get("previewOnly") is False
+                and not self._loss_aware_split_source):
             # The upstream inspect_clip summary omits effects/keyframes.
             # Require both the existing per-clip identity inspection and the
             # complete native get_timeline creative-state snapshot.

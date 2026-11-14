@@ -187,9 +187,9 @@ class EditorConfig:
         object.__setattr__(self, "_policy", EditorPathPolicy(
             self.projects_root, self.staging_root, self.outputs_root))
 
-    def client(self) -> LocalEditorClient:
+    def client(self, *, native_source=None) -> LocalEditorClient:
         return LocalEditorClient(self.endpoint, allowed_tools=self.allowed_tools,
-            timeout=self.timeout, policy=self._policy)
+            timeout=self.timeout, policy=self._policy, native_source=native_source)
 
 
 def load_editor_config(path) -> EditorConfig:

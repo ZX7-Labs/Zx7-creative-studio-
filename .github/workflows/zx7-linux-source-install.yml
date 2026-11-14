@@ -113,3 +113,55 @@ jobs:
           if [[ -n "${ZX7_OWNER_CP_EDITOR:-}" ]]; then
             git -C "$ZX7_OWNER_CP_EDITOR" diff --quiet HEAD --
           fi
+
+  native-loss-aware-editorial-owner-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install distinct source-pinned owner Studio loss-aware native editor
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/zx7-owner-loss-aware-install"
+          test ! -e "$target" && test ! -L "$target"
+          bash scripts/install-zx7-linux.sh --loss-aware-editorial "$target"
+          test -L "$target"
+          test -x "$target/bin/zx7-studio"
+          test "$("$target/node/bin/node" --version)" = "v24.22.2"
+          editor=$(realpath -- "$target/venv/share/zx7-studio/velorn")
+          expected=$(python3 -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_editorial_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --quiet HEAD --
+          test ! -e "$editor/.git/objects/info/alternates"
+          test "$(stat -c '%u:%a' "$editor/node_modules/electron/dist/chrome-sandbox")" = "0:4755"
+          "$target/bin/zx7-studio" --help
+          echo "ZX7_OWNER_LA_PREFIX=$target" >> "$GITHUB_ENV"
+          echo "ZX7_OWNER_LA_EDITOR=$editor" >> "$GITHUB_ENV"
+      - name: Installed source native project CAS, razor module and owner console
+        run: |
+          set -euo pipefail
+          "$ZX7_OWNER_LA_PREFIX/node/bin/node" --test "$ZX7_OWNER_LA_EDITOR/src/utils/zx7-loss-aware-split.test.mjs" \
+            "$ZX7_OWNER_LA_EDITOR/electron/nativeProjectCAS.test.cjs" \
+            "$ZX7_OWNER_LA_EDITOR/electron/nativeProjectCAS.bindings.source.mjs"
+          before=$(readlink -- "$ZX7_OWNER_LA_PREFIX")
+          if bash scripts/install-zx7-linux.sh --loss-aware-editorial "$ZX7_OWNER_LA_PREFIX"; then
+            echo "Loss-aware installer silently replaced owner prefix" >&2
+            exit 1
+          fi
+          test "$(readlink -- "$ZX7_OWNER_LA_PREFIX")" = "$before"
+          xvfb-run -a timeout 40s "$ZX7_OWNER_LA_EDITOR/node_modules/electron/dist/electron" \
+            engines/velorn/image-sequence-selection-e2e.cjs "$ZX7_OWNER_LA_EDITOR" after
+          PATH="$ZX7_OWNER_LA_PREFIX/bin:$PATH" "$ZX7_OWNER_LA_PREFIX/venv/bin/python" \
+            -u engines/velorn/installed-studio-e2e.py \
+            --source "$ZX7_OWNER_LA_EDITOR" --xvfb-binary /usr/bin/Xvfb
+      - name: Preserve upstream and installed source bytes
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --quiet HEAD --
+          if [[ -n "${ZX7_OWNER_LA_EDITOR:-}" ]]; then
+            git -C "$ZX7_OWNER_LA_EDITOR" diff --quiet HEAD --
+          fi
