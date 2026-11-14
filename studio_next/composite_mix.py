@@ -239,7 +239,7 @@ def validate_composition(plan,workspace,vault):
                       if kind=="video" else
                       {"id","source","asset_id","attestation_id","start","source_in","duration","gain_db"})
             supported=required|({"motion","fade_in_seconds","fade_out_seconds","chroma_key","source_kind","matte"}
-                                if kind=="video" else {"gain_keyframes","stereo_balance"})
+                                if kind=="video" else {"gain_keyframes","stereo_balance","speaker_gains_db"})
             if not required.issubset(layer) or not set(layer).issubset(supported):
                 raise ValueError("Director-specified "+kind+" layer is incomplete or uses untrusted effects")
             identifier=layer["id"]
