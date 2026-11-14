@@ -194,6 +194,22 @@ class OwnerInstalledBodyTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((root / "third.png").exists())
             self.assertEqual(gateway.host_budget_evidence()["reserved_writes"], 2)
 
+    async def test_direct_session_rejects_hosted_full_body_before_provider_setup(self):
+        """A direct Python caller cannot bypass the owner CLI's cloud boundary."""
+        from unittest.mock import patch
+        from studio_next.native_editor_session import run_native_session
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            inputs = SimpleNamespace(
+                source=root / "source", config=root / "config",
+                brief_file=root / "brief", state=root,
+                provider="nvidia", body_workspace=root)
+            with patch("studio_next.native_editor_session.native_decision_model") as model:
+                with self.assertRaisesRegex(ValueError, "local-only"):
+                    await run_native_session(inputs)
+                model.assert_not_called()
+            self.assertFalse((root / ".zx7-host-private").exists())
+
     async def test_disabled_body_source_does_not_create_vault_or_expand_grants(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
