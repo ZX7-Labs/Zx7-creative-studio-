@@ -96,7 +96,7 @@ jobs:
         run: |
           set -euo pipefail
           version=4.5.16
-          base="https://download.blender.org/release/Blender4.5"
+          base="https://mirror.blender.org/release/Blender4.5"
           temp="$RUNNER_TEMP/zx7-blender-lts"
           mkdir -p "$temp"
           curl --fail --location --retry 3 --connect-timeout 20 \
