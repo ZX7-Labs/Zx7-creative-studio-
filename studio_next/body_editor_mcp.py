@@ -689,7 +689,7 @@ def main(argv=None):
                 path, policy=config._policy, verified_sha256=verified_sha256,
                 start_seconds=start_seconds, duration_seconds=duration_seconds,
                 bins=bins)
-        server = create_editor_server(config.client(), allowed_access=config.allowed_access,
+        server = create_editor_server(config.client(native_source=options.native_source), allowed_access=config.allowed_access,
                                       export_verifier=export_verifier, frame_observer=frame_observer,
                                       audio_observer=audio_observer,
                                       audio_timeline_observer=audio_timeline_observer,
