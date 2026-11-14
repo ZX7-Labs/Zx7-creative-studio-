@@ -1,0 +1,67 @@
+diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
+--- a/src/services/mcpActions.js
++++ b/src/services/mcpActions.js
+@@ -15,6 +15,7 @@
+ import { buildAudioClipSplitState } from '../utils/audioClipSplit'
+ import { planLossAwareNativeSplit } from '../utils/zx7-loss-aware-split.mjs'
++import { planLossAwareNativeExtract } from '../utils/zx7-loss-aware-extract.mjs'
+ import { getProjectAssetReferences } from '../utils/projectAssetReferences.mjs'
+@@ -3451,7 +3452,58 @@
+-function handleExtractRange(payload = {}) {
++function handleExtractRange(payload = {}) {
++  // The legacy path below executed separate split/remove/move store mutations.
++  // Native BODY never calls that path: the entire reviewed range is planned
++  // against one synchronous source revision and committed in one undoable
++  // transaction, without unobservable intermediate clips or partial writes.
++  const state = useTimelineStore.getState()
++  const planned = planLossAwareNativeExtract({
++    clips: state.clips || [],
++    tracks: state.tracks || [],
++    transitions: state.transitions || [],
++    markers: state.markers || [],
++    startSeconds: payload.startSeconds ?? payload.start,
++    endSeconds: payload.endSeconds ?? payload.end,
++    trackIds: payload.trackIds,
++    ripple: payload.ripple ?? true,
++    fps: Number(state.timelineFps) || 24,
++    clipCounter: state.clipCounter || 1,
++  })
++  if (!planned.ok) throw new Error('ZX7 loss-aware extract refused: ' + planned.reason)
++  if (payload.previewOnly !== false) {
++    return {
++      previewOnly: true, action: 'extract_range',
++      message: 'Source-safe native range preview; no timeline mutation.',
++      plan: {
++        startSeconds: planned.startSeconds, endSeconds: planned.endSeconds,
++        deltaSeconds: planned.deltaSeconds, ripple: planned.ripple,
++        affectedTrackIds: planned.affectedTrackIds,
++        splitAtStart: planned.splitAtStart.map(id => ({ id })),
++        splitAtEnd: planned.splitAtEnd.map(id => ({ id })),
++        removeCount: planned.removedClipIds.length,
++        shiftCount: planned.shiftedClipIds.length,
++      },
++      warnings: [],
++    }
++  }
++  state.saveToHistory?.()
++  useTimelineStore.setState(() => ({
++    clips: planned.clips,
++    clipCounter: planned.clipCounter,
++    selectedClipIds: planned.selectedClipIds,
++  }))
++  return {
++    success: true, action: 'extract_range',
++    startSeconds: planned.startSeconds,
++    endSeconds: planned.endSeconds,
++    deltaSeconds: planned.deltaSeconds,
++    ripple: planned.ripple,
++    removedClipIds: planned.removedClipIds,
++    shiftedClipCount: planned.shiftedClipIds.length,
++    warnings: [],
++  }
++}
++
++// Retained upstream for source-diff review only. The pinned loss-aware
++// extract_range entry point never invokes this multi-mutation legacy handler.
++function zx7LegacyExtractRange(payload = {}) {
+   const plan = planExtractRange(payload)
