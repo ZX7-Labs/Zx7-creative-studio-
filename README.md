@@ -18,18 +18,25 @@ their evidence and remaining acceptance gates.
 
 `body.composite_mix` accepts an **optional** `canvas.audio_bus`, for
 example `{"sample_rate":48000,"channel_layout":"5.1"}` (96000 Hz
-also physically tested). The original source must carry six verified
-`5.1` channels; implicit 5.1→stereo downmix and invented upmix refuse.
-Existing mono/stereo projects retain their defaults.
+also physically tested). A six-channel source must physically report named `5.1` speakers and keeps
+the original channels unchanged. Mono dialogue or stereo music can also join
+the same 5.1 mix through an **explicit, one-to-one source-channel map**:
+`"speaker_map":{"FC":0}` assigns actual mono channel 0 to Center;
+`"speaker_map":{"FL":0,"FR":1}` assigns stereo source channels 0/1 to
+Front Left/Right. All nonassigned output speakers stay silent on that track.
+Missing/duplicate/unrecognized source channels, untrusted speaker names and
+implicit 5.1→stereo downmix refuse before rendering; the old stereo route
+retains its original behavior.
 
-For a targeted non-destructive edit, an original audio track can declare
+For a targeted non-destructive edit, a 5.1 audio track can additionally declare
 `"speaker_gains_db":{"FR":-12}`. BODY validates numeric gains and preserves
 other speaker channels; it does not execute arbitrary model-written filters.
 Each revision has a separate editable project plan and physically encoded
 A/V master. [The physical test](.github/workflows/zx7-audio-clock-physical.yml)
-retains both movies, the original six-channel WAV, editable plans, actual
-speaker RMS, EBU R128/true-peak observations, and 108 exact audio-clock
-cases. The broadcast analyzer imposes no default LUFS target.
+retains six-channel original/revised films, a separately source-attested
+original 5.1 ambience + mono dialogue + stereo music soundtrack and its
+host-owned BODY-tool output, editable plans, original PCM sources, speaker
+RMS, EBU R128/true-peak observations, and 108 exact audio-clock cases. The broadcast analyzer imposes no default LUFS target.
 
 **Scope:** This is the existing source/rights-protected BODY compositing
 route; it does **not** establish 5.1 editing parity in Velorn's GUI,
