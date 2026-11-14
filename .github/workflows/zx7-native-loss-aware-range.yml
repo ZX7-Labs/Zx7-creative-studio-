@@ -63,3 +63,72 @@ jobs:
           test "$(git -C third_party/velorn rev-parse HEAD)" = \
             b3c02adbd5c0779feb8abf34978299e9502cc0e7
           git -C third_party/velorn diff --exit-code HEAD --
+
+  installed-native-editor:
+    needs: [inspect-exact-source, editorial-planner]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install real sandboxed Electron, X11, FFmpeg, BODY and dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
+            libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
+            libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Regression for original source, native policies, loss guards and host identity
+        run: |
+          python -m py_compile studio_next/native_editor_source_pin.py \
+            studio_next/native_editor_identity.py studio_next/body_editor_client.py \
+            studio_next/body_editor_policy.py studio_next/body_editor_mcp.py \
+            engines/velorn/mcp-e2e.py
+          python -m unittest studio_next.test_body_editor_split_guard \
+            studio_next.test_body_editor_extract_guard \
+            studio_next.test_native_editor_identity \
+            studio_next.test_native_editorial_revision \
+            studio_next.test_native_editor_diagnostics -v
+      - name: Build exactly pinned atomic range source, real Linux Electron sandbox
+        run: |
+          set -euo pipefail
+          editor="$RUNNER_TEMP/zx7-native-atomic-range"
+          bash engines/velorn/prepare-native-loss-aware-extract-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
+          expected=$(python3 -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_extract_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --quiet HEAD --
+          echo "ZX7_ATOMIC_RANGE_EDITOR=$editor" >> "$GITHUB_ENV"
+          cd "$editor"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
+          npm run build
+          test -s dist/index.html
+          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          test -f "$helper"
+          sudo chown root:root -- "$helper"
+          sudo chmod 4755 -- "$helper"
+          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+      - name: Actual native linked A/V ripple, source revision refusal, reopen and decoded media
+        run: |
+          python -u engines/velorn/mcp-e2e.py \
+            --source "$ZX7_ATOMIC_RANGE_EDITOR" \
+            --xvfb-binary /usr/bin/Xvfb \
+            --display 127.0.0.1:97
+      - name: Pinned original and source-attested installed native editor unchanged
+        if: always()
+        run: |
+          test "$(git -C third_party/velorn rev-parse HEAD)" = \
+            b3c02adbd5c0779feb8abf34978299e9502cc0e7
+          git -C third_party/velorn diff --exit-code HEAD --
+          if printenv ZX7_ATOMIC_RANGE_EDITOR >/dev/null; then
+            git -C "$ZX7_ATOMIC_RANGE_EDITOR" diff --exit-code HEAD --
+          fi
