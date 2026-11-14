@@ -35,6 +35,24 @@ def digest(file):
     return hashlib.sha256(Path(file).read_bytes()).hexdigest()
 
 
+def native_autosave_digests(project: Path) -> set[str]:
+    """Read actual source-editor recovery snapshots, not an MCP save receipt."""
+    directory = project / "autosave"
+    assert directory.is_dir() and not directory.is_symlink(), (
+        "Installed native editor did not create its autosave recovery directory")
+    snapshots = sorted(directory.glob("project-*.comfystudio"))
+    assert snapshots, "Native project save succeeded without a recovery snapshot"
+    observed = set()
+    for path in snapshots:
+        assert path.is_file() and not path.is_symlink(), (
+            "Native recovery snapshot must be a regular project file", path)
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+        assert isinstance(parsed, dict) and isinstance(parsed.get("timelines"), list), (
+            "Native recovery snapshot is not an editable project", path)
+        observed.add(digest(path))
+    return observed
+
+
 def decode(cmd, timeout=100):
     return subprocess.check_output(cmd, stderr=subprocess.PIPE, timeout=timeout)
 
@@ -349,6 +367,9 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert any(len(t.get("clips") or []) == (
                 3 if with_blender else 2) for t in actual_saved["timelines"])
             saved_sha = digest(document)
+            initial_snapshots = native_autosave_digests(project)
+            assert saved_sha in initial_snapshots, (
+                "First committed native project is missing from autosave recovery")
             # A native render must be physically decoded, including sound.
             await invoke(studio, "export_timeline", {
                 "outputPath": str(export), "target": "h264_project",
@@ -471,6 +492,11 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                     "previewOnly": False})
                 updated_sha = digest(document)
                 assert updated_sha != saved_sha
+                recovery_snapshots = native_autosave_digests(project)
+                assert saved_sha in recovery_snapshots, (
+                    "Native edit discarded the previous recoverable source")
+                assert updated_sha in recovery_snapshots, (
+                    "Revised native document has no recoverable source snapshot")
                 assert digest(previous_source) == saved_sha
                 persisted = json.loads(document.read_text(encoding="utf-8"))
                 assert persisted["modified"] == updated_save["result"]["project"]["modified"]
@@ -535,6 +561,8 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert any(c["assetId"] == timeline["clips"][0]["assetId"]
                        for c in actual["clips"])
             assert digest(document) == saved_sha
+            assert saved_sha in native_autosave_digests(project), (
+                "Fresh native reopen lost its committed recovery snapshot")
             assert digest(original) == image_sha and digest(tone) == tone_sha
         print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_ATOMIC_AV "
                if with_atomic_range else "ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
