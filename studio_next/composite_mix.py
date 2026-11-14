@@ -313,8 +313,13 @@ def validate_composition(plan,workspace,vault):
                 elif native_channels == 6 and native_layout == "5.1":
                     if speaker_map is not None:
                         raise ValueError("Native 5.1 channel identity must not be remapped")
-                elif native_channels in (1, 2) and native_layout == (
-                        "mono" if native_channels == 1 else "stereo"):
+                elif native_channels in (1, 2) and native_layout in (
+                        None, "unknown", "mono" if native_channels == 1 else "stereo"):
+                    # Ordinary 1-/2-channel PCM WAV may omit the channel
+                    # layout mask entirely. Here we use the observed channel
+                    # *index*, not an inferred speaker identity. The author's
+                    # explicit c0/c1 map is the sole authority for speakers.
+                    # Six-channel files still require physical named 5.1.
                     # A declared source-channel assignment is a deliberate
                     # artistic routing decision, not permission for the codec
                     # to invent a surround spatialization. Every real input
