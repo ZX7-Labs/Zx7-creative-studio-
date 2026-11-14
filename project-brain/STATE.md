@@ -1,6 +1,10 @@
 # ZX7 — current engineering STATE
 
-**Verified code main · 2026-11-14 IST:** `e4d88978f81616ffc074353515b3e54af0273a6c` after [#342](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/342) source-native atomic A/V range and [#343](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343) one installed cross-engine original-editing workflow. Exact tested #343 head `916f42a18aca39861409db03be888e00212fdcea` ran 3/3 technical CI; earlier #340 original Blender integration remains retained. The historic [STATUS](../docs/continuity/STATUS.md) is archive only. Documentation-only follow-up heads must not be mistaken for the latest physically tested code.
+**Integrated main · 2026-11-14 IST:** `3a2d96c3b665d40f9abf5c730cde4de87c959754` after docs-only #344; last physically tested native video code is [#343](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343), exact `916f42a18aca39861409db03be888e00212fdcea` (3/3 technical CI). Historical [STATUS](../docs/continuity/STATUS.md) remains an archive, not live state.
+
+## Active G1/G production sound work — unmerged #346
+
+[#346](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/346) is a *draft*, not in main: existing source-attested BODY compositor now has explicitly authorized 5.1 bus, speaker-specific typed gain, unchanged old stereo semantics, physical six-channel AAC exports, immutable source rights and two separate editable creative plans. [Physical code head `28b041a9eb1ab3266a74d2106beaee6cc010596f`](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43630026901): 22/22 source/audio tests, 108/108 sample-clock oracles, [two encoded movies + source/artifact](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43630026901/artifacts/14128086408). Existing EBU true-peak meter integration has been added after this proof and needs new exact-head CI. Negative RED [#43629101630](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43629101630) and strict allowlist regression [#43629838084](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43629838084) retained. **No model autonomy, semantic listening, native Velorn surround parity or independent professional/art/security approval.** NVIDIA/private egress deferred.
 
 ## G3 integrated graphics / real native Blender handoff
 

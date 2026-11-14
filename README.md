@@ -14,6 +14,28 @@ The current [architecture](docs/architecture.md),
 [video research plan](docs/video-research-plan.md) record foundation decisions,
 their evidence and remaining acceptance gates.
 
+## Source-attested 5.1 sound production (BODY compositor)
+
+`body.composite_mix` accepts an **optional** `canvas.audio_bus`, for
+example `{"sample_rate":48000,"channel_layout":"5.1"}` (96000 Hz
+also physically tested). The original source must carry six verified
+`5.1` channels; implicit 5.1→stereo downmix and invented upmix refuse.
+Existing mono/stereo projects retain their defaults.
+
+For a targeted non-destructive edit, an original audio track can declare
+`"speaker_gains_db":{"FR":-12}`. BODY validates numeric gains and preserves
+other speaker channels; it does not execute arbitrary model-written filters.
+Each revision has a separate editable project plan and physically encoded
+A/V master. [The physical test](.github/workflows/zx7-audio-clock-physical.yml)
+retains both movies, the original six-channel WAV, editable plans, actual
+speaker RMS, EBU R128/true-peak observations, and 108 exact audio-clock
+cases. The broadcast analyzer imposes no default LUFS target.
+
+**Scope:** This is the existing source/rights-protected BODY compositing
+route; it does **not** establish 5.1 editing parity in Velorn's GUI,
+semantic music/dialogue listening, a creative model, or professional
+mastering/quality acceptance.
+
 ## Native video editor
 
 The complete [Velorn editor](third_party/velorn) is pinned at
