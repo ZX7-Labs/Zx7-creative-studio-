@@ -100,7 +100,7 @@ def _opacity_envelope_zero(clip):
     if frames:
         for frame in frames:
             if (type(frame) is not dict or not _number(frame.get("time")) or
-                    frame["time"] < 0 or not _number(frame.get("value"))):
+                    not _number(frame.get("value"))):
                 raise ValueError("Native content opacity keyframe is malformed")
         # Native interpolation holds first/last values outside the curve.
         # All-zero endpoints remain zero for every supported interpolation.
