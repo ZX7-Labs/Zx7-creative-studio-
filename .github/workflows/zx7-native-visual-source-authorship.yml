@@ -1,0 +1,43 @@
+name: ZX7 — Native Editable Visual Authorship (Offline)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zx7-native-visual-source-authorship.yml'
+      - 'studio_next/body_visual_document.py'
+      - 'studio_next/body_visual_graph.py'
+      - 'studio_next/test_body_visual_document.py'
+      - 'studio_next/body_integration.py'
+      - 'studio_next/body_tool_contracts.py'
+      - 'studio_next/body_materials.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-validity-and-physical-pixels:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real local pixel engine
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --no-cache-dir '.[production,editor]'
+      - name: Verify native graph source correctness and renderer-level artistic editability
+        run: |
+          set -euo pipefail
+          python -m py_compile studio_next/body_visual_document.py \
+            studio_next/body_tool_contracts.py studio_next/body_materials.py \
+            studio_next/body_integration.py studio_next/test_body_visual_document.py
+          python -m unittest -v studio_next.test_body_visual_document \
+            studio_next.test_body_visual_graph studio_next.test_body_capability_adapter
+          test -z "${NVIDIA_API_KEY:-}"
