@@ -36,7 +36,22 @@ p.write_text(source, encoding="utf-8")
 PY
 cp -- "$root/zx7-loss-aware-split.mjs" "$stage/candidate/src/utils/zx7-loss-aware-split.mjs"
 cp -- "$root/zx7-loss-aware-split.test.mjs" "$stage/candidate/src/utils/zx7-loss-aware-split.test.mjs"
-git -C "$stage/candidate" add -- src/services/mcpActions.js src/utils/zx7-loss-aware-split.mjs src/utils/zx7-loss-aware-split.test.mjs
+# The native MCP discovery contract must describe the actual child, not
+# upstream's destructive GUI razor behavior. Refuse any unknown descriptor.
+python3 - "$stage/candidate/electron/mcpServer.js" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+source = p.read_text(encoding="utf-8")
+old = 'Effects and keyframes stay on the left piece, matching the in-app razor. Defaults to previewOnly.'
+new = ('The loss-aware native MCP razor retains supported animated video/audio source '
+       'state on both sides, refuses unsupported effects and transitions before mutation, '
+       'and does not change the separate GUI razor. Defaults to previewOnly.')
+if source.count(old) != 1:
+    raise SystemExit("Unreviewed native split_clip descriptor; refusing child build")
+p.write_text(source.replace(old, new), encoding="utf-8")
+PY
+git -C "$stage/candidate" add -- electron/mcpServer.js src/services/mcpActions.js src/utils/zx7-loss-aware-split.mjs src/utils/zx7-loss-aware-split.test.mjs
 tree=$(git -C "$stage/candidate" write-tree)
 rev=$(GIT_AUTHOR_NAME='ZX7 Studio' GIT_AUTHOR_EMAIL='zx7-studio@users.noreply.github.com' \
   GIT_AUTHOR_DATE='2026-11-14T00:00:00Z' GIT_COMMITTER_NAME='ZX7 Studio' \
