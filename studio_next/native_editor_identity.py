@@ -18,6 +18,7 @@ from .native_editor_source_pin import (
     _source_matches_pinned_native_collaboration,
     _source_matches_pinned_native_scene,
     _source_matches_pinned_native_editorial,
+    _source_matches_pinned_native_loss_aware_editorial,
 )
 
 _MAX_TEXT = 6_000_000
@@ -252,6 +253,10 @@ def pinned_native_editor_identity_policy(source: Path, grants, session, *,
             "add_transition", "set_clip_style",
         ] if editorial_fenced else [])
     )
+    # Razor gained a new atomic native implementation only in this exact
+    # source child. Never grant its commit fence to legacy editor revisions.
+    if _source_matches_pinned_native_loss_aware_editorial(source):
+        fenced_names.append("split_clip")
     fenced_names = [name for name in fenced_names
                     if grants.get(name) == "write"]
     reader = NativeEditorIdentityReader(
