@@ -2322,8 +2322,8 @@ async def exercise(options):
                     assert len(live_before["clips"]) == 3
                     cut = await call(cut_session, "split_clip", {
                         **intent, "previewOnly": False})
-                    assert cut["success"] is True and len(cut["splits"]) == 1
-                    right_id = cut["splits"][0]["rightClipId"]
+                    assert cut["success"] is True and len(cut["result"]["splits"]) == 1
+                    right_id = cut["result"]["splits"][0]["rightClipId"]
                     after = await call(cut_session, "get_timeline", {
                         "includeClips": True})
                     assert len(after["clips"]) == 4
