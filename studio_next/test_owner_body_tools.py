@@ -166,7 +166,7 @@ class OwnerInstalledBodyTests(unittest.IsolatedAsyncioTestCase):
                 plan.write_text(json.dumps(authored_graph(red)), encoding="utf-8")
                 plan_sha = hashlib.sha256(plan.read_bytes()).hexdigest()
                 result = await view.call_tool("body.visual_graph", {
-                    "plan": str(plan), "out": str(target)})
+                    "plan": plan.name, "out": target.name})
                 self.assertFalse(result.is_error)
                 self.assertTrue(target.is_file() and not target.is_symlink())
                 with Image.open(target) as image:
@@ -189,8 +189,8 @@ class OwnerInstalledBodyTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(CapabilityExecutionError,
                                         "host_session_write_budget_exhausted"):
                 await view.call_tool("body.visual_graph", {
-                    "plan": str(root / "original.json"),
-                    "out": str(root / "third.png")})
+                    "plan": "original.json",
+                    "out": "third.png"})
             self.assertFalse((root / "third.png").exists())
             self.assertEqual(gateway.host_budget_evidence()["reserved_writes"], 2)
 
