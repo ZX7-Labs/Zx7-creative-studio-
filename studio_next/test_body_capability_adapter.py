@@ -193,7 +193,7 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
                            return_value={"status": "all_tool_results_verified",
                                          "completed": ["native"], "errors": []}) as run:
                     with self.assertRaisesRegex((ValueError, FileNotFoundError),
-                                                "published|source|No such|directory"):
+                                                "published|source|No such|directory|Media missing"):
                         await adapter.call_tool("body.motion_project", {
                             "plan": "original.json", "out": "original.zxmotion"})
                     run.assert_called_once()
@@ -221,7 +221,7 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
                 with patch("studio_next.body_integration.run_body_project",
                            return_value={"status": "blocked",
                                          "errors": ["Source needs an authentic host publication"]}):
-                    with self.assertRaisesRegex(RuntimeError, "authentic host publication"):
+                    with self.assertRaisesRegex(ValueError, "original durable BODY publication"):
                         await adapter.call_tool("body.motion_export", {
                             "bundle": "unverified.zxmotion", "out": "fake.mp4", "fps": 12})
                     self.assertFalse((root / "fake.mp4").exists())
