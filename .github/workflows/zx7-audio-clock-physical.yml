@@ -5,6 +5,7 @@ on:
     paths:
       - "studio_next/composite_mix.py"
       - "studio_next/test_composite_mix.py"
+      - "studio_next/test_composite_surround.py"
       - "studio_next/test_composite_sample_clock.py"
       - "scripts/research_audio_clock.py"
       - ".github/workflows/zx7-audio-clock-physical.yml"
@@ -31,7 +32,7 @@ jobs:
       - name: Verify source syntax and exact boundary unit tests
         run: |
           python -m compileall -q studio_next/composite_mix.py scripts/research_audio_clock.py
-          python -m unittest studio_next.test_composite_mix -v
+          python -m unittest studio_next.test_composite_mix studio_next.test_composite_surround -v
       - name: Compare 108 physically decoded timing cases to independent sample oracle
         run: |
           python scripts/research_audio_clock.py --require-conformance \
