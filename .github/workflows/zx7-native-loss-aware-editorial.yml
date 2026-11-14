@@ -11,6 +11,8 @@ on:
       - 'studio_next/body_editor_policy.py'
       - 'studio_next/body_editor_mcp.py'
       - 'studio_next/native_editor_identity.py'
+      - 'studio_next/native_editor_diagnostics.py'
+      - 'studio_next/test_native_editor_diagnostics.py'
       - 'studio_next/editor_runtime/launcher.mjs'
       - 'engines/velorn/mcp-e2e.py'
       - '.github/workflows/zx7-native-loss-aware-editorial.yml'
@@ -85,7 +87,8 @@ jobs:
           python -m unittest studio_next.test_body_editor_split_guard \
             studio_next.test_body_editor_extract_guard \
             studio_next.test_native_editor_identity \
-            studio_next.test_native_editorial_revision -v
+            studio_next.test_native_editorial_revision \
+            studio_next.test_native_editor_diagnostics -v
       - name: Build exact source-native loss-aware Linux Electron child
         run: |
           set -euo pipefail
