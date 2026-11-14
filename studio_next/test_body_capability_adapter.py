@@ -177,6 +177,55 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(page["no_native_write_replayed"])
             self.assertFalse((Path(root)/"movie.mp4").exists())
 
+    async def test_native_motion_refuses_success_without_actual_producer_receipt(self):
+        """MCP direct native writes cannot launder an unattested Blender parent."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adapter = InstalledBodyAdapter(root)
+            class ForbiddenDirectRunner:
+                def invoke(self, *_args, **_kwargs):
+                    raise AssertionError("Direct native Blender runner skips host publication")
+            with patch.object(adapter, "_installed", return_value=(
+                ForbiddenDirectRunner(), {"body.motion_project": {"access": "write"}})):
+                with patch("studio_next.body_integration.run_body_project",
+                           return_value={"status": "all_tool_results_verified",
+                                         "completed": ["native"], "errors": []}) as run:
+                    with self.assertRaisesRegex((ValueError, FileNotFoundError),
+                                                "published|source|No such|directory"):
+                        await adapter.call_tool("body.motion_project", {
+                            "plan": "original.json", "out": "original.zxmotion"})
+                    run.assert_called_once()
+                    graph, destination = run.call_args.args
+                    self.assertEqual(destination, root)
+                    self.assertEqual(len(graph["tool_graph"]), 1)
+                    node = graph["tool_graph"][0]
+                    self.assertEqual(node["tool_id"], "body.motion_project")
+                    self.assertEqual(node["inputs"], {
+                        "plan": "original.json", "out": "original.zxmotion"})
+                    self.assertEqual(node["depends_on"], [])
+                    self.assertEqual(graph.get("owner_facts", {}), {})
+                    self.assertFalse((root / "original.zxmotion").exists())
+
+    async def test_native_motion_durable_failure_does_not_run_unfenced_writer(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adapter = InstalledBodyAdapter(root)
+            class ForbiddenDirectRunner:
+                def invoke(self, *_args, **_kwargs):
+                    raise AssertionError("Unfenced write is not a fallback")
+            with patch.object(adapter, "_installed", return_value=(
+                ForbiddenDirectRunner(), {"body.motion_export": {"access": "write"}})):
+                with patch("studio_next.body_integration.run_body_project",
+                           return_value={"status": "blocked",
+                                         "errors": ["Source needs an authentic host publication"]}):
+                    with self.assertRaisesRegex(RuntimeError, "authentic host publication"):
+                        await adapter.call_tool("body.motion_export", {
+                            "bundle": "unverified.zxmotion", "out": "fake.mp4", "fps": 12})
+                    self.assertFalse((root / "fake.mp4").exists())
+
     async def test_installed_body_refuses_non_boolean_durable_policy(self):
         with tempfile.TemporaryDirectory() as root:
             for invalid in ("true",1,None):
