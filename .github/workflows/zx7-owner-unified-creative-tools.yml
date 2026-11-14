@@ -28,8 +28,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install exact existing native-editor and BODY dependencies
-        run: python -m pip install --no-cache-dir '.[editor,production]'
+      - name: Install local physical media decoder and real BODY pixel engine
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --no-cache-dir '.[editor,production]' numpy Pillow
+          ffmpeg -version | head -n 1
       - name: Prove shared actual installed BODY catalog + native editor contracts
         run: |
           set -euo pipefail
