@@ -73,9 +73,11 @@ async def exercise(source: Path, xvfb: str, display: str):
         root.mkdir(mode=0o700)
         for name in ("projects", "staging", "outputs", "state"):
             (root / name).mkdir(mode=0o700)
-        plan = root / "staging" / "original-art.json"
-        plan.write_text(json.dumps(graphic_plan(), sort_keys=True), encoding="utf-8")
-        graph_sha = digest(plan)
+        # Source must first be authored through the real model-visible BODY
+        # operation, never quietly pre-created by this test fixture.
+        plan = root / "creative-graphs" / "original-art.json"
+        revised_plan = root / "creative-graphs" / "original-art-v2.json"
+        revised_image = root / "staging" / "revised-art.png"
         tone = root / "staging" / "original-tone.wav"
         decode(["ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi",
                 "-i", "sine=f=440:sample_rate=48000:duration=2",
@@ -130,7 +132,8 @@ async def exercise(source: Path, xvfb: str, display: str):
                         gateway, "editor", "zx7",
                         require_model_native_observation_for=("editor",))
                     discovered = {x.name for x in (await view.list_tools()).tools}
-                    assert {"body.visual_graph", "create_project",
+                    assert {"body.visual_author", "body.visual_document",
+                            "body.visual_graph", "create_project",
                             "import_asset_from_path", "get_timeline",
                             "get_project", "add_asset_to_timeline", "save_project",
                             "export_timeline", "zx7_verify_native_export"}.issubset(discovered), discovered
@@ -151,10 +154,46 @@ async def exercise(source: Path, xvfb: str, display: str):
             raise AssertionError("Native source snapshot did not converge")
 
         async with connected() as (studio, gateway):
+            first_document = graphic_plan()
+            authored = await invoke(studio, "body.visual_author", {
+                "document": first_document,
+                "out": "creative-graphs/original-art.json",
+            })
+            assert authored["editable_source_file_committed"] is True
+            graph_sha = authored["sha256"]
+            assert plan.is_file() and digest(plan) == graph_sha
+            source_read = await invoke(studio, "body.visual_document", {
+                "plan": authored["relative_path"]})
+            assert source_read["graph"] == first_document
+            assert source_read["sha256"] == graph_sha
+
+            # Real distinct authored revision; no original overwrite.
+            revision = json.loads(json.dumps(first_document))
+            revision["nodes"][0]["params"]["channels"]["r"] = "1-u"
+            revision_receipt = await invoke(studio, "body.visual_author", {
+                "document": revision,
+                "out": "creative-graphs/original-art-v2.json",
+                "base": authored["relative_path"],
+                "expected_sha256": authored["sha256"],
+            })
+            assert revision_receipt["previous"]["sha256"] == graph_sha
+            assert revised_plan.is_file() and digest(plan) == graph_sha
+            reread = await invoke(studio, "body.visual_document", {
+                "plan": revision_receipt["relative_path"]})
+            assert reread["graph"] == revision
+            assert reread["sha256"] == revision_receipt["sha256"]
+            await invoke(studio, "body.visual_graph", {
+                "plan": revision_receipt["relative_path"],
+                "out": "staging/revised-art.png",
+            })
+            assert revised_image.is_file()
             result = await invoke(studio, "body.visual_graph", {
-                "plan": "staging/original-art.json",
+                "plan": authored["relative_path"],
                 "out": "staging/original-art.png",
             })
+            assert revised_image.read_bytes() != original.read_bytes()
+            assert digest(plan) == graph_sha
+            assert digest(revised_plan) == revision_receipt["sha256"]
             assert result and original.is_file()
             image_sha = digest(original)
             assert len(image_sha) == 64 and digest(plan) == graph_sha
@@ -273,6 +312,8 @@ async def exercise(source: Path, xvfb: str, display: str):
         print("ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV " + json.dumps({
             "one_real_editor_and_installed_body_gateway": True,
             "actual_original_editable_visual_graph": True,
+            "brain_visible_typed_source_authoring_and_readback": True,
+            "non_destructive_native_graph_revision_rendered_distinct_pixels": True,
             "original_generated_picture_and_audio_sha_preserved": True,
             "native_editor_imported_generated_media_and_sound": True,
             "native_editable_project_saved_and_fresh_Electron_reopened": True,
