@@ -310,8 +310,25 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
                 "previewOnly": False})
             await read_until(studio, lambda s:
                 (s.get("currentTimeline") or {}).get("clipCount") == 2)
+            if with_blender:
+                await invoke(studio, "get_project")
+                await invoke(studio, "import_asset_from_path", {
+                    "path": str(original_3d_video), "previewOnly": False})
+                await read_until(studio, lambda s: s.get("assetCount") == 3)
+                await invoke(studio, "get_project")
+                await invoke(studio, "add_asset_to_timeline", {
+                    "assetName": original_3d_video.name,
+                    "trackId": video_track,
+                    "startSeconds": 2, "durationSeconds": 1,
+                    "includeAudio": False, "previewOnly": False})
+                await read_until(studio, lambda s:
+                    (s.get("currentTimeline") or {}).get("clipCount") == 3)
             timeline = await invoke(studio, "get_timeline", {"includeClips": True})
-            assert len(timeline["clips"]) == 2
+            assert len(timeline["clips"]) == (3 if with_blender else 2)
+            if with_blender:
+                assert any(abs(c.get("startTime", -1) - 2) < .001
+                           and c["type"] == "video" for c in timeline["clips"]), (
+                    "Native timeline must retain genuine Blender movie in a distinct editable clip")
             clip_types = {c["type"] for c in timeline["clips"]}
             assert "audio" in clip_types and clip_types.intersection({"image", "video"}), (
                 "Native imported PNG and original tone must remain separate editable tracks",
@@ -322,15 +339,16 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
             assert document.is_file() and not document.is_symlink()
             actual_saved = json.loads(document.read_text(encoding="utf-8"))
             assert actual_saved["modified"] == save["result"]["project"]["modified"]
-            assert any(len(t.get("clips") or []) == 2
-                       for t in actual_saved["timelines"])
+            assert any(len(t.get("clips") or []) == (
+                3 if with_blender else 2) for t in actual_saved["timelines"])
             saved_sha = digest(document)
             # A native render must be physically decoded, including sound.
             await invoke(studio, "export_timeline", {
                 "outputPath": str(export), "target": "h264_project",
                 "width": 320, "height": 180, "fps": 24,
                 "range": "custom", "startSeconds": 0,
-                "endSeconds": 2, "includeAudio": True,
+                "endSeconds": 3 if with_blender else 2,
+                "includeAudio": True,
                 "previewOnly": False})
             deadline = time.monotonic() + 90
             video_pcm = audio_pcm = None
@@ -351,7 +369,7 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
                 await asyncio.sleep(.35)
             assert video_pcm is not None and audio_pcm is not None, (
                 "Real native editor did not produce independently decoded audiovisual output")
-            assert len(video_pcm) == 48 * 320 * 180 * 3
+            assert len(video_pcm) == (72 if with_blender else 48) * 320 * 180 * 3
             assert len(audio_pcm) >= 48000 and any(audio_pcm), (
                 "The original authored sound source was absent/silent")
             assert len(set(video_pcm[:320 * 180 * 3])) > 64
@@ -360,6 +378,15 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
             # Lossy H.264 chroma/resampling may differ slightly by design.
             first_frame = video_pcm[:len(image_decoded)]
             assert len(first_frame) == len(image_decoded)
+            if with_blender:
+                # A rendered/encoded native CGI shot must actually appear in
+                # the final timeline at the authored time, not just be stored.
+                last_frame = video_pcm[60 * 320 * 180 * 3:61 * 320 * 180 * 3]
+                assert len(last_frame) == len(first_frame)
+                assert len(set(last_frame)) > 32 and last_frame != first_frame, (
+                    "Rendered Blender 3D was omitted/black/identical in native final")
+                assert digest(original_bundle) == original_bundle_sha
+                assert digest(original_3d_video) == motion_video_sha
             mean_abs_pixel_error = sum(
                 abs(a - b) for a, b in zip(first_frame, image_decoded)
             ) / len(image_decoded)
@@ -369,7 +396,8 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
             verification = await invoke(studio, "zx7_verify_native_export", {
                 "path": str(export), "expected": {
                     "width": 320, "height": 180,
-                    "duration_seconds": 2, "require_audio": True}})
+                    "duration_seconds": 3 if with_blender else 2,
+                    "require_audio": True}})
             assert verification["physical_export_verified"] is True
             assert verification["native_export_sha256"] == digest(export)
             assert digest(document) == saved_sha
@@ -381,14 +409,25 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False)
             await invoke(reopened, "open_project", {
                 "projectPath": str(project), "previewOnly": False})
             await read_until(reopened, lambda s:
-                (s.get("currentTimeline") or {}).get("clipCount") == 2)
+                (s.get("currentTimeline") or {}).get("clipCount") == (
+                    3 if with_blender else 2))
             actual = await invoke(reopened, "get_timeline", {"includeClips": True})
-            assert len(actual["clips"]) == 2
+            assert len(actual["clips"]) == (3 if with_blender else 2)
+            if with_blender:
+                assert any(abs(c.get("startTime", -1) - 2) < .001
+                           and c["type"] == "video" for c in actual["clips"])
+                assert digest(original_bundle) == original_bundle_sha
+                assert digest(revised_job_path) == revised_job_sha
             assert any(c["assetId"] == timeline["clips"][0]["assetId"]
                        for c in actual["clips"])
             assert digest(document) == saved_sha
             assert digest(original) == image_sha and digest(tone) == tone_sha
-        print("ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV " + json.dumps({
+        print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
+               if with_blender else "ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV ") + json.dumps({
+            "actual_editable_blender_3d_and_native_revision_preserved": (
+                True if with_blender else None),
+            "fully_decoded_3d_motion_in_native_movie_with_original_audio": (
+                True if with_blender else None),
             "one_real_editor_and_installed_body_gateway": True,
             "actual_original_editable_visual_graph": True,
             "brain_visible_typed_source_authoring_and_readback": True,
