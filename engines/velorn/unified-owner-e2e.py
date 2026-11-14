@@ -65,7 +65,7 @@ def graphic_plan():
     }
 
 
-async def exercise(source: Path, xvfb: str, display: str):
+async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False):
     assert shutil.which("ffmpeg") and shutil.which("ffprobe")
     assert source.is_dir() and (source / "dist/index.html").is_file()
     with tempfile.TemporaryDirectory(prefix="zx7-unified-owner-native-") as temp:
@@ -83,6 +83,34 @@ async def exercise(source: Path, xvfb: str, display: str):
                 "-i", "sine=f=440:sample_rate=48000:duration=2",
                 "-ac", "2", str(tone)])
         tone_sha = digest(tone)
+        if with_blender:
+            from studio_next.body_motion_proof import fixture_job
+            from studio_next.body_motion_project import verify_motion_bundle
+            original_job = fixture_job()
+            # Real 1-second camera/type/geometry-nodes animation at 12fps.
+            original_job["renders"] = [
+                {"scene": "Scene", "frame": frame, "format": "png"}
+                for frame in range(1, 13)]
+            revision_job = {
+                "version": original_job["version"],
+                "project": "staging/native-3d-original.zxmotion",
+                "actions": [
+                    {"op": "set", "path": ["data", "curves", "Typography", "body"],
+                     "value": "REVISED"},
+                    {"op": "read", "path": ["data", "curves", "Typography", "body"]},
+                ],
+                "renders": [{"scene": "Scene", "frame": 3, "format": "png"}],
+            }
+            original_job_path = root / "staging" / "native-3d-original.json"
+            revised_job_path = root / "staging" / "native-3d-revision.json"
+            original_job_path.write_text(json.dumps(original_job), encoding="utf-8")
+            revised_job_path.write_text(json.dumps(revision_job), encoding="utf-8")
+            original_job_sha = digest(original_job_path)
+            revised_job_sha = digest(revised_job_path)
+            original_bundle = root / "staging" / "native-3d-original.zxmotion"
+            revised_bundle = root / "staging" / "native-3d-revision.zxmotion"
+            original_3d_video = root / "staging" / "native-3d-original.mp4"
+            revised_3d_image = root / "staging" / "native-3d-revision.png"
         original = root / "staging" / "original-art.png"
         export = root / "outputs" / "original-graph-and-sound.mp4"
         source_config = json.loads((Path(__file__).parent / "editor.example.json").read_text())
@@ -139,6 +167,9 @@ async def exercise(source: Path, xvfb: str, display: str):
                             "export_timeline", "zx7_verify_native_export"}.issubset(discovered), discovered
                     assert "body.research_assets" not in discovered, (
                         "This local creative-source mode cannot silently authorize network research")
+                    if with_blender:
+                        assert {"body.motion_project", "body.motion_export"}.issubset(
+                            discovered), ("Installed Blender 4.5+ and native source controls required", discovered)
                     yield view, gateway
 
         async def invoke(view, name, args=None):
@@ -203,6 +234,54 @@ async def exercise(source: Path, xvfb: str, display: str):
             assert len(image_decoded) == 320 * 180 * 3
             assert len(set(image_decoded)) > 64, "A fake/blank generated image is not evidence"
 
+            if with_blender:
+                from zipfile import ZipFile
+                receipt = await invoke(studio, "body.motion_project", {
+                    "plan": "staging/native-3d-original.json",
+                    "out": "staging/native-3d-original.zxmotion",
+                })
+                assert receipt["native_project_observations"]["renders"]
+                native_original = verify_motion_bundle(original_bundle)
+                original_bundle_sha = digest(original_bundle)
+                assert len(native_original["native"]["renders"]) == 12
+                assert {"Camera", "Title", "Bar"}.issubset(
+                    {item["name"] for item in native_original["native"]["objects"]})
+                assert all((item["width"], item["height"]) == (96, 64)
+                           for item in native_original["native"]["renders"])
+                with ZipFile(original_bundle) as bundle:
+                    assert bundle.read("project.blend").startswith(b"BLENDER")
+                    first_3d_render = bundle.read("render_000001.png")
+                    assert first_3d_render != bundle.read("render_000004.png"), (
+                        "Native 3D animation must produce visibly different frame bytes")
+                changed = await invoke(studio, "body.motion_project", {
+                    "plan": "staging/native-3d-revision.json",
+                    "out": "staging/native-3d-revision.zxmotion",
+                })
+                native_revised = verify_motion_bundle(revised_bundle)
+                assert native_revised["parent_bundle_sha256"] == original_bundle_sha
+                assert native_revised["native"]["actions"][1]["result"] == "REVISED"
+                with ZipFile(revised_bundle) as bundle:
+                    assert bundle.read("project.blend").startswith(b"BLENDER")
+                    assert bundle.read("render_000000.png") != first_3d_render
+                assert digest(original_bundle) == original_bundle_sha
+                assert digest(original_job_path) == original_job_sha
+                assert digest(revised_job_path) == revised_job_sha
+                await invoke(studio, "body.motion_export", {
+                    "bundle": "staging/native-3d-original.zxmotion",
+                    "out": "staging/native-3d-original.mp4",
+                    "fps": 12})
+                await invoke(studio, "body.motion_export", {
+                    "bundle": "staging/native-3d-revision.zxmotion",
+                    "out": "staging/native-3d-revision.png", "fps": 12})
+                assert original_3d_video.is_file() and revised_3d_image.is_file()
+                motion_video_sha = digest(original_3d_video)
+                movie_rgb = decode(["ffmpeg", "-nostdin", "-v", "error", "-xerror",
+                    "-i", str(original_3d_video), "-map", "0:v:0", "-pix_fmt",
+                    "rgb24", "-f", "rawvideo", "-"])
+                assert len(movie_rgb) == 12 * 96 * 64 * 3
+                assert movie_rgb[:96 * 64 * 3] != movie_rgb[4*96*64*3:5*96*64*3]
+                assert len(set(movie_rgb)) > 50
+
             await invoke(studio, "create_project", {
                 "name": "Real cross-engine editable visual and sound",
                 "width": 320, "height": 180, "fps": 24,
@@ -231,8 +310,25 @@ async def exercise(source: Path, xvfb: str, display: str):
                 "previewOnly": False})
             await read_until(studio, lambda s:
                 (s.get("currentTimeline") or {}).get("clipCount") == 2)
+            if with_blender:
+                await invoke(studio, "get_project")
+                await invoke(studio, "import_asset_from_path", {
+                    "path": str(original_3d_video), "previewOnly": False})
+                await read_until(studio, lambda s: s.get("assetCount") == 3)
+                await invoke(studio, "get_project")
+                await invoke(studio, "add_asset_to_timeline", {
+                    "assetName": original_3d_video.name,
+                    "trackId": video_track,
+                    "startSeconds": 2, "durationSeconds": 1,
+                    "includeAudio": False, "previewOnly": False})
+                await read_until(studio, lambda s:
+                    (s.get("currentTimeline") or {}).get("clipCount") == 3)
             timeline = await invoke(studio, "get_timeline", {"includeClips": True})
-            assert len(timeline["clips"]) == 2
+            assert len(timeline["clips"]) == (3 if with_blender else 2)
+            if with_blender:
+                assert any(abs(c.get("startTime", -1) - 2) < .001
+                           and c["type"] == "video" for c in timeline["clips"]), (
+                    "Native timeline must retain genuine Blender movie in a distinct editable clip")
             clip_types = {c["type"] for c in timeline["clips"]}
             assert "audio" in clip_types and clip_types.intersection({"image", "video"}), (
                 "Native imported PNG and original tone must remain separate editable tracks",
@@ -243,15 +339,16 @@ async def exercise(source: Path, xvfb: str, display: str):
             assert document.is_file() and not document.is_symlink()
             actual_saved = json.loads(document.read_text(encoding="utf-8"))
             assert actual_saved["modified"] == save["result"]["project"]["modified"]
-            assert any(len(t.get("clips") or []) == 2
-                       for t in actual_saved["timelines"])
+            assert any(len(t.get("clips") or []) == (
+                3 if with_blender else 2) for t in actual_saved["timelines"])
             saved_sha = digest(document)
             # A native render must be physically decoded, including sound.
             await invoke(studio, "export_timeline", {
                 "outputPath": str(export), "target": "h264_project",
                 "width": 320, "height": 180, "fps": 24,
                 "range": "custom", "startSeconds": 0,
-                "endSeconds": 2, "includeAudio": True,
+                "endSeconds": 3 if with_blender else 2,
+                "includeAudio": True,
                 "previewOnly": False})
             deadline = time.monotonic() + 90
             video_pcm = audio_pcm = None
@@ -272,7 +369,7 @@ async def exercise(source: Path, xvfb: str, display: str):
                 await asyncio.sleep(.35)
             assert video_pcm is not None and audio_pcm is not None, (
                 "Real native editor did not produce independently decoded audiovisual output")
-            assert len(video_pcm) == 48 * 320 * 180 * 3
+            assert len(video_pcm) == (72 if with_blender else 48) * 320 * 180 * 3
             assert len(audio_pcm) >= 48000 and any(audio_pcm), (
                 "The original authored sound source was absent/silent")
             assert len(set(video_pcm[:320 * 180 * 3])) > 64
@@ -281,6 +378,15 @@ async def exercise(source: Path, xvfb: str, display: str):
             # Lossy H.264 chroma/resampling may differ slightly by design.
             first_frame = video_pcm[:len(image_decoded)]
             assert len(first_frame) == len(image_decoded)
+            if with_blender:
+                # A rendered/encoded native CGI shot must actually appear in
+                # the final timeline at the authored time, not just be stored.
+                last_frame = video_pcm[60 * 320 * 180 * 3:61 * 320 * 180 * 3]
+                assert len(last_frame) == len(first_frame)
+                assert len(set(last_frame)) > 32 and last_frame != first_frame, (
+                    "Rendered Blender 3D was omitted/black/identical in native final")
+                assert digest(original_bundle) == original_bundle_sha
+                assert digest(original_3d_video) == motion_video_sha
             mean_abs_pixel_error = sum(
                 abs(a - b) for a, b in zip(first_frame, image_decoded)
             ) / len(image_decoded)
@@ -290,7 +396,8 @@ async def exercise(source: Path, xvfb: str, display: str):
             verification = await invoke(studio, "zx7_verify_native_export", {
                 "path": str(export), "expected": {
                     "width": 320, "height": 180,
-                    "duration_seconds": 2, "require_audio": True}})
+                    "duration_seconds": 3 if with_blender else 2,
+                    "require_audio": True}})
             assert verification["physical_export_verified"] is True
             assert verification["native_export_sha256"] == digest(export)
             assert digest(document) == saved_sha
@@ -302,14 +409,25 @@ async def exercise(source: Path, xvfb: str, display: str):
             await invoke(reopened, "open_project", {
                 "projectPath": str(project), "previewOnly": False})
             await read_until(reopened, lambda s:
-                (s.get("currentTimeline") or {}).get("clipCount") == 2)
+                (s.get("currentTimeline") or {}).get("clipCount") == (
+                    3 if with_blender else 2))
             actual = await invoke(reopened, "get_timeline", {"includeClips": True})
-            assert len(actual["clips"]) == 2
+            assert len(actual["clips"]) == (3 if with_blender else 2)
+            if with_blender:
+                assert any(abs(c.get("startTime", -1) - 2) < .001
+                           and c["type"] == "video" for c in actual["clips"])
+                assert digest(original_bundle) == original_bundle_sha
+                assert digest(revised_job_path) == revised_job_sha
             assert any(c["assetId"] == timeline["clips"][0]["assetId"]
                        for c in actual["clips"])
             assert digest(document) == saved_sha
             assert digest(original) == image_sha and digest(tone) == tone_sha
-        print("ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV " + json.dumps({
+        print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
+               if with_blender else "ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV ") + json.dumps({
+            "actual_editable_blender_3d_and_native_revision_preserved": (
+                True if with_blender else None),
+            "fully_decoded_3d_motion_in_native_movie_with_original_audio": (
+                True if with_blender else None),
             "one_real_editor_and_installed_body_gateway": True,
             "actual_original_editable_visual_graph": True,
             "brain_visible_typed_source_authoring_and_readback": True,
@@ -329,6 +447,9 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--xvfb-binary", required=True)
     parser.add_argument("--display", required=True)
+    parser.add_argument("--with-blender", action="store_true",
+                        help="Also prove genuine editable Blender 4.5+ motion in native Studio")
     args = parser.parse_args()
     asyncio.run(exercise(args.source.resolve(strict=True),
-                         args.xvfb_binary, args.display))
+                         args.xvfb_binary, args.display,
+                         with_blender=args.with_blender))

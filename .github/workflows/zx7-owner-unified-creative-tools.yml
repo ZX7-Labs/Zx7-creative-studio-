@@ -12,6 +12,9 @@ on:
       - 'studio_next/capability_gateway.py'
       - 'studio_next/capability_mcp_session.py'
       - 'engines/velorn/unified-owner-e2e.py'
+      - 'studio_next/body_motion_project.py'
+      - 'studio_next/body_motion_worker.py'
+      - 'studio_next/body_motion_proof.py'
   workflow_dispatch:
 
 permissions:
@@ -89,13 +92,35 @@ jobs:
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
-      - name: Physically verify local visual graph, native A/V import and fresh editable Electron reopen
+      - name: Install exact native Blender 4.5 LTS and authenticate official archive bytes
+        run: |
+          set -euo pipefail
+          version=4.5.16
+          base="https://mirror.blender.org/release/Blender4.5"
+          temp="$RUNNER_TEMP/zx7-blender-lts"
+          mkdir -p "$temp"
+          curl --fail --location --retry 3 --connect-timeout 20 \
+            --output "$temp/blender-$version.sha256" "$base/blender-$version.sha256"
+          curl --fail --location --retry 3 --connect-timeout 20 \
+            --output "$temp/blender-$version-linux-x64.tar.xz" \
+            "$base/blender-$version-linux-x64.tar.xz"
+          checksum=$(awk -v file="blender-$version-linux-x64.tar.xz" \
+            '$2 == file || $2 == "*" file {print $1}' "$temp/blender-$version.sha256")
+          test "${#checksum}" = 64
+          printf '%s  %s\n' "$checksum" "$temp/blender-$version-linux-x64.tar.xz" \
+            | sha256sum --check --status
+          tar -xJf "$temp/blender-$version-linux-x64.tar.xz" -C "$temp"
+          binary="$temp/blender-$version-linux-x64/blender"
+          test -x "$binary"
+          test "$("$binary" --version | head -n 1)" = "Blender 4.5.16 LTS"
+          echo "$temp/blender-$version-linux-x64" >> "$GITHUB_PATH"
+      - name: Physically verify actual Blender CGI, local visual graph, native A/V import and fresh editable Electron reopen
         run: |
           python -m py_compile engines/velorn/unified-owner-e2e.py
           python -u engines/velorn/unified-owner-e2e.py \
             --source "$ZX7_UNIFIED_EDITOR" \
             --xvfb-binary /usr/bin/Xvfb \
-            --display 127.0.0.1:96
+            --display 127.0.0.1:96 --with-blender
       - name: Never mutate original checked-out editor or pinned child
         if: always()
         run: |
