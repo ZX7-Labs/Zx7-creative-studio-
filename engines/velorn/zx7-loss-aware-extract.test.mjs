@@ -131,7 +131,7 @@ test('creative state that cannot be preserved fails without any replacement clip
     [[source({ keyframes: { speed: [{ time: 0, value: 1 }] } })], {}],
     [[source({ unknownMovieEffectPhase: 55 })], {}],
     [[audio({ fadeIn: 3 })], {}],
-    [[source()], { tracks: [{ ...tracks[0], locked: true }, tracks[1] } }],
+    [[source()], { tracks: [{ ...tracks[0], locked: true }, tracks[1]] }],
     [[source()], { transitions: [{ id: 't', clipAId: 'clip-1' }] }],
     [[source()], { markers: [{ id: 'beat', time: 7 }] }],
     [[linked, audio({ metadata: { linkedVideoClipId: 'clip-1' }, linkGroupId: 'a' })],
