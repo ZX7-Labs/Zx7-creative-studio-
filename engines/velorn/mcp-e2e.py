@@ -41,7 +41,8 @@ async def exercise(options):
         _source_matches_pinned_native_save,
         _source_matches_pinned_native_save_order,
         _source_matches_pinned_native_save_interleave,
-        _source_matches_pinned_native_cross_process)
+        _source_matches_pinned_native_cross_process,
+        _source_matches_pinned_native_loss_aware_editorial)
     collaboration_source = _source_matches_pinned_native_collaboration(
         options.source)
     scene_source = _source_matches_pinned_native_scene(options.source)
@@ -50,6 +51,8 @@ async def exercise(options):
     save_order_source = _source_matches_pinned_native_save_order(options.source)
     interleave_source = _source_matches_pinned_native_save_interleave(options.source)
     cross_process_source = _source_matches_pinned_native_cross_process(options.source)
+    loss_aware_source = _source_matches_pinned_native_loss_aware_editorial(options.source)
+    assert not loss_aware_source or cross_process_source
     assert not (interleave_source and cross_process_source)
     assert not cross_process_source or save_order_source
     assert not interleave_source or save_order_source
@@ -118,6 +121,7 @@ async def exercise(options):
         "add_asset_to_timeline", "add_assets_to_timeline",
         "set_clip_audio", "set_clip_speed", "update_track",
         "add_transition", "set_clip_style",
+        *(( "split_clip", ) if loss_aware_source else ()),
     })
 
     async def call(session, name, arguments=None):
@@ -918,7 +922,9 @@ async def exercise(options):
         # new right-hand clip. Never silently let BODY split an animated title.
         forbidden = await session.call_tool("split_clip", {
             "clipId": title_id, "timeSeconds": 1, "previewOnly": False})
-        assert forbidden.is_error and "discard editable clip state" in forbidden.content[0].text, forbidden
+        assert forbidden.is_error and (
+            loss_aware_source or "discard editable clip state" in forbidden.content[0].text
+        ), forbidden
         unchanged = await call(session, "get_timeline", {"includeClips": True})
         assert len(unchanged["clips"]) == 3
         preserved = next(clip for clip in unchanged["clips"] if clip["id"] == title_id)
