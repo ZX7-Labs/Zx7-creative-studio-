@@ -1,14 +1,14 @@
 diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
 --- a/src/services/mcpActions.js
 +++ b/src/services/mcpActions.js
-@@ -14,6 +14,7 @@
+@@ -14,5 +14,6 @@
  import { clampTrackPan, clampTrackVolume } from '../utils/audioTrackAudibility'
  import { normalizeAudioInserts } from '../utils/audioInserts'
  import { buildAudioClipSplitState } from '../utils/audioClipSplit'
 +import { planLossAwareNativeSplit } from '../utils/zx7-loss-aware-split.mjs'
  import { getProjectAssetReferences } from '../utils/projectAssetReferences.mjs'
  import {
-@@ -3302,7 +3303,49 @@
+@@ -3302,6 +3303,48 @@
  }
  
  function handleSplitClip(payload = {}) {
@@ -57,7 +57,7 @@ diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
    const { timeSeconds, targets, warnings } = collectSplitTargets(payload)
  
    if (payload.previewOnly !== false) {
-@@ -8934,7 +8977,7 @@
+@@ -8934,4 +8977,4 @@
  // These ten native editorial operations are synchronous through the pinned
  // renderer store: no awaits intervene between entry CAS and timeline mutation.
  // New asynchronous native operations must be audited separately before inclusion.
