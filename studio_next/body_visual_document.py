@@ -11,7 +11,8 @@ import json
 import os
 from pathlib import Path
 import re
-import tempfile
+import secrets
+import stat
 
 from .body_visual_graph import validate_graph
 from .media_vault import MediaVault
@@ -84,8 +85,23 @@ def _canonical_validated(document, *, root):
 
 def _read_checked(root, relative):
     workspace, _folder, target = _target(root, relative, must_exist=True)
-    with target.open("rb") as stream:
-        binary = stream.read(_DOC_BYTES_MAX + 1)
+    # Open the directory and file by kernel descriptors, not a path that a
+    # simultaneous editor process could replace with a symlink after preflight.
+    dirfd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        sourcefd = os.open(target.name, os.O_RDONLY | os.O_NOFOLLOW,
+                           dir_fd=dirfd)
+        with os.fdopen(sourcefd, "rb") as stream:
+            observed = os.fstat(stream.fileno())
+            if not stat.S_ISREG(observed.st_mode):
+                raise ValueError("Native source is not a regular owner document")
+            binary = stream.read(_DOC_BYTES_MAX + 1)
+        unchanged = os.stat(target.name, dir_fd=dirfd, follow_symlinks=False)
+        if (observed.st_dev, observed.st_ino, observed.st_size) != (
+                unchanged.st_dev, unchanged.st_ino, unchanged.st_size):
+            raise ValueError("Editable source file changed during native read")
+    finally:
+        os.close(dirfd)
     if len(binary) > _DOC_BYTES_MAX:
         raise ValueError("Editable source exceeded the owner read budget")
     try:
@@ -139,23 +155,33 @@ def author_visual_document(workspace, *, document, out,
     folder.mkdir(mode=0o700, exist_ok=True)
     if folder.is_symlink() or folder.stat().st_mode & 0o077:
         raise ValueError("Native artwork directory is not private")
-    fd, stage = tempfile.mkstemp(prefix=".zx7-authored-", suffix=".tmp", dir=folder)
+    dirfd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    stage = ".zx7-authored-" + secrets.token_hex(16) + ".tmp"
     try:
-        with os.fdopen(fd, "wb") as outstream:
-            outstream.write(binary)
-            outstream.flush()
-            os.fsync(outstream.fileno())
-        # Atomic no-clobber, same-filesystem link: at most ONE simultaneous
-        # writer wins. A crash before link cannot leave a partial final JSON.
-        os.link(stage, target, follow_symlinks=False)
-        dirfd = os.open(folder, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        fd = os.open(stage, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+                     0o600, dir_fd=dirfd)
         try:
+            with os.fdopen(fd, "wb") as outstream:
+                outstream.write(binary)
+                outstream.flush()
+                os.fsync(outstream.fileno())
+            # Atomic no-clobber, SAME opened owner directory descriptor.
+            # Path-redirection races cannot relocate a write into another
+            # project or change the destination inode after validation.
+            os.link(stage, target.name, src_dir_fd=dirfd,
+                    dst_dir_fd=dirfd, follow_symlinks=False)
             os.fsync(dirfd)
+            observed = os.fstat(dirfd)
+            current = folder.stat()
+            if (folder.is_symlink() or
+                    (observed.st_dev, observed.st_ino) !=
+                    (current.st_dev, current.st_ino)):
+                raise ValueError("Authored source directory changed during native commit")
         finally:
-            os.close(dirfd)
+            os.unlink(stage, dir_fd=dirfd)
+            os.fsync(dirfd)
     finally:
-        if os.path.exists(stage):
-            os.unlink(stage)
+        os.close(dirfd)
     return {
         "kind": "authored_native_visual_graph",
         "relative_path": out,
