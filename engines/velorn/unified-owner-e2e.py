@@ -185,13 +185,13 @@ async def exercise(source: Path, xvfb: str, display: str):
                 "startSeconds": 0, "durationSeconds": 2,
                 "includeAudio": False, "previewOnly": False})
             await read_until(studio, lambda s:
-                s.get("currentTimeline", {}).get("clipCount") == 1)
+                (s.get("currentTimeline") or {}).get("clipCount") == 1)
             await invoke(studio, "get_project")
             await invoke(studio, "add_asset_to_timeline", {
                 "assetName": tone.name, "startSeconds": 0,
                 "previewOnly": False})
             await read_until(studio, lambda s:
-                s.get("currentTimeline", {}).get("clipCount") == 2)
+                (s.get("currentTimeline") or {}).get("clipCount") == 2)
             timeline = await invoke(studio, "get_timeline", {"includeClips": True})
             assert len(timeline["clips"]) == 2
             clip_types = {c["type"] for c in timeline["clips"]}
@@ -263,7 +263,7 @@ async def exercise(source: Path, xvfb: str, display: str):
             await invoke(reopened, "open_project", {
                 "projectPath": str(project), "previewOnly": False})
             await read_until(reopened, lambda s:
-                s.get("currentTimeline", {}).get("clipCount") == 2)
+                (s.get("currentTimeline") or {}).get("clipCount") == 2)
             actual = await invoke(reopened, "get_timeline", {"includeClips": True})
             assert len(actual["clips"]) == 2
             assert any(c["assetId"] == timeline["clips"][0]["assetId"]
