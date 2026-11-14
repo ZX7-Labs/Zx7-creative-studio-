@@ -13,6 +13,27 @@ on:
 permissions:
   contents: read
 jobs:
+  inspect-native-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Inspect loss-aware source overlay and test exact descendant
+        run: |
+          set -euo pipefail
+          bash -n engines/velorn/prepare-native-loss-aware-editorial-candidate.sh
+          bash engines/velorn/prepare-native-loss-aware-editorial-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" \
+            "$RUNNER_TEMP/zx7-loss-aware-source" --inspect
+          test ! -e "$RUNNER_TEMP/zx7-loss-aware-source"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          git -C third_party/velorn diff --exit-code HEAD --
   offline-planner:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
