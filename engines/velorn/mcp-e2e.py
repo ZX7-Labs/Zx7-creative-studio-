@@ -2569,6 +2569,31 @@ async def exercise(options):
                     assert [k["easing"] for k in actual_curve] == [
                         k["easing"] for k in expected_curve]
                     assert [round(k["time"], 6) for k in actual_curve] == [-0.75, 1.25]
+                    # A real X11 keyboard Undo/Redo proves the native store
+                    # publishes ONE reversible range operation, not a series
+                    # of intermediate partially deleted source clips. No test
+                    # directly calls the timeline store to fabricate history.
+                    inject_gui_keyboard("ctrl+z")
+                    await wait(edit_session, lambda x:
+                        (x.get("currentTimeline") or {}).get("clipCount") == 2)
+                    undone = await call(edit_session, "get_timeline", {
+                        "includeClips": True, "limit": 1000})
+                    assert len(undone["clips"]) == 2
+                    assert {c["id"] for c in undone["clips"]} == {
+                        initial_video["id"], initial_audio["id"]}
+                    assert next(c for c in undone["clips"]
+                                if c["id"] == initial_video["id"]
+                                )["keyframes"] == authored["keyframes"]
+                    inject_gui_keyboard("ctrl+shift+z")
+                    await wait(edit_session, lambda x:
+                        (x.get("currentTimeline") or {}).get("clipCount") == 4)
+                    redone = await call(edit_session, "get_timeline", {
+                        "includeClips": True, "limit": 1000})
+                    assert {c["id"] for c in redone["clips"]} == {
+                        c["id"] for c in edited["clips"]}
+                    assert next(c for c in redone["clips"]
+                                if c["id"] == pics[1]["id"]
+                                )["keyframes"] == pics[1]["keyframes"]
                     saved_after = await call(edit_session, "save_project", {
                         "previewOnly": False})
                     persisted = json.loads(native_path.read_text(encoding="utf-8"))
