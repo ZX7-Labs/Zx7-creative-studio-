@@ -225,6 +225,126 @@ class PhysicalSurroundProductionTests(unittest.TestCase):
                     "professional_mastering_or_semantic_hearing_verified": False,
                 }, indent=2) + "\n", encoding="utf8")
 
+    def _add_timed_source(self, root, vault, name, expression, layout):
+        source = root / name
+        subprocess.run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+            "-f", "lavfi", "-i",
+            f"aevalsrc={expression}:s={_SAMPLE_RATE}:d=0.75:c={layout}",
+            "-c:a", "pcm_s16le", "-y", str(source)],
+            check=True, timeout=45)
+        record = vault.ingest(
+            source, mime="audio/wav", rights="owner_supplied",
+            source_type="owner_upload", source_id="source-" + name,
+            evidence="Separate real channel-specific licensed synthetic PCM",
+            owner_or_generator="source-owner")
+        return source, record
+
+    def test_real_mono_dialogue_and_stereo_music_mix_into_authored_5_1_speakers(self):
+        """Real video export mixes separate original ambience/dialogue/music.
+
+        Mono voice is *explicitly* authored on center, stereo score on
+        left/right; no implicit mono/stereo-to-5.1 FFmpeg remixer may decide
+        artist intent or leak source sound to unrelated speaker positions.
+        """
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            ambience, ambience_sha, vault, plan = self._source(root)
+            voice, v = self._add_timed_source(
+                root, vault, "dialogue-mono.wav",
+                "0.18*sin(2*PI*1000*t)", "mono")
+            music, m = self._add_timed_source(
+                root, vault, "music-stereo.wav",
+                "0.18*sin(2*PI*900*t)|0.18*sin(2*PI*1100*t)", "stereo")
+            originals = {
+                path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in (ambience, voice, music)
+            }
+            plan["audio_tracks"].extend([
+                {"id":"dialogue-center", "source":voice.name,
+                 "asset_id":v["asset_id"], "attestation_id":v["attestation_id"],
+                 "start":0.1, "source_in":0, "duration":0.60,
+                 "gain_db":-6, "speaker_map":{"FC":0}},
+                {"id":"music-fronts", "source":music.name,
+                 "asset_id":m["asset_id"], "attestation_id":m["attestation_id"],
+                 "start":0, "source_in":0, "duration":0.70,
+                 "gain_db":-6, "speaker_map":{"FL":0, "FR":1}},
+            ])
+            self.assertTrue(validate_document("body.composite_mix", plan, "plan"))
+            args = actual_composite_command(
+                plan, root, vault, root / "surround-mix.mp4")
+            graph = args[args.index("-filter_complex") + 1]
+            self.assertIn("pan=5.1|FC=c0", graph)
+            self.assertIn("pan=5.1|FL=c0|FR=c1", graph)
+            document = root / "editable-surround-production.json"
+            document.write_text(json.dumps(plan), encoding="utf-8")
+            movie = root / "actual-dialogue-score-surround.mp4"
+            result = render_composition(
+                document, root, root / "vault", movie)
+            self.assertTrue(result["full_picture_and_sound_decoder_completed"])
+            self.assertEqual(result["audio_channels"], 6)
+            encoded = subprocess.check_output([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+                "-i", str(movie), "-map", "0:a:0", "-ac", "6",
+                "-ar", str(_SAMPLE_RATE), "-f", "f32le", "-"], timeout=60)
+            pcm = array.array("f")
+            pcm.frombytes(encoded)
+            self.assertGreater(len(pcm) // 6, 20000)
+            ids = range(10000, 16000, 2)
+            def amplitude(speaker, frequency):
+                sine = sum(pcm[i * 6 + speaker] * math.sin(
+                    2 * math.pi * frequency * i / _SAMPLE_RATE) for i in ids)
+                cosine = sum(pcm[i * 6 + speaker] * math.cos(
+                    2 * math.pi * frequency * i / _SAMPLE_RATE) for i in ids)
+                return 2 * math.hypot(sine, cosine) / len(ids)
+            for frequency, intended in ((1000, 2), (900, 0), (1100, 1)):
+                self.assertGreater(amplitude(intended, frequency), .035,
+                                   (intended, frequency))
+                for speaker in range(6):
+                    if speaker != intended:
+                        self.assertLess(amplitude(speaker, frequency), .01,
+                                        (speaker, frequency))
+            self.assertEqual(ambience_sha, originals[ambience.name])
+            for path in (ambience, voice, music):
+                self.assertEqual(
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    originals[path.name])
+            self.assertEqual(json.loads(document.read_text()), plan)
+            self.assertEqual(_probe_channels(movie)["channel_layout"], "5.1")
+
+    def test_surround_source_routing_requires_explicit_bounded_one_to_one_mapping(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            _, _, vault, base = self._source(root)
+            voice, record = self._add_timed_source(
+                root, vault, "mono-route.wav",
+                "0.18*sin(2*PI*1000*t)", "mono")
+            plan = json.loads(json.dumps(base))
+            plan["audio_tracks"][0].update(
+                source=voice.name, asset_id=record["asset_id"],
+                attestation_id=record["attestation_id"])
+            # Without a deliberate native speaker assignment the host refuses,
+            # even though the source is a properly rights-attested real WAV.
+            with self.assertRaisesRegex(ValueError, "speaker|5.1|upmix"):
+                actual_composite_command(
+                    plan, root, vault, root / "never.mp4")
+            for mapping in (
+                {}, {"FC":1}, {"FC":True}, {"FC":-1},
+                {"FC":0,"FL":0}, {"not-a-speaker":0},
+                {"FC":0, "extra:pan=c0":3}, {"FC":"0"},
+            ):
+                wrong = json.loads(json.dumps(plan))
+                wrong["audio_tracks"][0]["speaker_map"] = mapping
+                with self.assertRaises(ValueError):
+                    actual_composite_command(
+                        wrong, root, vault, root / "never.mp4")
+            wrong_bus = json.loads(json.dumps(plan))
+            wrong_bus["canvas"].pop("audio_bus")
+            wrong_bus["audio_tracks"][0]["speaker_map"] = {"FC":0}
+            with self.assertRaisesRegex(ValueError, "speaker|stereo|bus"):
+                actual_composite_command(wrong_bus, root, vault, root / "never.mp4")
+            self.assertFalse((root / "never.mp4").exists())
+
     def test_untrusted_surround_gains_never_execute_or_cross_into_stereo_bus(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
