@@ -10,6 +10,8 @@ on:
       - 'studio_next/editor_runtime/launcher.mjs'
       - 'studio_next/body_editor_client.py'
       - 'studio_next/body_editor_mcp.py'
+      - 'studio_next/capability_gateway.py'
+      - 'studio_next/test_native_editorial_revision.py'
       - 'studio_next/native_editor_identity.py'
       - 'engines/velorn/mcp-e2e.py'
       - 'scripts/install-zx7-linux.sh'
@@ -94,6 +96,7 @@ jobs:
             studio_next/native_editor_identity.py studio_next/body_editor_client.py \
             studio_next/body_editor_policy.py studio_next/body_editor_mcp.py \
             engines/velorn/mcp-e2e.py
+          python -m unittest studio_next.test_native_editorial_revision -v
           python -m unittest studio_next.test_body_editor_split_guard \
             studio_next.test_body_editor_extract_guard \
             studio_next.test_native_editor_identity \
