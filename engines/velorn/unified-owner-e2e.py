@@ -411,6 +411,113 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert digest(plan) == graph_sha
             assert digest(original) == image_sha and digest(tone) == tone_sha
             assert gateway.host_budget_evidence()["reserved_writes"] >= 6
+            if with_atomic_range:
+                # One real owner project, one host-owned gateway, one native
+                # timeline. Do not flatten the Blender or original graph source.
+                # Picture: graph [0,2), CGI [2,3); original tone [0,3).
+                previous_source = root / "state" / "before-range.comfystudio"
+                shutil.copy2(document, previous_source)
+                assert digest(previous_source) == saved_sha
+                prior = await invoke(studio, "get_timeline", {
+                    "includeClips": True, "limit": 1000})
+                assert len(prior["clips"]) == 3
+                graph_clip = next(c for c in prior["clips"]
+                                  if c["assetId"] == timeline["clips"][0]["assetId"])
+                cg_clip = next(c for c in prior["clips"]
+                               if c["type"] == "video"
+                               and abs(c["startTime"] - 2) < 1e-6)
+                sound_clip = next(c for c in prior["clips"] if c["type"] == "audio")
+                assert abs(sound_clip["duration"] - 3) < 1e-4
+                assert abs(cg_clip["duration"] - 1) < 1e-4
+                assert graph_clip["startTime"] == 0
+                chosen = {"startSeconds": 2.25, "endSeconds": 2.5,
+                          "ripple": True}
+                preview = await invoke(studio, "extract_range", {
+                    **chosen, "previewOnly": True})
+                assert preview["previewOnly"] is True
+                assert preview["result"]["plan"]["removeCount"] == 2
+                assert preview["result"]["plan"]["shiftCount"] == 2
+                # Fresh real native project observation is a commit precondition
+                # for the same permissioned Brain-visible editor gateway.
+                await invoke(studio, "get_project")
+                applied = await invoke(studio, "extract_range", {
+                    **chosen, "previewOnly": False})
+                assert applied["success"] is True
+                assert applied["result"]["shiftedClipCount"] == 2
+                await read_until(studio, lambda state:
+                    (state.get("currentTimeline") or {}).get("clipCount") == 5)
+                actual = await invoke(studio, "get_timeline", {
+                    "includeClips": True, "limit": 1000})
+                assert len(actual["clips"]) == 5
+                assert next(c for c in actual["clips"]
+                            if c["id"] == graph_clip["id"]) == graph_clip, (
+                    "Atomic video/audio edit altered original authored graphics")
+                cg_parts = sorted((c for c in actual["clips"]
+                                   if c["assetId"] == cg_clip["assetId"]),
+                                  key=lambda c: c["startTime"])
+                sound_parts = sorted((c for c in actual["clips"]
+                                      if c["assetId"] == sound_clip["assetId"]),
+                                     key=lambda c: c["startTime"])
+                assert len(cg_parts) == len(sound_parts) == 2
+                assert abs(cg_parts[0]["startTime"] - 2) < 1e-5
+                assert abs(sound_parts[0]["startTime"]) < 1e-5
+                for parts, expected_source in ((cg_parts, .5), (sound_parts, 2.5)):
+                    assert abs(parts[1]["startTime"] - 2.25) < 1e-5
+                    assert abs(parts[1]["trimStart"] - expected_source) < 1e-4
+                assert digest(original_bundle) == original_bundle_sha
+                assert digest(original_3d_video) == motion_video_sha
+                assert digest(original) == image_sha and digest(tone) == tone_sha
+                updated_save = await invoke(studio, "save_project", {
+                    "previewOnly": False})
+                updated_sha = digest(document)
+                assert updated_sha != saved_sha
+                assert digest(previous_source) == saved_sha
+                persisted = json.loads(document.read_text(encoding="utf-8"))
+                assert persisted["modified"] == updated_save["result"]["project"]["modified"]
+                assert any(len(t.get("clips") or []) == 5 for t in persisted["timelines"])
+                edited_export = root / "outputs" / "graph-cgi-atomic-range.mp4"
+                await invoke(studio, "export_timeline", {
+                    "outputPath": str(edited_export), "target": "h264_project",
+                    "width": 320, "height": 180, "fps": 24,
+                    "range": "custom", "startSeconds": 0,
+                    "endSeconds": 2.75, "includeAudio": True,
+                    "previewOnly": False})
+                edited_rgb = edited_pcm = None
+                deadline = time.monotonic() + 90
+                while time.monotonic() < deadline:
+                    try:
+                        if edited_export.is_file() and edited_export.stat().st_size > 4000:
+                            edited_rgb = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                "-xerror", "-i", str(edited_export), "-map", "0:v:0",
+                                "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
+                            edited_pcm = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                "-xerror", "-i", str(edited_export), "-map", "0:a:0",
+                                "-ac", "1", "-ar", "16000", "-f", "s16le", "-"])
+                            break
+                    except (subprocess.CalledProcessError, OSError):
+                        pass
+                    await asyncio.sleep(.35)
+                assert edited_rgb is not None and edited_pcm is not None
+                assert len(edited_rgb) == 66 * 320 * 180 * 3
+                assert len(edited_pcm) >= 2 * 16000 * 2 and any(edited_pcm)
+                assert len(video_pcm) == 72 * 320 * 180 * 3
+                assert edited_rgb != video_pcm and edited_pcm != audio_pcm
+                # Neither presence of clips nor successful RPC means the
+                # original graph and CGI actually appear in the final picture.
+                frame_bytes = 320 * 180 * 3
+                assert sum(abs(a-b) for a, b in zip(
+                    edited_rgb[:frame_bytes], image_decoded)) / frame_bytes < 25
+                cg_frame = edited_rgb[55*frame_bytes:56*frame_bytes]
+                assert len(cg_frame) == frame_bytes
+                assert len(set(cg_frame)) > 32 and cg_frame != edited_rgb[:frame_bytes]
+                proven = await invoke(studio, "zx7_verify_native_export", {
+                    "path": str(edited_export), "expected": {
+                        "width": 320, "height": 180,
+                        "duration_seconds": 2.75, "require_audio": True}})
+                assert proven["physical_export_verified"] is True
+                assert proven["native_export_sha256"] == digest(edited_export)
+                assert digest(document) == updated_sha
+                saved_sha = updated_sha
         # New real Electron session, not one fake in-memory project document.
         async with connected() as (reopened, _):
             await invoke(reopened, "open_project", {
