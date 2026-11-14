@@ -20,6 +20,7 @@ import unittest
 
 from studio_next.body_document_schemas import validate_document
 from studio_next.composite_mix import actual_composite_command, render_composition
+from studio_next.body_loudness import inspect_original_loudness
 from studio_next.media_vault import MediaVault
 
 _FREQUENCIES = (220, 330, 440, 60, 660, 770)  # LFE intentionally below its low-pass
@@ -179,6 +180,29 @@ class PhysicalSurroundProductionTests(unittest.TestCase):
             self.assertEqual(json.loads(revised_document.read_text()),
                              revised_plan)
             self.assertEqual(_probe_channels(revised_movie)["channel_layout"], "5.1")
+            # Reuse the installed source-attested EBU R128/true-peak meter.
+            # This is physical evidence, NOT a genre LUFS target or an
+            # independent listener making an artistic judgement.
+            sound_meters = []
+            for label, movie in (("original", first_movie), ("revision", revised_movie)):
+                attested = vault.ingest(movie, mime="video/mp4", rights="owner_supplied",
+                    source_type="owner_upload", source_id=f"zx7-surround-{label}",
+                    evidence="Original synthetic 5.1 movie measured on physical bytes",
+                    owner_or_generator="source-owner")
+                sound_input = root / f"{label}-loudness-input.json"
+                sound_input.write_text(json.dumps({"media": {
+                    "source": movie.name, "asset_id": attested["asset_id"],
+                    "attestation_id": attested["attestation_id"]}}), encoding="utf8")
+                measured = inspect_original_loudness(sound_input, root, root / "vault")
+                self.assertTrue(measured["source_original_audio_stream_verified"])
+                self.assertTrue(measured["meter_analyzed_exact_private_attested_cas"])
+                self.assertTrue(measured["lra_short_film_less_than_60_seconds_unreliable"])
+                sound_meters.append({
+                    "sha256": measured["sha256"],
+                    "integrated_lufs": measured["integrated_loudness_lufs"],
+                    "true_peak_dbfs": measured["measured_true_peak_dbfs"],
+                    "lra_short_film_unreliable": True,
+                    "no_mastering_target_imposed": True})
             # Public CI uses synthetic authored material only; all bytes
             # exist for independent playback/review rather than a green log.
             if os.environ.get("ZX7_SURROUND_PROOF_DIR"):
@@ -194,6 +218,7 @@ class PhysicalSurroundProductionTests(unittest.TestCase):
                     "revised_movie_sha256": revised_proof["sha256"],
                     "physical_speakers": list(_SURROUND_SPEAKERS_TEST),
                     "before_rms": before, "after_rms": after,
+                    "actual_loudness_evidence": sound_meters,
                     "native_original_and_revision_editable": True,
                     "source_custody_unchanged": True,
                     "genuine_model_creativity_verified": False,
