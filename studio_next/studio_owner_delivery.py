@@ -103,6 +103,28 @@ def _verify_staged_sources(root, session, ledger):
     return len(ledger)
 
 
+def validate_owner_delivery_target(target):
+    """Validate an explicit operator target before any neural or native write.
+
+    Target controls physical delivery, not the Brain's aesthetic decisions.
+    Missing target is permitted for exploratory runs but never counted as
+    independently verified brief/profile conformance.
+    """
+    if target is None:
+        return None
+    if type(target) is not dict or set(target) != {
+            "width", "height", "duration_seconds"}:
+        raise ValueError("Owner delivery target needs width, height and duration_seconds")
+    width, height, seconds = (target[k] for k in (
+        "width", "height", "duration_seconds"))
+    if (type(width) is not int or not 1 <= width <= 8192 or
+            type(height) is not int or not 1 <= height <= 8192 or
+            type(seconds) not in (int, float) or not math.isfinite(seconds) or
+            not 0 < seconds <= 300):
+        raise ValueError("Owner delivery target must have finite positive dimensions and duration")
+    return {"width": width, "height": height, "duration_seconds": float(seconds)}
+
+
 def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_seconds=900):
     """Re-decode both immutable-in-session MP4s and locate the matching native project.
 
@@ -130,6 +152,9 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
             not isinstance(required, list) or
             REVIEWED_AV_PAIR not in required):
         raise ValueError("No completed host-required audiovisual review evidence")
+    # This is owner-declared state, not a model-authored verifier target.
+    # An omitted target cannot establish brief-compliant width/duration.
+    owner_target = validate_owner_delivery_target(status.get("owner_delivery_target"))
     pair = result.get("reviewed_native_audiovisual_pair")
     if not isinstance(pair, list) or len(pair) != 2:
         raise ValueError("No exact two-export audiovisual review pair")
@@ -183,7 +208,8 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         if before[-1] != binding["export_sha256"]:
             raise ValueError("Physical output differs from reviewed native receipt")
         inspection = verify_native_editor_export(
-            str(item), policy=policy, expected={"require_audio": True},
+            str(item), policy=policy,
+            expected={"require_audio": True, **(owner_target or {})},
             max_seconds=max_decode_seconds)
         after = native_export_file_identity(item)
         if before != after or inspection["native_export_sha256"] != binding["export_sha256"]:
@@ -258,6 +284,8 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
     return {
         "schema": 1, "kind": "zx7_owner_native_av_delivery_check",
         "session_id": session_id, "physical_audiovisual_pair_verified": True,
+        "owner_delivery_profile_verified": owner_target is not None,
+        "owner_delivery_target": owner_target,
         "source_staging_sha256_verified": True, "owner_stated_original_count": original_count,
         "owner_rights_independently_verified": False,
         "original_media_visible_in_exports_proven": False,

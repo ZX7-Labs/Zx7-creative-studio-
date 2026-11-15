@@ -311,7 +311,7 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                   allow_cloud_audio_diagnostics=False, allow_cloud_original_wav_upload=False,
                   allow_public_research=False, searxng_url=None,
                   xvfb_binary=None, display=None,
-                  enable_installed_body=False):
+                  enable_installed_body=False, delivery_target=None):
     from .native_editor_session import build_parser, run_native_session
     root, config, grants = load_workspace(path)
     if not isinstance(brief, str) or not 1 <= len(brief.strip()) <= 24000:
@@ -324,6 +324,10 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
         raise ValueError("Model turn budget must be between 1 and 128")
     if type(enable_installed_body) is not bool:
         raise ValueError("Installed BODY tools require an explicit host boolean")
+    if delivery_target is not None and reviewed_av_revision is not True:
+        raise ValueError("Owner delivery target requires reviewed audiovisual mode")
+    from .studio_owner_delivery import validate_owner_delivery_target
+    delivery_target = validate_owner_delivery_target(delivery_target)
     if enable_installed_body and config["provider"] != "local":
         raise ValueError("Installed full creative BODY tools are local-only; no unreviewed cloud source exposure")
     if reviewed_revision and reviewed_av_revision:
@@ -388,6 +392,7 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
             status = {"session_id": sid, "state": "preparing", "provider": config["provider"],
                       "model_id": config["model_id"], "artistic_quality_approved": False,
                       "render_snapshots_required": bool(snapshot_av),
+                      "owner_delivery_target": delivery_target,
                       "outputs_directory": str(locations["outputs"]),
                       "projects_directory": str(root / "projects"),
                       "native_journal": str(session / "native-journal.jsonl")}
@@ -402,6 +407,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 owner_context = {"authorized_sources": ledger,
                     "existing_native_project": str(project_path) if project_path else None,
                     "projects_root": str(root / "projects"), "outputs_root": str(locations["outputs"])}
+                if delivery_target is not None:
+                    owner_context["owner_delivery_target"] = delivery_target
                 text = brief.strip() + "\n\nHost-authorized workspace facts (not an editing plan):\n" + json.dumps(owner_context, ensure_ascii=False)
                 if len(text) > 32000:
                     raise ValueError("Brief and asset context exceed the native session budget")
@@ -554,6 +561,12 @@ def main(argv=None):
                      help="Separately allow NVIDIA to see numerical sound diagnostics (never raw WAV)")
     run.add_argument("--allow-cloud-original-wav-upload", action="store_true",
                      help="Independently consent to original WAV sent to exact NVIDIA Omni model")
+    run.add_argument("--target-width", type=int,
+                     help="Owner-required decoded video width; requires reviewed A/V mode")
+    run.add_argument("--target-height", type=int,
+                     help="Owner-required decoded video height; requires reviewed A/V mode")
+    run.add_argument("--target-duration-seconds", type=float,
+                     help="Owner-required physical runtime; exact decoder tolerance is 0.12s")
     run.add_argument("--xvfb-binary")
     run.add_argument("--display")
     args = p.parse_args(argv)
@@ -583,8 +596,15 @@ def main(argv=None):
             else:
                 with args.brief_file.open(encoding="utf-8") as stream:
                     brief = stream.read(24001)
+            delivery_target = (
+                {"width": args.target_width, "height": args.target_height,
+                 "duration_seconds": args.target_duration_seconds}
+                if any(value is not None for value in (
+                    args.target_width, args.target_height, args.target_duration_seconds))
+                else None)
             result = run_workspace(args.workspace, brief=brief, assets=args.asset, rights=args.rights,
                 project=args.project, max_turns=args.max_turns, model_timeout=args.model_timeout,
+                delivery_target=delivery_target,
                 allow_cloud_image_upload=args.allow_cloud_image_upload,
                 allow_public_research=args.allow_public_research, searxng_url=args.searxng_url,
                 reviewed_revision=args.reviewed_revision,
