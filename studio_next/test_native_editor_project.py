@@ -79,6 +79,24 @@ class RenderSnapshotTests(unittest.TestCase):
             self.assertIn("selected-timeline",
                           (selected / "project.comfystudio").read_text())
 
+            # Positive control: the exact selected native source is accepted,
+            # and the render snapshot is an immutable copy, not a replacement.
+            selected_saved = (selected / "project.comfystudio").read_bytes()
+            same_project = {**response, "projectPath": str(selected)}
+            correct_scope = {
+                DESTINATION_FIELD: "c" * 64,
+                SCOPE_FIELD: timeline_scope_digest(str(selected), "selected-timeline"),
+            }
+            snapshot_sha, _ = capture_render_project(
+                projects, snapshots, same_project, correct_scope,
+                (str(selected), "v1"), expected_project=selected)
+            self.assertEqual(snapshot_sha, hashlib.sha256(selected_saved).hexdigest())
+            self.assertEqual(
+                (snapshots / ("c" * 64 + ".comfystudio")).read_bytes(),
+                selected_saved)
+            self.assertEqual((selected / "project.comfystudio").read_bytes(),
+                             selected_saved)
+
 
 class SelectedProjectTests(unittest.TestCase):
     def setUp(self):
