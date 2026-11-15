@@ -361,6 +361,10 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
     # Existing projects are never silently treated as an empty fresh trial.
     fresh_av = (reviewed_av_revision and project_path is None and
                 not any((root / "projects").iterdir()))
+    # Both a truly fresh project and an explicitly owner-selected existing
+    # project can retain render-bound editable source snapshots. A new project
+    # in a populated root is not implicitly a fresh, source-bound trial.
+    snapshot_av = reviewed_av_revision and (fresh_av or project_path is not None)
     # Check before creating a run or copying media. No inference on bad setup.
     setup = doctor(root)
     if not setup["ready"]:
@@ -383,7 +387,7 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 directory.mkdir(mode=0o700)
             status = {"session_id": sid, "state": "preparing", "provider": config["provider"],
                       "model_id": config["model_id"], "artistic_quality_approved": False,
-                      "render_snapshots_required": bool(fresh_av),
+                      "render_snapshots_required": bool(snapshot_av),
                       "outputs_directory": str(locations["outputs"]),
                       "projects_directory": str(root / "projects"),
                       "native_journal": str(session / "native-journal.jsonl")}
@@ -412,7 +416,9 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                         ("reviewed-av-revision" if reviewed_av_revision else
                          "reviewed-revision" if reviewed_revision else "export")]
                 if fresh_av:
-                    argv += ["--fresh-trial-project", "--record-av-project-snapshots"]
+                    argv.append("--fresh-trial-project")
+                if snapshot_av:
+                    argv.append("--record-av-project-snapshots")
                 if allow_cloud_audio_diagnostics:
                     argv.append("--allow-cloud-audio-diagnostics")
                 if allow_cloud_original_wav_upload:
