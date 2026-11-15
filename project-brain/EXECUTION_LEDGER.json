@@ -314,7 +314,7 @@
       "run": 42711402879,
       "job": 129481639892,
       "details": "Qwen3.5 4B 46 decisions; 9068 vs 8192 context and final HTTP 400; wrong-profile mostly-black output; no qualifying reviewed revision",
-      "source_or_fix": "PR #311 merged the improved native prompt evidence dedup (ported from still-open historical #289); no accepted comparable real neural retest",
+      "source_or_fix": "PR #289 open/unmerged offline payload dedup; no accepted equivalent neural retest",
       "root_confidence": "context-overflow supported; entire creative failure not fully attributed",
       "post_fix_real_model_retest": "NOT_PASSED",
       "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879",
@@ -454,7 +454,7 @@
       "number": 289,
       "head": "6a2e0344f3e49c02249dcdb14c572277601bc12b",
       "status": "OPEN_NON_DRAFT",
-      "meaning": "Historical Qwen dedup PR: superseded by merged #311 with stricter source-safe guards; do not merge stale branch; no real model success",
+      "meaning": "Qwen context dedup offline fix; no real model success",
       "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/289"
     },
     {
@@ -523,6 +523,6 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "PR #311 already merged native context compaction; do not recreate/merge #289. Investigate source-current genuine model autonomy, conformant audiovisual export and semantic observe/revise blockers without repeating passed physical fixtures. Separate authorization needed for paid or private-model inference."
+    "next_action": "Inspect PR #289 overlap and source-current real-model controller/observation path, then remove the highest-value actual G1 acceptance blocker without repeating existing physical fixtures. Separate authorization needed for paid or private-model inference."
   }
 }
