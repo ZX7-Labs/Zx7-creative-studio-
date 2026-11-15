@@ -191,5 +191,23 @@ class ProjectBrainContractTests(unittest.TestCase):
         self.assertNotIn("Authoritative *planning consolidation candidate*", master[:850])
 
 
+
+    def test_current_state_is_bound_to_exact_mutable_ledger_blob(self):
+        # No private data or model calls: this is only a stale-document guard.
+        self.assertNotIn("state_ledger_content_mismatch", _module.validate(_here))
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["snapshot"]["notes"] += " synthetic-state-drift"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("state_ledger_content_mismatch", _module.validate(root))
+            state = root / "STATE.md"
+            state.write_text(state.read_text(encoding="utf-8").replace(
+                "LEDGER_GIT_BLOB=", "LEDGER_BINDING_REMOVED="
+            ), encoding="utf-8")
+            self.assertIn("state_missing_ledger_binding", _module.validate(root))
+
+
 if __name__ == "__main__":
     unittest.main()

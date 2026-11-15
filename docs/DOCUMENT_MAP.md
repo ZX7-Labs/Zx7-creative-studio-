@@ -67,7 +67,7 @@
 ## Operational update and no-duplication protocol
 
 - For a new behavior requirement: check fixed product authority → make an explicit design/owner decision only if needed → update blueprint. **Do not rederive a 90 KB master plan per chat.**
-- For a completed code/test result: attach real source SHA, changed project/source revision, exact PR/run/job and physical outcome; update JSON ledger + STATE and relevant EVIDENCE/RISKS. A merged PR is *implementation*, not professional acceptance.
+- For a completed code/test result: attach real source SHA, changed project/source revision, exact PR/run/job and physical outcome; update JSON ledger + STATE (including exact `LEDGER_GIT_BLOB` stamp) and relevant EVIDENCE/RISKS. A merged PR is *implementation*, not professional acceptance.
 - For a failure: preserve original logs/artifact digest and source URL, exact observed symptom/stack, root cause confidence, proposed fix, whether fix merged, and whether a comparable *real neural* retest passed. Keep source-level regressions separate from model proficiency.
 - For a status change: define what tier passed: `source_present`, `offline_tested`, `physical_native_tested`, `real_model_trial`, `independently_accepted`; never infer one from another. An acceptance gate is NOT complete while a required tier is missing.
 - Before starting: query exact live main, open PR overlap, latest relevant positive AND negative records. Resume the smallest blocked end-to-end owner outcome; no speculative “make CI green” work.

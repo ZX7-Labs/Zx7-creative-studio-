@@ -2,6 +2,8 @@
 
 > **Dated source inspection baseline, not live `main`:** 2026-11-15, `11f905245a7b6cf27ecf603300342e392bab96f7` (pre-documentation reorganization). #351 subsequently merged documentation at `0b52e4d658fd0fe519b73472b07851e4d839e14d`; no product runtime acceptance changed. **Refresh actual GitHub main, relevant PR/run and installed native tool grants before acting.** This compact human checkpoint and the JSON ledger describe the same dated engineering reality, not a permanently up-to-date status. Previous long STATE is [archived verbatim](STATE-2026-11-15-ARCHIVE.md); negative/positive evidence remains in [EVIDENCE/INDEX](EVIDENCE/INDEX.md).
 
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=a557d97473e88cb5a89c460d7a4eca484d4e475b` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+
 ## Product authority — do not replan
 
 - **Implementation-facing fixed blueprint:** [docs/BUILD_BLUEPRINT.md](../docs/BUILD_BLUEPRINT.md). It consolidates the [original A–L contract](../CAPABILITIES.md), [engineering standards](../ENGINEERING_STANDARD.md), [owner BRIEF](BRIEF.md) and [Master Plan](../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) without superseding them. Creative medium/fabric *capabilities* are a fixed intended result; proposed universal CSF architecture is an unproven G2 route.

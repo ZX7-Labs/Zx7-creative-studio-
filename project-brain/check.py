@@ -1,5 +1,6 @@
 """Offline, source-only canonical project brain contract. No model/API/network calls."""
 from __future__ import annotations
+import hashlib
 import json
 import pathlib
 import re
@@ -121,6 +122,19 @@ def validate(root: pathlib.Path = ROOT) -> list[str]:
             errors.append("state_lacks_exact_source_sha")
         if "Refresh" not in text and "refresh" not in text:
             errors.append("state_lacks_live_refresh_warning")
+        # This binds the human snapshot to the exact JSON bytes, preventing
+        # accidental divergence without claiming source or reviewer validity.
+        match = re.search(r"LEDGER_GIT_BLOB=([0-9a-f]{40})", text)
+        ledger_file = root / "EXECUTION_LEDGER.json"
+        if not match:
+            errors.append("state_missing_ledger_binding")
+        elif ledger_file.is_file() and not ledger_file.is_symlink():
+            raw = ledger_file.read_bytes()
+            git_blob_sha = hashlib.sha1(
+                b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw
+            ).hexdigest()
+            if match.group(1) != git_blob_sha:
+                errors.append("state_ledger_content_mismatch")
 
     # Structure only, NOT a certification of factual/source/semantic correctness.
     # Verify source-linked evidence before claiming acceptance; never block
@@ -182,9 +196,11 @@ def validate(root: pathlib.Path = ROOT) -> list[str]:
                             errors.append("unreviewed_execution_ledger_neural_success")
                             break
                 gates = ledger.get("open_gates", [])
-                g1 = next((g for g in gates
-                           if isinstance(g, dict) and g.get("id") == "G1-AUTONOMY"), None) \
+                g1 = (
+                    next((g for g in gates
+                          if isinstance(g, dict) and g.get("id") == "G1-AUTONOMY"), None)
                     if isinstance(gates, list) else None
+                )
                 if (g1 is None or
                         g1.get("state") not in ("OPEN_CRITICAL", "IN_PROGRESS", "ACCEPTED") or
                         (g1.get("state") == "ACCEPTED" and
