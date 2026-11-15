@@ -5,11 +5,6 @@ on:
       - "project-brain/**"
       - ".github/workflows/zx7-project-brain.yml"
       - "AGENTS.md"
-      - "CAPABILITIES.md"
-      - "ENGINEERING_STANDARD.md"
-      - "docs/BUILD_BLUEPRINT.md"
-      - "docs/DOCUMENT_MAP.md"
-      - "docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md"
       - "docs/continuity/**"
   push:
     branches: [main]
@@ -17,11 +12,6 @@ on:
       - "project-brain/**"
       - ".github/workflows/zx7-project-brain.yml"
       - "AGENTS.md"
-      - "CAPABILITIES.md"
-      - "ENGINEERING_STANDARD.md"
-      - "docs/BUILD_BLUEPRINT.md"
-      - "docs/DOCUMENT_MAP.md"
-      - "docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md"
       - "docs/continuity/**"
 permissions:
   contents: read
