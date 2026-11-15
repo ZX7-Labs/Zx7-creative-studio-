@@ -143,6 +143,22 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "render snapshot"):
             self.verify()
 
+    def test_owner_rejects_substituted_first_snapshot_even_if_still_a_valid_editable_revision(self):
+        self.assertTrue(self.verify()["saved_native_matches_last_render_snapshot"])
+        first = self.snapshots / (self.pair[0]["destination_sha256"] + ".comfystudio")
+        impostor = {
+            "currentTimelineId": "timeline-1",
+            "timelines": [{"id": "timeline-1", "clips": [
+                {"id": "unrelated", "trackId": "video-track",
+                 "name": "substituted-but-well-formed-previous-document"}]}],
+        }
+        first.write_text(json.dumps(impostor))
+        # This still has a populated correct-timeline document and differs
+        # from the final saved native project. Merely testing inequality is
+        # not proof that the first render used these exact saved bytes.
+        with self.assertRaisesRegex(ValueError, "render snapshot.*digest|digest.*render snapshot"):
+            self.verify()
+
     def test_owner_rejects_noncompleted_or_unreviewed_sessions(self):
         for update in (
             {"state": "running"}, {"state": "needs_attention"},
