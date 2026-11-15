@@ -103,6 +103,80 @@ def _verify_staged_sources(root, session, ledger):
     return len(ledger)
 
 
+def _verify_native_project_media_closure(project: Path, doc: dict):
+    """Rehash referenced physical native sources, not just a saved JSON receipt.
+
+    This is an owner-local read-only availability/integrity check at verify
+    time. It cannot authenticate the media's creative origin or prove that
+    those exact bytes contributed to an earlier render. Keep those separate.
+    """
+    inventory = doc.get("assets")
+    if not isinstance(inventory, list) or len(inventory) > _MAX_SCAN_ENTRIES:
+        raise ValueError("Native project source media inventory is missing or excessive")
+    sources = {}
+    for asset in inventory:
+        if not isinstance(asset, dict):
+            raise ValueError("Native project media entry is malformed")
+        ident = asset.get("id")
+        if type(ident) is not str or not ident or len(ident) > 256 or ident in sources:
+            raise ValueError("Native project has ambiguous media source identity")
+        sources[ident] = asset
+    active = next(
+        t for t in doc["timelines"] if isinstance(t, dict)
+        and t.get("id") == doc["currentTimelineId"])
+    referenced = set()
+    for clip in active["clips"]:
+        if not isinstance(clip, dict):
+            raise ValueError("Native timeline clip is malformed")
+        source_id = clip.get("assetId")
+        if source_id is None:
+            if clip.get("type") in ("video", "audio", "image"):
+                raise ValueError("Native media clip is missing its source identity")
+            continue
+        if type(source_id) is not str or source_id not in sources:
+            raise ValueError("Native timeline references an absent source media identity")
+        referenced.add(source_id)
+    # All imported inventory matters to an editable project, even if a clip
+    # is currently disabled/unused: omission would silently break human edits.
+    observation = hashlib.sha256()
+    total_bytes = 0
+    for source_id in sorted(sources):
+        asset = sources[source_id]
+        named, expected_bytes = asset.get("path"), asset.get("size")
+        if (type(named) is not str or not 1 <= len(named) <= 4096 or
+                "\\" in named or "\x00" in named or
+                type(expected_bytes) is not int or expected_bytes <= 0):
+            raise ValueError("Native media file path or byte count is invalid")
+        parts = named.split("/")
+        if (len(parts) < 3 or parts[0] != "assets" or
+                any(part in ("", ".", "..") for part in parts)):
+            raise ValueError("Native media file must remain within its project assets")
+        candidate = project.joinpath(*parts)
+        if (candidate.is_symlink() or
+                any(candidate.parents[i].is_symlink() for i in range(len(parts))) or
+                not candidate.is_file()):
+            raise ValueError("Native project source media is missing or linked")
+        actual = candidate.stat(follow_symlinks=False)
+        if not stat.S_ISREG(actual.st_mode) or actual.st_size != expected_bytes:
+            raise ValueError("Native project source media bytes differ from saved inventory")
+        current_sha = _sha256(candidate)
+        observation.update(source_id.encode("utf-8"))
+        observation.update(b"\x00")
+        observation.update(named.encode("utf-8"))
+        observation.update(b"\x00")
+        observation.update(current_sha.encode("ascii"))
+        observation.update(b"\n")
+        total_bytes += expected_bytes
+    return {
+        "native_media_source_closure_verified": True,
+        "native_media_asset_inventory_count": len(sources),
+        "native_media_used_asset_count": len(referenced),
+        "native_media_bytes_observed": total_bytes,
+        "native_media_observation_sha256": observation.hexdigest(),
+        "native_media_origin_or_export_contribution_proven": False,
+    }
+
+
 def validate_owner_delivery_target(target):
     """Validate an explicit operator target before any neural or native write.
 
@@ -250,6 +324,9 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
     if len(matches) != 1:
         raise ValueError("No unique editable saved project matches the reviewed timeline")
     saved, timeline_id, saved_sha = matches[0]
+    native_media_observation = _verify_native_project_media_closure(
+        saved.parent, document=matches[0][3] if len(matches[0]) == 4 else
+        _bounded_native_project(saved)[0])
     snapshots_required = status.get("render_snapshots_required", False)
     if type(snapshots_required) is not bool:
         raise ValueError("Malformed owner render snapshot requirement")
@@ -283,6 +360,7 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         snapshot_bound = True
     return {
         "schema": 1, "kind": "zx7_owner_native_av_delivery_check",
+        **native_media_observation,
         "session_id": session_id, "physical_audiovisual_pair_verified": True,
         "owner_delivery_profile_verified": owner_target is not None,
         "owner_delivery_target": owner_target,
