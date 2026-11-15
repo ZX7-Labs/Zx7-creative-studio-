@@ -2527,10 +2527,26 @@ async def exercise(options):
                             {"timeSeconds": 0.75, "label": "splice beat"},
                             {"timeSeconds": 1.25, "label": "dialogue review"},
                         ], "previewOnly": False})
-                    before_cues = await call(edit_session, "get_timeline", {"includeClips": True})
-                    cues = {m["label"]: m for m in before_cues["markers"]}
-                    assert set(cues) == {"intro beat", "remove with cut",
-                                         "splice beat", "dialogue review"}
+                    # MCP mutations may become visible in the editor's
+                    # source snapshot after the tool result: observe fresh
+                    # native state rather than trusting one immediate read.
+                    expected_labels = {"intro beat", "remove with cut",
+                                       "splice beat", "dialogue review"}
+                    deadline = time.monotonic() + 20
+                    cues = {}
+                    while time.monotonic() < deadline:
+                        before_cues = await call(edit_session, "get_timeline", {
+                            "includeClips": True})
+                        cues = {m["label"]: m for m in before_cues["markers"]}
+                        if set(cues) == expected_labels:
+                            break
+                        await asyncio.sleep(.15)
+                    else:
+                        raise AssertionError(
+                            "New native marker insertion failed to converge: "
+                            f"expected {sorted(expected_labels)}, saw "
+                            f"{sorted(cues)}, original marker IDs "
+                            f"{[m.get('id') for m in before_cues['markers']]}")
                     assert len({m["id"] for m in cues.values()}) == 4
                     saved_before = await call(edit_session, "save_project", {
                         "previewOnly": False})
