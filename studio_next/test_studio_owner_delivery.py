@@ -78,16 +78,19 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
             for path in self.media]
         self.snapshots = self.workspace / "state" / self.sid / "av-project-snapshots"
         self.snapshots.mkdir(parents=True, mode=0o700)
+        self.snapshot_hashes = []
         for binding, doc in zip(self.pair, (self.initial_doc, self.final_doc), strict=True):
-            (self.snapshots / (binding["destination_sha256"] + ".comfystudio")).write_text(
-                json.dumps(doc))
+            raw = json.dumps(doc)
+            (self.snapshots / (binding["destination_sha256"] + ".comfystudio")).write_text(raw)
+            self.snapshot_hashes.append(hashlib.sha256(raw.encode("utf-8")).hexdigest())
         self.status = {
             "session_id": self.sid, "state": "completed",
             "render_snapshots_required": True,
             "result": {"status": "model_finished_unverified",
                        "evaluation_evidence_satisfied": True,
                        "required_evaluation_evidence": [REVIEWED_AV_PAIR],
-                       "reviewed_native_audiovisual_pair": self.pair},
+                       "reviewed_native_audiovisual_pair": self.pair,
+                       "reviewed_native_snapshot_sha256": self.snapshot_hashes},
         }
         studio_cli._write_status(self.session, self.status)
 
@@ -133,11 +136,11 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         self.assertTrue(report["saved_native_matches_last_render_snapshot"])
         final_snapshot = self.snapshots / (self.pair[1]["destination_sha256"] + ".comfystudio")
         final_snapshot.write_text(json.dumps(self.initial_doc))
-        with self.assertRaisesRegex(ValueError, "editable revision"):
+        with self.assertRaisesRegex(ValueError, "render snapshot digest"):
             self.verify()
         final_snapshot.write_text(json.dumps({
             **self.final_doc, "unverified_post_render_edit": True}))
-        with self.assertRaisesRegex(ValueError, "differs from the reviewed render"):
+        with self.assertRaisesRegex(ValueError, "render snapshot digest"):
             self.verify()
         final_snapshot.unlink()
         with self.assertRaisesRegex(ValueError, "render snapshot"):
@@ -158,6 +161,20 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         # not proof that the first render used these exact saved bytes.
         with self.assertRaisesRegex(ValueError, "render snapshot.*digest|digest.*render snapshot"):
             self.verify()
+
+    def test_owner_rejects_missing_or_forged_render_time_snapshot_hashes(self):
+        for hashes in (None, [], ["a" * 64], ["a" * 64, "b" * 64],
+                       [self.snapshot_hashes[0], "broken"]):
+            with self.subTest(hashes=hashes):
+                changed = {**self.status["result"]}
+                if hashes is None:
+                    changed.pop("reviewed_native_snapshot_sha256", None)
+                else:
+                    changed["reviewed_native_snapshot_sha256"] = hashes
+                studio_cli._write_status(self.session,
+                                         {**self.status, "result": changed})
+                with self.assertRaisesRegex(ValueError, "render snapshot digest"):
+                    self.verify()
 
     def test_owner_rejects_noncompleted_or_unreviewed_sessions(self):
         for update in (
