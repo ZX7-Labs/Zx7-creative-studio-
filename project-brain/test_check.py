@@ -1,4 +1,5 @@
 """Negative and positive tests for the repository-only continuity contract."""
+import json
 import pathlib
 import shutil
 import tempfile
@@ -16,8 +17,8 @@ def _copy_scope_fixture(temp):
     shutil.copytree(_here, root, ignore=shutil.ignore_patterns("__pycache__"))
     docs = root.parent / "docs"
     docs.mkdir()
-    shutil.copyfile(_here.parent / "docs" / "ZX7_CREATIVE_STUDIO_MASTER_PLAN.md",
-                    docs / "ZX7_CREATIVE_STUDIO_MASTER_PLAN.md")
+    for document in ("ZX7_CREATIVE_STUDIO_MASTER_PLAN.md", "BUILD_BLUEPRINT.md", "DOCUMENT_MAP.md"):
+        shutil.copyfile(_here.parent / "docs" / document, docs / document)
     return root
 
 
@@ -76,6 +77,67 @@ class ProjectBrainContractTests(unittest.TestCase):
                           _module.validate(root))
             plan.unlink()
             self.assertIn("missing_or_symlink: ../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md",
+                          _module.validate(root))
+
+
+    def test_ledger_json_invalid_source_and_unearned_field_acceptance_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            original = path.read_text(encoding="utf-8")
+            path.write_text("{ definitely not json", encoding="utf-8")
+            self.assertIn("invalid_execution_ledger_json", _module.validate(root))
+            data = json.loads(original)
+            data["domains"][0]["independent_field_acceptance"] = "ACCEPTED"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("unsupported_execution_ledger_field_acceptance",
+                          _module.validate(root))
+
+    def test_deleted_domain_duplicate_failures_and_false_neural_pass_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["domains"] = data["domains"][:-1]
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("invalid_execution_ledger_domain_coverage",
+                          _module.validate(root))
+            data = json.loads((_here / "EXECUTION_LEDGER.json").read_text(encoding="utf-8"))
+            data["failures"][1]["id"] = data["failures"][0]["id"]
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("invalid_execution_ledger_failure_ids",
+                          _module.validate(root))
+            data["failures"][1]["id"] = "F-REAL-002"
+            data["failures"][0]["post_fix_real_model_retest"] = "PASSED"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("unreviewed_execution_ledger_neural_success",
+                          _module.validate(root))
+
+    def test_fixed_fabric_boundary_and_full_g1_plan_cannot_disappear_silently(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            blueprint = root.parent / "docs" / "BUILD_BLUEPRINT.md"
+            original = blueprint.read_text(encoding="utf-8")
+            self.assertIn("CANDIDATE / G2", original)
+            blueprint.write_text(original.replace("CANDIDATE / G2", "FIXED / G2", 1),
+                                 encoding="utf-8")
+            self.assertIn("invalid_blueprint_fixed_vs_hypothesis_boundary",
+                          _module.validate(root))
+            blueprint.write_text(original.replace("G1-07", "G1-XX", 1), encoding="utf-8")
+            self.assertIn("invalid_blueprint_fixed_vs_hypothesis_boundary",
+                          _module.validate(root))
+
+    def test_ledger_g1_priorities_and_failure_provenance_required(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["open_gates"][0]["state"] = "ACCEPTED"
+            data["failures"][0]["run_url"] = "https://invalid.example"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("invalid_execution_ledger_g1_priority",
+                          _module.validate(root))
+            self.assertIn("invalid_execution_ledger_failure_evidence",
                           _module.validate(root))
 
 
