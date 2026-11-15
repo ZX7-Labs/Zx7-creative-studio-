@@ -6,7 +6,7 @@ diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
  import { planLossAwareNativeSplit } from '../utils/zx7-loss-aware-split.mjs'
 +import { planLossAwareNativeExtract } from '../utils/zx7-loss-aware-extract.mjs'
  import { getProjectAssetReferences } from '../utils/projectAssetReferences.mjs'
-@@ -3451,2 +3452,57 @@
+@@ -3451,2 +3452,64 @@
 -function handleExtractRange(payload = {}) {
 +function handleExtractRange(payload = {}) {
 +  // The legacy path below executed separate split/remove/move store mutations.
@@ -39,6 +39,8 @@ diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
 +        splitAtEnd: planned.splitAtEnd.map(id => ({ id })),
 +        removeCount: planned.removedClipIds.length,
 +        shiftCount: planned.shiftedClipIds.length,
++        markerRemoveCount: planned.removedMarkerIds.length,
++        markerShiftCount: planned.shiftedMarkerIds.length,
 +      },
 +      warnings: [],
 +    }
@@ -46,6 +48,9 @@ diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
 +  state.saveToHistory?.()
 +  useTimelineStore.setState(() => ({
 +    clips: planned.clips,
++    markers: planned.markers,
++    selectedMarkerId: planned.removedMarkerIds.includes(state.selectedMarkerId)
++      ? null : state.selectedMarkerId,
 +    clipCounter: planned.clipCounter,
 +    selectedClipIds: planned.selectedClipIds,
 +  }))
@@ -57,6 +62,8 @@ diff --git a/src/services/mcpActions.js b/src/services/mcpActions.js
 +    ripple: planned.ripple,
 +    removedClipIds: planned.removedClipIds,
 +    shiftedClipCount: planned.shiftedClipIds.length,
++    removedMarkerIds: planned.removedMarkerIds,
++    shiftedMarkerCount: planned.shiftedMarkerIds.length,
 +    warnings: [],
 +  }
 +}
