@@ -1,7 +1,7 @@
 """The A/V release gate must keep review and revision on the same renders."""
 import unittest
 
-from studio_next.native_render_evidence import reviewed_render_pair
+from studio_next.native_render_evidence import reviewed_render_pair, reviewed_native_snapshot_hashes
 
 
 class ReviewedAVPairTests(unittest.TestCase):
@@ -64,3 +64,59 @@ class ReviewedAVPairTests(unittest.TestCase):
         events = self.events()
         events.append({**events[-1], "kind": "native_read_tool_reported_error"})
         self.assertIsNone(reviewed_render_pair(events, {"update_text_clip"}, audiovisual=True))
+
+
+class RenderTimeNativeSourceCustodyTests(unittest.TestCase):
+    """Only host-observed render receipts may identify the paired saved sources."""
+
+    def setUp(self):
+        self.pair = [
+            {"destination_sha256": "1" * 64, "export_sha256": "a" * 64,
+             "timeline_sha256": "f" * 64},
+            {"destination_sha256": "2" * 64, "export_sha256": "b" * 64,
+             "timeline_sha256": "f" * 64},
+        ]
+        self.events = [
+            {"kind": "native_tool_result", "tool": "export_timeline",
+             "host_application_write_acknowledged": True,
+             "native_export_destination_sha256": b["destination_sha256"],
+             "native_export_timeline_sha256": b["timeline_sha256"],
+             "native_render_saved_project_sha256": digest,
+             "native_render_options_sha256": "e" * 64}
+            for b, digest in zip(self.pair, ("3" * 64, "4" * 64), strict=True)
+        ]
+
+    def test_exact_original_and_revised_native_snapshot_digests_are_returned(self):
+        self.assertEqual(
+            reviewed_native_snapshot_hashes(self.events, self.pair),
+            ["3" * 64, "4" * 64])
+
+    def test_missing_or_forged_render_capture_fails_closed(self):
+        self.assertIsNone(reviewed_native_snapshot_hashes(self.events[:-1], self.pair))
+        for field, changed in (
+            ("native_export_timeline_sha256", "5" * 64),
+            ("native_render_saved_project_sha256", None),
+            ("native_render_saved_project_sha256", "bad"),
+            ("native_render_options_sha256", None),
+            ("host_application_write_acknowledged", False),
+        ):
+            with self.subTest(field=field):
+                altered = [dict(event) for event in self.events]
+                altered[0][field] = changed
+                self.assertIsNone(reviewed_native_snapshot_hashes(altered, self.pair))
+        forged = [dict(e) for e in self.events]
+        forged[1]["native_render_saved_project_sha256"] = "3" * 64
+        self.assertIsNone(reviewed_native_snapshot_hashes(forged, self.pair))
+
+    def test_later_render_without_host_source_receipt_invalidates_old_snapshot(self):
+        after = dict(self.events[0])
+        after.pop("native_render_saved_project_sha256")
+        self.assertIsNone(
+            reviewed_native_snapshot_hashes(self.events + [after], self.pair))
+
+    def test_wrong_pair_shape_is_not_treated_as_success(self):
+        for pair in (None, [], self.pair[:1],
+                     [{**self.pair[0], "timeline_sha256": "9" * 64}, self.pair[1]],
+                     [{**self.pair[0], "destination_sha256": "missing"}, self.pair[1]]):
+            with self.subTest(pair=pair):
+                self.assertIsNone(reviewed_native_snapshot_hashes(self.events, pair))
