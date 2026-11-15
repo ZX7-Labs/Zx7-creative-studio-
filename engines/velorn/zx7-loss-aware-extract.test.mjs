@@ -133,7 +133,7 @@ test('creative state that cannot be preserved fails without any replacement clip
     [[audio({ fadeIn: 3 })], {}],
     [[source()], { tracks: [{ ...tracks[0], locked: true }, tracks[1]] }],
     [[source()], { transitions: [{ id: 't', clipAId: 'clip-1' }] }],
-    [[source()], { markers: [{ id: 'beat', time: 7 }] }],
+    [[source()], { markers: [{ id: 'beat', time: 7 }], trackIds: ['video-1'] }],
     [[linked, audio({ metadata: { linkedVideoClipId: 'clip-1' }, linkGroupId: 'a' })],
       { trackIds: ['video-1'] }],
     [[source()], { startSeconds: 4, endSeconds: 2 }],
@@ -174,4 +174,65 @@ test('ripple does not invent a future temporal effect phase', () => {
   const plan = extract([source(), later])
   assert.equal(plan.ok, false)
   assert.equal(plan.clips, undefined)
+})
+
+test('full-track audio/video ripple retimes surviving native beat and review markers atomically', () => {
+  const markers = [
+    { id: 'marker-1', time: 1, label: 'opening', color: '#f5c451' },
+    { id: 'marker-2', time: 2.5, label: 'cut this beat', color: '#f5c451' },
+    { id: 'marker-3', time: 4, label: 'on splice', color: '#01ffab' },
+    { id: 'marker-4', time: 7, label: 'final cue', color: '#123456' },
+  ]
+  const original = structuredClone(markers)
+  const plan = extract([source(), audio()], { markers })
+  assert.equal(plan.ok, true, plan.reason)
+  assert.deepEqual(markers, original, 'native source markers must remain immutable until one commit')
+  assert.deepEqual(plan.markers.map(m => [m.id, m.time, m.label]), [
+    ['marker-1', 1, 'opening'],
+    ['marker-3', 2, 'on splice'],
+    ['marker-4', 5, 'final cue'],
+  ])
+  assert.deepEqual(plan.removedMarkerIds, ['marker-2'])
+  assert.deepEqual(plan.shiftedMarkerIds, ['marker-3', 'marker-4'])
+  assert.equal(plan.markers[1].color, '#01ffab')
+  assert.notEqual(plan.markers[1], markers[2])
+  assert.equal(plan.clips.filter(c => c.type === 'video').length, 2)
+  assert.equal(plan.clips.filter(c => c.type === 'audio').length, 2)
+})
+test('non-ripple edit preserves global review markers in place', () => {
+  const markers = [{ id: 'marker-1', time: 3, label: 'review', color: '#f5c451' }]
+  const plan = extract([source(), audio()], { markers, ripple: false })
+  assert.equal(plan.ok, true, plan.reason)
+  assert.deepEqual(plan.markers, markers)
+  assert.deepEqual(plan.removedMarkerIds, [])
+  assert.deepEqual(plan.shiftedMarkerIds, [])
+})
+test('ripple refuses to re-time global markers during partial-track selection', () => {
+  const clips = [source(), audio()]
+  const markers = [{ id: 'marker-1', time: 7, label: 'music cue', color: '#f5c451' }]
+  const previous = structuredClone({ clips, markers })
+  const plan = extract(clips, { markers, trackIds: ['audio-1'] })
+  assert.equal(plan.ok, false)
+  assert.equal(plan.clips, undefined)
+  assert.deepEqual({ clips, markers }, previous)
+})
+test('malformed, unknown or non-frame-native marker metadata never reaches an atomic commit', () => {
+  const valid = { id: 'marker-1', time: 7, label: 'cue', color: '#f5c451' }
+  const bad = [
+    [valid, { ...valid }],
+    [{ ...valid, time: -1 }],
+    [{ ...valid, time: 1 / 48 }],
+    [{ ...valid, time: NaN }],
+    [{ ...valid, id: '' }],
+    [{ ...valid, time: 1e12 }],
+    [{ ...valid, lockedMusicPhase: 'unreviewed' }],
+    [{ ...valid, label: 'x'.repeat(161) }],
+    [{ ...valid, color: 'untrusted-css' }],
+  ]
+  for (const markers of bad) {
+    const plan = extract([source(), audio()], { markers })
+    assert.equal(plan.ok, false, JSON.stringify(markers))
+    assert.equal(plan.markers, undefined)
+    assert.equal(plan.clips, undefined)
+  }
 })

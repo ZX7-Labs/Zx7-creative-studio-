@@ -100,7 +100,25 @@ export function planLossAwareNativeExtract({
   // Native transitions can own absolute/relative time and clip handles;
   // neither a stale reference nor a baked compromise is an acceptable edit.
   if (transitions.length) return fail('Authored transition timing needs a reviewed native range implementation')
-  if (markers.length && ripple) return fail('Ripple cannot silently leave authored timeline markers unshifted')
+  // Global beat/review cues share the one native timebase with sound and video.
+  // Never reinterpret a partial-track edit as permission to move every cue.
+  if (markers.length > 10000) return fail('Native marker budget exhausted')
+  if (markers.length && ripple && selected.size !== trackById.size)
+    return fail('Global native review/beat markers require full-track ripple')
+  const markerIds = new Set()
+  for (const marker of markers) {
+    if (!marker || typeof marker !== 'object' || Array.isArray(marker)
+        || typeof marker.id !== 'string' || !marker.id.trim()
+        || markerIds.has(marker.id) || !finite(marker.time)
+        || marker.time < 0 || marker.time > 10000000
+        || Math.abs(marker.time * fps - Math.round(marker.time * fps)) > EPS * fps
+        || (marker.label != null && (typeof marker.label !== 'string' || marker.label.length > 160))
+        || (marker.color != null && (typeof marker.color !== 'string'
+          || !/^#[0-9a-fA-F]{6}$/.test(marker.color)))
+        || Object.keys(marker).some(key => !['id', 'time', 'label', 'color'].includes(key)))
+      return fail('Unrepresentable native marker identity, timing or metadata')
+    markerIds.add(marker.id)
+  }
   const ids = new Set()
   for (const c of clips) {
     if (!c || typeof c.id !== 'string' || !c.id || ids.has(c.id)
@@ -209,8 +227,25 @@ export function planLossAwareNativeExtract({
           ] !== clip.id)) return fail('Extract would break editable original linked A/V')
     }
   }
+  // A single Undo restores clips AND native global cue state. The deleted
+  // half-open interval loses its cues; the splice retains an end-boundary cue.
+  const removedMarkerIds = []
+  const shiftedMarkerIds = []
+  const nextMarkers = []
+  for (const marker of markers) {
+    if (ripple && marker.time >= start - EPS && marker.time < end - EPS) {
+      removedMarkerIds.push(marker.id)
+    } else if (ripple && marker.time >= end - EPS) {
+      nextMarkers.push({ ...marker, time: marker.time - (end - start) })
+      shiftedMarkerIds.push(marker.id)
+    } else {
+      nextMarkers.push({ ...marker })
+    }
+  }
+  nextMarkers.sort((a, b) => a.time - b.time)
   return {
-    ok: true, clips: kept, clipCounter: counter,
+    ok: true, clips: kept, markers: nextMarkers,
+    removedMarkerIds, shiftedMarkerIds, clipCounter: counter,
     startSeconds: start, endSeconds: end, deltaSeconds: end - start,
     ripple, affectedTrackIds, splitAtStart, splitAtEnd,
     removedClipIds, shiftedClipIds, selectedClipIds,

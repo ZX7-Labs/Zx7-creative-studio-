@@ -59,7 +59,11 @@ _VIDEO = obj({"id": TEXT, **_SOURCE_FIELDS, **_TIMING,
                   "source_in": TIME, "invert": {"type": "boolean"}})})
 _AUDIO = obj({"id": TEXT, **_SOURCE_FIELDS, **_TIMING, "gain_db": number(-120, 120)}, {
     "gain_keyframes": array(obj({"at_seconds": TIME, "gain_db": number(-120, 120)})),
-    "stereo_balance": number(-1, 1)})
+    "stereo_balance": number(-1, 1),
+    "speaker_gains_db": obj({}, {speaker: number(-96, 24)
+                                  for speaker in ("FL", "FR", "FC", "LFE", "BL", "BR")}),
+    "speaker_map": obj({}, {speaker: number(0, 5, integer=True)
+                             for speaker in ("FL", "FR", "FC", "LFE", "BL", "BR")})})
 _SEQUENCE = obj({"frame_rate": RATE, "frame_size": obj({"width": SIZE, "height": SIZE}),
     "clips": array(obj({**_SOURCE_FIELDS, "first_frame": number(0, integer=True),
                        "end_frame": SIZE, "audio": SOUND}), minItems=1, maxItems=128)})
@@ -104,7 +108,9 @@ _SCHEMAS = {
     "body.composite_mix": ("plan", obj({
         "canvas": obj({"width": SIZE, "height": SIZE, "fps": SIZE,
                        "duration": POSITIVE, "background": COLOR}, {
-            "color_semantics": obj({"input": choice("bt709"), "output": choice("bt709")})}),
+            "color_semantics": obj({"input": choice("bt709"), "output": choice("bt709")}),
+            "audio_bus": obj({"sample_rate": choice(48000, 96000),
+                              "channel_layout": choice("stereo", "5.1")})}),
         "video_layers": array(_VIDEO), "audio_tracks": array(_AUDIO)})),
     "body.sequence_cuts": ("plan", _SEQUENCE),
     "body.mlt_owned_export": ("plan", obj({
