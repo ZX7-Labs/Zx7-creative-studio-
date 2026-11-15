@@ -642,6 +642,12 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             if not isinstance(media, list) or len(media) < 3:
                 raise AssertionError("Native deliverable has no real media asset inventory")
             source_ids = set()
+            original_media_sha = {
+                "original-art.png": image_sha,
+                "original-tone.wav": tone_sha,
+                "native-3d-original.mp4": motion_video_sha,
+            }
+            original_media_seen = set()
             for asset in media:
                 if not isinstance(asset, dict):
                     raise AssertionError("Native media inventory has invalid source")
@@ -668,11 +674,19 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 copied.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 shutil.copyfile(original_asset, copied)
                 actual_sha = digest(original_asset)
+                original_name = asset.get("name")
+                if (not isinstance(original_name, str) or
+                        original_name not in original_media_sha or
+                        original_name in original_media_seen or
+                        actual_sha != original_media_sha[original_name]):
+                    raise AssertionError("Native imported copy differs from owner-authored source")
+                original_media_seen.add(original_name)
                 if digest(copied) != actual_sha or not copied.stat().st_size:
                     raise AssertionError("Portable native asset is missing or mutated")
                 witnesses.append({
                     "file": copied.relative_to(destination).as_posix(),
                     "sha256": actual_sha, "bytes": copied.stat().st_size})
+            assert original_media_seen == set(original_media_sha)
             if not all(
                     isinstance(clip, dict) and clip.get("assetId") in source_ids
                     for timeline in native_document.get("timelines", [])

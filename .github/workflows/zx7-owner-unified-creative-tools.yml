@@ -141,9 +141,15 @@ jobs:
           actual = set()
           for item in manifest["files"]:
               name = item["file"]
-              assert name not in actual and "/" not in name and "\\" not in name
+              assert name not in actual and "\\" not in name and "\x00" not in name
+              parts = name.split("/")
+              assert all(part not in ("", ".", "..") for part in parts)
+              if len(parts) != 1:
+                  assert parts[0] == "portable-native-project" and len(parts) >= 2
               actual.add(name)
-              target = root / name
+              target = root.joinpath(*parts)
+              assert not any(target.parents[i].is_symlink()
+                             for i in range(len(parts)))
               assert target.is_file() and not target.is_symlink()
               assert item["bytes"] == target.stat().st_size > 0
               sha = hashlib.sha256()
