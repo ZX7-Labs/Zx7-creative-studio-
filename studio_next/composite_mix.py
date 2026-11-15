@@ -27,6 +27,7 @@ from .production_qc import full_decode_inspection
 
 _COLOR=re.compile(r"^#[a-fA-F0-9]{6}$")
 _ID=re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+_SURROUND_SPEAKERS = ("FL", "FR", "FC", "LFE", "BL", "BR")
 
 
 def _positive(value,label,*,allow_zero=False):
@@ -159,25 +160,47 @@ def _audio_sample_index(seconds, rate):
     return round(Fraction(str(seconds)) * rate)
 
 
-def _decoded_audio_sample_rate(path):
-    """Read the first decoded audio stream's native sample clock.
+def _decoded_audio_stream_format(path):
+    """Actual first audio stream sample clock and native speaker identity.
 
-    Sample indices, not approximate float timestamps, determine physical
-    source trims. This lookup is performed only on rights-checked media.
+    Codec/channel layouts are physical source facts, not model-controlled
+    labels. Never advertise a surround output that a source cannot represent.
     """
     try:
         raw = subprocess.check_output(
             ["ffprobe", "-v", "error", "-select_streams", "a:0",
-             "-show_entries", "stream=sample_rate", "-of", "json", str(path)],
-            timeout=45)
-        streams = json.loads(raw)["streams"]
-        rate = int(streams[0]["sample_rate"])
+             "-show_entries", "stream=sample_rate,channels,channel_layout",
+             "-of", "json", str(path)], timeout=45)
+        stream = json.loads(raw)["streams"][0]
+        rate = int(stream["sample_rate"])
+        channels = int(stream["channels"])
+        layout = stream.get("channel_layout")
     except (OSError, ValueError, TypeError, KeyError, IndexError,
             subprocess.SubprocessError) as exc:
-        raise ValueError("Original audio sample rate cannot be established") from exc
-    if not 1 <= rate <= 768000:
-        raise ValueError("Original audio sample rate is outside supported bounds")
-    return rate
+        raise ValueError("Original audio sample clock/channel layout cannot be established") from exc
+    if not 1 <= rate <= 768000 or not 1 <= channels <= 64:
+        raise ValueError("Original audio stream has unsupported physical clock/channels")
+    return rate, channels, layout
+
+
+def _audio_bus_spec(canvas):
+    """Opt-in sound delivery profile, preserving legacy stereo default.
+
+    The allowlist is an *installed/physically reviewed technical* scope, not
+    an artistic style or an invented audio engine. Future channel layouts
+    require their own exact-input and physical speaker-isolation evidence.
+    """
+    bus = canvas.get("audio_bus")
+    if bus is None:
+        return 48000, "stereo", 2
+    if (type(bus) is not dict or set(bus) != {"sample_rate", "channel_layout"}
+            or type(bus["sample_rate"]) is not int
+            or bus["sample_rate"] not in (48000, 96000)
+            or type(bus["channel_layout"]) is not str
+            or bus["channel_layout"] not in ("stereo", "5.1")):
+        raise ValueError("Invalid explicit audio bus sample clock/channel layout")
+    layout = bus["channel_layout"]
+    return bus["sample_rate"], layout, (6 if layout == "5.1" else 2)
 
 
 def validate_composition(plan,workspace,vault):
@@ -186,7 +209,7 @@ def validate_composition(plan,workspace,vault):
     canvas=plan["canvas"]
     expected_canvas={"width","height","fps","duration","background"}
     if not isinstance(canvas,dict) or not expected_canvas.issubset(canvas) or (
-            set(canvas)-expected_canvas-{"color_semantics"}):
+            set(canvas)-expected_canvas-{"color_semantics","audio_bus"}):
         raise ValueError("Editor must specify all physical delivery parameters")
     contract=canvas.get("color_semantics")
     if contract is not None and (
@@ -198,6 +221,7 @@ def validate_composition(plan,workspace,vault):
     seconds=_positive(canvas["duration"],"composition duration")
     if not isinstance(canvas["background"],str) or not _COLOR.fullmatch(canvas["background"]):
         raise ValueError("Editor must specify a valid authored color")
+    bus_rate, bus_layout, bus_channels = _audio_bus_spec(canvas)
     video=plan["video_layers"]
     audio=plan["audio_tracks"]
     if not isinstance(video,list) or not isinstance(audio,list) or not (video or audio):
@@ -215,7 +239,7 @@ def validate_composition(plan,workspace,vault):
                       if kind=="video" else
                       {"id","source","asset_id","attestation_id","start","source_in","duration","gain_db"})
             supported=required|({"motion","fade_in_seconds","fade_out_seconds","chroma_key","source_kind","matte"}
-                                if kind=="video" else {"gain_keyframes","stereo_balance"})
+                                if kind=="video" else {"gain_keyframes","stereo_balance","speaker_gains_db","speaker_map"})
             if not required.issubset(layer) or not set(layer).issubset(supported):
                 raise ValueError("Director-specified "+kind+" layer is incomplete or uses untrusted effects")
             identifier=layer["id"]
@@ -275,6 +299,41 @@ def validate_composition(plan,workspace,vault):
                     real_source_lengths[clock]=_decoded_source_duration(file,kind)
                 if source_in+duration>real_source_lengths[clock]+0.015:
                     raise ValueError("Original source trim exceeds physically decoded footage or sound")
+            if kind=="audio":
+                native_rate, native_channels, native_layout = _decoded_audio_stream_format(file)
+                # Legacy stereo accepts mono/stereo as before, but must NEVER
+                # silently downmix an actual multichannel source. Require the
+                # director to explicitly choose a physically supported bus.
+                speaker_map = layer.get("speaker_map")
+                if bus_layout == "stereo":
+                    if native_channels > 2:
+                        raise ValueError("Explicit multichannel audio bus required; no silent downmix")
+                    if speaker_map is not None:
+                        raise ValueError("Speaker map requires explicit surround bus, not legacy stereo")
+                elif native_channels == 6 and native_layout == "5.1":
+                    if speaker_map is not None:
+                        raise ValueError("Native 5.1 channel identity must not be remapped")
+                elif native_channels in (1, 2) and native_layout in (
+                        None, "unknown", "mono" if native_channels == 1 else "stereo"):
+                    # Ordinary 1-/2-channel PCM WAV may omit the channel
+                    # layout mask entirely. Here we use the observed channel
+                    # *index*, not an inferred speaker identity. The author's
+                    # explicit c0/c1 map is the sole authority for speakers.
+                    # Six-channel files still require physical named 5.1.
+                    # A declared source-channel assignment is a deliberate
+                    # artistic routing decision, not permission for the codec
+                    # to invent a surround spatialization. Every real input
+                    # channel must appear exactly once; other output speakers
+                    # remain silent on this track.
+                    if (type(speaker_map) is not dict
+                            or len(speaker_map) != native_channels
+                            or not set(speaker_map).issubset(_SURROUND_SPEAKERS)
+                            or any(type(index) is not int
+                                   for index in speaker_map.values())
+                            or set(speaker_map.values()) != set(range(native_channels))):
+                        raise ValueError("Explicit complete speaker map required for mono/stereo in 5.1")
+                else:
+                    raise ValueError("5.1 audio bus requires physical 5.1 or explicitly mapped mono/stereo source")
             if kind=="video" and contract is not None:
                 # This is not a silent metadata label. Every incoming
                 # picture must physically carry the declared SDR VUI, or
@@ -325,6 +384,16 @@ def validate_composition(plan,workspace,vault):
                 if (type(balance) not in (int,float) or
                         not math.isfinite(balance) or not -1<=balance<=1):
                     raise ValueError("Audio stereo balance must be a finite authored value in [-1,1]")
+                if bus_layout != "stereo" and balance:
+                    raise ValueError("Stereo balance cannot silently remap surround channels")
+                speaker_gains = layer.get("speaker_gains_db")
+                if speaker_gains is not None:
+                    if (bus_layout != "5.1" or type(speaker_gains) is not dict
+                            or set(speaker_gains) - set(_SURROUND_SPEAKERS)
+                            or any(type(gain) not in (int, float)
+                                   or not math.isfinite(gain) or not -96 <= gain <= 24
+                                   for gain in speaker_gains.values())):
+                        raise ValueError("Surround speaker gains require typed 5.1 dB controls")
                 envelope=layer.get("gain_keyframes",[])
                 if not isinstance(envelope,list) or len(envelope)>64:
                     raise ValueError("Original audio envelope must be a bounded list")
@@ -349,12 +418,12 @@ def actual_composite_command(plan,workspace,vault,out):
     inputs=validate_composition(plan,workspace,vault)
     c=plan["canvas"]
     w,h,fps,secs=c["width"],c["height"],c["fps"],c["duration"]
+    bus_rate, bus_layout, bus_channels = _audio_bus_spec(c)
     filters=[f"color=c=0x{c['background'][1:]}:s={w}x{h}:r={fps}:d={secs},format=rgba[bg]"]
     base="bg"
     args=["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y"]
     music=[]
     source_audio_rates={}
-    bus_rate=48000
     bus_end_samples=_audio_sample_index(secs,bus_rate)
     if bus_end_samples<=0:
         raise ValueError("Composition duration is shorter than one audio sample")
@@ -430,7 +499,7 @@ def actual_composite_command(plan,workspace,vault,out):
             # Quantize once to each source's real sample clock and to the
             # output bus clock. Millisecond delays silently shift audio.
             if row["file"] not in source_audio_rates:
-                source_audio_rates[row["file"]]=_decoded_audio_sample_rate(row["file"])
+                source_audio_rates[row["file"]]=_decoded_audio_stream_format(row["file"])[0]
             source_rate=source_audio_rates[row["file"]]
             source_first=_audio_sample_index(source_in,source_rate)
             source_length=_audio_sample_index(duration,source_rate)
@@ -439,9 +508,19 @@ def actual_composite_command(plan,workspace,vault,out):
             source_end=source_first+source_length
             lag_samples=_audio_sample_index(start,bus_rate)
             effects=(f"[{source_index}:a:0]atrim=start_sample={source_first}:"
-                f"end_sample={source_end},"
-                "asetpts=PTS-STARTPTS,aresample=48000,"
-                f"aformat=channel_layouts=stereo,volume={layer['gain_db']}dB")
+                f"end_sample={source_end},asetpts=PTS-STARTPTS")
+            mapping = layer.get("speaker_map")
+            if mapping is not None:
+                # Route *before* channel-layout normalization, while c0/c1
+                # still mean the actual source's mono/stereo channels. This
+                # never implicitly spreads voice or score to 5.1 speakers.
+                routes="|".join(
+                    f"{speaker}=c{mapping[speaker]}"
+                    for speaker in _SURROUND_SPEAKERS if speaker in mapping)
+                effects += ",pan=5.1|" + routes
+            effects+=(f",aresample={bus_rate},"
+                      f"aformat=channel_layouts={bus_layout},"
+                      f"volume={layer['gain_db']}dB")
             balance=float(layer.get("stereo_balance",0))
             if balance:
                 # Per-channel post-upmix balance, not invented 3D sound or
@@ -451,6 +530,15 @@ def actual_composite_command(plan,workspace,vault,out):
                 right=1+min(0.0,balance)
                 effects+=(f",pan=stereo|c0={left:.9g}*c0"
                           f"|c1={right:.9g}*c1")
+            speaker_gains = layer.get("speaker_gains_db")
+            if speaker_gains:
+                # FFmpeg pan executes per-sample and preserves six native
+                # source speakers. Coefficients come only from typed finite dB,
+                # not a model-supplied filter expression or implicit downmix.
+                matrix = "|".join(
+                    f"{speaker}={10 ** (float(speaker_gains.get(speaker, 0)) / 20):.12g}*c{index}"
+                    for index, speaker in enumerate(_SURROUND_SPEAKERS))
+                effects += ",pan=5.1|" + matrix
             envelope=_gain_automation_expression(layer)
             if envelope is not None:
                 effects+=","+envelope
@@ -471,14 +559,18 @@ def actual_composite_command(plan,workspace,vault,out):
             filters.append("".join(music)+f"amix=inputs={len(music)}:"
                            "duration=longest:normalize=0[aout]")
     else:
-        filters.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={secs}[aout]")
+        filters.append(f"anullsrc=r={bus_rate}:cl={bus_layout},"
+                       f"atrim=end_sample={bus_end_samples}[aout]")
     args+=["-filter_complex",";".join(filters),"-map","[vout]","-map","[aout]",
            "-c:v","libx264","-pix_fmt","yuv420p","-crf","18",
-           "-c:a","aac","-b:a","192k","-r",str(fps),
+           "-c:a","aac","-b:a",("512k" if bus_channels==6 else "192k"),
+           "-r",str(fps),
            "-t",str(secs),"-movflags","+faststart"]
     if "color_semantics" in c:
         args+=["-color_primaries","bt709","-color_trc","bt709",
                "-colorspace","bt709"]
+    if bus_channels != 2 or bus_rate != 48000:
+        args += ["-ar", str(bus_rate), "-ac", str(bus_channels)]
     args.append(str(out))
     return args
 
@@ -589,6 +681,7 @@ def render_composition(plan_json,workspace,vault_root,out,*,runner=None,probe=No
                     max(.12,2/expected["fps"])) or not detail["audio_stream_present"]:
                 raise RuntimeError("Rendered composite disagrees with authored geometry/timing/audio")
             real_codec_proof=runner is None and probe is None
+            observed_sound = None
             if real_codec_proof:
                 qa=full_decode_inspection(temporary,expected={
                     "width":expected["width"],
@@ -597,6 +690,13 @@ def render_composition(plan_json,workspace,vault_root,out,*,runner=None,probe=No
                 if not qa["technical_delivery_verified"] or not qa[
                         "full_picture_and_sound_decoder_completed"]:
                     raise RuntimeError("Actual composited film failed whole video/audio decode")
+                rate, channels, layout = _decoded_audio_stream_format(temporary)
+                bus_rate, bus_layout, bus_channels = _audio_bus_spec(expected)
+                if (rate != bus_rate or channels != bus_channels
+                        or layout != bus_layout):
+                    raise RuntimeError("Actual exported audio channel/speaker clock disagrees with authored bus")
+                observed_sound = {"sample_rate": rate, "channels": channels,
+                                  "channel_layout": layout}
             if sha256_file(source)!=before or any(
                     sha256_file(path)!=digest for path,digest in originals.items()):
                 raise ValueError("Owner media or director plan changed during real compositing")
@@ -619,6 +719,9 @@ def render_composition(plan_json,workspace,vault_root,out,*,runner=None,probe=No
                 "bytes":output.stat().st_size,"duration_seconds":detail["duration_seconds"],
                 "video_layers":len(plan["video_layers"]),
                 "audio_tracks":len(plan["audio_tracks"]),"audio_present":True,
+                "audio_sample_rate": observed_sound["sample_rate"] if observed_sound else None,
+                "audio_channels": observed_sound["channels"] if observed_sound else None,
+                "audio_channel_layout": observed_sound["channel_layout"] if observed_sound else None,
                 "verified_physically":real_codec_proof,
                 "full_picture_and_sound_decoder_completed":real_codec_proof,
                 "test_runner_or_probe_injected":not real_codec_proof,

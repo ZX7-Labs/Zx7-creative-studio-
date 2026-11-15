@@ -21,8 +21,15 @@ Preview is read-only. Untrusted direct writes without the native revision
 token are denied; old installed source variants retain their conservative
 extract guard.
 
+Global, frame-aligned native beat/review markers now participate in the **same**
+atomic extract commit and Undo/Redo: cues inside a deleted interval are removed,
+cues at/after its end shift by the exact video-frame delta, with IDs/labels/colors
+preserved. A partial-track ripple with global cues, unknown marker metadata,
+duplicates or off-grid times refuses before changing source. Non-ripple edits
+leave cues in place. The real installed editor source is pinned separately.
+
 Unsupported native transition phase, timed effect/mask/cache behavior,
-unsafe fade cuts, unknown creative fields, timeline-marker ripple, mixed
+unsafe fade cuts, unknown creative fields, ambiguous global marker state, mixed
 locked tracks and scoped edits that would desynchronize linked A/V all
 **refuse before mutation**, not silently flatten. The independent legacy GUI
 extract remains unreviewed; this is the native MCP range editor, not a
