@@ -720,7 +720,7 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                     "projectPath": str(relocated), "previewOnly": False})
                 assert reopened is not None
                 recovered = await read_until(relocated_editor, lambda state:
-                    state.get("project", {}).get("path") == str(relocated) and
+                    (state.get("project") or {}).get("path") == str(relocated) and
                     state.get("assetCount") == len(media) and
                     (state.get("currentTimeline") or {}).get("clipCount") == 5)
                 assert recovered["project"]["path"] == str(relocated)
