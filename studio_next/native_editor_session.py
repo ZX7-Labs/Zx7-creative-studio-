@@ -22,6 +22,7 @@ from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CR
 from studio_next.native_creative_audit import audit_native_journal
 from studio_next.native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
+    reviewed_native_snapshot_hashes,
 )
 from studio_next.native_editor_source_pin import (
     PINNED_VELORN_MCP_REVISION as _PINNED_MCP_PREVIEW_COMMIT,
@@ -466,7 +467,16 @@ async def run_native_session(args):
             host_pre_dispatch_rejections=True, host_verified_preview_error_tools=preview_tools)
         pair_report["reviewed_native_render_pair"] = audit["reviewed_native_render_pair"]
         if REVIEWED_AV_PAIR in required:
-            pair_report["reviewed_native_audiovisual_pair"] = audit["reviewed_native_audiovisual_pair"]
+            pair = audit["reviewed_native_audiovisual_pair"]
+            pair_report["reviewed_native_audiovisual_pair"] = pair
+            if capture_render_project is not None and pair is not None:
+                hashes = reviewed_native_snapshot_hashes(outcome["events"], pair)
+                if hashes is None:
+                    raise RuntimeError(
+                        "Reviewed native export pair lacks original render-time snapshot digests")
+                # Only bounded immutable digests enter the owner status. The
+                # actual project snapshots remain in the granted private state.
+                pair_report["reviewed_native_snapshot_sha256"] = hashes
     return {
         **pair_report,
         "status": outcome["status"],
