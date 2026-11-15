@@ -50,6 +50,35 @@ class RenderSnapshotTests(unittest.TestCase):
                 **binding, DESTINATION_FIELD: "e" * 64}, identity)
             self.assertNotEqual(options, changed_options)
 
+    def test_owner_selected_existing_project_does_not_capture_another_native_document(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            projects, snapshots = root / "projects", root / "snapshots"
+            selected, other = projects / "selected", projects / "other"
+            selected.mkdir(parents=True)
+            other.mkdir()
+            snapshots.mkdir()
+            (selected / "project.comfystudio").write_text(
+                '{"currentTimelineId":"selected-timeline","modified":"v1"}')
+            (other / "project.comfystudio").write_text(
+                '{"currentTimelineId":"other-timeline","modified":"v1"}')
+            response = {
+                "projectPath": str(other),
+                "settings": {"bitrateKbps": 8000, "audioBitrateKbps": 192, "preset": "medium"},
+                "result": {"options": {"rangeStart": 0, "rangeEnd": 6, "crf": 18}},
+            }
+            binding = {
+                DESTINATION_FIELD: "b" * 64,
+                SCOPE_FIELD: timeline_scope_digest(str(other), "other-timeline"),
+            }
+            with self.assertRaisesRegex(ValueError, "owner-selected"):
+                capture_render_project(
+                    projects, snapshots, response, binding, (str(other), "v1"),
+                    expected_project=selected)
+            self.assertEqual(list(snapshots.iterdir()), [])
+            self.assertIn("selected-timeline",
+                          (selected / "project.comfystudio").read_text())
+
 
 class SelectedProjectTests(unittest.TestCase):
     def setUp(self):
