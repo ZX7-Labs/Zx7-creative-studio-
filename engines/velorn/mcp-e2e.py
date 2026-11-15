@@ -2527,6 +2527,7 @@ async def exercise(options):
                             {"timeSeconds": 0.75, "label": "splice beat"},
                             {"timeSeconds": 1.25, "label": "dialogue review"},
                         ], "previewOnly": False})
+                    # Native MCP snapshots expose marker.name (store uses label).
                     # MCP mutations may become visible in the editor's
                     # source snapshot after the tool result: observe fresh
                     # native state rather than trusting one immediate read.
@@ -2537,7 +2538,7 @@ async def exercise(options):
                     while time.monotonic() < deadline:
                         before_cues = await call(edit_session, "get_timeline", {
                             "includeClips": True})
-                        cues = {m["label"]: m for m in before_cues["markers"]}
+                        cues = {m["name"]: m for m in before_cues["markers"]}
                         if set(cues) == expected_labels:
                             break
                         await asyncio.sleep(.15)
@@ -2584,7 +2585,7 @@ async def exercise(options):
                     edited = await call(edit_session, "get_timeline", {
                         "includeClips": True, "limit": 1000})
                     assert len(edited["clips"]) == 4
-                    after_cues = {m["label"]: m for m in edited["markers"]}
+                    after_cues = {m["name"]: m for m in edited["markers"]}
                     assert set(after_cues) == {"intro beat", "splice beat", "dialogue review"}
                     for label, time_seconds in (("intro beat", 0.25),
                                                 ("splice beat", 0.5),
