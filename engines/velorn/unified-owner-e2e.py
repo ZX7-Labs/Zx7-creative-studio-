@@ -715,52 +715,74 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 assert digest(relocated.joinpath(*relative.parts)) == digest(
                     portable.joinpath(*relative.parts))
             relocated_movie = root / "outputs" / "independently-reopened-native.mp4"
-            async with connected() as (relocated_editor, _):
-                reopened = await invoke(relocated_editor, "open_project", {
-                    "projectPath": str(relocated), "previewOnly": False})
-                assert reopened is not None
-                recovered = await read_until(relocated_editor, lambda state:
-                    (state.get("project") or {}).get("path") == str(relocated) and
-                    state.get("assetCount") == len(media) and
-                    (state.get("currentTimeline") or {}).get("clipCount") == 5)
-                assert recovered["project"]["path"] == str(relocated)
-                recovered_timeline = await invoke(relocated_editor, "get_timeline", {
-                    "includeClips": True, "limit": 1000})
-                assert len(recovered_timeline["clips"]) == 5
-                assert {clip["assetId"] for clip in recovered_timeline["clips"]} == source_ids
-                await invoke(relocated_editor, "get_project")
-                await invoke(relocated_editor, "export_timeline", {
-                    "outputPath": str(relocated_movie), "target": "h264_project",
-                    "width": 320, "height": 180, "fps": 24,
-                    "range": "custom", "startSeconds": 0,
-                    "endSeconds": 2.75, "includeAudio": True,
-                    "previewOnly": False})
-                independent_rgb = independent_pcm = None
-                deadline = time.monotonic() + 90
-                while time.monotonic() < deadline:
-                    try:
-                        if relocated_movie.is_file() and relocated_movie.stat().st_size > 4000:
-                            independent_rgb = decode(["ffmpeg", "-nostdin", "-v", "error",
-                                "-xerror", "-i", str(relocated_movie), "-map", "0:v:0",
-                                "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
-                            independent_pcm = decode(["ffmpeg", "-nostdin", "-v", "error",
-                                "-xerror", "-i", str(relocated_movie), "-map", "0:a:0",
-                                "-ac", "1", "-ar", "16000", "-f", "s16le", "-"])
-                            break
-                    except (subprocess.CalledProcessError, OSError):
-                        pass
-                    await asyncio.sleep(.35)
-                assert independent_rgb is not None and independent_pcm is not None
-                assert independent_rgb == edited_rgb, (
-                    "Relocated native project changed actual decoded picture")
-                assert independent_pcm == edited_pcm and any(independent_pcm), (
-                    "Relocated native project changed or lost original sound")
-                certified = await invoke(relocated_editor, "zx7_verify_native_export", {
-                    "path": str(relocated_movie), "expected": {
-                        "width": 320, "height": 180,
-                        "duration_seconds": 2.75, "require_audio": True}})
-                assert certified["physical_export_verified"] is True
-                assert certified["native_export_sha256"] == digest(relocated_movie)
+            # Adversarial portable-project check: a successful re-export on
+            # the SAME runner may silently reuse the former absolutePath or
+            # settings.sourcePath. Hide both original imported project media
+            # and all original staging inputs while the copied project opens
+            # and renders. Restore even if the test fails.
+            old_sources = (
+                project / "assets", original, tone, original_3d_video,
+            )
+            quarantine = root / "state" / "original-media-unavailable"
+            quarantine.mkdir(mode=0o700)
+            shifted_sources = []
+            try:
+                for index, original_source in enumerate(old_sources):
+                    assert original_source.exists() and not original_source.is_symlink()
+                    moved = quarantine / f"source-{index}"
+                    original_source.rename(moved)
+                    shifted_sources.append((moved, original_source))
+                assert all(not source.exists() for source in old_sources)
+                async with connected() as (relocated_editor, _):
+                    reopened = await invoke(relocated_editor, "open_project", {
+                        "projectPath": str(relocated), "previewOnly": False})
+                    assert reopened is not None
+                    recovered = await read_until(relocated_editor, lambda state:
+                        (state.get("project") or {}).get("path") == str(relocated) and
+                        state.get("assetCount") == len(media) and
+                        (state.get("currentTimeline") or {}).get("clipCount") == 5)
+                    assert recovered["project"]["path"] == str(relocated)
+                    recovered_timeline = await invoke(relocated_editor, "get_timeline", {
+                        "includeClips": True, "limit": 1000})
+                    assert len(recovered_timeline["clips"]) == 5
+                    assert {clip["assetId"] for clip in recovered_timeline["clips"]} == source_ids
+                    await invoke(relocated_editor, "get_project")
+                    await invoke(relocated_editor, "export_timeline", {
+                        "outputPath": str(relocated_movie), "target": "h264_project",
+                        "width": 320, "height": 180, "fps": 24,
+                        "range": "custom", "startSeconds": 0,
+                        "endSeconds": 2.75, "includeAudio": True,
+                        "previewOnly": False})
+                    independent_rgb = independent_pcm = None
+                    deadline = time.monotonic() + 90
+                    while time.monotonic() < deadline:
+                        try:
+                            if relocated_movie.is_file() and relocated_movie.stat().st_size > 4000:
+                                independent_rgb = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                    "-xerror", "-i", str(relocated_movie), "-map", "0:v:0",
+                                    "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
+                                independent_pcm = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                    "-xerror", "-i", str(relocated_movie), "-map", "0:a:0",
+                                    "-ac", "1", "-ar", "16000", "-f", "s16le", "-"])
+                                break
+                        except (subprocess.CalledProcessError, OSError):
+                            pass
+                        await asyncio.sleep(.35)
+                    assert independent_rgb is not None and independent_pcm is not None
+                    assert independent_rgb == edited_rgb, (
+                        "Relocated native project changed actual decoded picture")
+                    assert independent_pcm == edited_pcm and any(independent_pcm), (
+                        "Relocated native project changed or lost original sound")
+                    certified = await invoke(relocated_editor, "zx7_verify_native_export", {
+                        "path": str(relocated_movie), "expected": {
+                            "width": 320, "height": 180,
+                            "duration_seconds": 2.75, "require_audio": True}})
+                    assert certified["physical_export_verified"] is True
+                    assert certified["native_export_sha256"] == digest(relocated_movie)
+            finally:
+                for relocated_from, original_source in reversed(shifted_sources):
+                    relocated_from.rename(original_source)
+            assert all(source.exists() for source in old_sources)
             assert digest(portable_doc) == updated_sha
             assert digest(document) == updated_sha
             relocated_copy = destination / "relocated-native-picture-sound.mp4"
