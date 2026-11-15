@@ -229,3 +229,41 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
                     for scope, output_path, output_digest, _ in (before_revision, last_review)
                 ]
     return pair
+
+
+def reviewed_native_snapshot_hashes(events, pair):
+    """Bind a reviewed export pair to the original host-captured native bytes.
+
+    This is source/receipt consistency, NOT a signature or proof of artistic
+    improvement. Later renders to an identical destination supersede prior
+    receipts; unknown or missing saved hashes fail closed.
+    """
+    if type(pair) is not list or len(pair) != 2 or type(events) is not list:
+        return None
+
+    def is_sha(value):
+        return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+    captures = {}
+    for event in events:
+        if (type(event) is dict and event.get("kind") == "native_tool_result" and
+                event.get("tool") == RENDER_TOOL and
+                event.get("host_application_write_acknowledged") is True):
+            dest = event.get(DESTINATION_FIELD)
+            if is_sha(dest):
+                captures[dest] = event
+
+    shas = []
+    for binding in pair:
+        if type(binding) is not dict or not (
+                is_sha(binding.get("destination_sha256")) and
+                is_sha(binding.get("timeline_sha256"))):
+            return None
+        capture = captures.get(binding["destination_sha256"])
+        if (capture is None or
+                capture.get(SCOPE_FIELD) != binding["timeline_sha256"] or
+                not is_sha(capture.get(SAVED_RENDER_FIELD)) or
+                not is_sha(capture.get(SAVED_RENDER_OPTIONS_FIELD))):
+            return None
+        shas.append(capture[SAVED_RENDER_FIELD])
+    return shas if shas[0] != shas[1] else None
