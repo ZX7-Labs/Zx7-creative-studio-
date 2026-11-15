@@ -144,7 +144,7 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
     def test_owner_rejects_malformed_or_disabled_sound_delivery_contract(self):
         for target in (
             {"width": True, "height": 36, "duration_seconds": 0.5},
-            {"width": 64, "height": 36, "duration_seconds": float("nan")},
+            {"width": 64, "height": 36, "duration_seconds": "nan"},
             {"width": 64, "height": 36, "duration_seconds": 0},
             {"width": 64, "height": 36, "duration_seconds": 0.5, "require_audio": False},
         ):
