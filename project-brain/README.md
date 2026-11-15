@@ -21,13 +21,13 @@ The large [docs/continuity/STATUS.md](../docs/continuity/STATUS.md) is retained 
 
 ## Session protocol (no manual founder re-brief)
 
-**At session start:** read `AGENTS.md`, [fixed BUILD_BLUEPRINT](../docs/BUILD_BLUEPRINT.md), [DOCUMENT_MAP](../docs/DOCUMENT_MAP.md), this README, `BRIEF.md`, `STATE.md`, `EXECUTION_LEDGER.json`, `DECISIONS.md`, `RISKS.md`, `PROJECT_MAP.md` and the relevant true failure evidence. Refresh current `main`, open PRs, exact-head CI and active trial status using GitHub, not the frozen snapshot. Preserve uncommitted changes and avoid duplicate jobs.
+**At session start (small context):** read `AGENTS.md`, the relevant section of [the single fixed BUILD_BLUEPRINT](../docs/BUILD_BLUEPRINT.md), **current** `BRIEF.md`, `STATE.md` and `EXECUTION_LEDGER.json`; then refresh live `main`, affected PRs and exact source evidence. Consult `DECISIONS.md`, `RISKS.md`, `PROJECT_MAP.md`, [DOCUMENT_MAP](../docs/DOCUMENT_MAP.md), Master Plan, and raw failure logs **only for the current question or a conflict**. Do not load 30 MD files into every model context. Preserve uncommitted work and avoid duplicate jobs.
 
 **During work:** use a separate branch, make evidence-led targeted changes, run independent/relevant tests, state failures openly. The founder's latest instruction is a DELTA; do not restart or silently contradict earlier decisions.
 
 **At each meaningful checkpoint:** update `STATE.md` and `EXECUTION_LEDGER.json` together from actual live source evidence (replace stale snapshots, do not append a diary), append decision IDs only when a decision changed, update active risks and the evidence/failure indexes with reproducible links. In the *same reviewable PR* update any instructions that became inaccurate. Review the diff for secrets, private path/media/credentials and misleading green claims. Require CI and human/independent technical scrutiny of source changes.
 
-**On a new chat:** the founder can say “Continue ZX7: read the repository project-brain.” No need to paste the old history when the repository is accessible. A new model/session must still fetch it; neither ChatGPT memory nor this repository auto-executes work.
+**On a new chat:** the founder can say “Continue ZX7 using AGENTS, fixed blueprint, current BRIEF/STATE/LEDGER, and live GitHub.” No need to paste old history; reconcile only changes relevant to the next owner outcome. A new model/session must still fetch it; neither ChatGPT memory nor this repository auto-executes work.
 
 ## Durability and privacy
 

@@ -1,12 +1,12 @@
 # ZX7 Creative Studio — Fixed Build Blueprint (implementation contract)
 
-> **Purpose:** one implementation-facing reading path for the fixed product; it is NOT a second current-status file, an LLM persona prompt, a replacement for native code, or proof that requirements have been implemented.
+> **Purpose:** one implementation-facing **derivative of the original owner requirements**, not a new product version, upgrade proposal, competing authority, status file or claim of implementation. If it appears to differ from CAPABILITIES, current BRIEF or the original Master Plan, stop and reconcile their exact wording; do not automatically prefer the newest file.
 >
 > **Authority:** [CAPABILITIES.md](../CAPABILITIES.md) is the full A–L scope; [ENGINEERING_STANDARD.md](../ENGINEERING_STANDARD.md) and [AGENTS.md](../AGENTS.md) govern engineering; [founder BRIEF](../project-brain/BRIEF.md) controls explicit owner changes; [Master Plan](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) retains original reasoning, examples, and G0–G4/F01–F14/T01–T24. This blueprint consolidates implementation instructions without deleting or silently superseding any of them. If a future owner delta conflicts, record it explicitly in [DECISIONS](../project-brain/DECISIONS.md).
 >
 > **Fixed goal ≠ fixed technique.** Building an AI-native creative control/perception **fabric** is an intended product outcome. The *particular* Creative State Fabric (CSF) representation, API, engine, optimizer, and whether a medium beats existing native tools are G2 falsifiable design hypotheses—not authorized as proven universal formats. Do not confuse “we will build a powerful creative fabric” with “we must ship this first proposed CSF class hierarchy.” Scope must not shrink if the hypothesis fails.
 >
-> **Development is not certification:** current implementations and failures live ONLY in [execution ledger](../project-brain/EXECUTION_LEDGER.json), [STATE](../project-brain/STATE.md), [RISKS](../project-brain/RISKS.md), and [EVIDENCE](../project-brain/EVIDENCE/INDEX.md). No fixed requirement is removed when a test fails.
+> **Strict separation:** this file states *what must exist and how to judge it*. Current implementation, failed model runs, unfinished PRs, provider permissions and evidence status belong to [STATE](../project-brain/STATE.md), [EXECUTION_LEDGER](../project-brain/EXECUTION_LEDGER.json), [RISKS](../project-brain/RISKS.md) and [EVIDENCE](../project-brain/EVIDENCE/INDEX.md). Do not copy dated result claims back into this fixed file.
 
 ## 1. Product to build — locked owner outcomes
 
@@ -28,11 +28,11 @@ The Brain may be general, specialist, local or separately authorized hosted; cap
 | **FIXED** | Real saved editable project, original asset custody, non-destructive revisions, truthful undo/reopen, human override | A/B/C/I/K |
 | **FIXED** | FOSS, local-first, no required paid-model dependency; independent security and rights acceptance | BRIEF, CAPABILITIES |
 | **FIXED** | Complete all A–L; professional evidence before field transition; G1 before claiming C | Master Plan §11, ENGINEERING_STANDARD |
-| **CURRENT BASELINE** | Source-pinned Velorn native NLE, MLT/FFmpeg, OTIO subset, Blender, existing visual graph, host gateway, SQLite journal, project heads | Existing repo sources; change only after comparable evidence |
+| **PREFERRED REUSE RULE** | Inspect existing source-owning native engines, graphics, host gateway, journal and project heads before new systems; actual installed capability and pins belong to the live source map | ENGINEERING_STANDARD and PROJECT_MAP |
 | **CANDIDATE / G2** | CSF minimal typed fabric coordinating intent/observations/actions, adaptive router, model-optimized procedural medium | Master Plan §5, G2; NOT an already proven API |
 | **CANDIDATE** | Runtime specialist models, agent-memory indexes, rich learned perception, safe procedural grammar, exact interchange adapters | Measure expressive gain, cost and safety before adoption |
-| **HISTORICAL / SUPERSEDED** | Mandatory GUI mouse imitation, tool-only/code-only ideology, universal film JSON, forced always-on subagents, blanket NVIDIA-first spending, scripted CI as creative acceptance | Master Plan §10, latest BRIEF |
-| **CURRENT PERMISSION DELTA** | No NVIDIA paid inference or private-media egress during current offline stage without justified, explicit separate authorization | BRIEF 2026-11-13 |
+| **REJECTED APPROACHES** | Mandatory GUI imitation, tool-only/code-only dogma, fake universal film JSON, fictional always-on agents, or treating scripted CI as creativity | Master Plan §10 and DECISIONS |
+| **VARIABLE PERMISSIONS** | Always consult the current owner BRIEF and live host grants for paid/private inference; this fixed build contract is NOT an authorization snapshot | BRIEF and trusted host |
 
 “Implement the fabric now and upgrade later” means **finish a genuinely useful baseline fabric connecting native truth, creative control and observations first**. Defer embellishments and unproven abstractions; do not defer mandatory safety, artistic capabilities, or source preservation. Any claimed later upgrade must be optional/additive and benchmarked.
 
@@ -108,7 +108,7 @@ This is the **next integrated product outcome**, not a request for yet another n
 
 **G1 exit condition:** all relevant source/rights, actually applied native state, physical picture+sound, autonomous selection, semantic review, nontrivial revision, human collaboration, recovery and independent artistic/security gates accepted on an exact version. Never declare field C complete from an internal fixture, test count, 320×180 clip, or a hosted model reputation. Only after defensible field completion show the owner a concrete original film, then proceed to the next field.
 
-**Known actual neural negative baseline (do not silently reset):** Qwen [#42711402879](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879) failed context/quality and a 400 response; NVIDIA [#42754872382](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42754872382) produced wrong-size silent nonaccepted exports. Guards have since merged for parts of the pipeline; no source-proven successful equivalent creative neural retest as of the ledger baseline. Respect current owner NVIDIA paid-use deferral. Do not substitute another offline rerun for that unsolved gate.
+**Historical experiments are not fixed requirements.** For real model failures, subsequent source fixes, comparable retests and current permission, read the [mutable failure evidence](../project-brain/EVIDENCE/FAILURE_REGISTER.md) and [execution ledger](../project-brain/EXECUTION_LEDGER.json).
 
 ## 6. Full A–L: owner outcome, source foundation, distinct closure evidence
 
