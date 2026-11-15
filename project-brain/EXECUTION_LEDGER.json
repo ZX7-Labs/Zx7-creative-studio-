@@ -304,6 +304,16 @@
       "tested_code_head": "11fc1aef2de11b4790e50085039e430dcf39ef6e",
       "merged_tree": "2d0857c0d003ade1e807f8cb2f6fc45a51704988",
       "creative_acceptance": "SCRIPTED_NOT_AUTONOMOUS"
+    },
+    {
+      "id": "M-G1-SELECTED-RENDER-SNAPSHOT",
+      "kind": "technical",
+      "result": "SOURCE_SCOPED_REVIEW",
+      "evidence": "PR #356 binds both reviewed exports from an explicitly selected existing owner native project to immutable SHA-verified saved-document snapshots, retaining pre-revision original and rejecting sibling project substitution. RED: workflow 43746815156 on test-only head 6834e7a58df3b05f5560d78a05c682f5710bbba0. Exact-head/source and actual-model acceptance must be checked separately.",
+      "prs": [
+        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356"
+      ],
+      "creative_acceptance": "NOT_PROVEN"
     }
   ],
   "failures": [
@@ -314,7 +324,7 @@
       "run": 42711402879,
       "job": 129481639892,
       "details": "Qwen3.5 4B 46 decisions; 9068 vs 8192 context and final HTTP 400; wrong-profile mostly-black output; no qualifying reviewed revision",
-      "source_or_fix": "PR #289 open/unmerged offline payload dedup; no accepted equivalent neural retest",
+      "source_or_fix": "PR #311 already merged the source-compatible model-payload context dedup from still-open historical #289 (2026-11-12, 89990723aec8abb3b5c5eee79546c57de0591631); no accepted equivalent real-model retest",
       "root_confidence": "context-overflow supported; entire creative failure not fully attributed",
       "post_fix_real_model_retest": "NOT_PASSED",
       "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879",
@@ -454,7 +464,7 @@
       "number": 289,
       "head": "6a2e0344f3e49c02249dcdb14c572277601bc12b",
       "status": "OPEN_NON_DRAFT",
-      "meaning": "Qwen context dedup offline fix; no real model success",
+      "meaning": "Historical PR remains open but source-compatible context dedup already merged through #311. Do not merge duplicate; no accepted neural retest.",
       "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/289"
     },
     {
@@ -523,6 +533,6 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Inspect PR #289 overlap and source-current real-model controller/observation path, then remove the highest-value actual G1 acceptance blocker without repeating existing physical fixtures. Separate authorization needed for paid or private-model inference."
+    "next_action": "Continue G1 genuine Brain-authored original picture+sound through the existing unified owner/native route; verify PR #356 existing-project saved/render source binding and exact-head CI, then evaluate genuine neural autonomy and semantic A/V revision. #311 already merged Qwen context dedup; do not duplicate #289. Paid NVIDIA/private egress remains separately gated."
   }
 }
