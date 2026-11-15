@@ -209,5 +209,35 @@ class ProjectBrainContractTests(unittest.TestCase):
             self.assertIn("state_missing_ledger_binding", _module.validate(root))
 
 
+
+    def test_future_independent_review_can_link_a_pr_or_versioned_report(self):
+        # Synthetic receipt shapes only: the tool does not authenticate judges.
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            base = json.loads(path.read_text(encoding="utf-8"))
+            for report_url in (
+                "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/123",
+                "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/main/docs/report.md",
+            ):
+                data = json.loads(json.dumps(base))
+                data["domains"][0]["independent_field_acceptance"] = "ACCEPTED"
+                data["domains"][0]["acceptance_evidence"] = {
+                    "source_sha": "f" * 40,
+                    "report_url": report_url,
+                    "reviewer": "synthetic-evaluator",
+                    "scope": "synthetic-domain-task",
+                }
+                path.write_text(json.dumps(data), encoding="utf-8")
+                self.assertNotIn("unsupported_execution_ledger_field_acceptance",
+                                 _module.validate(root))
+            data["domains"][0]["acceptance_evidence"]["report_url"] = (
+                "https://malicious.invalid/claimed-review"
+            )
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("unsupported_execution_ledger_field_acceptance",
+                          _module.validate(root))
+
+
 if __name__ == "__main__":
     unittest.main()

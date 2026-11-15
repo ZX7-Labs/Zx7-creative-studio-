@@ -34,9 +34,11 @@ def _review_receipt_is_structured(value: object) -> bool:
         return False
     return (
         re.fullmatch(r"[0-9a-f]{40}", str(value.get("source_sha", ""))) is not None
-        and str(value.get("report_url", "")).startswith(
-            "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/"
-        )
+        and re.fullmatch(
+            r"https://github\.com/ZX7-Labs/Zx7-creative-studio-/"
+            r"(?:actions/runs/[0-9]+|pull/[0-9]+|blob/[^\s?#]+)",
+            str(value.get("report_url", "")),
+        ) is not None
         and bool(str(value.get("reviewer", "")).strip())
         and bool(str(value.get("scope", "")).strip())
     )
@@ -48,9 +50,10 @@ def _model_retest_receipt_is_structured(value: object, failure_id: str) -> bool:
         return False
     return (
         re.fullmatch(r"[0-9a-f]{40}", str(value.get("source_sha", ""))) is not None
-        and str(value.get("run_url", "")).startswith(
-            "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/"
-        )
+        and re.fullmatch(
+            r"https://github\.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/[0-9]+",
+            str(value.get("run_url", "")),
+        ) is not None
         and value.get("same_task_as") == failure_id
         and re.fullmatch(r"[0-9a-f]{64}", str(value.get("artifact_sha256", "")))
         is not None
