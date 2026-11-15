@@ -320,13 +320,14 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
             continue
         document, saved_sha = _bounded_native_project(saved)
         if timeline_scope_digest(str(entry), document["currentTimelineId"]) in timelines:
-            matches.append((saved, document["currentTimelineId"], saved_sha))
+            matches.append((saved, document["currentTimelineId"], saved_sha, document))
     if len(matches) != 1:
         raise ValueError("No unique editable saved project matches the reviewed timeline")
-    saved, timeline_id, saved_sha = matches[0]
+    saved, timeline_id, saved_sha, native_doc = matches[0]
     native_media_observation = _verify_native_project_media_closure(
-        saved.parent, document=matches[0][3] if len(matches[0]) == 4 else
-        _bounded_native_project(saved)[0])
+        saved.parent, native_doc)
+    if _bounded_native_project(saved)[1] != saved_sha:
+        raise ValueError("Native project changed while checking its source media")
     snapshots_required = status.get("render_snapshots_required", False)
     if type(snapshots_required) is not bool:
         raise ValueError("Malformed owner render snapshot requirement")
