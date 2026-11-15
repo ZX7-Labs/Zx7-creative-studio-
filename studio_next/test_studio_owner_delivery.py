@@ -123,6 +123,37 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         self.assertEqual(self.original.read_bytes(),
                          b"owner original bytes; not used as a pretend neural edit")
 
+    def test_owner_explicit_delivery_profile_must_match_both_decoded_movies(self):
+        requested = {"width": 64, "height": 36, "duration_seconds": 0.5}
+        self.status["owner_delivery_target"] = requested
+        studio_cli._write_status(self.session, self.status)
+        accepted = self.verify()
+        self.assertTrue(accepted["owner_delivery_profile_verified"])
+        self.assertEqual(accepted["owner_delivery_target"], requested)
+        for wrong in (
+            {"width": 640, "height": 36, "duration_seconds": 0.5},
+            {"width": 64, "height": 360, "duration_seconds": 0.5},
+            {"width": 64, "height": 36, "duration_seconds": 6.0},
+        ):
+            with self.subTest(target=wrong):
+                studio_cli._write_status(
+                    self.session, {**self.status, "owner_delivery_target": wrong})
+                with self.assertRaisesRegex(ValueError, "width|height|duration|profile"):
+                    self.verify()
+
+    def test_owner_rejects_malformed_or_disabled_sound_delivery_contract(self):
+        for target in (
+            {"width": True, "height": 36, "duration_seconds": 0.5},
+            {"width": 64, "height": 36, "duration_seconds": float("nan")},
+            {"width": 64, "height": 36, "duration_seconds": 0},
+            {"width": 64, "height": 36, "duration_seconds": 0.5, "require_audio": False},
+        ):
+            with self.subTest(target=target):
+                studio_cli._write_status(
+                    self.session, {**self.status, "owner_delivery_target": target})
+                with self.assertRaisesRegex(ValueError, "owner delivery|delivery target|profile"):
+                    self.verify()
+
     def test_owner_rejects_changed_media_and_forged_receipt(self):
         self.media[1].write_bytes(self.media[0].read_bytes())
         with self.assertRaisesRegex(ValueError, "differs"):

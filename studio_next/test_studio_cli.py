@@ -226,6 +226,37 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(args.provider, "local")
         self.assertEqual(result["session_id"], args.receipt.parent.name)
 
+    def test_explicit_owner_delivery_target_is_bound_to_private_session_before_model_use(self):
+        from studio_next import native_editor_session
+        self.init()
+        target = {"width": 640, "height": 360, "duration_seconds": 6.0}
+        mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked):
+            result = studio.run_workspace(
+                self.root, brief="An original motion and sound experiment",
+                reviewed_av_revision=True, delivery_target=target)
+        self.assertEqual(result["owner_delivery_target"], target)
+        text = (self.root / "sessions" / result["session_id"] / "brief.txt").read_text()
+        self.assertIn('"owner_delivery_target":', text)
+        self.assertIn('"width": 640', text)
+        count = len(list((self.root / "sessions").iterdir()))
+        for invalid in (
+            {"width": 640, "height": 360},
+            {"width": True, "height": 360, "duration_seconds": 6.0},
+            {"width": 640, "height": 360, "duration_seconds": float("inf")},
+            {"width": 640, "height": 360, "duration_seconds": 6.0,
+             "require_audio": False},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                studio.run_workspace(
+                    self.root, brief="Must reject before side effects",
+                    reviewed_av_revision=True, delivery_target=invalid)
+        with self.assertRaises(ValueError):
+            studio.run_workspace(
+                self.root, brief="No A/V acceptance", delivery_target=target)
+        self.assertEqual(len(list((self.root / "sessions").iterdir())), count)
+
     def test_owner_existing_project_audiovisual_revision_does_not_fake_freshness(self):
         from studio_next import native_editor_session
         self.init()
