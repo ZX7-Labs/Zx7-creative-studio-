@@ -120,7 +120,16 @@ jobs:
           python -u engines/velorn/unified-owner-e2e.py \
             --source "$ZX7_UNIFIED_EDITOR" \
             --xvfb-binary /usr/bin/Xvfb \
-            --display 127.0.0.1:96 --with-blender --with-atomic-range
+            --display 127.0.0.1:96 --with-blender --with-atomic-range \
+            --evidence-out "$GITHUB_WORKSPACE/output/g1-native-synthetic"
+      - name: Preserve verified synthetic source, editable project, and both physical A/V renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-g1-native-editable-synthetic-${{ github.sha }}
+          path: output/g1-native-synthetic/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Never mutate original checked-out editor or pinned child
         if: always()
         run: |

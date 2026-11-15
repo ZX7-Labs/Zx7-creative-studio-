@@ -86,7 +86,7 @@ def graphic_plan():
 
 
 async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
-                   with_atomic_range=False):
+                   with_atomic_range=False, evidence_out=None):
     if with_atomic_range and not with_blender:
         raise ValueError("Atomic cross-engine range acceptance requires real Blender footage")
     assert shutil.which("ffmpeg") and shutil.which("ffprobe")
@@ -594,6 +594,62 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert saved_sha in native_autosave_digests(project), (
                 "Fresh native reopen lost its committed recovery snapshot")
             assert digest(original) == image_sha and digest(tone) == tone_sha
+        if evidence_out is not None:
+            # This is deliberately a *synthetic, scripted technical sample*.
+            # Preserve exact source-native materials for external inspection;
+            # never call it a Brain-authored film or approved professional art.
+            if not (with_atomic_range and with_blender):
+                raise ValueError("Synthetic native delivery requires real Blender and atomic A/V")
+            destination = Path(evidence_out)
+            if not destination.is_absolute() or destination.is_symlink() or destination.exists():
+                raise ValueError("Synthetic delivery output must be a fresh absolute directory")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.mkdir(mode=0o700)
+            copies = (
+                ("first-native-picture-sound.mp4", export),
+                ("revised-native-picture-sound.mp4", edited_export),
+                ("final-editable-project.comfystudio", document),
+                ("first-render-native-project.comfystudio",
+                 render_snapshots / (first_binding[DESTINATION_FIELD] + ".comfystudio")),
+                ("revised-render-native-project.comfystudio",
+                 render_snapshots / (final_binding[DESTINATION_FIELD] + ".comfystudio")),
+                ("original-editable-visual-graph.json", plan),
+                ("revised-editable-visual-graph.json", revised_plan),
+                ("original-graph-source.png", original),
+                ("original-sound-source.wav", tone),
+                ("original-native-Blender-bundle.zxmotion", original_bundle),
+                ("revised-native-Blender-bundle.zxmotion", revised_bundle),
+            )
+            witnesses = []
+            for name, source_file in copies:
+                if not source_file.is_file() or source_file.is_symlink():
+                    raise AssertionError("Synthetic source/native evidence is unavailable", name)
+                replica = destination / name
+                shutil.copyfile(source_file, replica)
+                current = digest(source_file)
+                assert digest(replica) == current, (
+                    "Archived synthetic evidence differs from actual verified source", name)
+                witnesses.append({
+                    "file": name, "sha256": current, "bytes": replica.stat().st_size})
+            assert witnesses[3]["sha256"] == saved_sha
+            assert witnesses[4]["sha256"] == updated_sha
+            assert witnesses[2]["sha256"] == updated_sha
+            manifest = {
+                "schema": 1,
+                "kind": "zx7_synthetic_native_blender_graph_av_revision",
+                "synthetic_only": True,
+                "scripted_engine_decisions_not_neural": True,
+                "native_editor_source_identity_verified": True,
+                "first_and_revised_render_snapshots_sha_verified": True,
+                "physical_picture_and_non_silent_audio_decoded": True,
+                "editable_native_project_reopened": True,
+                "genuine_model_artistry_verified": False,
+                "independent_professional_review": False,
+                "files": witnesses,
+            }
+            (destination / "manifest.json").write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            assert len(list(destination.iterdir())) == len(copies) + 1
         print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_ATOMIC_AV "
                if with_atomic_range else "ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
                if with_blender else "ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV ") + json.dumps({
@@ -630,8 +686,11 @@ if __name__ == "__main__":
                         help="Also prove genuine editable Blender 4.5+ motion in native Studio")
     parser.add_argument("--with-atomic-range", action="store_true",
                         help="Cross-engine source-native ripple, double export and editable reopen")
+    parser.add_argument("--evidence-out", type=Path,
+                        help="Save only this synthetic physical native sample for external inspection")
     args = parser.parse_args()
     asyncio.run(exercise(args.source.resolve(strict=True),
                          args.xvfb_binary, args.display,
                          with_blender=args.with_blender,
-                         with_atomic_range=args.with_atomic_range))
+                         with_atomic_range=args.with_atomic_range,
+                         evidence_out=args.evidence_out))
