@@ -2519,6 +2519,19 @@ async def exercise(options):
                         await asyncio.sleep(.15)
                     else:
                         raise AssertionError("Native source keyframes never published")
+                    # Four native beat/review cues must survive the atomic A/V edit.
+                    await call(edit_session, "add_timeline_markers", {
+                        "markers": [
+                            {"timeSeconds": 0.25, "label": "intro beat"},
+                            {"timeSeconds": 0.625, "label": "remove with cut"},
+                            {"timeSeconds": 0.75, "label": "splice beat"},
+                            {"timeSeconds": 1.25, "label": "dialogue review"},
+                        ], "previewOnly": False})
+                    before_cues = await call(edit_session, "get_timeline", {"includeClips": True})
+                    cues = {m["label"]: m for m in before_cues["markers"]}
+                    assert set(cues) == {"intro beat", "remove with cut",
+                                         "splice beat", "dialogue review"}
+                    assert len({m["id"] for m in cues.values()}) == 4
                     saved_before = await call(edit_session, "save_project", {
                         "previewOnly": False})
                     before_movie = outputs / "before-atomic-range.mp4"
@@ -2530,6 +2543,8 @@ async def exercise(options):
                     assert preview["previewOnly"] is True
                     assert preview["result"]["plan"]["removeCount"] == 2
                     assert preview["result"]["plan"]["shiftCount"] == 2
+                    assert preview["result"]["plan"]["markerRemoveCount"] == 1
+                    assert preview["result"]["plan"]["markerShiftCount"] == 2
                     before_sha = digest(native_path)
                     unauthorized = await edit_session.call_tool("extract_range", {
                         **request, "previewOnly": False})
@@ -2546,11 +2561,20 @@ async def exercise(options):
                     assert result["success"] is True
                     assert result["result"]["shiftedClipCount"] == 2
                     assert len(result["result"]["removedClipIds"]) == 2
+                    assert result["result"]["removedMarkerIds"] == [cues["remove with cut"]["id"]]
+                    assert result["result"]["shiftedMarkerCount"] == 2
                     await wait(edit_session, lambda x:
                         (x.get("currentTimeline") or {}).get("clipCount") == 4)
                     edited = await call(edit_session, "get_timeline", {
                         "includeClips": True, "limit": 1000})
                     assert len(edited["clips"]) == 4
+                    after_cues = {m["label"]: m for m in edited["markers"]}
+                    assert set(after_cues) == {"intro beat", "splice beat", "dialogue review"}
+                    for label, time_seconds in (("intro beat", 0.25),
+                                                ("splice beat", 0.5),
+                                                ("dialogue review", 1.0)):
+                        assert after_cues[label]["id"] == cues[label]["id"]
+                        assert abs(after_cues[label]["time"] - time_seconds) < 1e-6
                     pics = sorted((c for c in edited["clips"]
                                    if c["assetId"] == initial_video["assetId"]),
                                   key=lambda c: c["startTime"])
@@ -2579,6 +2603,8 @@ async def exercise(options):
                     undone = await call(edit_session, "get_timeline", {
                         "includeClips": True, "limit": 1000})
                     assert len(undone["clips"]) == 2
+                    assert {m["id"]: m["time"] for m in undone["markers"]} == {
+                        m["id"]: m["time"] for m in cues.values()}
                     assert {c["id"] for c in undone["clips"]} == {
                         initial_video["id"], initial_audio["id"]}
                     assert next(c for c in undone["clips"]
@@ -2589,6 +2615,8 @@ async def exercise(options):
                         (x.get("currentTimeline") or {}).get("clipCount") == 4)
                     redone = await call(edit_session, "get_timeline", {
                         "includeClips": True, "limit": 1000})
+                    assert {m["id"]: m["time"] for m in redone["markers"]} == {
+                        m["id"]: m["time"] for m in after_cues.values()}
                     assert {c["id"] for c in redone["clips"]} == {
                         c["id"] for c in edited["clips"]}
                     assert next(c for c in redone["clips"]
@@ -2606,6 +2634,8 @@ async def exercise(options):
                     new_timeline = next(t for t in persisted["timelines"]
                                         if t["name"] == "ZX7 frame-exact source range")
                     assert len(new_timeline["clips"]) == 4
+                    assert {m["id"]: m["time"] for m in new_timeline["markers"]} == {
+                        m["id"]: m["time"] for m in after_cues.values()}
                     new_timeline_id = new_timeline["id"]
                     after_movie = outputs / "after-atomic-range.mp4"
                     _, media_sha, _, _ = await render_and_verify(
@@ -2625,6 +2655,8 @@ async def exercise(options):
                     actual = await call(restarted, "get_timeline", {
                         "includeClips": True})
                     assert len(actual["clips"]) == 4
+                    assert {m["id"]: m["time"] for m in actual["markers"]} == {
+                        m["id"]: m["time"] for m in after_cues.values()}
                     reopened_piece = next(c for c in actual["clips"]
                                           if c["id"] == pics[1]["id"])
                     assert reopened_piece["keyframes"] == pics[1]["keyframes"]
@@ -2636,6 +2668,7 @@ async def exercise(options):
                     "source_pinned_real_Electron_and_Body_CAS": True,
                     "direct_unfenced_write_and_fake_track_refused": True,
                     "actual_two_track_picture_sound_ripple_applied": True,
+                    "global_beat_review_cues_undo_redo_disk_and_reopen": True,
                     "source_window_frame_edges_and_timing_verified": True,
                     "original_animated_video_keyframes_retained": True,
                     "original_sound_windows_retained": True,
