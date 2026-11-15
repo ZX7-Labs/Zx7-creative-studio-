@@ -231,7 +231,11 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.init()
         project = self.root / "projects" / "owned-editable"
         project.mkdir()
-        (project / "project.comfystudio").write_text('{"timelines":[]}')
+        original = '{"timelines":[]}'
+        (project / "project.comfystudio").write_text(original)
+        unrelated = self.root / "projects" / "unrelated-editable"
+        unrelated.mkdir()
+        (unrelated / "project.comfystudio").write_text('{"timelines":[{"id":"other"}]}')
         mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
         with patch.object(studio, "doctor", return_value={"ready": True}), \
                 patch.object(native_editor_session, "run_native_session", mocked):
@@ -242,7 +246,12 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(args.project, project)
         self.assertEqual(args.evaluation_evidence, "reviewed-av-revision")
         self.assertFalse(args.fresh_trial_project)
-        self.assertFalse(args.record_av_project_snapshots)
+        self.assertTrue(args.record_av_project_snapshots)
+        self.assertTrue(result["render_snapshots_required"])
+        checkpoint = self.root / "sessions" / result["session_id"] / "prior-project.comfystudio"
+        self.assertEqual(checkpoint.read_text(), original)
+        self.assertEqual((unrelated / "project.comfystudio").read_text(),
+                         '{"timelines":[{"id":"other"}]}')
         self.assertEqual(result["state"], "needs_attention")
 
     def test_owner_nvidia_audio_review_consent_precedes_any_workspace_side_effect(self):
