@@ -329,8 +329,11 @@ async def run_native_session(args):
     capture_render_project = None
     native_revision_source = None
     if getattr(args, "record_av_project_snapshots", False):
-        if not fresh or REVIEWED_AV_PAIR not in required or host_grants.get("save_project") != "write":
-            raise ValueError("Render snapshots require a fresh audiovisual trial with a save grant")
+        if (not (fresh or getattr(args, "project", None) is not None) or
+                REVIEWED_AV_PAIR not in required or
+                host_grants.get("save_project") != "write"):
+            raise ValueError(
+                "Render snapshots require a fresh or owner-selected audiovisual project with a save grant")
         from .native_editor_project import capture_render_project as capture
         from .native_revision_observation import NativeRevisionObservationMcpSession
         from .native_render_evidence import DESTINATION_FIELD
@@ -338,7 +341,8 @@ async def run_native_session(args):
         snapshots_root.mkdir(mode=0o700)
         native_revision_source = NativeRevisionObservationMcpSession(snapshots_root)
         physical_capture = partial(
-            capture, project_root.resolve(strict=True), snapshots_root)
+            capture, project_root.resolve(strict=True), snapshots_root,
+            expected_project=getattr(args, "project", None))
 
         def capture_and_register_native_revision(response, binding, save_identity):
             # Capture already attests save identity, native timeline scope,
