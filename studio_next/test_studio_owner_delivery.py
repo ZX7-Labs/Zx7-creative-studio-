@@ -61,6 +61,23 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
                 "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
                 str(output),
             ], check=True, timeout=30)
+        # The verifier must prove a usable source-backed native PROJECT,
+        # not only an intact .comfystudio JSON and a previously rendered MP4.
+        self.project_media = self.project / "assets" / "video" / "owner-source.mp4"
+        self.project_media.parent.mkdir(parents=True)
+        shutil.copyfile(self.media[0], self.project_media)
+        self.media_id = "native-asset-original"
+        for doc in (self.initial_doc, self.final_doc):
+            doc["assets"] = [{
+                "id": self.media_id, "type": "video",
+                "name": "owner-source.mp4",
+                "path": "assets/video/owner-source.mp4",
+                "size": self.project_media.stat().st_size,
+            }]
+            doc["timelines"][0]["clips"][0].update({
+                "type": "video", "assetId": self.media_id,
+            })
+        self.native.write_text(json.dumps(self.final_doc))
         self.original = self.staging / "owner-source.mp4"
         self.original.write_bytes(b"owner original bytes; not used as a pretend neural edit")
         studio_cli._write_new(self.session / "sources.json", [{
@@ -153,6 +170,18 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
                     self.session, {**self.status, "owner_delivery_target": target})
                 with self.assertRaisesRegex(ValueError, "owner delivery|delivery target|profile"):
                     self.verify()
+
+    def test_owner_rejects_missing_native_asset_even_with_successful_previous_exports(self):
+        self.assertTrue(self.verify()["physical_audiovisual_pair_verified"])
+        self.project_media.unlink()
+        with self.assertRaisesRegex(ValueError, "native|asset|source|media"):
+            self.verify()
+
+    def test_owner_rejects_native_asset_symlink_outside_project(self):
+        self.project_media.unlink()
+        self.project_media.symlink_to(self.media[0])
+        with self.assertRaisesRegex(ValueError, "native|asset|source|media|linked"):
+            self.verify()
 
     def test_owner_rejects_changed_media_and_forged_receipt(self):
         self.media[1].write_bytes(self.media[0].read_bytes())
