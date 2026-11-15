@@ -27,6 +27,35 @@ SENSITIVE = (
 LINK = re.compile(r"(?<!!)\[[^\]\n]+\]\(([^)]+)\)")
 
 
+def _review_receipt_is_structured(value: object) -> bool:
+    """Only check a source-linked receipt shape; this never validates a reviewer."""
+    if not isinstance(value, dict):
+        return False
+    return (
+        re.fullmatch(r"[0-9a-f]{40}", str(value.get("source_sha", ""))) is not None
+        and str(value.get("report_url", "")).startswith(
+            "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/"
+        )
+        and bool(str(value.get("reviewer", "")).strip())
+        and bool(str(value.get("scope", "")).strip())
+    )
+
+
+def _model_retest_receipt_is_structured(value: object, failure_id: str) -> bool:
+    """Gate a claimed real-model retest on an attributable comparable-run shape."""
+    if not isinstance(value, dict):
+        return False
+    return (
+        re.fullmatch(r"[0-9a-f]{40}", str(value.get("source_sha", ""))) is not None
+        and str(value.get("run_url", "")).startswith(
+            "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/"
+        )
+        and value.get("same_task_as") == failure_id
+        and re.fullmatch(r"[0-9a-f]{64}", str(value.get("artifact_sha256", "")))
+        is not None
+    )
+
+
 def validate(root: pathlib.Path = ROOT) -> list[str]:
     """Return bounded factual filesystem/format failures without escaping root."""
     root = pathlib.Path(root)
@@ -37,6 +66,7 @@ def validate(root: pathlib.Path = ROOT) -> list[str]:
             errors.append(f"missing_or_symlink: {relative}")
             continue
         maximum = (14_000 if relative == "STATE.md" else
+                   240_000 if relative in ("DECISIONS.md", "EVIDENCE/INDEX.md") else
                    160_000 if relative.startswith("../docs/") else 40_000)
         if path.stat().st_size > maximum:
             errors.append(f"too_large: {relative}")
@@ -93,8 +123,8 @@ def validate(root: pathlib.Path = ROOT) -> list[str]:
             errors.append("state_lacks_live_refresh_warning")
 
     # Structure only, NOT a certification of factual/source/semantic correctness.
-    # Prevent a future agent from presenting implemented source as a complete
-    # professional A-L field or claiming an offline fix passed a real model trial.
+    # Verify source-linked evidence before claiming acceptance; never block
+    # future independently reviewed success just because the baseline was open.
     ledger_path = root / "EXECUTION_LEDGER.json"
     if ledger_path.is_file() and not ledger_path.is_symlink():
         try:
@@ -112,9 +142,14 @@ def validate(root: pathlib.Path = ROOT) -> list[str]:
                     errors.append("invalid_execution_ledger_domain_coverage")
                 else:
                     for domain in domains:
-                        if domain.get("independent_field_acceptance") != "NOT_ACCEPTED":
-                            # New acceptance requires a separate, explicitly reviewed
-                            # versioned schema, not an edited JSON string.
+                        status = domain.get("independent_field_acceptance")
+                        if status not in ("NOT_ACCEPTED", "ACCEPTED"):
+                            errors.append("unsupported_execution_ledger_field_acceptance")
+                            break
+                        if (status == "ACCEPTED" and
+                                not _review_receipt_is_structured(domain.get("acceptance_evidence"))):
+                            # An acceptance can advance with a linkable source and
+                            # reviewer. Shape is NOT proof the reviewer actually ran.
                             errors.append("unsupported_execution_ledger_field_acceptance")
                             break
                 snapshot = ledger.get("snapshot", {})
@@ -137,14 +172,27 @@ def validate(root: pathlib.Path = ROOT) -> list[str]:
                                 not f.get("post_fix_real_model_retest")):
                             errors.append("invalid_execution_ledger_failure_evidence")
                             break
-                        if f.get("kind") == "GENUINE_MODEL" and f.get("post_fix_real_model_retest") == "PASSED":
+                        if (f.get("kind") == "GENUINE_MODEL" and
+                                f.get("post_fix_real_model_retest") == "PASSED" and
+                                not _model_retest_receipt_is_structured(
+                                    f.get("post_fix_retest_evidence"), f["id"]
+                                )):
+                            # Do not block future genuine progress forever; reject
+                            # bare success without a comparable model run receipt.
                             errors.append("unreviewed_execution_ledger_neural_success")
                             break
                 gates = ledger.get("open_gates", [])
-                if (not isinstance(gates, list) or
-                        not gates or
-                        not any(isinstance(g, dict) and g.get("id") == "G1-AUTONOMY" and
-                                g.get("state") == "OPEN_CRITICAL" for g in gates)):
+                g1 = next((g for g in gates
+                           if isinstance(g, dict) and g.get("id") == "G1-AUTONOMY"), None) \
+                    if isinstance(gates, list) else None
+                if (g1 is None or
+                        g1.get("state") not in ("OPEN_CRITICAL", "IN_PROGRESS", "ACCEPTED") or
+                        (g1.get("state") == "ACCEPTED" and
+                         not _review_receipt_is_structured(g1.get("acceptance_evidence"))) or
+                        (g1.get("state") == "IN_PROGRESS" and
+                         not str(g1.get("progress_evidence", "")).startswith(
+                             "https://github.com/ZX7-Labs/Zx7-creative-studio-/"
+                         ))):
                     errors.append("invalid_execution_ledger_g1_priority")
 
     blueprint = root / "../docs/BUILD_BLUEPRINT.md"
