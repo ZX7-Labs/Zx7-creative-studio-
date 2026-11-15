@@ -55,11 +55,18 @@ def checkpoint_saved_project(project: Path, destination: Path, *, max_bytes=None
             "sha256": digest.hexdigest()}
 
 
-def capture_render_project(projects_root, snapshots_root, response, binding, save_identity):
-    """Preserve the saved document for an acknowledged, source-bound render."""
+def capture_render_project(projects_root, snapshots_root, response, binding, save_identity,
+                           *, expected_project=None):
+    """Preserve the acknowledged native document for this owner's render.
+
+    Existing owner-project sessions must not silently capture a sibling
+    native document even if that document is inside the same granted root.
+    """
     project = Path(response["projectPath"])
     if not project.is_absolute() or not project.is_relative_to(projects_root):
         raise ValueError("Render project is outside the host-owned root")
+    if expected_project is not None and project != Path(expected_project):
+        raise ValueError("Render source differs from the owner-selected native project")
     destination = snapshots_root / (binding[DESTINATION_FIELD] + ".comfystudio")
     saved = checkpoint_saved_project(project, destination, max_bytes=16 * 1024 * 1024)
     document = _load_json(destination.read_text(encoding="utf-8"))
