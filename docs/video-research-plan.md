@@ -1,8 +1,6 @@
 # Video foundation research and implementation plan
 
-> Active direction: integrate the selected complete editor. The owner superseded
-> the earlier research-only freeze. Keep historical measurements below; do not
-> restart universal research as a prerequisite for every implementation step.
+> **Historical video-specific research/implementation plan, not today's task board.** The underlying product aim and relevant source research are retained; later implementations may already cover individual proposals. Read the [single fixed build crosswalk](BUILD_BLUEPRINT.md), [current STATE](../project-brain/STATE.md) and [evidence ledger](../project-brain/EXECUTION_LEDGER.json) before selecting work. Do not restart old R1–R4/P1–P5 or repeat a passed physical check solely because this early plan says so.
 
 **Goal:** Make native video editing and its necessary project, source, audio,
 color, reliability and review dependencies a coherent professional capability.

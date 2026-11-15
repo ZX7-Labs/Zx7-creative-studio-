@@ -1,6 +1,6 @@
 # ZX7 Creative Studio — Master Vision, Architecture, Research, Decisions & Execution Contract
 
-> **Status:** Authoritative *planning consolidation candidate*, 12 November 2026 (IST). It records the intended product and the proposed build strategy; it **does not** certify implementation or professional quality. No existing `CAPABILITIES.md`, `ENGINEERING_STANDARD.md`, `AGENTS.md`, or `project-brain/` ledger is silently superseded. Review/merge this document as a new planning record.
+> **Status:** MERGED **historical design atlas** authored 11–12 November 2026 (IST). The original vision, chronological reasoning, G0–G4 plan and CSF hypothesis are preserved—not a live task board or a professional completion claim. One implementation-facing crosswalk is [BUILD_BLUEPRINT.md](BUILD_BLUEPRINT.md), strictly derived from the original [CAPABILITIES](../CAPABILITIES.md), [BRIEF](../project-brain/BRIEF.md) and this plan. Current source, permissions, failures and next work are in [STATE](../project-brain/STATE.md) and [EXECUTION_LEDGER](../project-brain/EXECUTION_LEDGER.json). Do not treat the dated main/PR inventory and original §16 handoff as today's instructions.
 >
 > **Repository baseline checked:** [`ZX7-Labs/Zx7-creative-studio-`](https://github.com/ZX7-Labs/Zx7-creative-studio-) `main` at `7242fd10886ce27350803dc2dc7eaa1bdb75777d` (10 November 2026, 14:17:27 UTC); 516 tracked blobs; 316 `studio_next/*.py` modules; 55 GitHub workflows. This is an inventory, **not** proof that every file was line-by-line audited.
 >
@@ -606,7 +606,7 @@ No code implementation, no repository mutation before a review branch, no NVIDIA
 
 The biggest uncertainty no longer concerns *what product is being built*. That has been repeatedly clarified and now protected by contracts. The highest information value is currently a complete native model/editor/perception/human loop and a matched code/tool/hybrid test. Further generic survey without a discriminating experiment risks wasted time. Reopen targeted research when actual observed gap changes architecture, API, algorithm, or professional acceptance threshold. This is not a declaration that all future scientific questions have been solved.
 
-## 16. Next session handoff: execute, do not restart the vision discussion
+## 16. Historical 12 November handoff (preserved; not current session instructions)
 
 **CURRENT GOAL:** Implement the full A–L ZX7 professional creative BODY, beginning with G0 repository reconciliation/architecture-lock and G1 real native video completion, without limiting BODY to current model knowledge or one control medium.
 
@@ -614,7 +614,7 @@ The biggest uncertainty no longer concerns *what product is being built*. That h
 
 **REPO BASELINE TO REFRESH:** `main` `7242fd10886ce27350803dc2dc7eaa1bdb75777d`; compare to latest GitHub main before action, then read open PRs, STATE/RISKS and source pins. Past run `42754872382` failed; previous specific NVIDIA one-shot authorization is exhausted.
 
-**FIRST ACTION:** Reconcile G0 live repository and candidate PRs, confirm trusted native source/identity/observation/runtime contracts, append new decision(s) instead of overwriting old ones, and translate [F01–F14](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md) from acceptance *specifications* into targeted executable cases as each affected field is implemented. Start with the first actual verified native-video source defect instead of inventing a framework. Avoid duplicate scheduler/store, broad rewrite or arbitrary new memory framework.
+**HISTORICAL FIRST ACTION — superseded by current STATE:** Reconcile G0 live repository and candidate PRs, confirm trusted native source/identity/observation/runtime contracts, append new decision(s) instead of overwriting old ones, and translate [F01–F14](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md) from acceptance *specifications* into targeted executable cases as each affected field is implemented. Start with the first actual verified native-video source defect instead of inventing a framework. Avoid duplicate scheduler/store, broad rewrite or arbitrary new memory framework.
 
 **IMPLEMENTATION START ACCEPTANCE:** exact-source tests, source custody and native revision physical proof, authorizations documented, experimental acceptance fixed before tuning, no unmeasured creative quality claim. Continue to G1 and then G2+G3+G4 by dependency, updating canonical project-brain and current CI evidence after each meaningful integration gate.
 

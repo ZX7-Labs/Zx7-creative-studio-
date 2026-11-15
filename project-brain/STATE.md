@@ -1,6 +1,8 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
-> **Last audited 2026-11-15 06:25 UTC.** Source baseline for this assessment: GitHub `main` `11f905245a7b6cf27ecf603300342e392bab96f7`. Refresh live `main`, relevant PRs, runs, native tool grants and source pins **before acting**. This is a checkpoint, not a guarantee that GitHub remains unchanged. Previous longer STATE is preserved byte-for-byte at [the historical archive](STATE-2026-11-15-ARCHIVE.md); [EVIDENCE/INDEX.md](EVIDENCE/INDEX.md) preserves earlier source/run receipts.
+> **Dated source inspection baseline, not live `main`:** 2026-11-15, `11f905245a7b6cf27ecf603300342e392bab96f7` (pre-documentation reorganization). #351 subsequently merged documentation at `0b52e4d658fd0fe519b73472b07851e4d839e14d`; no product runtime acceptance changed. **Refresh actual GitHub main, relevant PR/run and installed native tool grants before acting.** This compact human checkpoint and the JSON ledger describe the same dated engineering reality, not a permanently up-to-date status. Previous long STATE is [archived verbatim](STATE-2026-11-15-ARCHIVE.md); negative/positive evidence remains in [EVIDENCE/INDEX](EVIDENCE/INDEX.md).
+
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=a557d97473e88cb5a89c460d7a4eca484d4e475b` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

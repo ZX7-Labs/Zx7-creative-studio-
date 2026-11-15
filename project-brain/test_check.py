@@ -141,5 +141,103 @@ class ProjectBrainContractTests(unittest.TestCase):
                           _module.validate(root))
 
 
+    def test_future_evidence_backed_progress_is_structurally_admissible(self):
+        """Synthetic evidence shape proves checker can advance; not real acceptance."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            synthetic = {
+                "source_sha": "a" * 40,
+                "report_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/999000001",
+                "reviewer": "synthetic-external-review-fixture",
+                "scope": "defined-source-and-professional-review",
+            }
+            data["domains"][0]["independent_field_acceptance"] = "ACCEPTED"
+            data["domains"][0]["acceptance_evidence"] = dict(synthetic)
+            data["failures"][0]["post_fix_real_model_retest"] = "PASSED"
+            data["failures"][0]["post_fix_retest_evidence"] = {
+                "source_sha": "b" * 40,
+                "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/999000002",
+                "same_task_as": "F-REAL-001",
+                "artifact_sha256": "c" * 64,
+            }
+            data["open_gates"][0]["state"] = "ACCEPTED"
+            data["open_gates"][0]["acceptance_evidence"] = dict(synthetic)
+            path.write_text(json.dumps(data), encoding="utf-8")
+            problems = _module.validate(root)
+            self.assertNotIn("unsupported_execution_ledger_field_acceptance", problems)
+            self.assertNotIn("unreviewed_execution_ledger_neural_success", problems)
+            self.assertNotIn("invalid_execution_ledger_g1_priority", problems)
+
+    def test_append_only_decision_history_can_expand_safely(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            decisions = root / "DECISIONS.md"
+            with decisions.open("a", encoding="utf-8") as stream:
+                stream.write("\\n- **D044 · SYNTHETIC FIXTURE:** " + "A" * 10000 + "\\n")
+            self.assertNotIn("too_large: DECISIONS.md", _module.validate(root))
+
+    def test_current_owner_provider_policy_is_not_mixed_with_old_now_commands(self):
+        brief = (_here / "BRIEF.md").read_text(encoding="utf-8")
+        self.assertIn("2026-11-13", brief)
+        self.assertNotIn("- **NOW (historical):**", brief)
+        self.assertNotIn("updated 2026-11-10 following the founder's NVIDIA-first", brief)
+
+    def test_active_build_plan_has_no_historical_failure_as_locked_requirement(self):
+        blueprint = (_here.parent / "docs" / "BUILD_BLUEPRINT.md").read_text(encoding="utf-8")
+        self.assertNotIn("Known actual neural negative baseline", blueprint)
+        master = (_here.parent / "docs" / "ZX7_CREATIVE_STUDIO_MASTER_PLAN.md").read_text(encoding="utf-8")
+        self.assertNotIn("Authoritative *planning consolidation candidate*", master[:850])
+
+
+
+    def test_current_state_is_bound_to_exact_mutable_ledger_blob(self):
+        # No private data or model calls: this is only a stale-document guard.
+        self.assertNotIn("state_ledger_content_mismatch", _module.validate(_here))
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["snapshot"]["notes"] += " synthetic-state-drift"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("state_ledger_content_mismatch", _module.validate(root))
+            state = root / "STATE.md"
+            state.write_text(state.read_text(encoding="utf-8").replace(
+                "LEDGER_GIT_BLOB=", "LEDGER_BINDING_REMOVED="
+            ), encoding="utf-8")
+            self.assertIn("state_missing_ledger_binding", _module.validate(root))
+
+
+
+    def test_future_independent_review_can_link_a_pr_or_versioned_report(self):
+        # Synthetic receipt shapes only: the tool does not authenticate judges.
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            base = json.loads(path.read_text(encoding="utf-8"))
+            for report_url in (
+                "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/123",
+                "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/main/docs/report.md",
+            ):
+                data = json.loads(json.dumps(base))
+                data["domains"][0]["independent_field_acceptance"] = "ACCEPTED"
+                data["domains"][0]["acceptance_evidence"] = {
+                    "source_sha": "f" * 40,
+                    "report_url": report_url,
+                    "reviewer": "synthetic-evaluator",
+                    "scope": "synthetic-domain-task",
+                }
+                path.write_text(json.dumps(data), encoding="utf-8")
+                self.assertNotIn("unsupported_execution_ledger_field_acceptance",
+                                 _module.validate(root))
+            data["domains"][0]["acceptance_evidence"]["report_url"] = (
+                "https://malicious.invalid/claimed-review"
+            )
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn("unsupported_execution_ledger_field_acceptance",
+                          _module.validate(root))
+
+
 if __name__ == "__main__":
     unittest.main()

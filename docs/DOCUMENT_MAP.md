@@ -1,6 +1,15 @@
 # ZX7 documentation and source-of-truth map
 
-> This is a navigation and authority index, NOT another status ledger. Reorganized by *meaning* rather than moving older files: Git history, source links, external PR discussion and native source pins remain intact. A file's date or name does not make historical statements current.
+> This is a **navigation and conflict-prevention index**, NOT a status ledger or additional scope authority. Original requirements, creative-fabric concepts, accepted source and Git/PR history remain intact. Historic documents and rejected options are **retained as evidence, not reread as active work orders**. Do not choose one interpretation silently if two original owner requirements genuinely conflict.
+
+## Resolution order — no new version of the product
+
+1. **Owner's original fixed intent:** [CAPABILITIES.md](../CAPABILITIES.md) and [ENGINEERING_STANDARD.md](../ENGINEERING_STANDARD.md), plus original full [Master Plan](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md), contain the underlying requirements; [BRIEF](../project-brain/BRIEF.md) holds an explicit current owner delta. Use the owner's latest *specific* change on that issue, not an assistant-authored paraphrase that changes the goal.
+2. **One implementation crosswalk:** [BUILD_BLUEPRINT.md](BUILD_BLUEPRINT.md) organizes that same fixed product for coding. It **must not add scope, supersede an original requirement, or declare an unproven CSF architecture mandatory**. Repair an actual crosswalk conflict against source before coding.
+3. **Mutable engineering facts:** [STATE](../project-brain/STATE.md), [EXECUTION_LEDGER](../project-brain/EXECUTION_LEDGER.json), [EVIDENCE](../project-brain/EVIDENCE/INDEX.md), [FAILURES](../project-brain/EVIDENCE/FAILURE_REGISTER.md) and live GitHub. A dated snapshot is **never** proof of current source or a passed model/artistic acceptance.
+4. **Archive:** older `STATUS.md`, early research plans, historical PR and old code-head test statements remain retrievable but cannot override 1–3. If the owner's actual requirements genuinely contradict, present the precise conflicting lines rather than inventing a choice.
+
+**Token and time rule:** a new coding session normally needs only AGENTS + the relevant blueprint section + current BRIEF/STATE/LEDGER + affected source. Read full original documents, decisions or 30 Markdown files **when tracing a specific conflict**, not on every turn. Updating a test or adding a PR is not a reason to rewrite the goal.
 
 ## The two lanes (read in this order)
 
@@ -58,7 +67,7 @@
 ## Operational update and no-duplication protocol
 
 - For a new behavior requirement: check fixed product authority → make an explicit design/owner decision only if needed → update blueprint. **Do not rederive a 90 KB master plan per chat.**
-- For a completed code/test result: attach real source SHA, changed project/source revision, exact PR/run/job and physical outcome; update JSON ledger + STATE and relevant EVIDENCE/RISKS. A merged PR is *implementation*, not professional acceptance.
+- For a completed code/test result: attach real source SHA, changed project/source revision, exact PR/run/job and physical outcome; update JSON ledger + STATE (including exact `LEDGER_GIT_BLOB` stamp) and relevant EVIDENCE/RISKS. A merged PR is *implementation*, not professional acceptance.
 - For a failure: preserve original logs/artifact digest and source URL, exact observed symptom/stack, root cause confidence, proposed fix, whether fix merged, and whether a comparable *real neural* retest passed. Keep source-level regressions separate from model proficiency.
 - For a status change: define what tier passed: `source_present`, `offline_tested`, `physical_native_tested`, `real_model_trial`, `independently_accepted`; never infer one from another. An acceptance gate is NOT complete while a required tier is missing.
 - Before starting: query exact live main, open PR overlap, latest relevant positive AND negative records. Resume the smallest blocked end-to-end owner outcome; no speculative “make CI green” work.

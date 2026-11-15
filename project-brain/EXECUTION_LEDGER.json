@@ -14,7 +14,7 @@
     "merged_prs": 220,
     "closed_unmerged_prs": 39,
     "workflow_runs_repository_total_observed": 8612,
-    "notes": "Counts are timestamped live inventory, not authoritative tomorrow. Refresh before writing; branch counts do not equal unfinished features."
+    "notes": "Counts are timestamped live inventory, not authoritative tomorrow. Refresh before writing; branch counts do not equal unfinished features. Ledger baseline was deliberately recorded before doc-restructuring PR #351; never treat this source SHA as current main after later merges."
   },
   "claims_policy": {
     "fixed_requirements_source": "docs/BUILD_BLUEPRINT.md",
@@ -31,7 +31,8 @@
       "physical_native_tested",
       "genuine_model_verified",
       "independently_professionally_accepted"
-    ]
+    ],
+    "future_acceptance_protocol": "Structural checker allows a future field ACCEPTED/G1 ACCEPTED only with linked exact 40-char source SHA, report_url, named reviewer and scope. Genuine model retest PASSED needs exact run URL, 40-char source SHA, same_task_as original failure ID and 64-char artifact digest. These are receipt shapes, not independent verification that claims are true."
   },
   "product": "NOT_COMPLETE",
   "domains": [
@@ -472,14 +473,14 @@
     },
     {
       "number": 236,
-      "head": "22ae43d9df",
+      "head": "22ae43d9dffac341155aba887a2947a1f133661c",
       "status": "OPEN_DRAFT",
       "meaning": "host-observed source/timeline affordances; compare exact current code",
       "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/236"
     },
     {
       "number": 202,
-      "head": "ab411623ae",
+      "head": "ab411623ae2f1ad22214f7512508e74fc70c7fc3",
       "status": "OPEN_NON_DRAFT",
       "meaning": "live native object identity fencing; compare exact current code",
       "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/202"
@@ -518,7 +519,9 @@
       "mark merged source fix separately from post-fix real model retest",
       "do not infer completion from passing CI or JSON fields",
       "preserve old records in Git and EVIDENCE/INDEX",
-      "do not paste actual private inputs, keys, or whole raw traces in public Git"
+      "do not paste actual private inputs, keys, or whole raw traces in public Git",
+      "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
+      "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
     "next_action": "Inspect PR #289 overlap and source-current real-model controller/observation path, then remove the highest-value actual G1 acceptance blocker without repeating existing physical fixtures. Separate authorization needed for paid or private-model inference."
   }
