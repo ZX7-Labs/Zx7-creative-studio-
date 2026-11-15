@@ -229,17 +229,26 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         raise ValueError("Malformed owner render snapshot requirement")
     snapshot_bound = False
     if snapshots_required:
+        expected_snapshot_hashes = result.get("reviewed_native_snapshot_sha256")
+        if (type(expected_snapshot_hashes) is not list or
+                len(expected_snapshot_hashes) != 2 or
+                any(type(item) is not str or not _SHA.fullmatch(item)
+                    for item in expected_snapshot_hashes)):
+            raise ValueError("Host-required native render snapshot digests are missing")
         snapshots_root = root / "state" / session_id / "av-project-snapshots"
         if snapshots_root.is_symlink() or not snapshots_root.is_dir():
             raise ValueError("Host-required native render snapshots are missing")
         revisions = []
-        for binding in pair:
+        for binding, captured_sha in zip(pair, expected_snapshot_hashes, strict=True):
             snapshot = snapshots_root / (binding["destination_sha256"] + ".comfystudio")
             if not snapshot.is_file() or snapshot.is_symlink():
                 raise ValueError("Host-required render snapshot is missing or linked")
             snapshot_doc, snapshot_sha = _bounded_native_project(snapshot)
             if snapshot_doc["currentTimelineId"] != timeline_id:
                 raise ValueError("Native snapshot timeline differs from reviewed project")
+            if snapshot_sha != captured_sha:
+                raise ValueError(
+                    "Native render snapshot digest differs from original render-time source")
             revisions.append(snapshot_sha)
         if revisions[0] == revisions[1]:
             raise ValueError("Native snapshots do not establish an editable revision")
