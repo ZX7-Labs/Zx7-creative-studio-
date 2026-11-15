@@ -631,7 +631,10 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                     "Archived synthetic evidence differs from actual verified source", name)
                 witnesses.append({
                     "file": name, "sha256": current, "bytes": replica.stat().st_size})
-            assert witnesses[3]["sha256"] == saved_sha
+            # saved_sha now refers to the *final* revision after fresh
+            # reopen; the first real render keeps its own immutable receipt.
+            assert witnesses[3]["sha256"] == first_native_sha
+            assert first_native_sha != updated_sha
             assert witnesses[4]["sha256"] == updated_sha
             assert witnesses[2]["sha256"] == updated_sha
             manifest = {
