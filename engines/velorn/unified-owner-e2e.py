@@ -11,7 +11,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
@@ -631,6 +631,61 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                     "Archived synthetic evidence differs from actual verified source", name)
                 witnesses.append({
                     "file": name, "sha256": current, "bytes": replica.stat().st_size})
+            # Independent relocation must retain the native editor's complete
+            # referenced media closure, not only a JSON .comfystudio receipt.
+            # A project with missing asset blobs is NOT portable/editable
+            # outside the temporary CI installation.
+            portable = destination / "portable-native-project"
+            portable.mkdir(mode=0o700)
+            native_document = json.loads(document.read_text(encoding="utf-8"))
+            media = native_document.get("assets")
+            if not isinstance(media, list) or len(media) < 3:
+                raise AssertionError("Native deliverable has no real media asset inventory")
+            source_ids = set()
+            for asset in media:
+                if not isinstance(asset, dict):
+                    raise AssertionError("Native media inventory has invalid source")
+                identity, named = asset.get("id"), asset.get("path")
+                if (not isinstance(identity, str) or not identity or
+                        identity in source_ids or not isinstance(named, str) or
+                        not named or "\\" in named or "\x00" in named or
+                        any(bit in ("", ".", "..") for bit in named.split("/"))):
+                    raise AssertionError("Native media source identity/path unsafe")
+                source_ids.add(identity)
+                relative = PurePosixPath(named)
+                if (relative.is_absolute() or len(relative.parts) < 3 or
+                        relative.parts[0] != "assets"):
+                    raise AssertionError("Native source escapes owned relative asset directory")
+                original_asset = project.joinpath(*relative.parts)
+                if (not original_asset.is_file() or
+                        any(original_asset.joinpath(*relative.parts[:i]).is_symlink()
+                            for i in ()) or
+                        any(original_asset.parents[i].is_symlink()
+                            for i in range(len(relative.parts))) or
+                        original_asset.is_symlink() or
+                        not original_asset.resolve(strict=True).is_relative_to(
+                            project.resolve(strict=True))):
+                    raise AssertionError("Native media source cannot be safely relocated")
+                copied = portable.joinpath(*relative.parts)
+                copied.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                shutil.copyfile(original_asset, copied)
+                actual_sha = digest(original_asset)
+                if digest(copied) != actual_sha or not copied.stat().st_size:
+                    raise AssertionError("Portable native asset is missing or mutated")
+                witnesses.append({
+                    "file": copied.relative_to(destination).as_posix(),
+                    "sha256": actual_sha, "bytes": copied.stat().st_size})
+            if not all(
+                    isinstance(clip, dict) and clip.get("assetId") in source_ids
+                    for timeline in native_document.get("timelines", [])
+                    for clip in timeline.get("clips", [])):
+                raise AssertionError("Saved native timeline refers to missing media identity")
+            portable_doc = portable / "project.comfystudio"
+            shutil.copyfile(document, portable_doc)
+            assert digest(portable_doc) == updated_sha
+            witnesses.append({
+                "file": portable_doc.relative_to(destination).as_posix(),
+                "sha256": updated_sha, "bytes": portable_doc.stat().st_size})
             # saved_sha now refers to the *final* revision after fresh
             # reopen; the first real render keeps its own immutable receipt.
             assert witnesses[3]["sha256"] == first_native_sha
@@ -638,7 +693,7 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert witnesses[4]["sha256"] == updated_sha
             assert witnesses[2]["sha256"] == updated_sha
             manifest = {
-                "schema": 1,
+                "schema": 2,
                 "kind": "zx7_synthetic_native_blender_graph_av_revision",
                 "synthetic_only": True,
                 "scripted_engine_decisions_not_neural": True,
@@ -646,13 +701,15 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 "first_and_revised_render_snapshots_sha_verified": True,
                 "physical_picture_and_non_silent_audio_decoded": True,
                 "editable_native_project_reopened": True,
+                "portable_native_project_source_closure_verified": True,
+                "portable_native_project_reopened_after_extraction": False,
                 "genuine_model_artistry_verified": False,
                 "independent_professional_review": False,
                 "files": witnesses,
             }
             (destination / "manifest.json").write_text(
                 json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            assert len(list(destination.iterdir())) == len(copies) + 1
+            assert len(list(destination.iterdir())) == len(copies) + 2
         print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_ATOMIC_AV "
                if with_atomic_range else "ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
                if with_blender else "ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV ") + json.dumps({

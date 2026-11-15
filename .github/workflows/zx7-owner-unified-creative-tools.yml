@@ -131,7 +131,7 @@ jobs:
 
           root = Path("output/g1-native-synthetic")
           manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-          assert manifest["schema"] == 1
+          assert manifest["schema"] == 2
           assert manifest["kind"] == "zx7_synthetic_native_blender_graph_av_revision"
           assert manifest["synthetic_only"] is True
           assert manifest["scripted_engine_decisions_not_neural"] is True
@@ -151,9 +151,40 @@ jobs:
                   for chunk in iter(lambda: f.read(1024 * 1024), b""):
                       sha.update(chunk)
               assert item["sha256"] == sha.hexdigest(), name
-          assert len(actual) == 11
-          assert {p.name for p in root.iterdir()} == actual | {"manifest.json"}
-          print("ZX7_SYNTHETIC_NATIVE_DELIVERY_VERIFIED", len(actual), "source and A/V files")
+          assert manifest["portable_native_project_source_closure_verified"] is True
+          assert manifest["portable_native_project_reopened_after_extraction"] is False
+          portable = root / "portable-native-project"
+          native_path = portable / "project.comfystudio"
+          assert "portable-native-project/project.comfystudio" in actual
+          final_path = root / "final-editable-project.comfystudio"
+          assert hashlib.sha256(native_path.read_bytes()).digest() == hashlib.sha256(
+              final_path.read_bytes()).digest()
+          native = json.loads(native_path.read_text(encoding="utf-8"))
+          assets = native.get("assets")
+          assert isinstance(assets, list) and len(assets) >= 3
+          asset_ids = set()
+          for asset in assets:
+              assert isinstance(asset, dict)
+              ident, rel = asset.get("id"), asset.get("path")
+              assert isinstance(ident, str) and ident and ident not in asset_ids
+              asset_ids.add(ident)
+              assert isinstance(rel, str) and "\\" not in rel
+              parts = rel.split("/")
+              assert len(parts) >= 3 and parts[0] == "assets"
+              assert all(part not in ("", ".", "..") for part in parts)
+              leaf = portable.joinpath(*parts)
+              assert leaf.is_file() and not leaf.is_symlink()
+              assert "portable-native-project/" + rel in actual
+              assert leaf.stat().st_size > 0
+          timelines = native.get("timelines")
+          assert isinstance(timelines, list) and timelines
+          clips = [clip for t in timelines for clip in t.get("clips", [])]
+          assert len(clips) >= 5 and all(c.get("assetId") in asset_ids for c in clips)
+          assert len(actual) == 12 + len(assets)
+          assert {p.name for p in root.iterdir()} == (
+              {name for name in actual if "/" not in name} | {"manifest.json", "portable-native-project"})
+          print("ZX7_SYNTHETIC_NATIVE_PORTABLE_SOURCE_CLOSURE_VERIFIED",
+                len(assets), "retained source media; total", len(actual), "files")
           PY
       - name: Preserve verified synthetic source, editable project, and both physical A/V renders
         if: always()
