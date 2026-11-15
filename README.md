@@ -9,6 +9,8 @@ native Blender projects, media rendering, source custody and resumable jobs.
 Available operations depend on the engines installed on the host. Development
 is active; this is not a completed all-purpose creative suite.
 
+**Where to start:** [Fixed build blueprint](docs/BUILD_BLUEPRINT.md) (what ZX7 MUST become), [documentation ownership map](docs/DOCUMENT_MAP.md) (which source governs each fact), [current engineering STATE](project-brain/STATE.md) and [typed execution ledger](project-brain/EXECUTION_LEDGER.json) (what is actually built, failed or open). [Forensic failure register](project-brain/EVIDENCE/FAILURE_REGISTER.md) preserves original model-run blockers and exact logs. No A–L professional field is certified solely by these docs.
+
 The current [architecture](docs/architecture.md),
 [reuse research](docs/reuse-research.md) and
 [video research plan](docs/video-research-plan.md) record foundation decisions,

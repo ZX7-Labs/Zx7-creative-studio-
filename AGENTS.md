@@ -1,6 +1,6 @@
 # Product intent
 
-Engineering agents: read this file, [CAPABILITIES.md](CAPABILITIES.md) for the complete A–L product scope and acceptance gates, and [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md) for the autonomous evidence-led research, design, execution and final-demo sequence. These are contracts for how to work, not a model-intelligence upgrade or a claim of completed capability.
+Engineering agents: start from [the fixed implementation blueprint](docs/BUILD_BLUEPRINT.md), [documentation authority map](docs/DOCUMENT_MAP.md) and [current execution ledger](project-brain/EXECUTION_LEDGER.json), then read this file, [CAPABILITIES.md](CAPABILITIES.md) for the complete A–L product scope and acceptance gates, and [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md) for the autonomous evidence-led research, design, execution and final-demo sequence. These are contracts for how to work, not a model-intelligence upgrade or a claim of completed capability.
 
 Build one coherent creative system that an AI model can operate as an artist
 operates professional creative software. The AI supplies ideas and creative
@@ -15,7 +15,7 @@ capabilities; they do not define a fixed project structure or visual style.
 
 # Persistent session memory (required for all engineering agents)
 
-The canonical cross-session project memory is [project-brain/README.md](project-brain/README.md). At every session start, read its [BRIEF](project-brain/BRIEF.md), [STATE](project-brain/STATE.md), [DECISIONS](project-brain/DECISIONS.md), [RISKS](project-brain/RISKS.md) and [PROJECT_MAP](project-brain/PROJECT_MAP.md), then refresh actual GitHub main/PRs/runs before acting. At each meaningful work checkpoint update the same current STATE and relevant decisions/evidence in a reviewed commit. Historical [docs/continuity/STATUS.md](docs/continuity/STATUS.md) is no longer the current state source. Do not rely on ephemeral sandbox files or automatic chat memory; never copy credentials or owner-private uploads into public Git. Owner's latest model-development choice is NVIDIA API first while preserving a future provider-neutral, locally hostable product.
+The canonical cross-session project memory is [project-brain/README.md](project-brain/README.md). At every session start, read its [BRIEF](project-brain/BRIEF.md), [STATE](project-brain/STATE.md), [DECISIONS](project-brain/DECISIONS.md), [RISKS](project-brain/RISKS.md) and [PROJECT_MAP](project-brain/PROJECT_MAP.md), then refresh actual GitHub main/PRs/runs before acting. At each meaningful work checkpoint reconcile compact STATE **and** EXECUTION_LEDGER.json with exact source evidence in a reviewed commit; preserve failed model runs and avoid turning offline CI into claimed creative acceptance. Historical [docs/continuity/STATUS.md](docs/continuity/STATUS.md) is no longer the current state source. Do not rely on ephemeral sandbox files or automatic chat memory; never copy credentials or owner-private uploads into public Git. The latest 2026-11-13 owner delta defers paid NVIDIA and private-media inference during present offline/native engineering; model independence and local-first release remain fixed. A historical NVIDIA-first instruction is not current permission.
 
 # Accountable engineering ownership
 
