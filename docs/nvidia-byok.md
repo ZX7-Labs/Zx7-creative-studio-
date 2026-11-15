@@ -1,4 +1,6 @@
-# NVIDIA BYOK cloud inference (opt-in, development status)
+# NVIDIA BYOK cloud inference (optional integration reference)
+
+> **Not a current instruction to call NVIDIA.** The latest owner's [BRIEF](../project-brain/BRIEF.md) (13 November 2026) defers NVIDIA paid inference and private-media/raw-audio egress pending separately justified explicit consent. Catalog models, free tiers, quotas and transport capabilities in this page are time-dependent historical/reference details; verify against live provider documentation before any **authorized** future trial. No endpoint is an obligatory ZX7 runtime dependency.
 
 ZX7's default local editor and BODY run without any cloud account. This
 adapter does **not** imply a finished public installer, a cloud account
