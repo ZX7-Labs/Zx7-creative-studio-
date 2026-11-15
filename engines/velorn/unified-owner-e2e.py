@@ -29,6 +29,8 @@ from studio_next.native_editor_identity import pinned_native_editor_identity_pol
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
+from studio_next.native_editor_project import capture_render_project
+from studio_next.native_render_evidence import native_render_binding, DESTINATION_FIELD
 
 
 def digest(file):
@@ -371,13 +373,28 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert saved_sha in initial_snapshots, (
                 "First committed native project is missing from autosave recovery")
             # A native render must be physically decoded, including sound.
-            await invoke(studio, "export_timeline", {
+            first_render = await invoke(studio, "export_timeline", {
                 "outputPath": str(export), "target": "h264_project",
                 "width": 320, "height": 180, "fps": 24,
                 "range": "custom", "startSeconds": 0,
                 "endSeconds": 3 if with_blender else 2,
                 "includeAudio": True,
                 "previewOnly": False})
+            if with_atomic_range:
+                # Reuse exactly the host callback exercised by native Brain
+                # sessions; this is a physical source-custody check, NOT a
+                # synthetic model decision or professional creative rating.
+                render_snapshots = root / "state" / "native-owner-render-bindings"
+                render_snapshots.mkdir(mode=0o700)
+                first_binding = native_render_binding(str(export), first_render)
+                assert first_binding, "Native renderer did not bind real export to actual timeline"
+                first_native_sha, first_options_sha = capture_render_project(
+                    root / "projects", render_snapshots, first_render, first_binding,
+                    (str(project), save["result"]["project"]["modified"]),
+                    expected_project=project)
+                assert first_native_sha == saved_sha
+                assert digest(render_snapshots /
+                    (first_binding[DESTINATION_FIELD] + ".comfystudio")) == saved_sha
             deadline = time.monotonic() + 90
             video_pcm = audio_pcm = None
             while time.monotonic() < deadline:
@@ -502,12 +519,25 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 assert persisted["modified"] == updated_save["result"]["project"]["modified"]
                 assert any(len(t.get("clips") or []) == 5 for t in persisted["timelines"])
                 edited_export = root / "outputs" / "graph-cgi-atomic-range.mp4"
-                await invoke(studio, "export_timeline", {
+                final_render = await invoke(studio, "export_timeline", {
                     "outputPath": str(edited_export), "target": "h264_project",
                     "width": 320, "height": 180, "fps": 24,
                     "range": "custom", "startSeconds": 0,
                     "endSeconds": 2.75, "includeAudio": True,
                     "previewOnly": False})
+                final_binding = native_render_binding(str(edited_export), final_render)
+                assert final_binding, "Second native render lacks actual project binding"
+                revised_native_sha, revised_options_sha = capture_render_project(
+                    root / "projects", render_snapshots, final_render, final_binding,
+                    (str(project), updated_save["result"]["project"]["modified"]),
+                    expected_project=project)
+                assert revised_native_sha == updated_sha != first_native_sha
+                assert len(first_options_sha) == len(revised_options_sha) == 64
+                assert digest(render_snapshots /
+                    (final_binding[DESTINATION_FIELD] + ".comfystudio")) == updated_sha
+                assert digest(render_snapshots /
+                    (first_binding[DESTINATION_FIELD] + ".comfystudio")) == saved_sha
+                assert first_binding[DESTINATION_FIELD] != final_binding[DESTINATION_FIELD]
                 edited_rgb = edited_pcm = None
                 deadline = time.monotonic() + 90
                 while time.monotonic() < deadline:
@@ -585,6 +615,8 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 True if with_atomic_range else None),
             "native_decoded_picture_matches_body_authored_pixels": True,
             "native_export_source_bound_verification": True,
+            "two_actual_render_time_saved_native_snapshots_bound": (
+                True if with_atomic_range else None),
             "genuine_model_artistry_or_professional_VFX_approved": False,
         }, sort_keys=True), flush=True)
 
