@@ -152,7 +152,8 @@ jobs:
                       sha.update(chunk)
               assert item["sha256"] == sha.hexdigest(), name
           assert manifest["portable_native_project_source_closure_verified"] is True
-          assert manifest["portable_native_project_reopened_after_extraction"] is False
+          assert manifest["portable_native_project_reopened_after_extraction"] is True
+          assert manifest["relocated_export_matches_revision_picture_and_audio"] is True
           portable = root / "portable-native-project"
           native_path = portable / "project.comfystudio"
           assert "portable-native-project/project.comfystudio" in actual
@@ -180,11 +181,34 @@ jobs:
           assert isinstance(timelines, list) and timelines
           clips = [clip for t in timelines for clip in t.get("clips", [])]
           assert len(clips) >= 5 and all(c.get("assetId") in asset_ids for c in clips)
-          assert len(actual) == 12 + len(assets)
+          assert len(actual) == 13 + len(assets)
+          assert "relocated-native-picture-sound.mp4" in actual
           assert {p.name for p in root.iterdir()} == (
               {name for name in actual if "/" not in name} | {"manifest.json", "portable-native-project"})
+          for name, expected_duration, expected_frames in (
+              ("first-native-picture-sound.mp4", 3.0, 72),
+              ("revised-native-picture-sound.mp4", 2.75, 66),
+              ("relocated-native-picture-sound.mp4", 2.75, 66),
+          ):
+              import subprocess
+              movie = root / name
+              probe = json.loads(subprocess.check_output([
+                  "ffprobe", "-v", "error", "-count_frames", "-show_entries",
+                  "stream=codec_type,width,height,duration,nb_read_frames",
+                  "-of", "json", str(movie)], timeout=30))
+              video = [row for row in probe["streams"]
+                       if row.get("codec_type") == "video"]
+              audio = [row for row in probe["streams"]
+                       if row.get("codec_type") == "audio"]
+              assert len(video) == len(audio) == 1
+              assert video[0]["width"] == 320 and video[0]["height"] == 180
+              assert int(video[0]["nb_read_frames"]) == expected_frames
+              assert abs(float(video[0]["duration"]) - expected_duration) < .02
+              subprocess.run(["ffmpeg", "-nostdin", "-v", "error",
+                  "-xerror", "-i", str(movie), "-map", "0:v:0", "-map", "0:a:0",
+                  "-f", "null", "-"], check=True, timeout=90)
           print("ZX7_SYNTHETIC_NATIVE_PORTABLE_SOURCE_CLOSURE_VERIFIED",
-                len(assets), "retained source media; total", len(actual), "files")
+                len(assets), "retained source media; 3 movies physically decoded")
           PY
       - name: Preserve verified synthetic source, editable project, and both physical A/V renders
         if: always()

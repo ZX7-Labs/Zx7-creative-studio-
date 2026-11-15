@@ -658,8 +658,6 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                     raise AssertionError("Native source escapes owned relative asset directory")
                 original_asset = project.joinpath(*relative.parts)
                 if (not original_asset.is_file() or
-                        any(original_asset.joinpath(*relative.parts[:i]).is_symlink()
-                            for i in ()) or
                         any(original_asset.parents[i].is_symlink()
                             for i in range(len(relative.parts))) or
                         original_asset.is_symlink() or
@@ -692,6 +690,71 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert first_native_sha != updated_sha
             assert witnesses[4]["sha256"] == updated_sha
             assert witnesses[2]["sha256"] == updated_sha
+            # Actual relocation test: do not confuse a SHA-complete archive
+            # with a working native project on a fresh editor process.
+            relocated = root / "projects" / "relocated-from-physical-evidence"
+            assert not relocated.exists()
+            shutil.copytree(portable, relocated, symlinks=False)
+            assert digest(relocated / "project.comfystudio") == updated_sha
+            for asset in media:
+                relative = PurePosixPath(asset["path"])
+                assert digest(relocated.joinpath(*relative.parts)) == digest(
+                    portable.joinpath(*relative.parts))
+            relocated_movie = root / "outputs" / "independently-reopened-native.mp4"
+            async with connected() as (relocated_editor, _):
+                reopened = await invoke(relocated_editor, "open_project", {
+                    "projectPath": str(relocated), "previewOnly": False})
+                assert reopened is not None
+                recovered = await read_until(relocated_editor, lambda state:
+                    state.get("project", {}).get("path") == str(relocated) and
+                    state.get("assetCount") == len(media) and
+                    (state.get("currentTimeline") or {}).get("clipCount") == 5)
+                assert recovered["project"]["path"] == str(relocated)
+                recovered_timeline = await invoke(relocated_editor, "get_timeline", {
+                    "includeClips": True, "limit": 1000})
+                assert len(recovered_timeline["clips"]) == 5
+                assert {clip["assetId"] for clip in recovered_timeline["clips"]} == source_ids
+                await invoke(relocated_editor, "get_project")
+                await invoke(relocated_editor, "export_timeline", {
+                    "outputPath": str(relocated_movie), "target": "h264_project",
+                    "width": 320, "height": 180, "fps": 24,
+                    "range": "custom", "startSeconds": 0,
+                    "endSeconds": 2.75, "includeAudio": True,
+                    "previewOnly": False})
+                independent_rgb = independent_pcm = None
+                deadline = time.monotonic() + 90
+                while time.monotonic() < deadline:
+                    try:
+                        if relocated_movie.is_file() and relocated_movie.stat().st_size > 4000:
+                            independent_rgb = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                "-xerror", "-i", str(relocated_movie), "-map", "0:v:0",
+                                "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
+                            independent_pcm = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                "-xerror", "-i", str(relocated_movie), "-map", "0:a:0",
+                                "-ac", "1", "-ar", "16000", "-f", "s16le", "-"])
+                            break
+                    except (subprocess.CalledProcessError, OSError):
+                        pass
+                    await asyncio.sleep(.35)
+                assert independent_rgb is not None and independent_pcm is not None
+                assert independent_rgb == edited_rgb, (
+                    "Relocated native project changed actual decoded picture")
+                assert independent_pcm == edited_pcm and any(independent_pcm), (
+                    "Relocated native project changed or lost original sound")
+                certified = await invoke(relocated_editor, "zx7_verify_native_export", {
+                    "path": str(relocated_movie), "expected": {
+                        "width": 320, "height": 180,
+                        "duration_seconds": 2.75, "require_audio": True}})
+                assert certified["physical_export_verified"] is True
+                assert certified["native_export_sha256"] == digest(relocated_movie)
+            assert digest(portable_doc) == updated_sha
+            assert digest(document) == updated_sha
+            relocated_copy = destination / "relocated-native-picture-sound.mp4"
+            shutil.copyfile(relocated_movie, relocated_copy)
+            assert digest(relocated_copy) == digest(relocated_movie)
+            witnesses.append({
+                "file": relocated_copy.name, "sha256": digest(relocated_copy),
+                "bytes": relocated_copy.stat().st_size})
             manifest = {
                 "schema": 2,
                 "kind": "zx7_synthetic_native_blender_graph_av_revision",
@@ -702,14 +765,15 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 "physical_picture_and_non_silent_audio_decoded": True,
                 "editable_native_project_reopened": True,
                 "portable_native_project_source_closure_verified": True,
-                "portable_native_project_reopened_after_extraction": False,
+                "portable_native_project_reopened_after_extraction": True,
+                "relocated_export_matches_revision_picture_and_audio": True,
                 "genuine_model_artistry_verified": False,
                 "independent_professional_review": False,
                 "files": witnesses,
             }
             (destination / "manifest.json").write_text(
                 json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            assert len(list(destination.iterdir())) == len(copies) + 2
+            assert len(list(destination.iterdir())) == len(copies) + 3
         print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_ATOMIC_AV "
                if with_atomic_range else "ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
                if with_blender else "ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV ") + json.dumps({
