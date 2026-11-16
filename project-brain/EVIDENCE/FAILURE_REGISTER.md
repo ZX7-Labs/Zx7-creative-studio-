@@ -34,6 +34,18 @@ This is a **causal retrieval index**, not a reconstructed raw transcript or a se
 - **Separate broader outcome:** 19/19 combined exact-head workflow runs eventually successful; [#349](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/349) merged with same tested Git tree. **Technical native integration passed; independent creative or security test did not run.**
 - **Status:** INITIAL_CI_FAIL / SAME_HEAD_RERUN_PASS / CAUSE_UNKNOWN.
 
+## F-REAL-004 — 2026-11-16 synthetic NVIDIA real native A/V trial, identical outputs
+
+- **Source and evidence:** [run #43875955529](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43875955529), exact source `07fe1a84c7249df8a76f8ec83f838c96358604d2`, job `133328916078`, [original artifact #14230378968](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43875955529/artifacts/14230378968); independent downloaded ZIP SHA256 `cb5629c7c492c6d11abe7bbde5b46daa1c6dc74ea0eb9022e9a578b499a6bc36`.
+- **Observed:** Actual NVIDIA 120B created native video+audio and two correct 640×360 24fps six-second H264/AAC exports with identical byte SHA; five `export_delivery_mismatch` host pre-dispatch denials. Real 48-turn session ended without conforming reviewed creative revision. These are synthetic assets; no private owner originals were uploaded.
+- **Later fix and limit:** `3c4b91e814ec0bc950f68e7a1bf384e8c1535021` exposes exact host-approved export profile/preset precedence through real native tool metadata. Later run #43883369538 made distinct picture outputs but did **not** pass the real-model acceptance. No automatic cloud retry or new authorization.
+
+## F-REAL-005 — 2026-11-16 synthetic NVIDIA real picture revision without accepted A/V review
+
+- **Source and evidence:** [run #43883369538](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43883369538), source `07487c0babc36b7eaf6bc02f3a70b8e4b2334f85`, job `133354875086`, [original artifact #14233632889](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43883369538/artifacts/14233632889), verified downloaded ZIP SHA256 `5f393460bcb8dca0de243148e458dfba92533de96f69dc658bc457f6e3efbd95`.
+- **Independent physical check:** Both MP4s decode to real 640×360 H264/24fps/6s and AAC stereo 44.1kHz with 144 picture frames each. 107/144 decoded RGB frame MD5s differ; decoded PCM S16LE stereo 48kHz SHA256 `caf801fa989beb326cf11eaade0c8972cf46fb2db64e1c540089bcbdddf4b16e` is **identical**. Saved native project contains original source video/audio and a shape. 115 native journal events, 48 model-submitted tools and six host-denied `output_exists` requests; model selected real frame and numerical audio observations, but `reviewed_native_render_pair`/`reviewed_native_audiovisual_pair` remain absent at `turn_budget_exhausted`. Neither semantic hearing nor professional artistry was independently accepted.
+- **Causal scope:** Export target source problem improved; model/controller end-to-end review completion and semantic sound understanding still fail. Diagnose journal/model feedback and verified pair criteria offline before any purpose-specific authorized further inference. Existing safe refusals and no-uncertain-write-replay MUST remain; model-created different files alone are insufficient acceptance.
+
 ## Remaining expensive / acceptance-blocking uncertainties (not mislabeled as past failures)
 
 - **U-G1:** No accepted model-initiated **original picture+audible sound → semantic time-based observation → intentional native revision → two conforming independently reviewed editable exports → true human co-edit**. [R01](../RISKS.md), [G1 build plan](../../docs/BUILD_BLUEPRINT.md).

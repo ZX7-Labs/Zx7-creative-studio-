@@ -14,7 +14,7 @@
     "merged_prs": 224,
     "closed_unmerged_prs": 41,
     "workflow_runs_repository_total_observed": 9028,
-    "notes": "Dated GitHub API inventory observed 2026-11-16; 403 branch refs include historical work, not 403 active features. 30 Markdown files have explicit authority/archive roles, not 30 competing plans. PR #289 was closed as superseded after #311 merge. Active #356 remains draft/unmerged: code head 276d30ac9c648d487739bf9de06d07c98e3479a6 had 13/13 technical workflows pass; latest independent evidence-only head bde314237196070e61cbf13ea6e971330e12afc1 was not yet fully retested at this snapshot. No real model artistic acceptance."
+    "notes": "Dated GitHub API inventory observed 2026-11-16; 403 branch refs include historical work, not 403 active features. 30 Markdown files have explicit authority/archive roles, not 30 competing plans. PR #289 was closed as superseded after #311 merge. Active #356 remains draft/unmerged: code head 276d30ac9c648d487739bf9de06d07c98e3479a6 had 13/13 technical workflows pass; latest independent evidence-only head bde314237196070e61cbf13ea6e971330e12afc1 was not yet fully retested at this snapshot. No real model artistic acceptance. 2026-11-16 exact G1 synthetic NVIDIA failures #43875955529 and #43883369538 were newly inspected against original retained artifacts; 35/35 latest #356 checks are technical only, not artistic acceptance. Earlier dated inventory counts are not refreshed."
   },
   "claims_policy": {
     "fixed_requirements_source": "docs/BUILD_BLUEPRINT.md",
@@ -367,6 +367,32 @@
       "root_confidence": "exact first-run predicate unknown",
       "post_fix_real_model_retest": "NOT_APPLICABLE",
       "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43680525680",
+      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+    },
+    {
+      "id": "F-REAL-004",
+      "kind": "GENUINE_MODEL",
+      "result": "FAILED",
+      "run": 43875955529,
+      "job": 133328916078,
+      "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07fe1a84c7249df8a76f8ec83f838c96358604d2: two identical SHA/decoded 640x360 24fps 6s H264/AAC outputs with native video+audio; 5 export_delivery_mismatch pre-dispatch rejections; 48-turn budget exhaustion; no accepted review pair.",
+      "source_or_fix": "Git commit 3c4b91e814ec0bc950f68e7a1bf384e8c1535021 later exposed owner-specific native export target metadata to the model; subsequent run #43883369538 produced distinct video but failed full G1.",
+      "root_confidence": "Exact model journal and original retained synthetic artifact ZIP #14230378968 independently inspected; source-cause of entire creative failure not fully proven.",
+      "post_fix_real_model_retest": "FAILED_NO_ACCEPTED_REVIEW",
+      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43875955529",
+      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+    },
+    {
+      "id": "F-REAL-005",
+      "kind": "GENUINE_MODEL",
+      "result": "FAILED",
+      "run": 43883369538,
+      "job": 133354875086,
+      "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07487c0babc36b7eaf6bc02f3a70b8e4b2334f85: two distinct conformant decoded 640x360 24fps 6s H264/AAC files, 107/144 RGB frame hashes different, same decoded 48kHz stereo PCM; real native project and video/audio; 6 safe output_exists pre-dispatch rejections; 48 turns exhausted, reviewed A/V pair absent; no semantic hearing.",
+      "source_or_fix": "Export target metadata fix was present. Current #356 exact head 00dcfc69c3d20455bbc875d2e8eef0406c9188f2 35/35 technical checks PASS but no succeeding comparable real model trial. Next isolate source-bound review pairing/model competence before spending another authorized trial.",
+      "root_confidence": "Retained artifact #14233632889 independently downloaded, ZIP SHA256 5f393460bcb8dca0de243148e458dfba92533de96f69dc658bc457f6e3efbd95, FFprobe/FFmpeg picture/audio decoding and native JSONL journal inspected.",
+      "post_fix_real_model_retest": "NOT_PASSED",
+      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43883369538",
       "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
     }
   ],
