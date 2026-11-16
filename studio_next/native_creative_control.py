@@ -290,6 +290,81 @@ def _native_placement_assets(texts):
     return {"assets": choices, "count": count, "complete": not limited, "staged_files_require_import": True}
 
 
+def _native_clip_style_targets(texts, timeline_id, inputs):
+    """Match the *pinned editor's* clip selectors against a complete real READ.
+
+    In NVIDIA trial #43855560474 the model-selected set_clip_style returned
+    the exact pinned pre-mutation "No matching clips found" error. The host
+    may reject an evidently empty target BEFORE sending an uncertain WRITE;
+    it must never invent a replacement clip or execute a different edit.
+    Return None for missing, stale, truncated, or ambiguous read evidence.
+    """
+    try:
+        snapshot = _strict_receipt(texts, "native clip style targets")
+    except NativeCreativeControlError:
+        return None
+    clips = snapshot.get("clips")
+    if (snapshot.get("id") != timeline_id or
+            snapshot.get("clipLimitApplied") is not False or
+            type(clips) is not list or len(clips) > 1000):
+        return None
+    seen = set()
+    for clip in clips:
+        if (type(clip) is not dict or
+                type(clip.get("id")) is not str or
+                not 1 <= len(clip["id"]) <= 128 or
+                clip["id"] in seen):
+            return None
+        seen.add(clip["id"])
+    all_ids = sorted(seen)
+    raw = inputs.get("clipIds") or inputs.get("clipId") or ""
+    explicit = (raw if type(raw) is list else raw.split(",") if type(raw) is str else [])
+    explicit = {item.strip() for item in explicit
+                if type(item) is str and item.strip()}
+    candidates = [clip for clip in clips if not explicit or clip["id"] in explicit]
+
+    selector = str(inputs.get("filter") or "").strip().lower()
+    selector = re.sub(r"[\s_-]+", "", selector)
+    # The renderer's selectedClipIds are not in get_timeline. Do not
+    # manufacture a selection from the clip array or claim zero matches.
+    if selector == "selected" and not explicit:
+        return {"all_ids": all_ids, "matched_ids": None,
+                "selection_unobservable": True}
+    if selector == "disabled":
+        candidates = [x for x in candidates if x.get("enabled") is False]
+    elif selector == "enabled":
+        candidates = [x for x in candidates if x.get("enabled") is not False]
+    elif selector == "visual":
+        candidates = [x for x in candidates
+                      if x.get("type") in ("video", "image", "text", "shape")]
+    elif selector == "audio":
+        candidates = [x for x in candidates if x.get("type") == "audio"]
+    elif selector in ("colored", "labeled"):
+        candidates = [x for x in candidates if bool(x.get("labelColor"))]
+    type_filter = str(inputs.get("type") or "").lower().strip()
+    if type_filter:
+        types = {item.strip() for item in type_filter.split(",") if item.strip()}
+        candidates = [x for x in candidates if str(x.get("type") or "").lower() in types]
+    track_id = str(inputs.get("trackId") or "").strip()
+    if track_id:
+        candidates = [x for x in candidates if x.get("trackId") == track_id]
+    name_query = str(inputs.get("nameIncludes") or "").lower().strip()
+    if name_query:
+        candidates = [x for x in candidates if name_query in
+                      str(x.get("name") or x.get("assetName") or x["id"]).lower()]
+    # Pinned Velorn's resolveMcpClipTargets also treats labelColor as an
+    # existing-label *filter*, even when set_clip_style is changing it.
+    # Preserve that real behavior in the preflight; don't falsely certify a
+    # new color as an already-matching clip and then send a doomed write.
+    color = str(inputs.get("labelColor") or "").strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        candidates = [x for x in candidates
+                      if str(x.get("labelColor") or "").lower() == color.lower()]
+    return {"all_ids": all_ids,
+            "matched_ids": sorted(x["id"] for x in candidates),
+            "selection_unobservable": False}
+
+
 def _pinned_source_clip_edit_plan_matches(name, plan):
     """Exact source-pinned no-write clip edit plan, not a successful edit.
 
@@ -1979,6 +2054,62 @@ class NativeCreativeControl:
                 # The editor's createTrack/newTrack/newTopTrack path remains
                 # unrestricted: it is a distinct genuine creative operation.
                 content_inputs = args["inputs"]
+                # Before a model-selected clip style WRITE, perform one
+                # host-granted fresh READ of the exact current clip inventory.
+                # The pinned editor rejects an empty target before mutation.
+                # Keep that failure out of the uncertain-write path without
+                # guessing a replacement target, replaying, or trusting the
+                # model's claimed clip ID. The native editor still rechecks.
+                if (native_name == "set_clip_style" and
+                        self.host_tool_access is not None and
+                        self.host_tool_access.get("get_timeline") == "read" and
+                        "get_timeline" in validators and
+                        validators["get_timeline"].is_valid({
+                            "includeClips": True, "limit": 1000})):
+                    observed_targets = None
+                    timeline_id = self._trusted_project_active_timeline_id()
+                    if timeline_id is not None:
+                        try:
+                            checked = await self.session.call_tool(
+                                "get_timeline", {"includeClips": True, "limit": 1000})
+                            if not _native_mcp_error_status(checked):
+                                checked_texts, checked_images, checked_audio = (
+                                    _native_content(checked))
+                                if not checked_images and not checked_audio:
+                                    observed_targets = _native_clip_style_targets(
+                                        checked_texts, timeline_id, content_inputs)
+                        except (NativeCreativeControlError, ValueError, OSError):
+                            # No trustworthy, complete source read: do not
+                            # turn uncertainty into a guessed positive match.
+                            pass
+                    if (observed_targets is None or
+                            observed_targets["matched_ids"] is None or
+                            not observed_targets["matched_ids"]):
+                        keyword = ("host_clip_style_target_unconfirmed"
+                                   if observed_targets is None or
+                                      observed_targets["matched_ids"] is None
+                                   else "host_clip_style_no_matching_clip")
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": keyword,
+                            "host_observed_clip_ids": (
+                                observed_targets["all_ids"][:32]
+                                if observed_targets is not None else []),
+                            "host_source_attested_read_only": True,
+                            "choose_exact_existing_clip_id_from_native_state": True,
+                            "label_color_is_also_a_selector_in_pinned_editor": (
+                                bool(content_inputs.get("labelColor"))),
+                            "no_native_dispatch": True,
+                            "no_automatic_retry": True}
+                        self._append({
+                            "kind": "model_action_rejected", "turn": turn,
+                            **timing, "tool": native_name,
+                            "inputs_sha256": hashlib.sha256(
+                                _wire(content_inputs).encode()).hexdigest(),
+                            "validation_keyword": keyword,
+                            "schema_location": "native/get_timeline/clips",
+                            "no_native_dispatch": True})
+                        continue
                 needs_existing_video_track = (
                     native_name in _CONTENT_VIDEO_TRACK_WRITES and
                     type(content_inputs.get("trackId")) is str and

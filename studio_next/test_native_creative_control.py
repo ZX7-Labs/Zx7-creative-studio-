@@ -86,6 +86,125 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(type="text", text='No placeable asset matched "not-imported.mp4".')])
         return session
 
+    @staticmethod
+    def _live_clip_style_session(*, complete=True):
+        session = FakeSession()
+        session.tools = [
+            SimpleNamespace(name="get_project", description="Real native state",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="get_timeline", description="Real native clips",
+                            input_schema={"type": "object", "properties": {
+                                "includeClips": {"type": "boolean"},
+                                "limit": {"type": "integer"}}}),
+            SimpleNamespace(name="set_clip_style", description="Pinned clip style edit",
+                            input_schema={"type": "object", "properties": {
+                                "clipId": {"type": "string"}, "positionX": {"type": "number"},
+                                "labelColor": {"type": "string"},
+                                "filter": {"type": "string"},
+                                "previewOnly": {"type": "boolean"}}}),
+        ]
+
+        async def native_call(name, arguments):
+            session.calls.append((name, arguments))
+            if name == "get_project":
+                result = {"mcp": {"hasProject": True},
+                          "project": {"currentTimelineId": "timeline-native"},
+                          "currentTimeline": {"id": "timeline-native", "clipCount": 2}}
+            elif name == "get_timeline":
+                result = {"id": "timeline-native", "clipLimitApplied": not complete,
+                          "clips": [{"id": "clip-1", "type": "video",
+                                     "trackId": "video-1", "enabled": True,
+                                     "labelColor": ""},
+                                    {"id": "clip-2", "type": "audio",
+                                     "trackId": "audio-1", "enabled": True,
+                                     "labelColor": ""}]}
+            elif name == "set_clip_style":
+                # The genuine pinned editor returns an error when an explicit
+                # clip target does not exist. Never trust a fake success for it.
+                assert arguments.get("clipId") == "clip-1"
+                result = {"success": True, "clipCount": 1}
+            else:
+                raise AssertionError("Unknown native test tool")
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text", text=json.dumps(result))])
+        session.call_tool = native_call
+        return session
+
+    async def test_nvidia_retry_unknown_style_clip_is_rejected_before_write(self):
+        """Actual trial #43855560474 terminated on exact no-matching-clips."""
+        session = self._live_clip_style_session()
+        model = ScriptedModel([
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-not-in-real-editor",
+                             "positionX": 40, "previewOnly": False}),
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-1", "positionX": 40,
+                             "previewOnly": False}),
+            decision("finish", summary="Technical fixture, not approved art"),
+        ])
+        grants = {"get_project": "read", "get_timeline": "read",
+                  "set_clip_style": "write"}
+        with tempfile.TemporaryDirectory() as root:
+            journal = Path(root) / "native.jsonl"
+            result = await NativeCreativeControl(
+                session, model, host_tool_access=grants, max_turns=3,
+                receipt_path=journal).run("Edit the real source footage")
+            self.assertEqual(result["status"], "model_finished_unverified")
+            self.assertEqual(sum(name == "set_clip_style" for name, _ in session.calls), 1)
+            self.assertEqual(next(a for name, a in session.calls
+                                  if name == "set_clip_style")["clipId"], "clip-1")
+            rejected = [event for event in result["events"]
+                        if event["kind"] == "model_action_rejected"]
+            self.assertEqual(len(rejected), 1)
+            self.assertEqual(rejected[0]["validation_keyword"],
+                             "host_clip_style_no_matching_clip")
+            self.assertTrue(rejected[0]["no_native_dispatch"])
+            feedback = model.observed[1]["last_rejected_native_action_feedback"]
+            self.assertEqual(feedback["host_observed_clip_ids"], ["clip-1", "clip-2"])
+            self.assertTrue(feedback["no_automatic_retry"])
+            self.assertNotIn("clip-not-in-real-editor", journal.read_text())
+            self.assertTrue(any(x["kind"] == "native_tool_result" and
+                                x["tool"] == "set_clip_style"
+                                for x in result["events"]))
+
+    async def test_pinned_style_label_color_filter_cannot_fake_target(self):
+        session = self._live_clip_style_session()
+        model = ScriptedModel([
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-1", "labelColor": "#ff0000",
+                             "previewOnly": False}),
+            decision("finish", summary="Missing target is not a write"),
+        ])
+        grants = {"get_project": "read", "get_timeline": "read",
+                  "set_clip_style": "write"}
+        result = await NativeCreativeControl(
+            session, model, host_tool_access=grants, max_turns=2).run(
+                "Change a model-chosen native clip style")
+        self.assertFalse(any(name == "set_clip_style" for name, _ in session.calls))
+        self.assertEqual(model.observed[1]["last_rejected_native_action_feedback"][
+            "validation_keyword"], "host_clip_style_no_matching_clip")
+        self.assertTrue(model.observed[1]["last_rejected_native_action_feedback"][
+            "label_color_is_also_a_selector_in_pinned_editor"])
+        self.assertEqual(result["status"], "model_finished_unverified")
+
+    async def test_incomplete_clip_inventory_cannot_authorize_style_write(self):
+        session = self._live_clip_style_session(complete=False)
+        model = ScriptedModel([
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-1", "positionX": 40,
+                             "previewOnly": False}),
+            decision("finish", summary="Incomplete read cannot prove a target"),
+        ])
+        grants = {"get_project": "read", "get_timeline": "read",
+                  "set_clip_style": "write"}
+        result = await NativeCreativeControl(
+            session, model, host_tool_access=grants, max_turns=2).run(
+                "Do not guess with an incomplete real clip inventory")
+        self.assertFalse(any(name == "set_clip_style" for name, _ in session.calls))
+        self.assertEqual(model.observed[1]["last_rejected_native_action_feedback"][
+            "validation_keyword"], "host_clip_style_target_unconfirmed")
+        self.assertEqual(result["status"], "model_finished_unverified")
+
     async def test_source_attested_failed_preview_allows_only_a_new_model_decision(self):
         for preview in (None, True):
             with self.subTest(preview=preview):
