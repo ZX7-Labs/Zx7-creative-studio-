@@ -2,19 +2,19 @@
   "schema_version": "zx7.execution-ledger.v1",
   "purpose": "Typed, source-linked snapshot of what is built, physically verified, actually failed, and still unaccepted. NOT raw action log, not a new planning spec, not automatic live status.",
   "snapshot": {
-    "observed_utc": "2026-11-15T06:25:56Z",
-    "github_main_at_audit": "11f905245a7b6cf27ecf603300342e392bab96f7",
-    "tracked_git_tree_entries": 624,
-    "tracked_markdown_at_audit": 26,
-    "branches": 397,
-    "prs_total": 344,
+    "observed_utc": "2026-11-16T03:27:48Z",
+    "github_main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "tracked_git_tree_entries": 629,
+    "tracked_markdown_at_audit": 30,
+    "branches": 403,
+    "prs_total": 350,
     "open_prs": 85,
-    "open_prs_draft": 70,
-    "open_prs_nondraft": 15,
-    "merged_prs": 220,
-    "closed_unmerged_prs": 39,
-    "workflow_runs_repository_total_observed": 8612,
-    "notes": "Counts are timestamped live inventory, not authoritative tomorrow. Refresh before writing; branch counts do not equal unfinished features. Ledger baseline was deliberately recorded before doc-restructuring PR #351; never treat this source SHA as current main after later merges."
+    "open_prs_draft": 71,
+    "open_prs_nondraft": 14,
+    "merged_prs": 224,
+    "closed_unmerged_prs": 41,
+    "workflow_runs_repository_total_observed": 9028,
+    "notes": "Dated GitHub API inventory observed 2026-11-16; 403 branch refs include historical work, not 403 active features. 30 Markdown files have explicit authority/archive roles, not 30 competing plans. PR #289 was closed as superseded after #311 merge. Active #356 remains draft/unmerged: code head 276d30ac9c648d487739bf9de06d07c98e3479a6 had 13/13 technical workflows pass; latest independent evidence-only head bde314237196070e61cbf13ea6e971330e12afc1 was not yet fully retested at this snapshot. No real model artistic acceptance."
   },
   "claims_policy": {
     "fixed_requirements_source": "docs/BUILD_BLUEPRINT.md",
@@ -308,8 +308,8 @@
     {
       "id": "M-G1-SELECTED-RENDER-SNAPSHOT",
       "kind": "technical",
-      "result": "SOURCE_SCOPED_REVIEW",
-      "evidence": "PR #356 binds both reviewed exports from an explicitly selected existing owner native project to immutable SHA-verified saved-document snapshots, retaining pre-revision original and rejecting sibling project substitution. RED: workflow 43746815156 on test-only head 6834e7a58df3b05f5560d78a05c682f5710bbba0. Exact-head/source and actual-model acceptance must be checked separately.",
+      "result": "PHYSICAL_TECHNICAL_DRAFT_UNMERGED",
+      "evidence": "Draft PR #356 code head 276d30ac9c648d487739bf9de06d07c98e3479a6: 13/13 GitHub technical workflows success, with independent synthetic native A/V artifact #14191830274 (16/16 file digests; 72/66/66 frames, complete relocatable 3-source closure and matching decoded relocated picture/sound) and installed release artifact #14190804292 (24/24 manifest digests; 1542 tests run, 1515 passed, 27 skipped, 0 failed; 57-frame 320x480 A/V film). Exact evidence and limits in EVIDENCE/INDEX. Source/custody/portability is technical, not neural creative, human coediting or professional acceptance.",
       "prs": [
         "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356"
       ],
@@ -461,13 +461,6 @@
   ],
   "open_prs_needing_overlap_review": [
     {
-      "number": 289,
-      "head": "6a2e0344f3e49c02249dcdb14c572277601bc12b",
-      "status": "OPEN_NON_DRAFT",
-      "meaning": "Historical PR remains open but source-compatible context dedup already merged through #311. Do not merge duplicate; no accepted neural retest.",
-      "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/289"
-    },
-    {
       "number": 288,
       "head": "cd6ff58b7882e6d961af51169d6976e93cd47060",
       "status": "OPEN_DRAFT",
@@ -533,6 +526,6 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Continue G1 genuine Brain-authored original picture+sound through the existing unified owner/native route; verify PR #356 existing-project saved/render source binding and exact-head CI, then evaluate genuine neural autonomy and semantic A/V revision. #311 already merged Qwen context dedup; do not duplicate #289. Paid NVIDIA/private egress remains separately gated."
+    "next_action": "Preserve original A-L and reuse existing unified owner/Brain/BODY/editor. PR #356 is verified for scoped technical native custody/portability but stays DRAFT until independently accepted G1. Historical duplicate #289 closed, merged #311 source fix retained; do not re-open or rerun weak Qwen CPU trials without a falsifiable model-quality hypothesis. Next: establish a genuine capable, explicitly authorized local Brain creative A/V first+revision run with semantic picture/sound observation, then independently judge the outputs and human coedit. Paid NVIDIA and any private media egress require separate explicit approval. Do not create new schedulers, media stores, framework or duplicate documentation."
   }
 }
