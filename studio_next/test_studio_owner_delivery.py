@@ -129,6 +129,7 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         self.assertTrue(report["saved_native_matches_last_render_snapshot"])
         self.assertTrue(report["native_media_source_closure_verified"])
         self.assertTrue(report["native_media_matches_final_render_capture"])
+        self.assertTrue(report["render_snapshot_media_closure_verified"])
         self.assertEqual(report["native_media_asset_inventory_count"], 1)
         self.assertEqual(report["native_media_used_asset_count"], 1)
         self.assertFalse(report["native_media_origin_or_export_contribution_proven"])
@@ -148,6 +149,42 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         self.assertEqual(self.native.read_bytes(), native_before)
         self.assertEqual(self.original.read_bytes(),
                          b"owner original bytes; not used as a pretend neural edit")
+
+    def _two_revisions_with_distinct_original_media(self):
+        """Legitimate revision: new native asset, old asset still retained."""
+        first_media = self.project / "assets" / "video" / "first-revision-source.mp4"
+        shutil.copyfile(self.project_media, first_media)
+        self.initial_doc["assets"][0]["path"] = "assets/video/first-revision-source.mp4"
+        first_sha = _verify_native_project_media_closure(
+            self.project, self.initial_doc)["native_media_observation_sha256"]
+        first_snapshot = self.snapshots / (
+            self.pair[0]["destination_sha256"] + ".comfystudio")
+        raw = json.dumps(self.initial_doc).encode("utf-8")
+        first_snapshot.write_bytes(raw)
+        self.status["result"]["reviewed_native_snapshot_sha256"][0] = (
+            hashlib.sha256(raw).hexdigest())
+        self.status["result"]["reviewed_native_media_sha256"][0] = first_sha
+        studio_cli._write_status(self.session, self.status)
+        return first_media
+
+    def test_first_and_final_revisions_with_distinct_retained_sources_remain_portable(self):
+        first_media = self._two_revisions_with_distinct_original_media()
+        report = self.verify()
+        self.assertTrue(report["saved_native_matches_last_render_snapshot"])
+        self.assertTrue(first_media.is_file())
+        self.assertTrue(report["render_snapshot_media_closure_verified"])
+
+    def test_first_revision_missing_source_cannot_be_reported_as_portable(self):
+        first_media = self._two_revisions_with_distinct_original_media()
+        first_media.unlink()
+        with self.assertRaisesRegex(ValueError, "source media|snapshot source"):
+            self.verify()
+
+    def test_first_revision_same_size_media_replacement_cannot_pass(self):
+        first_media = self._two_revisions_with_distinct_original_media()
+        first_media.write_bytes(b"Z" * first_media.stat().st_size)
+        with self.assertRaisesRegex(ValueError, "source media|snapshot source"):
+            self.verify()
 
     def test_owner_explicit_delivery_profile_must_match_both_decoded_movies(self):
         requested = {"width": 64, "height": 36, "duration_seconds": 0.5}

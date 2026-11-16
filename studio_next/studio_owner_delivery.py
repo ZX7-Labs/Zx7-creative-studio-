@@ -348,7 +348,8 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
                     for value in expected_media_hashes)):
             raise ValueError("Host-required render-time native media digests are missing")
         revisions = []
-        for binding, captured_sha in zip(pair, expected_snapshot_hashes, strict=True):
+        for index, (binding, captured_sha) in enumerate(zip(
+                pair, expected_snapshot_hashes, strict=True)):
             snapshot = snapshots_root / (binding["destination_sha256"] + ".comfystudio")
             if not snapshot.is_file() or snapshot.is_symlink():
                 raise ValueError("Host-required render snapshot is missing or linked")
@@ -358,6 +359,18 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
             if snapshot_sha != captured_sha:
                 raise ValueError(
                     "Native render snapshot digest differs from original render-time source")
+            # The first editable revision may reference media that the final
+            # revision no longer needs. Verifying only the final media closure
+            # would incorrectly accept an irrecoverable first saved project.
+            # Each render-time media digest was captured independently by the
+            # host; rehash each snapshot's *own* asset inventory, not the
+            # final inventory (which may legitimately add new native assets).
+            observed_media = (native_media_observation if index == len(pair) - 1
+                else _verify_native_project_media_closure(saved.parent, snapshot_doc))
+            if (observed_media["native_media_observation_sha256"] !=
+                    expected_media_hashes[index]):
+                raise ValueError(
+                    "Native snapshot source media differ from original render-time custody")
             revisions.append(snapshot_sha)
         if revisions[0] == revisions[1]:
             raise ValueError("Native snapshots do not establish an editable revision")
@@ -380,6 +393,7 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         "editable_native_project_sha256": saved_sha,
         "saved_native_matches_last_render_snapshot": snapshot_bound,
         "native_media_matches_final_render_capture": snapshot_bound,
+        "render_snapshot_media_closure_verified": snapshot_bound,
         "native_render_snapshot_match_not_tested": not snapshots_required,
         "rendered_exports": verified,
         "model_autonomy_independently_evaluated": False,
