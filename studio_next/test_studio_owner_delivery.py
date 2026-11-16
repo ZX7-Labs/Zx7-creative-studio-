@@ -14,7 +14,8 @@ from unittest.mock import patch
 from studio_next import studio_cli
 from studio_next.native_render_evidence import REVIEWED_AV_PAIR, destination_digest, timeline_scope_digest
 from studio_next.studio_owner_delivery import (
-    verify_owner_audiovisual_delivery, _verify_native_project_media_closure)
+    verify_owner_audiovisual_delivery, _verify_native_project_media_closure,
+    _verify_staged_sources)
 
 
 class OwnerAudiovisualDeliveryTests(unittest.TestCase):
@@ -400,9 +401,41 @@ class NativeProjectMediaBoundaryRaceTests(unittest.TestCase):
                 return real_open(path, flags, *args, **kwargs)
 
             with patch("os.open", side_effect=replace_parent_before_file_open):
-                with self.assertRaisesRegex(ValueError, "Native project source media"):
+                with self.assertRaisesRegex(ValueError, "Source media"):
                     _verify_native_project_media_closure(project, document)
             self.assertTrue(swapped[0], "test must simulate a real parent swap at open")
+
+    def test_staged_original_parent_swap_cannot_follow_outside_workspace(self):
+        with tempfile.TemporaryDirectory(prefix="zx7-staging-race-") as temp:
+            workspace = Path(temp) / "workspace"
+            session = "a" * 24
+            staging = workspace / "staging" / session
+            staging.mkdir(parents=True)
+            source = staging / "owner.wav"
+            original_bytes = b"real-owner-workspace-asset"
+            source.write_bytes(original_bytes)
+            outside = Path(temp) / "outside"
+            outside.mkdir()
+            # Same bytes deliberately defeat a plain digest-based check: the
+            # security goal is no read THROUGH a linked parent outside root.
+            (outside / source.name).write_bytes(original_bytes)
+            ledger = [{"path": str(source), "sha256": hashlib.sha256(original_bytes).hexdigest(),
+                       "bytes": len(original_bytes), "rights": "synthetic", 
+                       "rights_independently_verified": False}]
+            real_open = os.open
+            swapped = [False]
+
+            def replace_staging_before_file_open(path, flags, *args, **kwargs):
+                if str(path).endswith("owner.wav") and not swapped[0]:
+                    staging.rename(workspace / "staging" / "previous-session")
+                    staging.symlink_to(outside, target_is_directory=True)
+                    swapped[0] = True
+                return real_open(path, flags, *args, **kwargs)
+
+            with patch("os.open", side_effect=replace_staging_before_file_open):
+                with self.assertRaisesRegex(ValueError, "source|media|changed|linked"):
+                    _verify_staged_sources(workspace, session, ledger)
+            self.assertTrue(swapped[0])
 
     @unittest.skipUnless(hasattr(os, "O_PATH"), "Linux O_PATH required")
     def test_native_media_directory_requires_search_not_read_permission(self):
