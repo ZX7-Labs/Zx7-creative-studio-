@@ -31,7 +31,7 @@ from .native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
     SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
-    destination_digest, native_render_binding, reviewed_render_pair,
+    destination_digest, native_render_binding, reviewed_render_pair, valid_av_review_values,
 )
 
 
@@ -1080,6 +1080,10 @@ class NativeCreativeControl:
         completion evidence. Historical receipts remain intact for forensics.
         """
         by_destination = {}
+        # Only trusted source-hash-matched, full-duration read receipts count.
+        # This is numeric audio coverage, NOT model semantic listening.
+        durations = {}
+        full_audio = set()
         unbound = set()  # Compatible with older, non-reviewed test journals.
         frames = set()
         any_write = saw_frame = post_review_write = False
@@ -1090,10 +1094,13 @@ class NativeCreativeControl:
             destination = event.get(DESTINATION_FIELD)
             if kind == "native_read_tool_reported_error":
                 if (destination is not None and
-                        (tool == _VERIFIED_EXPORT_TOOL or tool in _VERIFIED_FRAME_TOOLS)):
+                        (tool == _VERIFIED_EXPORT_TOOL or tool in _VERIFIED_FRAME_TOOLS or
+                         (self._requires_av_review and tool == AUDIO_ENVELOPE))):
                     invalid = by_destination.pop(destination, None)
                     if invalid is not None:
                         frames.discard(invalid)
+                        full_audio.discard(invalid)
+                    durations.pop(destination, None)
                 continue
             if kind != "native_tool_result":
                 continue
@@ -1103,6 +1110,8 @@ class NativeCreativeControl:
                 if saw_frame and tool in self.host_content_revision_tools:
                     post_review_write = True
                 by_destination.clear()
+                durations.clear()
+                full_audio.clear()
                 unbound.clear()
                 frames.clear()
                 verified_receipts = 0
@@ -1117,8 +1126,23 @@ class NativeCreativeControl:
                     previous = by_destination.get(destination)
                     if previous is not None and previous != sha:
                         frames.discard(previous)
+                        full_audio.discard(previous)
+                        durations.pop(destination, None)
                     by_destination[destination] = sha
+                    values = event.get(AV_REVIEW_FIELD)
+                    if (tool == _VERIFIED_EXPORT_TOOL and
+                            valid_av_review_values(_VERIFIED_EXPORT_TOOL, values)):
+                        durations[destination] = values[0]
             observed = event.get("observed_export_sha256")
+            if (tool == AUDIO_ENVELOPE and destination in by_destination and
+                    by_destination[destination] == observed and
+                    destination in durations and
+                    valid_av_review_values(AUDIO_ENVELOPE, event.get(AV_REVIEW_FIELD)) and
+                    event[AV_REVIEW_FIELD][0] == 0 and
+                    abs(event[AV_REVIEW_FIELD][1] - durations[destination]) <= 0.02 and
+                    isinstance(event.get(AV_PCM_FIELD), str) and
+                    re.fullmatch(r"[a-f0-9]{64}", event[AV_PCM_FIELD])):
+                full_audio.add(observed)
             if observed is not None and event.get("image_sha256"):
                 if ((destination is not None and by_destination.get(destination) == observed)
                         or (destination is None and observed in unbound)):
@@ -1130,6 +1154,7 @@ class NativeCreativeControl:
             "post_review_write_acknowledged": post_review_write,
             "current_verified": current_verified,
             "current_frames": frames,
+            "current_full_audio": full_audio,
             "current_verified_output_count": len(by_destination) + len(unbound),
             "same_export_reverification_count": max(
                 0, verified_receipts - len(distinct_receipts)),
@@ -1544,6 +1569,10 @@ class NativeCreativeControl:
                          export_evidence["current_frames"]) and
                     ("verified_export_frame_observed" in self.required_evidence or
                      REVIEWED_RENDER_PAIR in self.required_evidence))
+                audio_review_pending = (
+                    self.catalog_mode == "indexed" and self._requires_av_review and
+                    bool(export_evidence["current_verified"] -
+                         export_evidence["current_full_audio"]))
                 if frame_review_pending:
                     actual_frame_tools = [
                         tool for tool in sorted(_VERIFIED_FRAME_TOOLS)
@@ -1557,6 +1586,16 @@ class NativeCreativeControl:
                         actual_frame_tools +
                         [tool for tool in self._host_frontier_tools
                          if tool not in actual_frame_tools])
+                if audio_review_pending and (
+                        AUDIO_ENVELOPE in self.tools and
+                        self.host_tool_access.get(AUDIO_ENVELOPE) == "read"):
+                    # A genuine first export in run #43883369538 had picture
+                    # observations but no timed sound observation before a
+                    # content edit. Surface an already-granted READ, without
+                    # executing it or choosing the Brain's creative next step.
+                    self._host_frontier_tools = (
+                        [AUDIO_ENVELOPE] + [tool for tool in self._host_frontier_tools
+                                             if tool != AUDIO_ENVELOPE])
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
                 placement_validator = None
@@ -1717,6 +1756,15 @@ class NativeCreativeControl:
                             name for name in visible_selectable
                             if frame_review_pending and name in _VERIFIED_FRAME_TOOLS],
                         "current_frame_observation_not_automatically_executed": True,
+                        "verified_export_still_needs_full_duration_audio": (
+                            self._requires_av_review and
+                            bool(export_evidence["current_verified"] -
+                                 export_evidence["current_full_audio"])),
+                        "current_audio_observation_read_selectable": (
+                            [AUDIO_ENVELOPE] if audio_review_pending and
+                            AUDIO_ENVELOPE in visible_selectable else []),
+                        "audio_observation_is_numeric_not_semantic_hearing": True,
+                        "audio_observation_not_automatically_executed": True,
                     },
                 }
                 if placement_tracks is not None:

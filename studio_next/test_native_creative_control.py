@@ -980,6 +980,95 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             result["events"], host_tool_access=grants,
             expected_required_evidence=required)["journal_chain_structurally_valid"])
 
+    async def test_real_neural_av_missing_audio_surfaces_granted_read_without_dispatch(self):
+        """Regression for failed real model #43883369538: its first export was
+        visually reviewed but not audio-reviewed before its creative edit.
+        A verified export must expose the *existing* read-only audio affordance;
+        the host must never fetch sound, choose an edit, or change acceptance.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD,
+            REVIEWED_AV_PAIR, TIMED_FRAMES, destination_digest,
+        )
+        path, sha = "/private/outputs/verified-first.mp4", "a" * 64
+        destination = destination_digest(path)
+        model = ScriptedModel([decision("search", query="not_a_real_native_tool")])
+        session = FakeSession()
+        session.tools.extend([
+            SimpleNamespace(name=name, description="Actual host-native reader",
+                            input_schema={"type": "object", "properties": {}})
+            for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE)])
+        grants = {tool.name: ("write" if tool.name in
+                  {"update_text_clip", "export_timeline"} else "read")
+                  for tool in session.tools}
+        control = NativeCreativeControl(
+            session, model, catalog_mode="indexed", max_turns=1,
+            host_tool_access=grants, required_evidence=("reviewed_native_render_pair_verified", REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",))
+        verified_events = [
+            {"kind": "native_tool_result", "tool": "export_timeline",
+             "host_application_write_acknowledged": True, DESTINATION_FIELD: destination},
+            {"kind": "native_tool_result", "tool": "zx7_verify_native_export",
+             DESTINATION_FIELD: destination,
+             "independently_verified_export_sha256": sha, AV_REVIEW_FIELD: [6]},
+            {"kind": "native_tool_result", "tool": TIMED_FRAMES,
+             DESTINATION_FIELD: destination, "observed_export_sha256": sha,
+             "image_sha256": ["b" * 64, "c" * 64], AV_REVIEW_FIELD: [1, 4]},
+        ]
+        control.events.extend(verified_events)
+        control._verified_exports.add(sha)
+        result = await control.run("Observe real A/V evidence")
+        progress = model.observed[0]["host_verified_execution_progress"]
+        self.assertTrue(progress["verified_export_still_needs_full_duration_audio"])
+        self.assertIn(AUDIO_ENVELOPE, progress["current_audio_observation_read_selectable"])
+        self.assertIn(AUDIO_ENVELOPE, model.observed[0]["selectable_native_tools"])
+        self.assertNotIn("finish", model.observed[0]["available_actions"])
+        self.assertEqual(session.calls, [])  # no automatic read or edit
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+        self.assertNotIn("/private/", json.dumps(result["events"]))
+
+        good_audio = {"kind": "native_tool_result", "tool": AUDIO_ENVELOPE,
+                      DESTINATION_FIELD: destination, "observed_export_sha256": sha,
+                      AV_PCM_FIELD: "d" * 64, AV_REVIEW_FIELD: [0, 6]}
+        for bad_audio in (
+            {**good_audio, AV_REVIEW_FIELD: [0, 1]},
+            {**good_audio, AV_REVIEW_FIELD: [0, 6.1]},
+            {**good_audio, AV_PCM_FIELD: "not-a-verified-sha"},
+            {**good_audio, "observed_export_sha256": "e" * 64},
+        ):
+            control.events.append(bad_audio)
+            self.assertEqual(control._current_export_evidence()["current_full_audio"], set())
+            control.events.pop()
+        control.events.append(good_audio)
+        current = control._current_export_evidence()
+        self.assertEqual(current["current_full_audio"], {sha})
+        control.events.append({**good_audio, "observed_export_sha256": "e" * 64})
+        self.assertEqual(control._current_export_evidence()["current_full_audio"], {sha})
+        control.events.append({"kind": "native_read_tool_reported_error",
+                               "tool": AUDIO_ENVELOPE, DESTINATION_FIELD: destination})
+        self.assertEqual(control._current_export_evidence()["current_full_audio"], set())
+        control.events.append({"kind": "native_tool_result", "tool": "update_text_clip",
+                               "host_application_write_acknowledged": True})
+        self.assertEqual(control._current_export_evidence()["current_full_audio"], set())
+
+    def test_visual_only_session_does_not_lose_valid_export_from_failed_audio_probe(self):
+        """Non-A/V contracts must not retroactively require an audio proof."""
+        from studio_next.native_render_evidence import DESTINATION_FIELD, destination_digest, AUDIO_ENVELOPE
+        session = FakeSession()
+        grants = {tool.name: ("write" if tool.name == "update_text_clip" else "read")
+                  for tool in session.tools}
+        control = NativeCreativeControl(
+            session, ScriptedModel([]), host_tool_access=grants,
+            required_evidence=("physical_export_verified",))
+        sha, destination = "a" * 64, destination_digest("/private/movie.mp4")
+        control._verified_exports.add(sha)
+        control.events = [{"kind": "native_tool_result", "tool": "zx7_verify_native_export",
+                           DESTINATION_FIELD: destination, "independently_verified_export_sha256": sha}]
+        self.assertEqual(control._current_export_evidence()["current_verified"], {sha})
+        control.events.append({"kind": "native_read_tool_reported_error", "tool": AUDIO_ENVELOPE,
+                               DESTINATION_FIELD: destination})
+        self.assertEqual(control._current_export_evidence()["current_verified"], {sha})
+
     async def test_current_verified_bytes_offer_real_frame_read_without_rescanning(self):
         """Actual 4B transcript: once the same export is verified, an observer
         must be selectable without a new catalog search. This scripted model
