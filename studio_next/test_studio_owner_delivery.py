@@ -181,6 +181,16 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "native|asset|source|media"):
             self.verify()
 
+    def test_owner_rejects_same_size_media_substitution_after_render(self):
+        # Existing pre-render project JSON and two physical exports remain
+        # untouched. A different source with identical size must NOT pass
+        # historical render-time media custody merely because it decodes.
+        observed = self.verify()
+        self.assertTrue(observed["native_media_source_closure_verified"])
+        self.project_media.write_bytes(b"X" * self.project_media.stat().st_size)
+        with self.assertRaisesRegex(ValueError, "render|source|changed|media|digest"):
+            self.verify()
+
     def test_owner_rejects_native_asset_symlink_outside_project(self):
         self.project_media.unlink()
         self.project_media.symlink_to(self.media[0])
