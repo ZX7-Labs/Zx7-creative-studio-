@@ -50,7 +50,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     """
     import anyio
     import jsonschema
-    from .body_editor_delivery import admitted_owner_delivery, native_delivery_matches
+    from .body_editor_delivery import (
+        admitted_owner_delivery, native_delivery_matches, owner_delivery_native_tool_hint)
     from mcp.server import Server
     from mcp import types
 
@@ -135,6 +136,20 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 "workspace, never an existing destination. The owner's "
                 "creative brief supplies the actual permitted root.")
             schema["properties"]["outputPath"]["minLength"] = 1
+        declared_description = native[name].get("description") or ""
+        if required_export_delivery is not None and name in (
+                "export_timeline", "check_export_readiness"):
+            # The direct NVIDIA tool adapter takes only the *first 256*
+            # characters of each native tool description. Put the exact
+            # owner-authorized profile and pinned preset precedence first;
+            # otherwise a model sees the default 1080p instructions and
+            # repeatedly wastes decisions on safe pre-dispatch rejections.
+            # This is tool metadata only, not an action, export, new grant,
+            # or override of the source-native read-only readiness check.
+            guidance = owner_delivery_native_tool_hint(required_export_delivery)
+            schema = copy.deepcopy(schema)
+            schema["description"] = guidance
+            declared_description = guidance + " " + declared_description
         if required_export_delivery is not None and name == "export_timeline":
             # Velorn accepts undocumented aliases such as codec and aspect.
             # Readiness projects onto declared fields, so reject extras before
@@ -145,7 +160,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         validator.check_schema(schema)
         validators[name] = validator(schema)
         tools[name] = types.Tool.model_validate({
-            **native[name], "inputSchema": schema})
+            **native[name], "description": declared_description,
+            "inputSchema": schema})
     verified_export_name = "zx7_verify_native_export"
     observed_frame_name = "zx7_observe_verified_export_frame"
     observed_samples_name = "zx7_observe_verified_export_samples"
