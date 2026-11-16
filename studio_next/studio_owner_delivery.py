@@ -81,6 +81,68 @@ def _sha256(path):
     return sha.hexdigest()
 
 
+def _sha256_project_media(project: Path, parts: list[str], expected_bytes: int):
+    """Hash native media inside one pinned directory-fd chain, not via a
+    re-resolved pathname that could cross a concurrently swapped parent link.
+
+    The already validated relative components are opened with O_NOFOLLOW at
+    every level. After reading, independently check both file and ancestor
+    identities to reject a rename, link swap or an unstable source. This is
+    owner-local read-only custody, not creative origin authentication.
+    """
+    directory_flags = (getattr(os, "O_PATH", os.O_RDONLY) |
+                       os.O_DIRECTORY | os.O_NOFOLLOW |
+                       getattr(os, "O_CLOEXEC", 0))
+    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    directory_fds = []
+    sha = hashlib.sha256()
+    try:
+        current = os.open(project, directory_flags)
+        directory_fds.append(current)
+        for name in parts[:-1]:
+            current = os.open(name, directory_flags, dir_fd=current)
+            directory_fds.append(current)
+        with os.fdopen(os.open(parts[-1], file_flags,
+                               dir_fd=directory_fds[-1]), "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(before.st_mode) or
+                    before.st_size != expected_bytes):
+                raise ValueError("Native project source media size or type changed")
+            count = 0
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                count += len(chunk)
+                sha.update(chunk)
+            after = os.fstat(stream.fileno())
+            if count != expected_bytes or _stable_identity(before) != _stable_identity(after):
+                raise ValueError("Native project source media changed while hashing")
+            # The file may be intact but its *parent* replaced with a symlink
+            # while it was open. An ancestor identity check is indispensable.
+            if (_stable_identity(os.stat(project, follow_symlinks=False)) !=
+                    _stable_identity(os.fstat(directory_fds[0]))):
+                raise ValueError("Native project source media root changed")
+            for parent_fd, child, child_fd in zip(
+                    directory_fds, parts[:-1], directory_fds[1:]):
+                current_parent = os.stat(child, dir_fd=parent_fd,
+                                         follow_symlinks=False)
+                if (not stat.S_ISDIR(current_parent.st_mode) or
+                        _stable_identity(current_parent) !=
+                        _stable_identity(os.fstat(child_fd))):
+                    raise ValueError("Native project source media parent changed or linked")
+            current_file = os.stat(parts[-1], dir_fd=directory_fds[-1],
+                                   follow_symlinks=False)
+            if (not stat.S_ISREG(current_file.st_mode) or
+                    _stable_identity(current_file) != _stable_identity(after)):
+                raise ValueError("Native project source media changed or linked")
+        return sha.hexdigest()
+    except OSError:
+        # The path was unavailable or an untrusted component changed. Do not
+        # put private owner paths or OS error payloads into the public result.
+        raise ValueError("Native project source media is missing, changed or linked") from None
+    finally:
+        for fd in reversed(directory_fds):
+            os.close(fd)
+
+
 def _verify_staged_sources(root, session, ledger):
     if not isinstance(ledger, list) or len(ledger) > 64:
         raise ValueError("Untrusted staged owner source ledger")
@@ -151,15 +213,7 @@ def _verify_native_project_media_closure(project: Path, doc: dict):
         if (len(parts) < 3 or parts[0] != "assets" or
                 any(part in ("", ".", "..") for part in parts)):
             raise ValueError("Native media file must remain within its project assets")
-        candidate = project.joinpath(*parts)
-        if (candidate.is_symlink() or
-                any(candidate.parents[i].is_symlink() for i in range(len(parts))) or
-                not candidate.is_file()):
-            raise ValueError("Native project source media is missing or linked")
-        actual = candidate.stat(follow_symlinks=False)
-        if not stat.S_ISREG(actual.st_mode) or actual.st_size != expected_bytes:
-            raise ValueError("Native project source media bytes differ from saved inventory")
-        current_sha = _sha256(candidate)
+        current_sha = _sha256_project_media(project, parts, expected_bytes)
         observation.update(source_id.encode("utf-8"))
         observation.update(b"\x00")
         observation.update(named.encode("utf-8"))

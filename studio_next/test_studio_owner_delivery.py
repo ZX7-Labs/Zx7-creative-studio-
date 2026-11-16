@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from studio_next import studio_cli
 from studio_next.native_render_evidence import REVIEWED_AV_PAIR, destination_digest, timeline_scope_digest
@@ -365,6 +367,79 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         studio_cli._write_status(self.session, self.status)
         with self.assertRaisesRegex(ValueError, "same timeline"):
             self.verify()
+
+
+class NativeProjectMediaBoundaryRaceTests(unittest.TestCase):
+    """Independent path-swap regression; never follow a raced parent symlink."""
+
+    def test_parent_replaced_during_native_source_open_is_not_verified(self):
+        with tempfile.TemporaryDirectory(prefix="zx7-native-race-") as temp:
+            root = Path(temp)
+            project = root / "project"
+            videos = project / "assets" / "video"
+            videos.mkdir(parents=True)
+            (videos / "clip.mp4").write_bytes(b"original-native-media")
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "clip.mp4").write_bytes(b"X" * len(b"original-native-media"))
+            document = {
+                "currentTimelineId": "film",
+                "timelines": [{"id": "film", "clips": [
+                    {"type": "video", "assetId": "original"}]}],
+                "assets": [{"id": "original", "path": "assets/video/clip.mp4",
+                            "size": len(b"original-native-media")}],
+            }
+            real_open = os.open
+            swapped = [False]
+
+            def replace_parent_before_file_open(path, flags, *args, **kwargs):
+                if str(path).endswith("clip.mp4") and not swapped[0]:
+                    videos.rename(project / "assets" / "retained-video")
+                    videos.symlink_to(outside, target_is_directory=True)
+                    swapped[0] = True
+                return real_open(path, flags, *args, **kwargs)
+
+            with patch("os.open", side_effect=replace_parent_before_file_open):
+                with self.assertRaisesRegex(ValueError, "Native project source media"):
+                    _verify_native_project_media_closure(project, document)
+            self.assertTrue(swapped[0], "test must simulate a real parent swap at open")
+
+    @unittest.skipUnless(hasattr(os, "O_PATH"), "Linux O_PATH required")
+    def test_native_media_directory_requires_search_not_read_permission(self):
+        with tempfile.TemporaryDirectory(prefix="zx7-native-search-") as temp:
+            project = Path(temp) / "project"
+            video = project / "assets" / "video"
+            video.mkdir(parents=True)
+            (video / "original.mp4").write_bytes(b"file-beneath-execute-only-dir")
+            doc = {"currentTimelineId": "t", "timelines": [{"id": "t", "clips": [
+                       {"type": "video", "assetId": "v"}]}],
+                   "assets": [{"id": "v", "path": "assets/video/original.mp4",
+                               "size": len(b"file-beneath-execute-only-dir")}],
+                   }
+            video.chmod(0o111)
+            try:
+                result = _verify_native_project_media_closure(project, doc)
+                self.assertTrue(result["native_media_source_closure_verified"])
+            finally:
+                video.chmod(0o700)
+
+    def test_native_media_source_remains_readable_without_path_swaps(self):
+        with tempfile.TemporaryDirectory(prefix="zx7-native-simple-") as temp:
+            project = Path(temp) / "project"
+            location = project / "assets" / "audio"
+            location.mkdir(parents=True)
+            (location / "source.wav").write_bytes(b"independent-owner-sound")
+            doc = {"currentTimelineId": "t",
+                   "timelines": [{"id": "t", "clips": [
+                       {"type": "audio", "assetId": "a"}]}],
+                   "assets": [{"id": "a", "path": "assets/audio/source.wav",
+                               "size": len(b"independent-owner-sound")}],
+                   }
+            result = _verify_native_project_media_closure(project, doc)
+            self.assertTrue(result["native_media_source_closure_verified"])
+            self.assertEqual(result["native_media_used_asset_count"], 1)
+            self.assertEqual(result["native_media_bytes_observed"],
+                             len(b"independent-owner-sound"))
 
 
 if __name__ == "__main__":
