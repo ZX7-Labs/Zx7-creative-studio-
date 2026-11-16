@@ -26,6 +26,7 @@ AV_REVIEW_FIELD = "native_av_review"
 AV_PCM_FIELD = "native_av_pcm_sha256"
 SAVED_RENDER_FIELD = "native_render_saved_project_sha256"
 SAVED_RENDER_OPTIONS_FIELD = "native_render_options_sha256"
+SAVED_RENDER_MEDIA_FIELD = "native_render_media_sha256"
 SAVED_RENDER_FAILURE = "native_render_saved_project_capture_failed"
 
 
@@ -231,8 +232,8 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
     return pair
 
 
-def reviewed_native_snapshot_hashes(events, pair):
-    """Bind a reviewed export pair to the original host-captured native bytes.
+def _reviewed_host_render_hashes(events, pair, field, *, distinct=False):
+    """Bind a reviewed export pair to exact trusted host-captured bytes.
 
     This is source/receipt consistency, NOT a signature or proof of artistic
     improvement. Later renders to an identical destination supersede prior
@@ -263,7 +264,18 @@ def reviewed_native_snapshot_hashes(events, pair):
         if (capture is None or
                 capture.get(SCOPE_FIELD) != binding["timeline_sha256"] or
                 not is_sha(capture.get(SAVED_RENDER_FIELD)) or
-                not is_sha(capture.get(SAVED_RENDER_OPTIONS_FIELD))):
+                not is_sha(capture.get(SAVED_RENDER_OPTIONS_FIELD)) or
+                not is_sha(capture.get(field))):
             return None
-        shas.append(capture[SAVED_RENDER_FIELD])
-    return shas if shas[0] != shas[1] else None
+        shas.append(capture[field])
+    return shas if (not distinct or shas[0] != shas[1]) else None
+
+
+def reviewed_native_snapshot_hashes(events, pair):
+    """The exact first and revised native project bytes captured by the host."""
+    return _reviewed_host_render_hashes(events, pair, SAVED_RENDER_FIELD, distinct=True)
+
+
+def reviewed_native_media_hashes(events, pair):
+    """Render-time source-media closure digests for the same physical pair."""
+    return _reviewed_host_render_hashes(events, pair, SAVED_RENDER_MEDIA_FIELD)

@@ -342,6 +342,11 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         snapshots_root = root / "state" / session_id / "av-project-snapshots"
         if snapshots_root.is_symlink() or not snapshots_root.is_dir():
             raise ValueError("Host-required native render snapshots are missing")
+        expected_media_hashes = result.get("reviewed_native_media_sha256")
+        if (type(expected_media_hashes) is not list or len(expected_media_hashes) != 2 or
+                any(type(value) is not str or not _SHA.fullmatch(value)
+                    for value in expected_media_hashes)):
+            raise ValueError("Host-required render-time native media digests are missing")
         revisions = []
         for binding, captured_sha in zip(pair, expected_snapshot_hashes, strict=True):
             snapshot = snapshots_root / (binding["destination_sha256"] + ".comfystudio")
@@ -358,6 +363,9 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
             raise ValueError("Native snapshots do not establish an editable revision")
         if revisions[-1] != saved_sha:
             raise ValueError("Final saved native source differs from the reviewed render")
+        if (native_media_observation["native_media_observation_sha256"] !=
+                expected_media_hashes[-1]):
+            raise ValueError("Native media source bytes changed since original final render")
         snapshot_bound = True
     return {
         "schema": 1, "kind": "zx7_owner_native_av_delivery_check",
@@ -371,6 +379,7 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         "editable_native_project_relative_to_workspace": str(saved.relative_to(root)),
         "editable_native_project_sha256": saved_sha,
         "saved_native_matches_last_render_snapshot": snapshot_bound,
+        "native_media_matches_final_render_capture": snapshot_bound,
         "native_render_snapshot_match_not_tested": not snapshots_required,
         "rendered_exports": verified,
         "model_autonomy_independently_evaluated": False,

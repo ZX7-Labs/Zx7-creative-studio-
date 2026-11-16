@@ -22,7 +22,7 @@ from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CR
 from studio_next.native_creative_audit import audit_native_journal
 from studio_next.native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
-    reviewed_native_snapshot_hashes,
+    reviewed_native_media_hashes, reviewed_native_snapshot_hashes,
 )
 from studio_next.native_editor_source_pin import (
     PINNED_VELORN_MCP_REVISION as _PINNED_MCP_PREVIEW_COMMIT,
@@ -349,11 +349,11 @@ async def run_native_session(args):
             # Capture already attests save identity, native timeline scope,
             # real original bytes and render settings. Only AFTER that passes
             # may a model-visible READ candidate enter the host registry.
-            project_sha, options_sha = physical_capture(
+            project_sha, options_sha, media_sha = physical_capture(
                 response, binding, save_identity)
             native_revision_source.register_host_captured_render(
                 binding[DESTINATION_FIELD], project_sha, options_sha)
-            return project_sha, options_sha
+            return project_sha, options_sha, media_sha
 
         capture_render_project = capture_and_register_native_revision
     brief = args.brief_file.read_text(encoding="utf-8")
@@ -477,6 +477,10 @@ async def run_native_session(args):
                 # Only bounded immutable digests enter the owner status. The
                 # actual project snapshots remain in the granted private state.
                 pair_report["reviewed_native_snapshot_sha256"] = hashes
+                media_hashes = reviewed_native_media_hashes(outcome["events"], pair)
+                if media_hashes is None:
+                    raise RuntimeError("Reviewed native pair lacks render-time media digests")
+                pair_report["reviewed_native_media_sha256"] = media_hashes
     return {
         **pair_report,
         "status": outcome["status"],

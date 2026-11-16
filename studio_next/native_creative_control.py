@@ -30,7 +30,7 @@ from .native_editor_source_pin import source_verified_preview_intent
 from .native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
-    SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
+    SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
 )
 
@@ -2642,16 +2642,18 @@ class NativeCreativeControl:
                          and event.get("tool") != RENDER_TOOL), None)
                     if previous_write == "save_project":
                         try:
-                            project_sha, options_sha = await asyncio.to_thread(
+                            project_sha, options_sha, media_sha = await asyncio.to_thread(
                                 self._capture_render_project, host_response, render_binding,
                                 self._explicit_render_save_identity)
-                            if not _digest(project_sha) or not _digest(options_sha):
-                                raise ValueError("Render snapshot lacks trusted digests")
+                            if not all(_digest(value) for value in
+                                       (project_sha, options_sha, media_sha)):
+                                raise ValueError("Render snapshot lacks trusted media digests")
                         except (OSError, ValueError):
                             render_binding[SAVED_RENDER_FAILURE] = True
                         else:
                             render_binding[SAVED_RENDER_FIELD] = project_sha
                             render_binding[SAVED_RENDER_OPTIONS_FIELD] = options_sha
+                            render_binding[SAVED_RENDER_MEDIA_FIELD] = media_sha
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,

@@ -84,7 +84,12 @@ def capture_render_project(projects_root, snapshots_root, response, binding, sav
     comparable = [{key: value for key, value in source.items() if key != "filename"}
                   for source in (plan, options)]
     settings = json.dumps(comparable, sort_keys=True, allow_nan=False).encode("utf-8")
-    return saved["sha256"], hashlib.sha256(settings).hexdigest()
+    # Bind physical native media bytes at the SAME render-time host checkpoint.
+    # Current media presence and size alone cannot detect post-export swaps.
+    from .studio_owner_delivery import _verify_native_project_media_closure
+    media = _verify_native_project_media_closure(project, document)
+    return (saved["sha256"], hashlib.sha256(settings).hexdigest(),
+            media["native_media_observation_sha256"])
 
 
 def _receipt(result):
