@@ -1,7 +1,8 @@
 """The A/V release gate must keep review and revision on the same renders."""
 import unittest
 
-from studio_next.native_render_evidence import reviewed_render_pair, reviewed_native_snapshot_hashes
+from studio_next.native_render_evidence import (
+    reviewed_render_pair, reviewed_native_snapshot_hashes, reviewed_native_media_hashes)
 
 
 class ReviewedAVPairTests(unittest.TestCase):
@@ -82,7 +83,8 @@ class RenderTimeNativeSourceCustodyTests(unittest.TestCase):
              "native_export_destination_sha256": b["destination_sha256"],
              "native_export_timeline_sha256": b["timeline_sha256"],
              "native_render_saved_project_sha256": digest,
-             "native_render_options_sha256": "e" * 64}
+             "native_render_options_sha256": "e" * 64,
+             "native_render_media_sha256": "6" * 64}
             for b, digest in zip(self.pair, ("3" * 64, "4" * 64), strict=True)
         ]
 
@@ -90,6 +92,18 @@ class RenderTimeNativeSourceCustodyTests(unittest.TestCase):
         self.assertEqual(
             reviewed_native_snapshot_hashes(self.events, self.pair),
             ["3" * 64, "4" * 64])
+
+    def test_media_digests_for_exact_original_and_revised_native_renders(self):
+        self.assertEqual(reviewed_native_media_hashes(self.events, self.pair),
+                         ["6" * 64, "6" * 64])
+        for candidate in (None, "not-a-sha", "x" * 64):
+            with self.subTest(candidate=candidate):
+                changed = [dict(event) for event in self.events]
+                changed[1]["native_render_media_sha256"] = candidate
+                self.assertIsNone(reviewed_native_media_hashes(changed, self.pair))
+        after = dict(self.events[0])
+        after.pop("native_render_media_sha256")
+        self.assertIsNone(reviewed_native_media_hashes(self.events + [after], self.pair))
 
     def test_missing_or_forged_render_capture_fails_closed(self):
         self.assertIsNone(reviewed_native_snapshot_hashes(self.events[:-1], self.pair))

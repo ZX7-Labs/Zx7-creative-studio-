@@ -1137,7 +1137,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 def capture(_receipt, _binding, _save):
                     if scenario == "capture-failed":
                         raise OSError("private path must not enter the journal")
-                    return "f" * 64, "e" * 64
+                    return "f" * 64, "e" * 64, "d" * 64
 
                 result = await NativeCreativeControl(
                     session, model, max_turns=len(actions), host_tool_access=grants,
@@ -1172,6 +1172,10 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     [event[SAVED_RENDER_FIELD] for event in events if SAVED_RENDER_FIELD in event],
                     ["f" * 64, "f" * 64])
+                self.assertEqual(
+                    [event["native_render_media_sha256"] for event in events
+                     if "native_render_media_sha256" in event],
+                    ["d" * 64, "d" * 64])
                 audio_receipts = [
                     payload for context in model.observed
                     for payload in map(json.loads, context["last_native_result_texts"])

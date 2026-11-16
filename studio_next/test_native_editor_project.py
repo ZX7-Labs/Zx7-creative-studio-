@@ -23,7 +23,15 @@ class RenderSnapshotTests(unittest.TestCase):
             project = projects / "film"
             project.mkdir(parents=True)
             snapshots.mkdir()
-            original = b'{"currentTimelineId":"film-timeline","modified":"version-1"}'
+            doc = {"currentTimelineId": "film-timeline", "modified": "version-1",
+                   "assets": [{"id": "media-1", "name": "source.wav",
+                               "path": "assets/audio/source.wav", "size": 32}],
+                   "timelines": [{"id": "film-timeline", "clips": [
+                       {"id": "clip-1", "type": "audio", "assetId": "media-1"}]}]}
+            media_path = project / "assets" / "audio" / "source.wav"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_bytes(b"A" * 32)
+            original = json.dumps(doc, sort_keys=True).encode("utf-8")
             (project / "project.comfystudio").write_bytes(original)
             response = {"projectPath": str(project),
                         "settings": {"bitrateKbps": 8000, "audioBitrateKbps": 192, "preset": "medium"},
@@ -31,8 +39,10 @@ class RenderSnapshotTests(unittest.TestCase):
             binding = {DESTINATION_FIELD: "a" * 64,
                        SCOPE_FIELD: timeline_scope_digest(str(project), "film-timeline")}
             identity = (str(project), "version-1")
-            digest, options = capture_render_project(projects, snapshots, response, binding, identity)
+            digest, options, source_media = capture_render_project(
+                projects, snapshots, response, binding, identity)
             self.assertEqual(digest, hashlib.sha256(original).hexdigest())
+            self.assertRegex(source_media, r"^[0-9a-f]{64}$")
             snapshot = snapshots / ("a" * 64 + ".comfystudio")
             self.assertEqual(snapshot.read_bytes(), original)
             with self.assertRaises(FileExistsError):
@@ -46,9 +56,15 @@ class RenderSnapshotTests(unittest.TestCase):
                 capture_render_project(projects, snapshots, response, {
                     **binding, DESTINATION_FIELD: "d" * 64}, (str(project), "wrong-version"))
             changed = {**response, "settings": {**response["settings"], "bitrateKbps": 4000}}
-            _, changed_options = capture_render_project(projects, snapshots, changed, {
-                **binding, DESTINATION_FIELD: "e" * 64}, identity)
+            _, changed_options, same_media = capture_render_project(
+                projects, snapshots, changed, {
+                    **binding, DESTINATION_FIELD: "e" * 64}, identity)
             self.assertNotEqual(options, changed_options)
+            self.assertEqual(source_media, same_media)
+            media_path.write_bytes(b"Z" * 32)
+            _, _, substituted = capture_render_project(projects, snapshots, response, {
+                **binding, DESTINATION_FIELD: "f" * 64}, identity)
+            self.assertNotEqual(source_media, substituted)
 
     def test_owner_selected_existing_project_does_not_capture_another_native_document(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -59,9 +75,11 @@ class RenderSnapshotTests(unittest.TestCase):
             other.mkdir()
             snapshots.mkdir()
             (selected / "project.comfystudio").write_text(
-                '{"currentTimelineId":"selected-timeline","modified":"v1"}')
+                '{"currentTimelineId":"selected-timeline","modified":"v1",'
+                '"assets":[],"timelines":[{"id":"selected-timeline","clips":[{"id":"title"}]}]}')
             (other / "project.comfystudio").write_text(
-                '{"currentTimelineId":"other-timeline","modified":"v1"}')
+                '{"currentTimelineId":"other-timeline","modified":"v1",'
+                '"assets":[],"timelines":[{"id":"other-timeline","clips":[{"id":"title"}]}]}')
             response = {
                 "projectPath": str(other),
                 "settings": {"bitrateKbps": 8000, "audioBitrateKbps": 192, "preset": "medium"},
@@ -87,10 +105,11 @@ class RenderSnapshotTests(unittest.TestCase):
                 DESTINATION_FIELD: "c" * 64,
                 SCOPE_FIELD: timeline_scope_digest(str(selected), "selected-timeline"),
             }
-            snapshot_sha, _ = capture_render_project(
+            snapshot_sha, _, media_sha = capture_render_project(
                 projects, snapshots, same_project, correct_scope,
                 (str(selected), "v1"), expected_project=selected)
             self.assertEqual(snapshot_sha, hashlib.sha256(selected_saved).hexdigest())
+            self.assertRegex(media_sha, r"^[0-9a-f]{64}$")
             self.assertEqual(
                 (snapshots / ("c" * 64 + ".comfystudio")).read_bytes(),
                 selected_saved)

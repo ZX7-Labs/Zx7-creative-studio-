@@ -388,7 +388,7 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 render_snapshots.mkdir(mode=0o700)
                 first_binding = native_render_binding(str(export), first_render)
                 assert first_binding, "Native renderer did not bind real export to actual timeline"
-                first_native_sha, first_options_sha = capture_render_project(
+                first_native_sha, first_options_sha, first_media_sha = capture_render_project(
                     root / "projects", render_snapshots, first_render, first_binding,
                     (str(project), save["result"]["project"]["modified"]),
                     expected_project=project)
@@ -527,12 +527,15 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                     "previewOnly": False})
                 final_binding = native_render_binding(str(edited_export), final_render)
                 assert final_binding, "Second native render lacks actual project binding"
-                revised_native_sha, revised_options_sha = capture_render_project(
+                revised_native_sha, revised_options_sha, revised_media_sha = capture_render_project(
                     root / "projects", render_snapshots, final_render, final_binding,
                     (str(project), updated_save["result"]["project"]["modified"]),
                     expected_project=project)
                 assert revised_native_sha == updated_sha != first_native_sha
                 assert len(first_options_sha) == len(revised_options_sha) == 64
+                assert len(first_media_sha) == len(revised_media_sha) == 64
+                assert first_media_sha == revised_media_sha, (
+                    "Original source media unexpectedly changed between actual renders")
                 assert digest(render_snapshots /
                     (final_binding[DESTINATION_FIELD] + ".comfystudio")) == updated_sha
                 assert digest(render_snapshots /

@@ -11,7 +11,8 @@ from pathlib import Path
 
 from studio_next import studio_cli
 from studio_next.native_render_evidence import REVIEWED_AV_PAIR, destination_digest, timeline_scope_digest
-from studio_next.studio_owner_delivery import verify_owner_audiovisual_delivery
+from studio_next.studio_owner_delivery import (
+    verify_owner_audiovisual_delivery, _verify_native_project_media_closure)
 
 
 class OwnerAudiovisualDeliveryTests(unittest.TestCase):
@@ -100,6 +101,8 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
             raw = json.dumps(doc)
             (self.snapshots / (binding["destination_sha256"] + ".comfystudio")).write_text(raw)
             self.snapshot_hashes.append(hashlib.sha256(raw.encode("utf-8")).hexdigest())
+        media_sha = _verify_native_project_media_closure(
+            self.project, self.final_doc)["native_media_observation_sha256"]
         self.status = {
             "session_id": self.sid, "state": "completed",
             "render_snapshots_required": True,
@@ -107,7 +110,8 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
                        "evaluation_evidence_satisfied": True,
                        "required_evaluation_evidence": [REVIEWED_AV_PAIR],
                        "reviewed_native_audiovisual_pair": self.pair,
-                       "reviewed_native_snapshot_sha256": self.snapshot_hashes},
+                       "reviewed_native_snapshot_sha256": self.snapshot_hashes,
+                       "reviewed_native_media_sha256": [media_sha, media_sha]},
         }
         studio_cli._write_status(self.session, self.status)
 
@@ -124,6 +128,7 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         self.assertTrue(report["source_staging_sha256_verified"])
         self.assertTrue(report["saved_native_matches_last_render_snapshot"])
         self.assertTrue(report["native_media_source_closure_verified"])
+        self.assertTrue(report["native_media_matches_final_render_capture"])
         self.assertEqual(report["native_media_asset_inventory_count"], 1)
         self.assertEqual(report["native_media_used_asset_count"], 1)
         self.assertFalse(report["native_media_origin_or_export_contribution_proven"])
@@ -248,6 +253,20 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
                 studio_cli._write_status(self.session,
                                          {**self.status, "result": changed})
                 with self.assertRaisesRegex(ValueError, "render snapshot digest"):
+                    self.verify()
+
+    def test_owner_rejects_missing_or_substituted_render_time_media_hashes(self):
+        for hashes in (None, [], ["1" * 64], ["a" * 64, "bad"],
+                       ["a" * 64, "b" * 64]):
+            with self.subTest(hashes=hashes):
+                changed = dict(self.status["result"])
+                if hashes is None:
+                    changed.pop("reviewed_native_media_sha256")
+                else:
+                    changed["reviewed_native_media_sha256"] = hashes
+                studio_cli._write_status(self.session, {
+                    **self.status, "result": changed})
+                with self.assertRaisesRegex(ValueError, "media|source"):
                     self.verify()
 
     def test_owner_rejects_noncompleted_or_unreviewed_sessions(self):
