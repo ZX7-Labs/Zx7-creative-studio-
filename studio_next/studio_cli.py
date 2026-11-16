@@ -284,18 +284,25 @@ def _stage_asset(path, destination, rights):
         raise ValueError("Authorized source must be a nonempty regular file")
     temporary = destination / (".copy-" + secrets.token_hex(8))
     digest = hashlib.sha256()
-    before = source.stat()
+    # Verify the *opened bytes* belong to the admitted owner source. Path
+    # metadata alone cannot detect a swapped read fd or a same-size edit with
+    # restored mtime; ctime and fstat also close those custody gaps.
+    before = source.stat(follow_symlinks=False)
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
     try:
         with source.open("rb") as src, open(temporary, "xb", opener=lambda p, f: os.open(p, f, 0o600)) as out:
+            opened = os.fstat(src.fileno())
+            if not stat.S_ISREG(opened.st_mode) or identity(opened) != identity(before):
+                raise ValueError("Source changed while staging; read source differs from admitted original")
             while chunk := src.read(1024 * 1024):
                 digest.update(chunk)
                 out.write(chunk)
             out.flush()
             os.fsync(out.fileno())
-        after = source.stat()
-        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
-                after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
-            raise ValueError("Source changed while staging; original remains untouched")
+            after = source.stat(follow_symlinks=False)
+            if identity(before) != identity(os.fstat(src.fileno())) or identity(before) != identity(after):
+                raise ValueError("Source changed while staging; original may have been modified")
         target = destination / (digest.hexdigest()[:16] + "-" + source.name)
         # A run has its own staging directory. Refuse duplicate source names.
         os.link(temporary, target)

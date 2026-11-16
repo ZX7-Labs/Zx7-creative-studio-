@@ -46,6 +46,96 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
             self.init(model_id="changed")
         self.assertEqual((root / "studio.json").read_bytes(), original)
 
+    def test_staging_refuses_original_mutation_with_restored_mtime(self):
+        """Changing bytes and restoring mtime must not forge stable source custody."""
+        original = self.base / "owned-source.bin"
+        initial = b"original-media-bytes-for-verified-custody"
+        original.write_bytes(initial)
+        before = original.stat()
+        staging = self.base / "stage"
+        staging.mkdir()
+        regular_open = Path.open
+        mutated = []
+
+        class MutatingReader:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def __enter__(self):
+                self.stream.__enter__()
+                return self
+
+            def __exit__(self, *exc):
+                return self.stream.__exit__(*exc)
+
+            def fileno(self):
+                return self.stream.fileno()
+
+            def read(self, *args):
+                data = self.stream.read(*args)
+                if data and not mutated:
+                    # Another local process modifies the already-open original
+                    # without replacing its inode, then restores its mtime.
+                    fd = os.open(original, os.O_WRONLY)
+                    try:
+                        os.pwrite(fd, b"X" * len(initial), 0)
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                    os.utime(original, ns=(before.st_atime_ns, before.st_mtime_ns))
+                    mutated.append(True)
+                return data
+
+        def open_with_mutation(path, *args, **kwargs):
+            stream = regular_open(path, *args, **kwargs)
+            if Path(path) == original and args and args[0] == "rb":
+                return MutatingReader(stream)
+            return stream
+
+        with patch.object(Path, "open", open_with_mutation):
+            with self.assertRaisesRegex(ValueError, "Source changed while staging"):
+                studio._stage_asset(original, staging, "I own this source")
+        self.assertTrue(mutated)
+        self.assertEqual(original.stat().st_ino, before.st_ino)
+        self.assertEqual(original.stat().st_mtime_ns, before.st_mtime_ns)
+        self.assertNotEqual(original.read_bytes(), initial)
+        self.assertFalse(list(staging.iterdir()), "No accepted source should remain")
+
+    def test_staging_refuses_read_descriptor_not_matching_admitted_source(self):
+        """Source pathname identity alone must not authenticate a different open fd."""
+        admitted = self.base / "admitted.wav"
+        substituted = self.base / "other.wav"
+        admitted.write_bytes(b"original owned audio")
+        substituted.write_bytes(b"untrusted other wav")
+        staging = self.base / "stage"
+        staging.mkdir()
+        regular_open = Path.open
+
+        def swap_open(path, *args, **kwargs):
+            if Path(path) == admitted and args and args[0] == "rb":
+                return regular_open(substituted, *args, **kwargs)
+            return regular_open(path, *args, **kwargs)
+
+        with patch.object(Path, "open", swap_open):
+            with self.assertRaisesRegex(ValueError, "Source changed while staging"):
+                studio._stage_asset(admitted, staging, "I own the original")
+        self.assertFalse(list(staging.iterdir()))
+        self.assertEqual(admitted.read_bytes(), b"original owned audio")
+
+    def test_staging_intact_original_still_preserves_bytes_and_rights(self):
+        original = self.base / "owned-original.wav"
+        content = b"RIFF0000WAVE-source-validity-test"
+        original.write_bytes(content)
+        staging = self.base / "stage"
+        staging.mkdir()
+        receipt = studio._stage_asset(original, staging, "I own the sound")
+        self.assertEqual(Path(receipt["path"]).read_bytes(), content)
+        self.assertEqual(receipt["sha256"], hashlib.sha256(content).hexdigest())
+        self.assertEqual(receipt["bytes"], len(content))
+        self.assertEqual(receipt["rights"], "I own the sound")
+        self.assertIs(receipt["rights_independently_verified"], False)
+        self.assertEqual(original.read_bytes(), content)
+
     def test_doctor_checks_actual_local_server_model_inventory_without_inference(self):
         requests = []
         models = [{"id": "local-fixture"}]
