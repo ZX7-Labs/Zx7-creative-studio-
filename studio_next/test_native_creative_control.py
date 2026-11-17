@@ -1086,6 +1086,95 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                "host_application_write_acknowledged": True})
         self.assertEqual(control._current_export_evidence()["current_full_audio"], set())
 
+    async def test_real_verified_sound_is_model_selectable_only_for_audio_capable_brain(self):
+        """Source-bound native raw-WAV is already installed, but the previous
+        indexed frontier buried it behind discovery after verifying A/V.
+        Never fetch sound, infer musical semantics or create a new grant.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, DESTINATION_FIELD, REVIEWED_AV_PAIR,
+            destination_digest,
+        )
+        path, sha = "/private/outputs/source-verified.mp4", "a" * 64
+        source = destination_digest(path)
+        raw = "zx7_observe_verified_export_audio"
+
+        class AudioCapableModel(ScriptedModel):
+            def decide_with_audio(self, context, sounds):
+                raise AssertionError("The host may not fetch WAV or call model audio proactively")
+
+        for capable, granted, physical, already_observed, egress_allowed, expected in (
+            (True, True, True, False, None, True),
+            (True, False, True, False, None, False),
+            (False, True, True, False, None, False),
+            (True, True, False, False, None, False),
+            (True, True, True, True, None, False),
+            (True, True, True, False, False, False),
+            (True, True, True, False, True, True),
+        ):
+            with self.subTest(audio_capable=capable, host_grant=granted,
+                              verified=physical, heard=already_observed):
+                session = FakeSession()
+                session.tools.append(SimpleNamespace(
+                    name=raw, description="Host-verified original WAV excerpt",
+                    input_schema={"type":"object","properties":{
+                        "path":{"type":"string"},
+                        "start_seconds":{"type":"number"},
+                        "duration_seconds":{"type":"number"}}}))
+                session.tools.extend([SimpleNamespace(
+                    name="export_timeline",description="Real native export",
+                    input_schema={"type":"object", "properties":{}}),
+                    SimpleNamespace(name="zx7_observe_verified_export_samples",
+                    description="Source verified timed decoded picture",
+                    input_schema={"type":"object", "properties":{}})])
+                session.tools.append(SimpleNamespace(
+                    name=AUDIO_ENVELOPE,description="Only numeric full audio envelope",
+                    input_schema={"type":"object", "properties":{}}))
+                grants = {tool.name:"read" for tool in session.tools}
+                grants["update_text_clip"] = "write"
+                grants["export_timeline"] = "write"
+                if not granted:
+                    session.tools = [tool for tool in session.tools if tool.name != raw]
+                    grants.pop(raw)
+                model = (AudioCapableModel if capable else ScriptedModel)([
+                    decision("search",query="nothing here")])
+                if egress_allowed is not None:
+                    model.allow_original_audio_upload = egress_allowed
+                ctl = NativeCreativeControl(session, model, max_turns=1,
+                    catalog_mode="indexed", host_tool_access=grants,
+                    required_evidence=("reviewed_native_render_pair_verified", REVIEWED_AV_PAIR),
+                    host_content_revision_tools=("update_text_clip",))
+                if physical:
+                    ctl._verified_exports.add(sha)
+                    ctl.events.extend([
+                        {"kind":"native_tool_result", "tool":"export_timeline",
+                         "host_application_write_acknowledged":True,
+                         DESTINATION_FIELD:source},
+                        {"kind":"native_tool_result", "tool":"zx7_verify_native_export",
+                         "independently_verified_export_sha256":sha,
+                         DESTINATION_FIELD:source, "native_av_review":[6]},
+                    ])
+                    if already_observed:
+                        ctl.events.append({
+                            "kind":"native_tool_result", "tool":raw,
+                            "observed_export_sha256":sha,
+                            "audio_sha256":"b"*64,
+                            "audio_sent_to_model_for_next_decision":True,
+                        })
+                result = await ctl.run("Inspect actual original audiovisual sources")
+                observed = model.observed[0]
+                choices = observed["selectable_native_tools"]
+                progress = observed["host_verified_execution_progress"]
+                self.assertEqual(raw in choices, expected)
+                self.assertEqual(raw in progress["current_source_audio_excerpt_read_selectable"],
+                                 expected)
+                self.assertFalse(observed["audio_semantically_reviewed"])
+                self.assertFalse(progress["audio_excerpt_was_automatically_dispatched"])
+                self.assertEqual(session.calls, [],
+                    "A read-only affordance must not dispatch audio or editing")
+                self.assertEqual(result["status"], "turn_budget_exhausted")
+                self.assertNotIn("/private/", json.dumps(result["events"]))
+
     def test_visual_only_session_does_not_lose_valid_export_from_failed_audio_probe(self):
         """Non-A/V contracts must not retroactively require an audio proof."""
         from studio_next.native_render_evidence import DESTINATION_FIELD, destination_digest, AUDIO_ENVELOPE

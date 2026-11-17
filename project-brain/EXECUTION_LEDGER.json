@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Read LIVE PR #356 head and checks: parent d32d187eea6c078e40b3997cd4dd0115ced917c5 has corrected real native scene run #44081413347 PASS and 34/36 checks at captured time (MLT editorial and installed recovery running). Do not rerun old scene failure, fabricate neural/human acceptance or revive past branches. Next actual creative G1 blocker: capable local Brain sees source-bound timed original/revised picture, semantically hears bounded real audio, chooses/edit/reviews native physical first/second outputs, then human/professional evaluation. Model transport routes already exist separately; private/paid use needs new purpose-specific consent."
+    "next_action": "Current staged G1 source delta after previous head 80e395ef348df28edbaae81eb48a1bf48f0f74f8: raw WAV indexed native model affordance locally 174/174 eligible PASS, 3 script checkout-only tests unavailable; exact new code CI pending. Do not promote this to neural semantic hearing. Existing WAV and picture transports are real but independent model-led A/V first/revised creative test still unaccepted. Keep PR #356 draft and main untouched. Preserve old scene physical PASS #44081413347; avoid docs-only commits while expensive CI jobs still running, and refresh live head before any branch move."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -717,5 +717,26 @@
     ],
     "source_unchanged_since_physical_test": true,
     "exact_head_not_final_green": true
+  },
+  "indexed_brain_verified_wav_affordance_2026_11_17": {
+    "parent_source_head": "80e395ef348df28edbaae81eb48a1bf48f0f74f8",
+    "implementation_status": "EXACT_BLOB_TDD_GREEN_NEW_SOURCE_CI_PENDING",
+    "scope": "Already implemented host-bound source-verified WAV reader selectable for capable, permitted native indexed Brain after actual export verification; no auto audio fetch or model decision",
+    "controller_blob": "8f04a55a6a5bdaa9f0bfbb3de1bb888a1ee09871",
+    "test_blob": "2fc3151e35c28f5af872ae973ed275e5f9b1c4a9",
+    "red": "New source-verified raw WAV affordance missing in context and indexed selectable list; additionally explicit Omni WAV egress disabled case failed prior to consent guard.",
+    "green": {
+      "targeted_cases": "7 capability, grant, source and prior-observation scenarios",
+      "offline_eligible_tests": 174,
+      "passed": 174,
+      "failed": 0,
+      "excluded_repository_only_tests": 3,
+      "exclusion_reason": "Installed release wheel does not include scripts/run_native_model_trial.py; full repo CI required",
+      "environment": "Python 3.13, installed exact code wheel, inert MCP import shim, no actual model/server calls"
+    },
+    "safety": "Only native read tool pre-existing in exact runtime AND host grant, verified export in current journal, callable decide_with_audio and explicit Omni consent when defined. No unsolicited model/owner source transport; provider still validates binary source timing and consent.",
+    "followup": "GitHub code-head CI and independently competent actual neural visual+audio creative trial NOT RUN",
+    "artistic_acceptance": "NOT_ACCEPTED",
+    "owner_private_paid_permission": "NOT_GRANTED"
   }
 }

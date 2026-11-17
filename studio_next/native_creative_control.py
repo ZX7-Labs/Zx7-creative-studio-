@@ -1585,6 +1585,34 @@ class NativeCreativeControl:
                     self.catalog_mode == "indexed" and self._requires_av_review and
                     bool(export_evidence["current_verified"] -
                          export_evidence["current_full_audio"]))
+                # The existing original-WAV read is a real source-bound
+                # acoustic input, unlike the numeric full-film envelope.
+                # Offer it ONLY to an audio-capable Brain after actual export
+                # verification. This is an inspectable READ choice, never a
+                # host-dispatched probe or a semantic-listening certificate.
+                # The previous audio sample for the same verified export must
+                # not be repeatedly offered as if no evidence was observed.
+                raw_audio_reader = "zx7_observe_verified_export_audio"
+                actual_audio_observed = {
+                    event.get("observed_export_sha256")
+                    for event in self.events
+                    if event.get("kind") == "native_tool_result" and
+                       event.get("tool") == raw_audio_reader and
+                       event.get("audio_sent_to_model_for_next_decision") is True and
+                       _digest(event.get("audio_sha256"))
+                }
+                audio_excerpt_pending = (
+                    self.catalog_mode == "indexed" and
+                    self._requires_av_review and
+                    callable(getattr(self.model, "decide_with_audio", None)) and
+                    # An Omni cloud adapter without an explicit one-use WAV
+                    # upload grant must never be offered this route. Local
+                    # models have no cloud-upload policy property.
+                    getattr(self.model, "allow_original_audio_upload", True) is True and
+                    raw_audio_reader in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(raw_audio_reader) == "read" and
+                    bool(export_evidence["current_verified"] - actual_audio_observed))
                 if frame_review_pending:
                     actual_frame_tools = [
                         tool for tool in sorted(_VERIFIED_FRAME_TOOLS)
@@ -1608,6 +1636,12 @@ class NativeCreativeControl:
                     self._host_frontier_tools = (
                         [AUDIO_ENVELOPE] + [tool for tool in self._host_frontier_tools
                                              if tool != AUDIO_ENVELOPE])
+                if audio_excerpt_pending:
+                    # Retain the existing full-film numeric envelope and real
+                    # frame candidates. Offer only the real, permitted WAV
+                    # observer; the Brain decides whether and when to listen.
+                    insertion = 1 if audio_review_pending else 0
+                    self._host_frontier_tools.insert(insertion, raw_audio_reader)
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
                 placement_validator = None
@@ -1777,6 +1811,11 @@ class NativeCreativeControl:
                             AUDIO_ENVELOPE in visible_selectable else []),
                         "audio_observation_is_numeric_not_semantic_hearing": True,
                         "audio_observation_not_automatically_executed": True,
+                        "current_source_audio_excerpt_read_selectable": (
+                            [raw_audio_reader] if audio_excerpt_pending and
+                            raw_audio_reader in visible_selectable else []),
+                        "audio_excerpt_was_automatically_dispatched": False,
+                        "raw_audio_transport_not_independent_semantic_hearing": True,
                         **({
                             "previous_source_review_seconds_for_matching_frames":
                                 comparison_frame_seconds,
