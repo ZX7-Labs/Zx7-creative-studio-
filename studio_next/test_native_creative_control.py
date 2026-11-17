@@ -1015,6 +1015,61 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                          AUDIO_ENVELOPE} for call in session.calls))
         self.assertNotIn("/private/", json.dumps(result["events"]))
 
+    async def test_indexed_same_time_av_comparison_keeps_verified_native_reader_visible(self):
+        """Failed real 120B G1 had two physically verified, already-observed
+        cuts at incompatible times. The indexed Brain must be able to choose
+        a new same-time *read* without rediscovering the actual native tool.
+        This is a scripted contract test, NOT proof of neural creative review.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES)
+        from studio_next.test_native_render_evidence import ReviewedAVPairTests
+
+        for scenario, expected in (
+                ("disjoint", True), ("already_comparable", False),
+                ("invalidated_by_write", False)):
+            with self.subTest(scenario=scenario):
+                events = ReviewedAVPairTests().events()
+                if scenario != "already_comparable":
+                    events[7]["native_av_review"] = [0.5, 4.5]
+                if scenario == "invalidated_by_write":
+                    events.append({
+                        "kind": "native_tool_result", "tool": "add_text_clip",
+                        "host_application_write_acknowledged": True})
+                session = FakeSession()
+                session.tools.extend([
+                    SimpleNamespace(name=name,
+                        description="Existing real native engine capability",
+                        input_schema={"type": "object", "properties": {}})
+                    for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE)])
+                grants = {tool.name: (
+                    "write" if tool.name in {"export_timeline", "update_text_clip"}
+                    else "read") for tool in session.tools}
+                model = ScriptedModel([
+                    decision("search", query="unrelated native action")])
+                control = NativeCreativeControl(
+                    session, model, max_turns=1, catalog_mode="indexed",
+                    host_tool_access=grants,
+                    host_content_revision_tools=("update_text_clip",),
+                    required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR))
+                control.events.extend(events)
+                control._verified_exports.update(("a" * 64, "b" * 64))
+                result = await control.run("Inspect real revisions; choose your own next step")
+                context = model.observed[0]
+                progress = context["host_verified_execution_progress"]
+                self.assertEqual(
+                    progress.get("previous_source_review_seconds_for_matching_frames"),
+                    [1, 4] if expected else None)
+                self.assertEqual(TIMED_FRAMES in context["selectable_native_tools"],
+                                 expected)
+                self.assertEqual(
+                    progress["current_same_time_picture_comparison_read_selectable"],
+                    [TIMED_FRAMES] if expected else [])
+                self.assertEqual(session.calls, [])
+                self.assertEqual(result["status"], "turn_budget_exhausted")
+                self.assertIn(REVIEWED_AV_PAIR, context["missing_completion_evidence"]
+                              ) if expected else None
+
     async def test_real_neural_av_missing_audio_surfaces_granted_read_without_dispatch(self):
         """Regression for failed real model #43883369538: its first export was
         visually reviewed but not audio-reviewed before its creative edit.

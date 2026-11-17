@@ -1616,6 +1616,18 @@ class NativeCreativeControl:
                     self.host_tool_access is not None and
                     self.host_tool_access.get(raw_audio_reader) == "read" and
                     bool(export_evidence["current_verified"] - actual_audio_observed))
+                # An earlier verified cut and this verified revised cut
+                # may each have frames, but at disjoint timestamps. The old
+                # pending-frame check then hid the exact same-time READ behind
+                # another catalog search. Surface only the existing granted
+                # timed observer; never choose timestamps, dispatch, or count
+                # another review on the Brain's behalf.
+                matching_frame_review_pending = (
+                    self.catalog_mode == "indexed" and
+                    bool(comparison_frame_seconds) and
+                    TIMED_FRAMES in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(TIMED_FRAMES) == "read")
                 if frame_review_pending:
                     actual_frame_tools = [
                         tool for tool in sorted(_VERIFIED_FRAME_TOOLS)
@@ -1629,6 +1641,11 @@ class NativeCreativeControl:
                         actual_frame_tools +
                         [tool for tool in self._host_frontier_tools
                          if tool not in actual_frame_tools])
+                if matching_frame_review_pending:
+                    self._host_frontier_tools = (
+                        [TIMED_FRAMES] +
+                        [tool for tool in self._host_frontier_tools
+                         if tool != TIMED_FRAMES])
                 if audio_review_pending and (
                         AUDIO_ENVELOPE in self.tools and
                         self.host_tool_access.get(AUDIO_ENVELOPE) == "read"):
@@ -1805,6 +1822,9 @@ class NativeCreativeControl:
                             name for name in visible_selectable
                             if frame_review_pending and name in _VERIFIED_FRAME_TOOLS],
                         "current_frame_observation_not_automatically_executed": True,
+                        "current_same_time_picture_comparison_read_selectable": (
+                            [TIMED_FRAMES] if matching_frame_review_pending and
+                            TIMED_FRAMES in visible_selectable else []),
                         "verified_export_still_needs_full_duration_audio": (
                             self._requires_av_review and
                             bool(export_evidence["current_verified"] -
