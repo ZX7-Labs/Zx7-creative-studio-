@@ -208,7 +208,7 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
     return {"workspace": str(root), "status": "initialized", "next": "doctor"}
 
 
-def doctor(path, *, check_model=True):
+def doctor(path, *, check_model=True, inspect_installed_body=False):
     """Inspect setup; never install engines, download weights or call cloud AI."""
     from .native_editor_session import editor_runtime_path, native_editor_child_environment
     root, config, _ = load_workspace(path)
@@ -274,8 +274,30 @@ def doctor(path, *, check_model=True):
             add("local_model", False, "Start the configured local OpenAI-compatible model server")
     elif config["provider"] == "nvidia":
         add("provider_credentials", bool(os.environ.get("NVIDIA_API_KEY")), "NVIDIA_API_KEY presence only; no cloud request made")
-    return {"workspace": str(root), "ready": all(c["ready"] for c in checks),
-            "model_connection_checked": check_model and config["provider"] == "local", "checks": checks}
+    # Opt-in source-truth inventory of creative engines through the SAME
+    # local BODY catalog admitted for run --enable-installed-body-tools.
+    # No operation is invoked, no provider is contacted and the availability
+    # of a tool must not be misreported as creative-art or UX acceptance.
+    result = {"workspace": str(root), "ready": all(c["ready"] for c in checks),
+              "model_connection_checked": check_model and config["provider"] == "local",
+              "checks": checks}
+    if inspect_installed_body:
+        if config["provider"] != "local":
+            raise ValueError("Installed BODY inventory is local-only until separate hosted egress review")
+        # The installed model uses the same ToolCatalog with host access
+        # constraints. Inventory only: do not initialize MediaVault/SQLite.
+        from .body_integration import body_catalog
+        operations = sorted(body_catalog(
+            root, initialize_vault=False).executable_ids(("read", "write")))
+        result["installed_body"] = {
+            "scope": "installed_host_granted_operations_only",
+            "operation_count": len(operations), "operations": operations,
+            "professional_creative_acceptance_verified": False,
+        }
+        add("installed_body_catalog", bool(operations),
+            "Actual locally executable/granted BODY tool names; not neural or professional acceptance")
+        result["ready"] = all(c["ready"] for c in checks)
+    return result
 
 
 def _stage_asset(path, destination, rights):
@@ -528,7 +550,11 @@ def main(argv=None):
     init.add_argument("--provider", choices=("local", "nvidia"), default="local")
     init.add_argument("--base-url", default="http://127.0.0.1:8080")
     for name in ("doctor", "status"):
-        commands.add_parser(name).add_argument("workspace", type=Path)
+        command = commands.add_parser(name)
+        command.add_argument("workspace", type=Path)
+        if name == "doctor":
+            command.add_argument("--installed-body-tools", action="store_true",
+                help="Read-only inventory of actual local BODY creative engines in this Studio")
     verify = commands.add_parser("verify", help="Independently re-decode both reviewed A/V exports and match editable native project")
     verify.add_argument("workspace", type=Path)
     verify.add_argument("session_id")
@@ -582,7 +608,7 @@ def main(argv=None):
             result = initialize_workspace(args.workspace, source=args.source, model_id=args.model_id,
                 provider=args.provider, base_url=args.base_url)
         elif args.command == "doctor":
-            result = doctor(args.workspace)
+            result = doctor(args.workspace, inspect_installed_body=args.installed_body_tools)
         elif args.command == "status":
             result = workspace_status(args.workspace)
         elif args.command == "verify":

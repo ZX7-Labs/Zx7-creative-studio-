@@ -9,6 +9,31 @@ from studio_next.media_vault import MediaVault,MediaCustodyError
 
 
 class MediaVaultProductionTests(unittest.TestCase):
+    def test_read_only_catalog_probe_does_not_create_vault_or_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "never-initialized"
+            MediaVault(target, initialize=False)
+            self.assertFalse(target.exists())
+            self.assertFalse((root / "never-initialized" / "assets.sqlite3").exists())
+            with self.assertRaisesRegex(MediaCustodyError, "boolean"):
+                MediaVault(target, initialize="false")
+            self.assertFalse(target.exists())
+            original = MediaVault(root / "created-on-use")
+            self.assertTrue(original.db.is_file())
+            self.assertTrue(original.objects.is_dir())
+
+    def test_read_only_vault_inventory_rejects_redirected_vault_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            alias = root / "vault"
+            alias.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(MediaCustodyError, "linked"):
+                MediaVault(alias, initialize=False)
+            self.assertEqual(list(outside.iterdir()), [])
+
     def test_original_photography_survives_move_or_restart(self):
         with tempfile.TemporaryDirectory() as root:
             input=Path(root)/"camera.mov"

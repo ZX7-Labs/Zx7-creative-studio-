@@ -364,7 +364,7 @@ def _commit_actual_body_output(final_path,render):
         stage.unlink(missing_ok=True)
 
 
-def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=None):
+def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=None,initialize_vault=True):
     """Attach native editor operations only through a host-configured client.
 
     The host owns its grants and argument/path policy. Project/model arguments
@@ -372,7 +372,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     are never advertised as replayable cached work or media delivery receipts.
     """
     root=Path(workspace).resolve()
-    vault=MediaVault(vault_root or (root/"vault"))
+    vault=MediaVault(vault_root or (root/"vault"),initialize=initialize_vault)
     catalog=ToolCatalog()
     # Research cannot become a source-rights attestation or a media writer.
     # Its explicit 'network' permission is not included in ordinary read grants.

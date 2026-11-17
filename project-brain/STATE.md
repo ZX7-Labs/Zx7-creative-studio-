@@ -1,8 +1,9 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
 > **Verified handoff, 2026-11-17:** `main` is 716c226ab7cb24e5a662229d951bf7f8bc17a28f. Active [G1 PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) source head `fa676757dffab425993502ce9317c3de2886244f` has **35/35 successful exact-head checks**. Its synthetic merge tree `fe3e0c4473e4dc0d2d8e55908284b26835fa99e7` matches the source head. Independently rehashed installed release and decoded original physical outputs; see [EVIDENCE/INDEX](EVIDENCE/INDEX.md). Prior source checkpoints 276d30ac/bde31423/8abe18a7 and their already passed physical tests are historical. **This is verified technical scope only**, not genuine neural, artistic or public-release acceptance. PR remains DRAFT, unmerged. Refresh live heads and permissions before modifying.
+> **New active candidate (2026-11-17):** `zx7-studio doctor --installed-body-tools` now reports the live local BODY engine catalog without creating a vault/SQLite and rejects linked vault roots. TDD reproduced both issues; **72/72 related local tests PASS** with inert import-only MCP shim; new exact-head CI is **PENDING**. Prior 35/35 applied to the older source; no G1 or A–L creative acceptance upgrade. Parent `6b73899854a4b6a5fba32cb31abcba9a52592c75`.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=cc7e26539ee5c3a09849fc823385e6d18eefce80` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=11b0382b96c7a3c26ba645b89c0585526451c216` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

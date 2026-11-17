@@ -319,12 +319,19 @@ def sha256_file(path):
 
 class MediaVault:
     """SQLite WAL + atomic immutable blobs; empty results are never delivered."""
-    def __init__(self,root):
-        self.root=Path(root).resolve()
+    def __init__(self,root,*,initialize=True):
+        if type(initialize) is not bool:
+            raise MediaCustodyError("Vault initialization policy must be an explicit boolean")
+        supplied=Path(root)
+        if supplied.is_symlink():
+            raise MediaCustodyError("Source vault root cannot be a linked external directory")
+        self.root=supplied.resolve()
         self.objects=self.root/"objects"
         self.db=self.root/"assets.sqlite3"
         if self.objects.is_symlink() or self.db.is_symlink():
             raise MediaCustodyError("Source vault cannot use an external linked object or database")
+        if not initialize:
+            return  # Pure native tool discovery: no SQLite, directories, or asset writes.
         self.objects.mkdir(parents=True,exist_ok=True)
         with self._connect() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS blobs(

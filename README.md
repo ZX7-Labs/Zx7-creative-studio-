@@ -99,6 +99,7 @@ model. If the server lists several, pass `--model-id` to choose one.
 python -m pip install '.[editor,production]'
 zx7-studio init ./my-studio --source ./third_party/velorn
 zx7-studio doctor ./my-studio
+zx7-studio doctor ./my-studio --installed-body-tools
 zx7-studio run ./my-studio --brief-file ./brief.txt --asset ./source.mov --rights 'I own this footage'
 zx7-studio status ./my-studio
 ```
@@ -106,6 +107,12 @@ zx7-studio status ./my-studio
 The `--source` override is optional when a built editor is already present at
 `share/zx7-studio/velorn` under the active Python installation or in the
 matching source checkout.
+
+The optional `doctor --installed-body-tools` shows **actual installed local BODY
+operations** from the same source catalog used during a Studio run. It performs
+no tool call, creates no vault/SQLite file, and does not grant cloud media access.
+This is a technical installation inventory, **not** professional CGI/VFX, audio,
+design or full A–L creative acceptance.
 
 For an **opt-in local-only** combined creative-tool session (same Brain, same
 host gateway and budget), enable the actual installed BODY catalog:

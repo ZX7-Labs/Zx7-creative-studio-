@@ -174,6 +174,46 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertFalse(second.exists())
         self.assertEqual(requests, ["/v1/models"] * 4)
 
+    def test_doctor_opt_in_reports_actual_installed_body_tools_without_writes(self):
+        """One Studio reports host-executable engines, not artistic acceptance."""
+        self.init()
+        self.assertFalse((self.root / "vault").exists())
+        self.assertFalse((self.root / ".zx7-host-private").exists())
+        original = (self.root / "editor-grants.json").read_bytes()
+        baseline = studio.doctor(self.root, check_model=False)
+        self.assertNotIn("installed_body", baseline)
+        observed = studio.doctor(
+            self.root, check_model=False, inspect_installed_body=True)
+        body = observed["installed_body"]
+        self.assertEqual(body["scope"], "installed_host_granted_operations_only")
+        self.assertGreater(body["operation_count"], 0)
+        self.assertIn("body.timecode_format", body["operations"])
+        self.assertEqual(body["operation_count"], len(body["operations"]))
+        self.assertEqual(body["operations"], sorted(body["operations"]))
+        self.assertFalse(body["professional_creative_acceptance_verified"])
+        self.assertIn("installed_body_catalog", {x["name"] for x in observed["checks"]})
+        self.assertEqual((self.root / "editor-grants.json").read_bytes(), original)
+        self.assertFalse((self.root / "vault").exists())
+        self.assertFalse((self.root / ".zx7-host-private").exists())
+
+    def test_doctor_creative_inventory_refuses_hosted_provider_without_probe(self):
+        from studio_next.native_editor_session import attest_owner_body_source
+        self.init(provider="nvidia")
+        with patch("studio_next.native_editor_session.attest_owner_body_source") as source:
+            with self.assertRaisesRegex(ValueError, "local-only"):
+                studio.doctor(self.root, check_model=False, inspect_installed_body=True)
+            source.assert_not_called()
+
+    def test_doctor_installed_body_cli_flag_is_explicit_and_read_only(self):
+        self.init()
+        result = io.StringIO()
+        with contextlib.redirect_stdout(result):
+            code = studio.main(["doctor", str(self.root), "--installed-body-tools"])
+        report = json.loads(result.getvalue())
+        self.assertIn("installed_body", report)
+        self.assertFalse(report["installed_body"]["professional_creative_acceptance_verified"])
+        self.assertEqual(code, 2, "No native editor or local model should be invented")
+
     def test_unreadable_local_model_inventory_does_not_create_workspace(self):
         with patch("studio_next.local_model_http.urlopen", side_effect=BadStatusLine("invalid")):
             with self.assertRaisesRegex(ValueError, "Could not read model inventory"):

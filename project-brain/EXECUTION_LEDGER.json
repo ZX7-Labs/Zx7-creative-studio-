@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Continue PR #356 from live source; do not repeat independently passed exact-head physical tests or resurrect historical branches. Highest-value gap: genuinely capable model-selected picture AND semantically understood sound; first-source/revised output actual same-time physical review, native edit and human coedit. Current NVIDIA Super VL trial supplied numeric sound facts but no neural semantic hearing. Existing separately consented Omni WAV route does not prove combined semantic video+sound. Work offline on falsifiable integration diagnosis first; a new purpose-scoped paid/multimodal model authorization is mandatory before cloud testing or private media egress. Preserve all A-L scope, source hashes, safe grant failures and historical negative evidence."
+    "next_action": "First verify changed-head CI for local-only Studio installed creative-tool inventory at latest PR #356 head. Do not repeat previously proven native physical tests unless changed code requires. After this measured user-facing integration improvement, G1 needs genuine capable model semantic picture AND sound perception, physical independent revision, true human coedit and professional review. No parallel frameworks, stale branch merges, or unapproved paid/private-media inference; full A-L remains NOT_ACCEPTED."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -603,5 +603,28 @@
     "paid_or_private_egress_consent": "REQUIRES_NEW_PURPOSE_SPECIFIC_APPROVAL",
     "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356#issuecomment-6937688565",
     "note": "Latest checkpoint is a dated independent verification of the source-changing head; if later commits are docs-only do not claim their exact heads have the same Git checks."
+  },
+  "owner_studio_inventory_2026_11_17": {
+    "pr": 356,
+    "source_parent": "6b73899854a4b6a5fba32cb31abcba9a52592c75",
+    "changed_head_status": "PENDING_CI",
+    "feature": "Opt-in zx7-studio doctor --installed-body-tools uses same actual installed BODY executable catalog; source-neutral capability inventory, no new engine",
+    "files": [
+      "studio_next/studio_cli.py",
+      "studio_next/body_integration.py",
+      "studio_next/media_vault.py",
+      "studio_next/test_studio_cli.py",
+      "studio_next/test_media_vault.py"
+    ],
+    "local_red": "3 CLI missing-feature cases and redirected vault-root case fail before fix",
+    "local_green": {
+      "total": 72,
+      "passed": 72,
+      "failed": 0,
+      "runner": "Python 3.13; inert test-only MCP import shim (no actual editor or model dispatch)"
+    },
+    "security": "No local vault/SQLite created by read-only catalog inspection; rejects directly symlinked source vault root; default runtime vault initialization unchanged; hosted BODY inventory not permitted",
+    "acceptance": "TECHNICAL_CANDIDATE_ONLY_NOT_G1_OR_A_L_ACCEPTED",
+    "next": "First inspect changed-head exact CI; then capable Brain source-bound real picture and semantic sound native first/revision and human/pro review"
   }
 }
