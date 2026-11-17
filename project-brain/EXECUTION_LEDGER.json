@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify exact-head CI after indexed matching timestamp native READ frontier correction. Then close any new technical failures with source-bound tests; preserve original trial negative. Do not run another paid or private model experiment without separately scoped consent. Genuine capable Brain picture+sound semantic review, model-selected artistic revision, actual human collaboration and independent professional evaluation remain open."
+    "next_action": "Review exact changed-head unit and native physical CI for source-fenced heartbeat guard and model-selected same-time observation. Preserve native identity pre-dispatch initial negative and same-code targeted rerun success distinctly; neither proves the old error harmless. Do not merge draft #356 or call G1 accepted without a successful authorized real capable-model audiovisual creative loop and independent professional/human review."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -694,6 +694,27 @@
       "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44099891001",
       "corrective_code_check": "PREPARED; EXACT_NEW_HEAD_CI_PENDING",
       "effect_on_creative_workflow": "NONE; documentation validator only; does not certify runtime or artistic acceptance"
+    },
+    {
+      "run_id": 44119756861,
+      "exact_source_sha": "bc1f74f7b90df09e4efdf2948cf7a8a76eea50b7",
+      "job_first": 134168493469,
+      "first_status": "FAILURE",
+      "causal_location": "engines/velorn/mcp-e2e.py:562 through NativeEditorIdentityReader pre-dispatch for set_clip_keyframes",
+      "original_error_code": "native_identity_project_changed_during_read",
+      "native_write_dispatched": false,
+      "source_mechanism": "Pinned upstream buildMcpSnapshot() regenerates generatedAt on heartbeat even when source-owned zx7NativeRevision is unchanged. Existing reader compared generatedAt even for a source-fenced CAS writer. The precise field that changed in this particular failed CI wasn't logged, so original causal attribution remains a hypothesis.",
+      "corrective_scope": "For exact source-fenced live revision ONLY, stable identity, timeline/counts and stable validated zx7NativeRevision determine read consistency. Legacy/unfenced reads still fail on generatedAt drift. No write replay or bypass of synchronous renderer revision fence.",
+      "tests_prepared": "Heartbeat-only with stable live token accepted, changed live token refused, missing token refused, legacy fallback remains strict; exact source CI pending.",
+      "targeted_same_source_rerun": {
+        "status": "SUCCESS",
+        "run_id": 44119756861,
+        "job_id": 134170794631,
+        "source_sha": "bc1f74f7b90df09e4efdf2948cf7a8a76eea50b7",
+        "conclusion": "Original first attempt FAILED, exact same-code targeted rerun PASS, root cause remains UNKNOWN; do NOT classify as proven flaky."
+      },
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44119756861",
+      "root_confidence": "UNDERLYING_VOLATILE_GENERATED_AT_SOURCE_CONFIRMED; SPECIFIC_FAILED_RUN_CAUSE_NOT_FULLY_PROVEN"
     }
   ],
   "native_scene_save_convergence_ci_2026_11_17": {
@@ -793,5 +814,16 @@
     "change": "When current trust-bound A/V pairing supplies original validated reference seconds and installed TIMED_FRAMES is truly host-granted READ, promote only that existing native read into the indexed choice frontier. No native dispatch, model choice, permission change, extra engine, status waiver or acceptance bypass.",
     "regression": "Three scripted receipt cases: disjoint verified samples exposes only installed same-time read; already comparable pair and post-write invalidation do not. Strict reviewed A/V proof remains unchanged.",
     "caveat": "Real neural outcome, semantic listening, original independent creative revision and professional acceptance remain UNVERIFIED. No paid NVIDIA inference or private egress."
+  },
+  "native_live_revision_vs_volatile_snapshot_2026_11_17": {
+    "parent_head": "bc1f74f7b90df09e4efdf2948cf7a8a76eea50b7",
+    "status": "SOURCE_FIX_AND_TEST_COMMITTED_ON_DRAFT_PR_EXACT_NEW_HEAD_CI_PENDING",
+    "observed_ci_run": 44119756861,
+    "failed_job": 134168493469,
+    "upstream_source": "VelornLabs/velorn b3c02adbd5c0779feb8abf34978299e9502cc0e7 src/services/mcpSnapshot.js; ZX7 pinned native-live-revision.patch",
+    "objective": "Refuse actual human/model edits during identity admission, while allowing harmless publisher heartbeat when native mutation token is unchanged",
+    "remediation": "Do not remove or auto-retry the host CAS; compare stable identity and counts, then exact native revision on source-fenced paths. Keep non-fenced generatedAt equality as before.",
+    "proof": "Two independent negative tests for live revision change and missing token, and one strict legacy case. Fresh exact-head installed Electron/FFmpeg regression required. Same-code rerun installed job 134170794631 PASSED; original failing job 134168493469 is retained.",
+    "authorization": "No hosted model calls, private media egress, third-party source rewrite or new architecture."
   }
 }

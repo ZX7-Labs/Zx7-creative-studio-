@@ -34,6 +34,9 @@ class NativeReadSession:
         self.error_tool = None
         self.malformed_tool = None
         self.human_edit_during_read = False
+        self.snapshot_heartbeat_between_reads = False
+        self.provide_native_revision = False
+        self.native_revision = "a" * 40
         self.fail_before_source = False
         self.limit_assets = False
         self.limit_clips = False
@@ -77,9 +80,12 @@ class NativeReadSession:
         if name == "get_project":
             if self.fail_before_source:
                 raise RuntimeError("private /home/sensitive/owned-media.mov")
-            if self.human_edit_during_read and sum(
-                    c[0] == "get_project" for c in self.calls) == 2:
-                self.revision = "revision-human"
+            if sum(c[0] == "get_project" for c in self.calls) == 2:
+                if self.human_edit_during_read:
+                    self.revision = "revision-human"
+                    self.native_revision = "b" * 40
+                elif self.snapshot_heartbeat_between_reads:
+                    self.revision = "snapshot-heartbeat-without-native-edit"
             data = {
                 "project": {
                     # Exact pinned Velorn source contract intentionally has
@@ -108,6 +114,8 @@ class NativeReadSession:
                 "limitApplied": self.limit_assets}
         else:
             raise AssertionError("unsupported tool: " + name)
+        if name == "get_project" and self.provide_native_revision:
+            data["zx7NativeRevision"] = self.native_revision
         return SimpleNamespace(is_error=False, content=[
             SimpleNamespace(type="text", text=json.dumps(data))])
 
@@ -141,6 +149,44 @@ class PinnedReaderUnitTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "project_changed_during_read"):
             await self.reader()
         self.assertEqual(self.native.write_attempts, 0)
+
+    async def test_source_fenced_native_identity_ignores_heartbeat_not_a_live_edit(self):
+        """Pinned upstream snapshot generatedAt refreshes on a heartbeat.
+        Source-attested zx7NativeRevision remains stable without a mutation.
+        Never turn the volatile presentation stamp into a false edit.
+        """
+        self.native.provide_native_revision = True
+        self.native.snapshot_heartbeat_between_reads = True
+        trusted = NativeEditorIdentityReader(
+            self.native, GRANTS, require_live_revision=True)
+        observed = await trusted()
+        self.assertEqual(observed["__zx7_live_revision"], "a" * 40)
+        self.assertEqual([name for name, _ in self.native.calls],
+                         ["get_project", "get_timeline", "get_assets", "get_project"])
+        self.assertEqual(self.native.write_attempts, 0)
+
+        # Legacy / unfenced sources have no same-commit CAS: reject drift.
+        legacy = NativeReadSession()
+        legacy.snapshot_heartbeat_between_reads = True
+        with self.assertRaisesRegex(ValueError, "project_changed_during_read"):
+            await NativeEditorIdentityReader(legacy, GRANTS)()
+        self.assertEqual(legacy.write_attempts, 0)
+
+    async def test_source_fenced_concurrent_native_mutation_and_missing_token_fail_closed(self):
+        self.native.provide_native_revision = True
+        self.native.human_edit_during_read = True
+        fenced = NativeEditorIdentityReader(
+            self.native, GRANTS, require_live_revision=True)
+        with self.assertRaisesRegex(ValueError, "project_changed_during_read"):
+            await fenced()
+        self.assertEqual(self.native.write_attempts, 0)
+
+        missing = NativeReadSession()
+        missing.snapshot_heartbeat_between_reads = True
+        with self.assertRaisesRegex(ValueError, "native_identity_live_revision_unavailable"):
+            await NativeEditorIdentityReader(
+                missing, GRANTS, require_live_revision=True)()
+        self.assertEqual(missing.write_attempts, 0)
 
     async def test_limited_snapshots_are_unknown_not_missing_ids(self):
         for field in ("limit_assets", "limit_clips"):
