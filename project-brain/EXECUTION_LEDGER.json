@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "First verify changed-head CI for local-only Studio installed creative-tool inventory at latest PR #356 head. Do not repeat previously proven native physical tests unless changed code requires. After this measured user-facing integration improvement, G1 needs genuine capable model semantic picture AND sound perception, physical independent revision, true human coedit and professional review. No parallel frameworks, stale branch merges, or unapproved paid/private-media inference; full A-L remains NOT_ACCEPTED."
+    "next_action": "Latest source is active draft PR #356, not main. Owner inventory parent 1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de already has 36/36 checks. New same-gateway no-write tool-discovery fix local 107/107 RED/GREEN green, exact new-head CI pending. Do not repeat earlier tests, experiments, or reconstruct original video tools. After safe integration verified, highest creative G1 remains capable local model source-grounded picture plus semantic WAV observation, independent intentional first/revised edit, genuine human coedit, professional review and full A-L scope; never claim real sound understanding from transport or numerical RMS. Paid/private egress requires separate purpose-specific approval."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -607,7 +607,7 @@
   "owner_studio_inventory_2026_11_17": {
     "pr": 356,
     "source_parent": "6b73899854a4b6a5fba32cb31abcba9a52592c75",
-    "changed_head_status": "PENDING_CI",
+    "changed_head_status": "EXACT_SOURCE_HEAD_GITHUB_36_OF_36_SUCCESS",
     "feature": "Opt-in zx7-studio doctor --installed-body-tools uses same actual installed BODY executable catalog; source-neutral capability inventory, no new engine",
     "files": [
       "studio_next/studio_cli.py",
@@ -625,6 +625,50 @@
     },
     "security": "No local vault/SQLite created by read-only catalog inspection; rejects directly symlinked source vault root; default runtime vault initialization unchanged; hosted BODY inventory not permitted",
     "acceptance": "TECHNICAL_CANDIDATE_ONLY_NOT_G1_OR_A_L_ACCEPTED",
-    "next": "First inspect changed-head exact CI; then capable Brain source-bound real picture and semantic sound native first/revision and human/pro review"
-  }
+    "next": "First inspect changed-head exact CI; then capable Brain source-bound real picture and semantic sound native first/revision and human/pro review",
+    "source_sha": "1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de",
+    "exact_head_checks": {
+      "success": 36,
+      "total": 36
+    },
+    "provenance": "https://github.com/ZX7-Labs/Zx7-creative-studio-/commit/1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de"
+  },
+  "body_gateway_read_only_discovery_2026_11_17": {
+    "parent": "1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de",
+    "pr": 356,
+    "status": "LOCAL_TDD_GREEN_CHANGED_HEAD_CI_PENDING",
+    "problem": "Real installed BODY tool list and host grant refresh created MediaVault/SQLite without an operation; read-only tool discovery affected actual shared Brain–BODY session, not just doctor",
+    "red": "2 genuine real InstalledBodyAdapter and connect_installed_zx7_body discovery tests FAILED on exact previous package source, showing unexpected /vault directory",
+    "green": {
+      "local_tests": 107,
+      "passed": 107,
+      "failed": 0,
+      "skipped": 0,
+      "source_blob": "488376fa857790505948fa43aee0916b4d769f63",
+      "test_blob": "2f3b1649190165b6970c518412c5e60ac1fe3cc3",
+      "environment": "Python 3.13, installed wheel at parent source, inert test-only MCP import shim, no real editor/model requests"
+    },
+    "changed_source": [
+      "studio_next/body_capability_adapter.py",
+      "studio_next/test_body_capability_adapter.py"
+    ],
+    "behavior": "list_tools and trusted_grants call existing catalog with initialize_vault=False; call_tool retains normal initialized-vault path for actual operations; no new backend, scheduler or data model",
+    "exact_head_ci": "PENDING_AFTER_COMMIT",
+    "acceptance": "SAFE_LOCAL_INTEGRATION_ONLY_NOT_G1_OR_FULL_A_L"
+  },
+  "ci_failures_and_retests": [
+    {
+      "run_id": 44018376571,
+      "exact_source_sha": "1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de",
+      "job_first": 133821797690,
+      "first_status": "FAILURE",
+      "causal_location": "engines/velorn/mcp-e2e.py:176 native second saved project did not converge to acknowledged modified revision in 15s",
+      "targeted_rerun_job": 133823050037,
+      "rerun_status": "SUCCESS",
+      "root_cause": "UNKNOWN_NOT_PROVEN_FLAKY",
+      "source_file_changed_by_inventory_commit": false,
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44018376571",
+      "warning": "Retain original fail; rerun pass does not establish absence of race"
+    }
+  ]
 }

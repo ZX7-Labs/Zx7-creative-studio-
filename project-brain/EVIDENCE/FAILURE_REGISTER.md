@@ -27,6 +27,12 @@ This is a **causal retrieval index**, not a reconstructed raw transcript or a se
 - **Source correction:** [#290](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/290) merged bounded 180-second per-call timeout and 1500-second outer budget with no automatic retry on uncertain POST. Later real run F-REAL-002 failed on different output/audit conditions, so the earlier 90-second timeout is not a completed creative success.
 - **Status:** ORIGINAL_TIMEOUT_CONFIRMED / TIMEOUT_BOUNDS_MERGED / FULL_CREATIVE_MODEL_OUTCOME_FAILED.
 
+## F-CI-005 — 2026-11-17 same-source native saved-revision convergence
+
+- **First failure, retained:** [run #44018376571, job 133821797690](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44018376571/job/133821797690) at exact source `1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de`. In actual pinned Electron/X11 editor scenario, a second `save_project` acknowledgement returned a `modified` revision, but `engines/velorn/mcp-e2e.py:176` did not observe that exact revision in saved `project.comfystudio` within 15 seconds; `AssertionError: Native saved document never converged to acknowledged revision`. Prior native custody/fencing steps had run.
+- **Same-exact-head evidence:** One targeted failed-job rerun [job 133823050037](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44018376571/job/133823050037) **SUCCESS**; 36/36 exact code-head check-runs later SUCCESS. `engines/velorn/mcp-e2e.py` was unchanged by the owner inventory feature. **First-run root cause UNKNOWN**. A rerun passing does not prove the failure was harmless, deterministic, or conclusively flaky. Preserve for repeated-failure investigation and do not silently extend a timing threshold.
+- **Status:** FIRST_REAL_NATIVE_SAVED_REVISION_CONVERGENCE_FAIL / SAME_HEAD_SINGLE_RERUN_PASS / DETERMINISTIC_CAUSE_UNPROVEN / PROFESSIONAL_HUMAN_COEDIT_UNACCEPTED.
+
 ## F-CI-004 — combined source Electron scene preflight
 
 - **Original:** [#349 combined workstream #43680525680](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43680525680), exact code head `11fc1aef2de11b4790e50085039e430dcf39ef6e`. Initial scene installed-editor job failed a version/sandbox preflight **after successful Electron build**; targeted failed-job rerun on identical source head passed actual native scene, save and fresh reopen.

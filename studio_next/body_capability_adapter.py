@@ -78,15 +78,18 @@ class InstalledBodyAdapter:
         self._allowed_access = allowed
         self._grants = None
 
-    def _installed(self):
-        catalog = body_catalog(self._workspace, editor_client=self._editor_client)
+    def _installed(self, *, initialize_vault=True):
+        # Listing tools or refreshing grants must never create owner assets.
+        # Actual admitted operations retain the original initialized vault.
+        catalog = body_catalog(self._workspace, editor_client=self._editor_client,
+                               initialize_vault=initialize_vault)
         enabled = catalog.executable_ids(self._allowed_access)
         descriptors = {item["id"]: item for item in catalog.discover()
                        if item["id"] in enabled}
         return catalog, descriptors
 
     async def list_tools(self):
-        _, permitted = self._installed()
+        _, permitted = self._installed(initialize_vault=False)
         # These data come only from the actual installed local ToolCatalog,
         # never AI text, old app documentation or guessed future APIs.
         return SimpleNamespace(tools=[
@@ -98,7 +101,7 @@ class InstalledBodyAdapter:
             nextCursor=None)
 
     def trusted_grants(self):
-        _, permitted = self._installed()
+        _, permitted = self._installed(initialize_vault=False)
         return {name: spec["access"] for name, spec in permitted.items()}
 
     async def call_tool(self, name, inputs):
