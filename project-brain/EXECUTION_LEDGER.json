@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Review exact changed-head unit and native physical CI for source-fenced heartbeat guard and model-selected same-time observation. Preserve native identity pre-dispatch initial negative and same-code targeted rerun success distinctly; neither proves the old error harmless. Do not merge draft #356 or call G1 accepted without a successful authorized real capable-model audiovisual creative loop and independent professional/human review."
+    "next_action": "Keep PR #356 DRAFT/unmerged. The exact source/code head b2c9 has 19 successful workflows, one historical editorial-source physical FAIL (#44122006732) and two still running at last read; a default-editor first-save mismatch (#44122005810) first FAIL then same-source rerun PASS. Keep both negative records. Validate legacy profile vs already verified source-pinned save-authoritative descendant before any supported/default installer migration, independently recheck actual failed output stamps, and do not weaken the physical equality requirement. G1 real Brain creative A/V loop, real human co-edit, independent quality/security and A-L acceptance all still open, paid/private consent absent."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -715,6 +715,32 @@
       },
       "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44119756861",
       "root_confidence": "UNDERLYING_VOLATILE_GENERATED_AT_SOURCE_CONFIRMED; SPECIFIC_FAILED_RUN_CAUSE_NOT_FULLY_PROVEN"
+    },
+    {
+      "run_id": 44122005810,
+      "first_job_id": 134175592452,
+      "source_sha": "b2c9a1446beb7b3b29ed865337e74136a5400b5c",
+      "first_status": "FAILURE",
+      "site": "engines/velorn/mcp-e2e.py:176, first render_and_verify after save",
+      "observed": "Native saved document never converged to acknowledged revision for pinned supported desktop_revision 58361e3810e8f5c459bf656d14a0832dbc0c7e7a.",
+      "same_source_rerun_job": 134179442943,
+      "same_source_rerun": "SUCCESS",
+      "root_source": "Pinned upstream fileSystem.saveProject computes disk modified from internal Date, while projectStore.saveProject computes and returns a separate prior Date; source-level defect predates collab_save_revision. Exact failing run did not log both timestamp values.",
+      "safe_existing_fix": "engines/velorn/native-save-timestamp.patch already source-pinned and physically exercised in current save-authority CI; do not replace default supported desktop installer silently.",
+      "status": "LEGACY_SUPPORTED_PROFILE_RELEASE_UNVERIFIED",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122005810"
+    },
+    {
+      "run_id": 44122006732,
+      "first_job_id": 134176199462,
+      "source_sha": "b2c9a1446beb7b3b29ed865337e74136a5400b5c",
+      "first_status": "FAILURE",
+      "site": "engines/velorn/mcp-e2e.py:1432 baseline render_and_verify after native save",
+      "observed": "Native saved document never converged to acknowledged revision on historical collab_editorial_revision 7df0aef57c5c3a22621d75eaced1eaa17005533e.",
+      "root_source": "This pinned editorial variant predates native-save-timestamp.patch, which corrects separate persisted and acknowledged modified timestamp; actual mismatch values not logged.",
+      "safe_existing_fix": "Later collab_save_revision 03b03c5d252950b0e7345449720e6685ec00e596, save_order d5b712ccc510f5ca703848ee1e5d854ce44b423c and loss_aware_extract f34141851c4db5228962984e31475e61a7faa647 reuse the reviewed fix and are tested separately.",
+      "status": "HISTORICAL_PROFILE_FAILED_NATIVE_PHYSICAL_CI_UNRESOLVED",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122006732"
     }
   ],
   "native_scene_save_convergence_ci_2026_11_17": {
@@ -809,21 +835,40 @@
   "matching_native_av_review_frontier_2026_11_17": {
     "source_parent": "472a627dbbb02334d8059c8e4febe5e6ae37bb2d",
     "originating_failure_run": 43991467485,
-    "status": "SOURCE_AND_TEST_PREPARED_EXACT_NEW_HEAD_CI_PENDING",
+    "status": "EXACT_HEAD_OFFLINE_REGRESSION_CI_PASSED_NOT_NEURAL",
     "defect": "A real first and revised A/V export can each be physically verified and have genuine timed picture observations, but the indexed controller only boosts an observer if no current frame was observed. Disjoint requested sample seconds then leave a same-time follow-up read buried behind another catalog search.",
     "change": "When current trust-bound A/V pairing supplies original validated reference seconds and installed TIMED_FRAMES is truly host-granted READ, promote only that existing native read into the indexed choice frontier. No native dispatch, model choice, permission change, extra engine, status waiver or acceptance bypass.",
     "regression": "Three scripted receipt cases: disjoint verified samples exposes only installed same-time read; already comparable pair and post-write invalidation do not. Strict reviewed A/V proof remains unchanged.",
-    "caveat": "Real neural outcome, semantic listening, original independent creative revision and professional acceptance remain UNVERIFIED. No paid NVIDIA inference or private egress."
+    "caveat": "Real neural outcome, semantic listening, original independent creative revision and professional acceptance remain UNVERIFIED. No paid NVIDIA inference or private egress.",
+    "code_ci": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122005832"
   },
   "native_live_revision_vs_volatile_snapshot_2026_11_17": {
     "parent_head": "bc1f74f7b90df09e4efdf2948cf7a8a76eea50b7",
-    "status": "SOURCE_FIX_AND_TEST_COMMITTED_ON_DRAFT_PR_EXACT_NEW_HEAD_CI_PENDING",
+    "status": "SOURCE_AND_TEST_VERIFIED_SCOPED_CI_WITH_OTHER_NATIVE_LEGACY_PROFILE_FAILURES",
     "observed_ci_run": 44119756861,
     "failed_job": 134168493469,
     "upstream_source": "VelornLabs/velorn b3c02adbd5c0779feb8abf34978299e9502cc0e7 src/services/mcpSnapshot.js; ZX7 pinned native-live-revision.patch",
     "objective": "Refuse actual human/model edits during identity admission, while allowing harmless publisher heartbeat when native mutation token is unchanged",
     "remediation": "Do not remove or auto-retry the host CAS; compare stable identity and counts, then exact native revision on source-fenced paths. Keep non-fenced generatedAt equality as before.",
-    "proof": "Two independent negative tests for live revision change and missing token, and one strict legacy case. Fresh exact-head installed Electron/FFmpeg regression required. Same-code rerun installed job 134170794631 PASSED; original failing job 134168493469 is retained.",
+    "proof": "Two independent negative tests for live revision change and missing token, and one strict legacy case. Fresh exact-head installed Electron/FFmpeg regression required. Same-code rerun installed job 134170794631 PASSED; original failing job 134168493469 is retained. Exact-head revision evidence workflow #44122005832 (3.11/3.12/3.13) PASS; independent installed saver/atomic range workflows #44122005619/#44122005764 PASS. Different legacy native profile save timestamp failures separately unresolved.",
     "authorization": "No hosted model calls, private media egress, third-party source rewrite or new architecture."
+  },
+  "exact_head_ci_2026_11_17_b2c9": {
+    "source_sha": "b2c9a1446beb7b3b29ed865337e74136a5400b5c",
+    "pr": 356,
+    "observed": "2026-11-17",
+    "exact_head_workflows": 22,
+    "success": 19,
+    "confirmed_failures": 1,
+    "unfinished": 2,
+    "original_initial_failed_then_same_source_rerun_succeeded": "workflow 44122005810, jobs 134175592452 FAIL / 134179442943 PASS; retain original negative",
+    "distinct_failed_legacy_workflow": "44122006732, job 134176199462",
+    "source_save_timestamp_authority_succeeded": "44122005619",
+    "native_atomic_range_real_editor_succeeded": "44122005764",
+    "brain_native_revision_offline_succeeded": "44122005832",
+    "canonical_brain_integrity_succeeded": "44122005928",
+    "other_tests": "19 successful latest recorded workflow conclusions include offline, physical and source checks; no creative/artistic acceptance.",
+    "source_tracked_mutation": "No additional runtime rewrite justified without independent review of legacy default support and exact first-run source discrepancy",
+    "status": "RELEASE_NO_GO; 22/22 NOT GREEN; NO A-L ACCEPTED"
   }
 }
