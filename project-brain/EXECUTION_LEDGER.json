@@ -565,6 +565,43 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Preserve original A-L and reuse existing unified owner/Brain/BODY/editor. PR #356 is verified for scoped technical native custody/portability but stays DRAFT until independently accepted G1. Historical duplicate #289 closed, merged #311 source fix retained; do not re-open or rerun weak Qwen CPU trials without a falsifiable model-quality hypothesis. Next: establish a genuine capable, explicitly authorized local Brain creative A/V first+revision run with semantic picture/sound observation, then independently judge the outputs and human coedit. Paid NVIDIA and any private media egress require separate explicit approval. Do not create new schedulers, media stores, framework or duplicate documentation."
+    "next_action": "Continue PR #356 from live source; do not repeat independently passed exact-head physical tests or resurrect historical branches. Highest-value gap: genuinely capable model-selected picture AND semantically understood sound; first-source/revised output actual same-time physical review, native edit and human coedit. Current NVIDIA Super VL trial supplied numeric sound facts but no neural semantic hearing. Existing separately consented Omni WAV route does not prove combined semantic video+sound. Work offline on falsifiable integration diagnosis first; a new purpose-scoped paid/multimodal model authorization is mandatory before cloud testing or private media egress. Preserve all A-L scope, source hashes, safe grant failures and historical negative evidence."
+  },
+  "exact_head_checkpoint_2026_11_17": {
+    "pr": 356,
+    "source_head": "fa676757dffab425993502ce9317c3de2886244f",
+    "main_at_inspection": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "synthetic_merge": "051130b3d98f1b851dadd9db0ec37bfecc986f92",
+    "shared_tree": "fe3e0c4473e4dc0d2d8e55908284b26835fa99e7",
+    "exact_head_github_checks": "35/35 SUCCESS",
+    "installed_artifact": {
+      "run_id": 43994896374,
+      "artifact_id": 14290715802,
+      "zip_sha256": "9cf40e5e985ab167d7370002ea2e65f7f8edeb2eae3452d2aeedb081e37fabcd",
+      "manifest_hashes": "24/24",
+      "tests": {
+        "run": 1563,
+        "passed": 1536,
+        "skipped": 27,
+        "failed": 0
+      },
+      "independent_wheel_tests": "144/144 eligible",
+      "physical_media": "3/3 decoded; CGI video-only"
+    },
+    "real_model": {
+      "run_id": 43991467485,
+      "artifact_id": 14287639311,
+      "zip_sha256": "93480cd1c2dbc0468506ffc32d6d78b03ecbb156fd67c2c59594692101906ede",
+      "outcome": "FAILED",
+      "before_after_picture_times": "disjoint",
+      "audio_pcm": "unchanged",
+      "exact_source_journal_hint_replay": "PASS fail-closed",
+      "post_fix_paid_retest": "NOT_RUN"
+    },
+    "technical_scope": "VERIFIED",
+    "artistic_and_a_l": "NOT_ACCEPTED",
+    "paid_or_private_egress_consent": "REQUIRES_NEW_PURPOSE_SPECIFIC_APPROVAL",
+    "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356#issuecomment-6937688565",
+    "note": "Latest checkpoint is a dated independent verification of the source-changing head; if later commits are docs-only do not claim their exact heads have the same Git checks."
   }
 }
