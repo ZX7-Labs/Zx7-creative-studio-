@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Check exact new-head PR #356 scene workflow: it now pins real collab_save_order_revision (includes scene, authoritative persisted save timestamp, serialized saves) rather than obsolete scene-only pre-save-fix. Require its real Electron X11 + project-save + A/V + source SHA check PASS before clearing repeated CI failures; no timed-threshold increase, job skip or old-branch merge. Also preserve shared BODY pure-discovery RED/GREEN 107/107. Then G1 still needs genuine capable local Brain source-bound temporal picture + semantic WAV review and revised physical native delivery, human edit and professional independent review, full A–L."
+    "next_action": "Read LIVE PR #356 head and checks: parent d32d187eea6c078e40b3997cd4dd0115ced917c5 has corrected real native scene run #44081413347 PASS and 34/36 checks at captured time (MLT editorial and installed recovery running). Do not rerun old scene failure, fabricate neural/human acceptance or revive past branches. Next actual creative G1 blocker: capable local Brain sees source-bound timed original/revised picture, semantically hears bounded real audio, chooses/edit/reviews native physical first/second outputs, then human/professional evaluation. Model transport routes already exist separately; private/paid use needs new purpose-specific consent."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -696,9 +696,26 @@
     "evidence": "Earlier scene-only installed workflow excluded already reviewed native-save-timestamp.patch and native-save-ordering.patch; save_project acknowledged modified values can disagree with source file. Prior save patch explicitly reconciles persisted timestamp to acknowledged native UI revision.",
     "narrow_fix": "Retarget existing native scene CI workflow to existing pinned save-order descendant; retain real Electron/X11, exact source SHA, source closure, GUI conflicts and renderer tests. No production source authority expanded and no CI skipped.",
     "corrected_workflow": ".github/workflows/zx7-native-scene-candidate.yml",
-    "status": "WORKFLOW_SOURCE_CORRECTION_PENDING_EXACT_HEAD_PHYSICAL_CI",
-    "new_pass": "NOT_YET_OBSERVED",
+    "status": "SCOPED_NATIVE_SCENE_REAL_PHYSICAL_PASS",
+    "new_pass": "PASS_ELECTRON_X11_SAVE_ACK_FILE_TIMESTAMP_GUI_AV_REOPEN_SIGKILL_RECOVERY",
     "causal_confidence": "SOURCE_CODE_MECHANISM_PROVEN; THE TWO FAILED LIVE RUNS DID NOT CONTAIN PER-SAVE_TIMESTAMP_DIAGNOSTICS",
-    "product": "G1_ARTISTIC_AND_HUMAN_NOT_ACCEPTED"
+    "product": "G1_ARTISTIC_AND_HUMAN_NOT_ACCEPTED",
+    "exact_source_head": "d32d187eea6c078e40b3997cd4dd0115ced917c5",
+    "workflow_run": 44081413347,
+    "installed_job": 134033406399,
+    "proof_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44081413347/job/134033406399",
+    "remaining": "not genuine AI-authored art, independent human usability, semantic hearing, or full A-L"
+  },
+  "latest_ci_checkpoint": {
+    "source": "d32d187eea6c078e40b3997cd4dd0115ced917c5",
+    "observed_date": "2026-11-17",
+    "passed": 34,
+    "total": 36,
+    "running": [
+      "real-mlt-editorial-contract",
+      "actual-installed-original-media-body"
+    ],
+    "source_unchanged_since_physical_test": true,
+    "exact_head_not_final_green": true
   }
 }
