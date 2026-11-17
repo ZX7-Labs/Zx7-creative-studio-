@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Keep PR #356 DRAFT/unmerged. The exact source/code head b2c9 has 19 successful workflows, one historical editorial-source physical FAIL (#44122006732) and two still running at last read; a default-editor first-save mismatch (#44122005810) first FAIL then same-source rerun PASS. Keep both negative records. Validate legacy profile vs already verified source-pinned save-authoritative descendant before any supported/default installer migration, independently recheck actual failed output stamps, and do not weaken the physical equality requirement. G1 real Brain creative A/V loop, real human co-edit, independent quality/security and A-L acceptance all still open, paid/private consent absent."
+    "next_action": "Confirm exact-head native editorial installed save-order physical suite and new source-parity regression, with all other CI failures retained. Do not merge draft #356 until release/security, a genuine model-authored image/audio first+revision pair, human workflow and independent A-L professional acceptance are proven; no paid/private media inference without new consent."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -870,5 +870,14 @@
     "other_tests": "19 successful latest recorded workflow conclusions include offline, physical and source checks; no creative/artistic acceptance.",
     "source_tracked_mutation": "No additional runtime rewrite justified without independent review of legacy default support and exact first-run source discrepancy",
     "status": "RELEASE_NO_GO; 22/22 NOT GREEN; NO A-L ACCEPTED"
+  },
+  "editorial_installer_source_parity_2026_11_17": {
+    "parent": "d5f021ed151539778a42a03815162501e8418127",
+    "old_failing_run": 44122006732,
+    "old_failing_job": 134176199462,
+    "status": "SOURCE_CI_AND_REGRESSION_PREPARED_EXACT_NEW_HEAD_PHYSICAL_CI_PENDING",
+    "issue": "Old editorial CI tested collab_editorial_revision 7df0aef57c5c3a22621d75eaced1eaa17005533e although actual owner --editorial-collaboration installer uses collab_save_order_revision d5b712ccc510f5ca703848ee1e5d854ce44b423c.",
+    "change": "Existing Electron editorial GUI/AI co-edit, original A/V, crash and save authority full workflow now prepares the exact currently owner-installed pinned source via prepare-native-save-order-candidate.sh and checks that expected SHA; new static regression protects installer/CI source pin parity.",
+    "constraints": "Original legacy CI failure retained; never weaken saved-file physical comparison, alter installed stable default, run paid model or infer artistic quality from source CI. New exact-head CI pending."
   }
 }
