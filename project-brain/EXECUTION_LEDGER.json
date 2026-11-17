@@ -14,7 +14,7 @@
     "merged_prs": 224,
     "closed_unmerged_prs": 41,
     "workflow_runs_repository_total_observed": 9028,
-    "notes": "Dated GitHub API inventory observed 2026-11-16; 403 branch refs include historical work, not 403 active features. 30 Markdown files have explicit authority/archive roles, not 30 competing plans. PR #289 was closed as superseded after #311 merge. Active #356 remains draft/unmerged: code head 276d30ac9c648d487739bf9de06d07c98e3479a6 had 13/13 technical workflows pass; latest independent evidence-only head bde314237196070e61cbf13ea6e971330e12afc1 was not yet fully retested at this snapshot. No real model artistic acceptance. 2026-11-16 exact G1 synthetic NVIDIA failures #43875955529 and #43883369538 were newly inspected against original retained artifacts; 35/35 latest #356 checks are technical only, not artistic acceptance. Earlier dated inventory counts are not refreshed."
+    "notes": "Dated GitHub API inventory observed 2026-11-16; 403 branch refs include historical work, not 403 active features. 30 Markdown files have explicit authority/archive roles, not 30 competing plans. PR #289 was closed as superseded after #311 merge. Active #356 remains draft/unmerged: code head 276d30ac9c648d487739bf9de06d07c98e3479a6 had 13/13 technical workflows pass; latest independent evidence-only head bde314237196070e61cbf13ea6e971330e12afc1 was not yet fully retested at this snapshot. No real model artistic acceptance. 2026-11-16 exact G1 synthetic NVIDIA failures #43875955529 and #43883369538 were newly inspected against original retained artifacts; 35/35 latest #356 checks are technical only, not artistic acceptance. Earlier dated inventory counts are not refreshed. Explicitly one owner-authorized synthetic-only NVIDIA G1 trial #43991467485 (2026-11-17) FAILED genuine A/V reviewed pair despite three decoded distinct videos; exact frame observation timestamps lacked overlap and sound PCM did not change. 48 model turns, two safe output_exists denials; post-fix retest NOT RUN and spent grant revoked. Earlier 2026-11-16 inventory counts are historical, not refreshed."
   },
   "claims_policy": {
     "fixed_requirements_source": "docs/BUILD_BLUEPRINT.md",
@@ -393,6 +393,19 @@
       "root_confidence": "Retained artifact #14233632889 independently downloaded, ZIP SHA256 5f393460bcb8dca0de243148e458dfba92533de96f69dc658bc457f6e3efbd95, FFprobe/FFmpeg picture/audio decoding and native JSONL journal inspected.",
       "post_fix_real_model_retest": "NOT_PASSED",
       "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43883369538",
+      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+    },
+    {
+      "id": "F-REAL-006",
+      "kind": "GENUINE_MODEL",
+      "result": "FAILED",
+      "run": 43991467485,
+      "job": 133732842887,
+      "details": "2026-11-17 one explicitly owner-authorized synthetic-only NVIDIA Nemotron 3.5 Super VL 120B G1 trial at exact executing commit 10ef5a992acde37bd680976cb8a0a44aa35d12a6, 48 turns (46 submitted model tools), 118 host journal events, 13 model-selected native writes, 2 independently verified H264/AAC exports plus a third not verified. Three actual six-second 640x360 24fps/144-frame videos with 3 distinct RGB sequences and identical audible decoded PCM, physical first vs second 144/144 corresponding frames differ. First real model frame observation times [1,3,5] seconds versus second [0.5,2.6,4.7], no intersection, PCM unchanged: host correctly cannot certify revised A/V pair, though both cuts had full-duration numeric audio observation. Subsequent edits and third unverified output consumed budget; host_evidence_satisfied=false; artistic_quality_approved=false. Two safe output_exists pre-dispatch denials, no original owner media upload.",
+      "source_or_fix": "One-use guarded branch authorization 10ef5a992acde37bd680976cb8a0a44aa35d12a6 was revoked by 2ddef2aef87e2a0f50a27ebcc2b295b51a49b707, restoring exactly previously 35/35 CI-green source tree 1c9cfdd33d253b1a046a49d483671a1dcf044a4f. Offline TDD candidate in this PR surfaces earlier source-verified model-selected picture sample timestamps to the model for a comparable read; does not relax actual reviewed_render_pair acceptance, automatically dispatch reads, choose art or grant another paid trial.",
+      "root_confidence": "HIGH for incomparable sampled timestamps as immediate A/V-pair rejection: original model journal, pinned source state machine, separately independently decoded physical synthetic ZIP #14287639311 SHA256 93480cd1c2dbc0468506ffc32d6d78b03ecbb156fd67c2c59594692101906ede. No claim model would finish after feedback fix; professional/audio-semantics untested.",
+      "post_fix_real_model_retest": "NOT_RUN_GRANT_SPENT",
+      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43991467485",
       "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
     }
   ],

@@ -123,8 +123,8 @@ def _decoded_review_changed(before, after):
     )
 
 
-def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
-    """Return the latest qualifying pair of file receipts from one timeline."""
+def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
+    """Shared fail-closed source-bound pairing and read-only candidate state."""
     rendered, used_destinations, verified = {}, set(), {}
     first_verification = {}
     av_reviews = {}
@@ -229,7 +229,39 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
                      "timeline_sha256": scope}
                     for scope, output_path, output_digest, _ in (before_revision, last_review)
                 ]
+    return pair, before_revision, rendered, verified
+
+
+def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
+    """Return the latest qualifying pair of file receipts from one timeline."""
+    pair, _, _, _ = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=audiovisual)
     return pair
+
+
+def reviewed_av_reference_frame_times(events, revision_tools):
+    """Return exact prior-model-observed times for *another* verified A/V cut.
+
+    Trusted receipts, real timeline identity and export SHA must all match the
+    same source-bound pairing state as the acceptance gate. This is a read-only
+    explanation of why identical-time samples may be needed, not a new model
+    action, source attestation, artistic plan or evidence waiver. None means
+    no safely comparable current export (or that the pair already qualifies).
+    """
+    pair, before, rendered, verified = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=True)
+    if pair is not None or before is None or before[3] is None:
+        return None
+    scope, prior_dest, prior_digest, decoded = before
+    times = sorted(decoded[0])
+    if (not 2 <= len(times) <= 4 or not
+            valid_av_review_values(TIMED_FRAMES, times)):
+        return None
+    for current_dest, current_digest in verified.items():
+        if (current_dest != prior_dest and current_digest != prior_digest and
+                rendered.get(current_dest) == scope):
+            return times
+    return None
 
 
 def _reviewed_host_render_hashes(events, pair, field, *, distinct=False):

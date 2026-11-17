@@ -980,6 +980,41 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             result["events"], host_tool_access=grants,
             expected_required_evidence=required)["journal_chain_structurally_valid"])
 
+    async def test_real_120b_full_catalog_gets_same_time_audiovisual_revision_hint(self):
+        """Real #43991467485 chose disjoint before/after picture sample
+        timestamps. A host-verified, same-timeline timestamp reference is
+        factual feedback, not a generated creative edit or a weaker gate.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES)
+        from studio_next.test_native_render_evidence import ReviewedAVPairTests
+        events = ReviewedAVPairTests().events()
+        events[7]["native_av_review"] = [0.5, 4.5]
+        model = ScriptedModel([decision("discover")])
+        session = FakeSession()
+        for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE):
+            session.tools.append(SimpleNamespace(
+                name=name, description="Trusted existing native tool",
+                input_schema={"type": "object", "properties": {}}))
+        grants = {tool.name: ("write" if tool.name in (
+            "export_timeline", "update_text_clip") else "read")
+            for tool in session.tools}
+        control = NativeCreativeControl(session, model,
+            max_turns=1, catalog_mode="full", host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",))
+        control.events.extend(events)
+        control._verified_exports.update(("a" * 64, "b" * 64))
+        result = await control.run("Review current verified picture and sound")
+        progress = model.observed[0]["host_verified_execution_progress"]
+        self.assertEqual(progress["previous_source_review_seconds_for_matching_frames"], [1, 4])
+        self.assertTrue(progress["matching_picture_seconds_are_read_only_and_not_auto_dispatched"])
+        self.assertIn(REVIEWED_AV_PAIR, model.observed[0]["missing_completion_evidence"])
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+        self.assertFalse(any(call[0] in {"export_timeline", "update_text_clip", TIMED_FRAMES,
+                                         AUDIO_ENVELOPE} for call in session.calls))
+        self.assertNotIn("/private/", json.dumps(result["events"]))
+
     async def test_real_neural_av_missing_audio_surfaces_granted_read_without_dispatch(self):
         """Regression for failed real model #43883369538: its first export was
         visually reviewed but not audio-reviewed before its creative edit.

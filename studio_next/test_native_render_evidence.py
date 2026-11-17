@@ -61,6 +61,45 @@ class ReviewedAVPairTests(unittest.TestCase):
                 self.assertIsNone(reviewed_render_pair(changed, revisions, audiovisual=True))
                 self.assertIsNotNone(reviewed_render_pair(changed, revisions))
 
+    def test_genuine_model_disjoint_review_seconds_are_not_auditable_without_reference(self):
+        """2026-11-17 failed 120B G1: picture A at 1/3/5, picture B at
+        0.5/2.6/4.7 and unchanged PCM; do NOT falsely accept this pair.
+        Expose only A's actual trusted sample times for a new model-selected
+        read against B; never synthesize an observation or creative action.
+        """
+        from studio_next.native_render_evidence import reviewed_av_reference_frame_times
+        events = self.events()
+        events[2]["native_av_review"] = [1, 3]
+        events[2]["image_sha256"] = ["a" * 64, "b" * 64]
+        events[7]["native_av_review"] = [0.5, 2.6]
+        events[7]["image_sha256"] = ["d" * 64, "e" * 64]
+        self.assertIsNone(reviewed_render_pair(events, {"update_text_clip"}, audiovisual=True))
+        self.assertEqual(reviewed_av_reference_frame_times(events, {"update_text_clip"}), [1, 3])
+        self.assertIsNone(reviewed_av_reference_frame_times(events[:6], {"update_text_clip"}))
+        # The Brain may choose a genuine second same-time read; this test
+        # simulates only the host proof grammar, not a real decoded event.
+        events[7]["native_av_review"] = [1, 3]
+        self.assertIsNotNone(reviewed_render_pair(events, {"update_text_clip"}, audiovisual=True))
+        self.assertIsNone(reviewed_av_reference_frame_times(events, {"update_text_clip"}))
+
+    def test_reference_times_fail_closed_on_unrelated_scope_or_unverified_mutation(self):
+        from studio_next.native_render_evidence import reviewed_av_reference_frame_times
+        events = self.events()
+        events[7]["native_av_review"] = [0.5, 4.5]
+        self.assertEqual(reviewed_av_reference_frame_times(events, {"update_text_clip"}), [1, 4])
+        mismatched = [dict(e) for e in events]
+        mismatched[5]["native_export_timeline_sha256"] = "different-timeline"
+        self.assertIsNone(reviewed_av_reference_frame_times(mismatched, {"update_text_clip"}))
+        # A fresh native write before the model performs matching observation
+        # invalidates the old physical export; no timestamps remain admitted.
+        changed = events + [{"kind": "native_tool_result", "tool": "add_text_clip",
+                             "host_application_write_acknowledged": True}]
+        self.assertIsNone(reviewed_av_reference_frame_times(changed, {"update_text_clip"}))
+        failed = events + [{"kind": "native_read_tool_reported_error",
+                            "tool": "zx7_verify_native_export",
+                            "native_export_destination_sha256": "after"}]
+        self.assertIsNone(reviewed_av_reference_frame_times(failed, {"update_text_clip"}))
+
     def test_a_failed_later_audio_read_revokes_a_previously_complete_pair(self):
         events = self.events()
         events.append({**events[-1], "kind": "native_read_tool_reported_error"})

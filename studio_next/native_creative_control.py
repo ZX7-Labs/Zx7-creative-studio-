@@ -31,7 +31,8 @@ from .native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
     SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
-    destination_digest, native_render_binding, reviewed_render_pair, valid_av_review_values,
+    destination_digest, native_render_binding, reviewed_render_pair,
+    reviewed_av_reference_frame_times, valid_av_review_values,
 )
 
 
@@ -1554,6 +1555,17 @@ class NativeCreativeControl:
                                 "possibilities_not_creative_instructions": True,
                             }
                 export_evidence = self._current_export_evidence()
+                # The last real 120B source-backed A/V trial sampled the
+                # first verified cut at 1/3/5s and the revised cut at
+                # 0.5/2.6/4.7s. Both physical films differed, but there was
+                # no identical-time visual comparison and their PCM matched.
+                # Report only the model's earlier validated sample times for
+                # another already-verified export. No native read/write, new
+                # grant or creative revision is selected by the host.
+                comparison_frame_seconds = (
+                    reviewed_av_reference_frame_times(
+                        self.events, self.host_content_revision_tools)
+                    if self._requires_av_review else None)
                 # Actual Qwen3.5-4B run #42621894429 verified the exact
                 # same MP4 eight times, then kept `verify` as the only
                 # selectable indexed tool. The verified-frame READ required
@@ -1765,6 +1777,11 @@ class NativeCreativeControl:
                             AUDIO_ENVELOPE in visible_selectable else []),
                         "audio_observation_is_numeric_not_semantic_hearing": True,
                         "audio_observation_not_automatically_executed": True,
+                        **({
+                            "previous_source_review_seconds_for_matching_frames":
+                                comparison_frame_seconds,
+                            "matching_picture_seconds_are_read_only_and_not_auto_dispatched": True,
+                        } if comparison_frame_seconds else {}),
                     },
                 }
                 if placement_tracks is not None:
