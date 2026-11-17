@@ -94,19 +94,19 @@ def _sha256_beneath_directory(project: Path, parts: list[str], expected_bytes: i
             before = os.fstat(stream.fileno())
             if (not stat.S_ISREG(before.st_mode) or
                     before.st_size != expected_bytes):
-                raise ValueError("Source media size or type changed")
+                raise ValueError("native source media size or type changed")
             count = 0
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 count += len(chunk)
                 sha.update(chunk)
             after = os.fstat(stream.fileno())
             if count != expected_bytes or _stable_identity(before) != _stable_identity(after):
-                raise ValueError("Source media changed while hashing")
+                raise ValueError("native source media changed while hashing")
             # The file may be intact but its *parent* replaced with a symlink
             # while it was open. An ancestor identity check is indispensable.
             if (_stable_identity(os.stat(project, follow_symlinks=False)) !=
                     _stable_identity(os.fstat(directory_fds[0]))):
-                raise ValueError("Source media root changed")
+                raise ValueError("native source media root changed")
             for parent_fd, child, child_fd in zip(
                     directory_fds, parts[:-1], directory_fds[1:]):
                 current_parent = os.stat(child, dir_fd=parent_fd,
@@ -114,17 +114,17 @@ def _sha256_beneath_directory(project: Path, parts: list[str], expected_bytes: i
                 if (not stat.S_ISDIR(current_parent.st_mode) or
                         _stable_identity(current_parent) !=
                         _stable_identity(os.fstat(child_fd))):
-                    raise ValueError("Source media parent changed or linked")
+                    raise ValueError("native source media parent changed or linked")
             current_file = os.stat(parts[-1], dir_fd=directory_fds[-1],
                                    follow_symlinks=False)
             if (not stat.S_ISREG(current_file.st_mode) or
                     _stable_identity(current_file) != _stable_identity(after)):
-                raise ValueError("Source media changed or linked")
+                raise ValueError("native source media changed or linked")
         return sha.hexdigest()
     except OSError:
         # The path was unavailable or an untrusted component changed. Do not
         # put private owner paths or OS error payloads into the public result.
-        raise ValueError("Source media is missing, changed or linked") from None
+        raise ValueError("native source media is missing, changed or linked") from None
     finally:
         for fd in reversed(directory_fds):
             os.close(fd)
@@ -147,8 +147,13 @@ def _verify_staged_sources(root, session, ledger):
                 item["rights_independently_verified"] is not False or
                 type(item["rights"]) is not str):
             raise ValueError("Owner original is not a safe source with stated rights")
-        observed = _sha256_beneath_directory(
-            root, ["staging", session, source.name], item["bytes"])
+        try:
+            observed = _sha256_beneath_directory(
+                root, ["staging", session, source.name], item["bytes"])
+        except ValueError:
+            # Preserve the existing owner-level error contract while keeping
+            # private filesystem details out of any externally visible report.
+            raise ValueError("Original source bytes differ from session ledger") from None
         if observed != item["sha256"]:
             raise ValueError("Original source bytes differ from session ledger")
     return len(ledger)
@@ -163,7 +168,7 @@ def _verify_native_project_media_closure(project: Path, doc: dict):
     """
     inventory = doc.get("assets")
     if not isinstance(inventory, list) or len(inventory) > _MAX_SCAN_ENTRIES:
-        raise ValueError("Source media inventory is missing or excessive")
+        raise ValueError("native source media inventory is missing or excessive")
     sources = {}
     for asset in inventory:
         if not isinstance(asset, dict):

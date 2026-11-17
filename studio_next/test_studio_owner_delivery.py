@@ -401,9 +401,25 @@ class NativeProjectMediaBoundaryRaceTests(unittest.TestCase):
                 return real_open(path, flags, *args, **kwargs)
 
             with patch("os.open", side_effect=replace_parent_before_file_open):
-                with self.assertRaisesRegex(ValueError, "Source media"):
+                with self.assertRaisesRegex(ValueError, "source media"):
                     _verify_native_project_media_closure(project, document)
             self.assertTrue(swapped[0], "test must simulate a real parent swap at open")
+
+    def test_staged_owner_changed_size_preserves_existing_error_contract(self):
+        with tempfile.TemporaryDirectory(prefix="zx7-staged-error-") as temp:
+            root = Path(temp) / "owner"
+            session = "b" * 24
+            staging = root / "staging" / session
+            staging.mkdir(parents=True)
+            source = staging / "owner.wav"
+            before = b"original-unchanged-asset"
+            source.write_bytes(before)
+            ledger = [{"path": str(source), "sha256": hashlib.sha256(before).hexdigest(),
+                       "bytes": len(before), "rights": "synthetic",
+                       "rights_independently_verified": False}]
+            source.write_bytes(before + b"tampered")
+            with self.assertRaisesRegex(ValueError, "Original source bytes differ"):
+                _verify_staged_sources(root, session, ledger)
 
     def test_staged_original_parent_swap_cannot_follow_outside_workspace(self):
         with tempfile.TemporaryDirectory(prefix="zx7-staging-race-") as temp:
