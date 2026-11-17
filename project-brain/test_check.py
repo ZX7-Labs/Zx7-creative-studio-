@@ -239,5 +239,23 @@ class ProjectBrainContractTests(unittest.TestCase):
                           _module.validate(root))
 
 
+    def test_typed_execution_ledger_grows_beyond_old_limit_but_stays_bounded(self):
+        # RED at 40 KB: exact-head #356 integrity run 44099891001 rejected
+        # an otherwise valid 41+ KB typed ledger. Preserve limits elsewhere.
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["snapshot"]["notes"] += " synthetic-source-linked-receipts " + "r" * 26000
+            path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+            self.assertGreater(path.stat().st_size, 40_000)
+            self.assertLess(path.stat().st_size, 80_000)
+            self.assertNotIn("too_large: EXECUTION_LEDGER.json", _module.validate(root))
+            # No unlimited diary: the typed ledger still fails closed above 80 KB.
+            with path.open("ab") as stream:
+                stream.write(b" " * (80_001 - path.stat().st_size))
+            self.assertIn("too_large: EXECUTION_LEDGER.json", _module.validate(root))
+
+
 if __name__ == "__main__":
     unittest.main()

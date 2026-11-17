@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Check current PR #356 at live head. Previous source 5e040ff256ce638869d74dc7acd08114003da9ca has 34/36 GitHub checks success at snapshot (MLT and installed body still running). New prepared explicit model WAV transport gate fixes actual NVIDIA inherited audio stub false affordance with RED->GREEN and 165/165 runnable relevant local tests; 3 checkout-only tests absent and must be covered by exact GitHub CI. Move to this prepared descendant ONLY after previous expensive CI finishes and expected SHA still matches. Do not rerun prior scene tests proactively. Further G1 genuine art+semantic listening+native first/revision+human/professional evaluation remains unaccepted and paid/private trial requires purpose-specific consent."
+    "next_action": "On draft PR #356 verify exact-head project-brain integrity after the bounded typed ledger capacity correction; keep 44099891001 original RED. Avoid repeating 19 same-code native physical passes without changes to native code. Then investigate the missing genuine source-timed A/V semantic perception and independently model-directed first/revision artistic output. No paid NVIDIA/private upload without new purpose-specific consent; no A-L professional acceptance inferred."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -682,6 +682,18 @@
       "root_cause": "LEGACY_SCENE_SOURCE_OMITS_LATER_SAVE_TIMESTAMP_AND_ORDERING_FIX; PHYSICAL_COMPARABLE_RETEST_REQUIRED",
       "future_comparable_test": "Run corrected same real scene/X11/native A/V workflow on source-pinned later save-order revision",
       "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44079766155"
+    },
+    {
+      "run_id": 44099891001,
+      "exact_source_sha": "471af1ee1e9c83da1168be79f0700996e3042d30",
+      "status": "FAILURE",
+      "job_id": 134096752072,
+      "failure": "offline-continuity-integrity: too_large: EXECUTION_LEDGER.json",
+      "root_cause": "40_000-byte generic document cap applied to growing typed source-linked execution evidence (41+ KB); no schema/semantic failure established in this run",
+      "action": "Add separate bounded 80_000-byte limit for typed ledger; keep STATE 14_000, other files original limits; add RED/GREEN-style synthetic 40k-80k growth and >80k rejection regression",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44099891001",
+      "corrective_code_check": "PREPARED; EXACT_NEW_HEAD_CI_PENDING",
+      "effect_on_creative_workflow": "NONE; documentation validator only; does not certify runtime or artistic acceptance"
     }
   ],
   "native_scene_save_convergence_ci_2026_11_17": {
@@ -707,15 +719,17 @@
     "remaining": "not genuine AI-authored art, independent human usability, semantic hearing, or full A-L"
   },
   "latest_ci_checkpoint": {
-    "source": "d32d187eea6c078e40b3997cd4dd0115ced917c5",
+    "source": "471af1ee1e9c83da1168be79f0700996e3042d30",
     "observed_date": "2026-11-17",
-    "passed": 34,
-    "total": 36,
-    "running": [
-      "real-mlt-editorial-contract",
-      "actual-installed-original-media-body"
-    ],
-    "source_unchanged_since_physical_test": true,
+    "checks_observed": 20,
+    "passed": 19,
+    "failed": 1,
+    "failed_workflow": "ZX7 Canonical Project Brain — Offline Integrity",
+    "failed_run": 44099891001,
+    "failed_job": 134096752072,
+    "failed_reason": "too_large: EXECUTION_LEDGER.json",
+    "native_and_other_checks": "19 completed successful workflows on exact code head; no genuine artistic acceptance",
+    "correction": "bounded typed-ledger growth regression and checker cap prepared; exact changed-head CI not yet observed",
     "exact_head_not_final_green": true
   },
   "indexed_brain_verified_wav_affordance_2026_11_17": {
