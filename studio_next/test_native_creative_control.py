@@ -1100,6 +1100,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         raw = "zx7_observe_verified_export_audio"
 
         class AudioCapableModel(ScriptedModel):
+            # A callable method alone is insufficient; explicit trusted transport contract.
+            supports_source_bound_wav_input = True
             def decide_with_audio(self, context, sounds):
                 raise AssertionError("The host may not fetch WAV or call model audio proactively")
 
@@ -1174,6 +1176,86 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     "A read-only affordance must not dispatch audio or editing")
                 self.assertEqual(result["status"], "turn_budget_exhausted")
                 self.assertNotIn("/private/", json.dumps(result["events"]))
+
+    async def test_actual_local_omni_and_visual_only_adapters_advertise_only_supported_wav(self):
+        """The real visual-only NVIDIA subclass inherits an audio method which
+        deliberately raises, so callable(decide_with_audio) is NOT capability.
+        A model may see the real native WAV observer only when its adapter
+        declares implemented transport and explicit egress (if hosted).
+        No native or provider operation is dispatched in this fixture.
+        """
+        from studio_next.nvidia_native_tool_model import (
+            NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
+            NVIDIA_OMNI_AUDIO_MODEL_ID,
+        )
+        from studio_next.nvidia_model import NvidiaModelSettings
+        from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
+        from studio_next.providers import LocalModelSettings
+        from studio_next.native_render_evidence import (
+            REVIEWED_AV_PAIR, DESTINATION_FIELD, destination_digest,
+        )
+        variants = [
+            ("visual_only_nvidia", NvidiaNativeToolCreativeModel(
+                NvidiaModelSettings(model_id="nvidia/test-visual-only"),
+                system_prompt="Use only native host-authorized tools"), False),
+            ("unconsented_omni", NvidiaOmniNativeToolCreativeModel(
+                NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID),
+                system_prompt="Use only native host-authorized tools",
+                allow_original_audio_upload=False), False),
+            ("consented_omni", NvidiaOmniNativeToolCreativeModel(
+                NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID),
+                system_prompt="Use only native host-authorized tools",
+                allow_original_audio_upload=True), True),
+            ("local_native_audio_transport", LocalNativeStructuredCreativeModel(
+                LocalModelSettings(model_id="compatible-local-multimodal"),
+                system_prompt="Use only native host-authorized tools"), True),
+        ]
+        raw = "zx7_observe_verified_export_audio"
+        for label, model, expected in variants:
+            with self.subTest(adapter=label):
+                session = FakeSession()
+                session.tools.extend([
+                    SimpleNamespace(name=raw, description="Source-verified WAV reader",
+                        input_schema={"type": "object", "properties": {
+                            "path": {"type": "string"},
+                            "start_seconds": {"type": "number"},
+                            "duration_seconds": {"type": "number"}}}),
+                    SimpleNamespace(name="export_timeline", description="Real native renderer",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="zx7_observe_verified_export_samples",
+                        description="Verified timed picture frames",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="zx7_observe_verified_export_audio_timeline",
+                        description="Source-bound numerical PCM envelope",
+                        input_schema={"type": "object", "properties": {}}),
+                ])
+                grants = {tool.name: "read" for tool in session.tools}
+                grants.update({"update_text_clip": "write", "export_timeline": "write"})
+                model_observations = []
+                model.decide = lambda context: (
+                    model_observations.append(context),
+                    decision("search", query="real available source tools"))[1]
+                self.assertTrue(callable(getattr(model, "decide_with_audio", None)),
+                    "Inherited NVIDIA audio stub must be distinguished from real support")
+                controller = NativeCreativeControl(session, model,
+                    max_turns=1, catalog_mode="indexed", host_tool_access=grants,
+                    required_evidence=("reviewed_native_render_pair_verified", REVIEWED_AV_PAIR),
+                    host_content_revision_tools=("update_text_clip",))
+                sha = "a" * 64
+                controller._verified_exports.add(sha)
+                controller.events.append({
+                    "kind": "native_tool_result", "tool": "zx7_verify_native_export",
+                    "independently_verified_export_sha256": sha,
+                    DESTINATION_FIELD: destination_digest("/private/exports/film.mp4"),
+                    "native_av_review": [6],
+                })
+                result = await controller.run("Review original source picture and sound")
+                self.assertEqual(result["status"], "turn_budget_exhausted")
+                self.assertTrue(model_observations)
+                self.assertEqual(raw in model_observations[0]["selectable_native_tools"], expected)
+                self.assertFalse(model_observations[0]["audio_semantically_reviewed"])
+                self.assertEqual(session.calls, [],
+                    "A read-only capability hint must never invoke native tools or cloud model")
 
     def test_visual_only_session_does_not_lose_valid_export_from_failed_audio_probe(self):
         """Non-A/V contracts must not retroactively require an audio proof."""

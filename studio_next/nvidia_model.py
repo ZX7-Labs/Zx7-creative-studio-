@@ -114,6 +114,8 @@ class NvidiaCreativeModel(LocalCreativeModel):
     Sending original image bytes requires explicit host opt-in. Never log inputs,
     response bodies, remote errors, or Authorization headers.
     """
+    # Visual endpoints inherit an audio method that intentionally rejects WAV.
+    supports_source_bound_wav_input = False
 
     def __init__(self, settings: NvidiaModelSettings | None = None, *,
                  system_prompt: str = _CREATIVE_SYSTEM, allow_image_upload: bool = False):

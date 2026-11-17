@@ -132,6 +132,8 @@ class LocalModelSettings:
 
 class LocalCreativeModel:
     """OpenAI-compatible local model adapter. No expensive cloud calls."""
+    # Explicit backend capability: inherited methods alone are not reliable.
+    supports_source_bound_wav_input = True
     def __init__(self,settings:LocalModelSettings,system_prompt:str=_CREATIVE_SYSTEM):
         self.settings=settings
         self.system_prompt=system_prompt

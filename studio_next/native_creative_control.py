@@ -1604,6 +1604,9 @@ class NativeCreativeControl:
                 audio_excerpt_pending = (
                     self.catalog_mode == "indexed" and
                     self._requires_av_review and
+                    # A callable inherited stub (such as visual-only NVIDIA)
+                    # does not mean that a model can actually consume WAV.
+                    getattr(self.model, "supports_source_bound_wav_input", False) is True and
                     callable(getattr(self.model, "decide_with_audio", None)) and
                     # An Omni cloud adapter without an explicit one-use WAV
                     # upload grant must never be offered this route. Local

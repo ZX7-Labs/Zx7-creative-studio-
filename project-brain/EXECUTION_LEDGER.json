@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Current staged G1 source delta after previous head 80e395ef348df28edbaae81eb48a1bf48f0f74f8: raw WAV indexed native model affordance locally 174/174 eligible PASS, 3 script checkout-only tests unavailable; exact new code CI pending. Do not promote this to neural semantic hearing. Existing WAV and picture transports are real but independent model-led A/V first/revised creative test still unaccepted. Keep PR #356 draft and main untouched. Preserve old scene physical PASS #44081413347; avoid docs-only commits while expensive CI jobs still running, and refresh live head before any branch move."
+    "next_action": "Check current PR #356 at live head. Previous source 5e040ff256ce638869d74dc7acd08114003da9ca has 34/36 GitHub checks success at snapshot (MLT and installed body still running). New prepared explicit model WAV transport gate fixes actual NVIDIA inherited audio stub false affordance with RED->GREEN and 165/165 runnable relevant local tests; 3 checkout-only tests absent and must be covered by exact GitHub CI. Move to this prepared descendant ONLY after previous expensive CI finishes and expected SHA still matches. Do not rerun prior scene tests proactively. Further G1 genuine art+semantic listening+native first/revision+human/professional evaluation remains unaccepted and paid/private trial requires purpose-specific consent."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -737,6 +737,38 @@
     "safety": "Only native read tool pre-existing in exact runtime AND host grant, verified export in current journal, callable decide_with_audio and explicit Omni consent when defined. No unsolicited model/owner source transport; provider still validates binary source timing and consent.",
     "followup": "GitHub code-head CI and independently competent actual neural visual+audio creative trial NOT RUN",
     "artistic_acceptance": "NOT_ACCEPTED",
-    "owner_private_paid_permission": "NOT_GRANTED"
+    "owner_private_paid_permission": "NOT_GRANTED",
+    "source_code_head": "5e040ff256ce638869d74dc7acd08114003da9ca",
+    "source_check_status_at_candidate": "34_OF_36_SUCCESS_TWO_RUNNING"
+  },
+  "explicit_model_wav_transport_gate_2026_11_17": {
+    "parent_head": "5e040ff256ce638869d74dc7acd08114003da9ca",
+    "pr": 356,
+    "status": "PREPARED_LOCAL_RED_GREEN_NEW_SOURCE_CI_PENDING",
+    "original_problem": "Standard visual-only NvidiaNativeToolCreativeModel inherits callable decide_with_audio from NvidiaCreativeModel, but inherited implementation explicitly raises no reviewed original-WAV contract. New verified WAV tool frontier incorrectly offered this incapable model because callable() returned true and consent attribute was absent, defaulting true.",
+    "reproduced_negative": "Actual visual-only NvidiaNativeToolCreativeModel receives false verified WAV hint in a host-granted, actual-export-sha-scoped, read-only controller fixture; RED failed with unexpected raw tool in selectable_native_tools.",
+    "source_blobs": {
+      "studio_next/providers.py": "ce00ef2f790141367832c64cb4934a7fa233cd81",
+      "studio_next/nvidia_model.py": "b25c08d428a9fb91ceaa1e6692adb54b6b08a346",
+      "studio_next/nvidia_native_tool_model.py": "9b171e617b49960fe3fcb97f0ceaeac443ae9b58",
+      "studio_next/native_creative_control.py": "1b067cabe278cdbe155396013effda190401a382",
+      "studio_next/test_native_creative_control.py": "11d09b288e6103068fb639d1c7df7ea202f1a7cc",
+      "studio_next/test_native_audio_model_input.py": "b87d1a761afcb6d06b23824b81461b08f8452a72"
+    },
+    "gate": "Model adapter must explicitly declare supports_source_bound_wav_input=True and provide callable decide_with_audio. NVIDIA native visual adapter False, Omni exact model True but still requires allow_original_audio_upload=True, local JSON model adapter True (transport, NOT proven server semantic competence); missing or unreviewed adapters False. Original host-granted native read and verified export SHA still required.",
+    "red_green_local": {
+      "one_failed_before_and_passed_after": "actual installed NVIDIA subclass inherited unsupported WAV stub",
+      "other_real_adapter_variants": "unconsented Omni false; consented exact-model Omni true; local native structured audio transport true",
+      "eligible_tests_run": 165,
+      "passed": 165,
+      "failed": 0,
+      "errors": 0,
+      "excluded_checkout_only": 3,
+      "environment": "Python 3.13, exact installed wheel source patched with current branch code, inert MCP import-only shim; no native/model/cloud calls; 3 checkout-only scripts not shipped in wheel",
+      "independent_real_loopback_http_test": "PASS; actual localhost TCP JSON-Schema response + SHA-bound original binary WAV input; synthetic fixture only, no real neural hearing or cloud."
+    },
+    "exact_head_ci": "PENDING",
+    "actual_semantic_hearing": "NOT_EVALUATED",
+    "owner_paid_private_consent": "NO_NEW_PURPOSE_SPECIFIC_APPROVAL"
   }
 }

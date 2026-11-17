@@ -295,6 +295,9 @@ class NvidiaOmniNativeToolCreativeModel(NvidiaNativeToolCreativeModel):
     No WAV leaves the process without explicit consent and source-hash binding.
     """
 
+    # Exact Omni adapter implements separately consented original WAV transport.
+    supports_source_bound_wav_input = True
+
     def __init__(self, settings=None, *, system_prompt=None,
                  allow_image_upload=False, allow_original_audio_upload=False):
         if (not isinstance(settings, NvidiaModelSettings) or
