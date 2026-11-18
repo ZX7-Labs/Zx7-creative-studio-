@@ -17,6 +17,7 @@ import subprocess
 import sys
 from typing import NamedTuple
 
+from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
 from studio_next.native_render_evidence import destination_digest, timeline_scope_digest
 from studio_next.body_editor_export import native_export_file_identity
 
@@ -552,7 +553,8 @@ def trial_delivery_profile_compliant(
 
 
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
-              audiovisual=False, allow_cloud_audio_diagnostics=False):
+              audiovisual=False, allow_cloud_audio_diagnostics=False,
+              allow_cloud_synthetic_wav=False):
     # Runtime API and CLI enforce the same explicit paid/provider disclosure.
     # An old reviewed visual-only request is not authority to send synthetic
     # sound statistics to a hosted model or to launch a new cloud evaluation.
@@ -560,11 +562,18 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         raise ValueError("Audiovisual cloud trial needs explicit audio diagnostics consent")
     if allow_cloud_audio_diagnostics and not audiovisual:
         raise ValueError("Cloud audio diagnostics require audiovisual trial mode")
-    if model_id != _ALLOWED_MODEL:
+    if type(allow_cloud_synthetic_wav) is not bool or (allow_cloud_synthetic_wav and not audiovisual):
+        raise ValueError("Synthetic WAV requires the audited Omni audiovisual trial")
+    expected_model = NVIDIA_OMNI_AUDIO_MODEL_ID if allow_cloud_synthetic_wav else _ALLOWED_MODEL
+    if model_id != expected_model:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
     roots, cfg = prepare_trial(workspace, source=_SOURCE_EDITOR,
                                audiovisual=audiovisual)
     workspace = Path(workspace).resolve()
+    if allow_cloud_synthetic_wav:
+        with (workspace / "brief.txt").open("a", encoding="utf-8") as brief:
+            brief.write(" Listen to source-bound synthetic WAV excerpts from both exports. "
+                        "Explain which audible detail informed your revision and compare the result.")
     receipt = workspace / "native-journal.jsonl"
     command = [
         sys.executable, str(_EDITOR_CLIENT),
@@ -582,6 +591,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
             "reviewed-av-revision" if audiovisual else "reviewed-revision"),
         *(["--allow-cloud-audio-diagnostics", "--record-av-project-snapshots"]
           if audiovisual else []),
+        *(["--allow-cloud-original-wav-upload"] if allow_cloud_synthetic_wav else []),
         "--max-turns", str(_TRIAL_MAX_TURNS),
         "--model-timeout", str(_TRIAL_MODEL_TIMEOUT_SECONDS),
         "--source", str(_SOURCE_EDITOR),
@@ -706,7 +716,9 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         "physical_export_verify_receipts": summary.get("independently_verified_export_receipts"),
         "decoded_real_exports": media,
         "decoded_audio_errors": len(audio_rejections) if audiovisual else None,
-        "original_media_sent_to_model": False,
+        **({"original_media_sent_to_model": False} if not allow_cloud_synthetic_wav else {}),
+        "private_owner_media_sent_to_model": False,
+        "synthetic_wav_upload_authorized": allow_cloud_synthetic_wav,
         "synthetic_frame_upload_explicitly_authorized": True,
         "artistic_quality_approved": False,
     }
@@ -737,6 +749,8 @@ def main(argv=None):
                         help="Opt in to a model-driven trial with physically decoded sound")
     parser.add_argument("--allow-cloud-audio-diagnostics", action="store_true",
                         help="Separate consent for sending synthetic audio statistics to NVIDIA")
+    parser.add_argument("--allow-cloud-synthetic-wav", action="store_true",
+                        help="Permit source-bound generated WAV excerpts on the audited Omni trial")
     args = parser.parse_args(argv)
     if args.prepare_audiovisual_only:
         prepare_trial(args.workspace, source=_SOURCE_EDITOR, audiovisual=True)
@@ -748,7 +762,8 @@ def main(argv=None):
     run_trial(args.workspace, model_id=args.model_id,
               xvfb_binary=args.xvfb_binary, display=args.display,
               audiovisual=args.audiovisual_trial,
-              allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics)
+              allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics,
+              allow_cloud_synthetic_wav=args.allow_cloud_synthetic_wav)
 
 
 if __name__ == "__main__":

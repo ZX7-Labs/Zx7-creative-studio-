@@ -2,6 +2,10 @@
 
 This is a **causal retrieval index**, not a reconstructed raw transcript or a second current STATE. Read source-linked [EVIDENCE/INDEX](INDEX.md) and real GitHub job logs/artifacts for full execution detail; original artifacts can expire. Every entry distinguishes actual failure, best-supported cause, **merged corrective source**, and whether a *comparable real model result* independently passed. Source-level green CI is not a genuine-model retest. No credentials/private prompts/media are stored here.
 
+## NVIDIA Omni synthetic native A/V trial, 18 November 2026
+
+[Run 44342694162](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44342694162), source `f09521694d4d8658a065b990157c67dd9e1fc4dd`. NVIDIA Omni rejected the first text/tool inference request (HTTP 400, turn 0). The journal contains the host bootstrap read and model decision failure. No creative action, output, or WAV observation. The response omitted field-level diagnostics. Isolate provider request compatibility on a synthetic text-only fixture before another full trial.
+
 ## F-REAL-001 — Qwen local 4B autonomous editor run
 
 - **Original:** [real workflow #42711402879](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879), failed native job `129481639892`; artifact `13722569378` (unexpired at 2026-11-15 audit, originally scheduled expiration 2026-11-24 UTC). Qwen3.5-4B local HTTP/llama.cpp, real 46-turn native decision trial.
