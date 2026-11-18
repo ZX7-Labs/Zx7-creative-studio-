@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Review exact CI after narrowly changed four affected workflow Ubuntu archive mirrors. Original 18 PASS/4 CANCELLED source 5f39 remains negative; do not claim product pass until installed code checks run. Do not duplicate existing media guards, change Brain-BODY, merge PR #356, run paid/private models or mark A-L professional acceptance."
+    "next_action": "Verify exact-head CI after bounded ledger fixture correction and MLT official mirror + no-recommends installer; inspect any failures and preserve both negatives. No new creative capability, media validator, broad refactor, provider call, private egress or main merge. The real model-directed original A/V creative improvement and human/professional A-L acceptance remain unverified."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -741,6 +741,31 @@
       "safe_existing_fix": "Later collab_save_revision 03b03c5d252950b0e7345449720e6685ec00e596, save_order d5b712ccc510f5ca703848ee1e5d854ce44b423c and loss_aware_extract f34141851c4db5228962984e31475e61a7faa647 reuse the reviewed fix and are tested separately.",
       "status": "HISTORICAL_PROFILE_FAILED_NATIVE_PHYSICAL_CI_UNRESOLVED",
       "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122006732"
+    },
+    {
+      "run_id": 44218675250,
+      "job_id": 134514813617,
+      "source_sha": "2bb473dd2e169d1b4d1bf44a84d38d0645615b7e",
+      "first_status": "FAILURE",
+      "location": "project-brain/test_check.py:252 synthetic typed ledger fixture",
+      "exact_error": "AssertionError: 80147 not less than 80000",
+      "root_cause": "The test appended 26,000 bytes to a growing legitimate ledger. The fixture itself exceeded the 80KB cap; the real canonical file and check.py validation had passed, and 15/16 other adversarial tests passed.",
+      "scope": "Replace fixture's constant 26KB addition with bounded adaptive padding; both existing >40KB positive and >80KB rejection assertions remain. Do not relax checker 80KB cap.",
+      "status": "CODE_AND_TEST_FIX_PREPARED_EXACT_NEW_HEAD_CI_PENDING",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44218675250",
+      "creative_impact": "NONE"
+    },
+    {
+      "run_id": 44218675449,
+      "job_id": 134514814346,
+      "source_sha": "2bb473dd2e169d1b4d1bf44a84d38d0645615b7e",
+      "first_status": "CANCELLED",
+      "location": "MLT renderer CI: install open-source native editor and physical decoder",
+      "observed": "20-minute GitHub job timeout while apt downloaded Ubuntu packages from regional us-east-2.ec2.archive.ubuntu.com, including optional pocketsphinx-en-us; native tests not reached.",
+      "scope": "Use same official Ubuntu mirror that helped 4 other previously cancelled workflows to succeed; request only mandatory packages via --no-install-recommends. No package/test/timeout/engine/product changes.",
+      "status": "CI_ENVIRONMENT_FIX_PREPARED_EXACT_NEW_HEAD_CI_PENDING",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44218675449",
+      "creative_impact": "NONE"
     }
   ],
   "native_scene_save_convergence_ci_2026_11_17": {
@@ -766,16 +791,16 @@
     "remaining": "not genuine AI-authored art, independent human usability, semantic hearing, or full A-L"
   },
   "latest_ci_checkpoint": {
-    "source": "5f39a1eca5311e80f0b1e010f42b1bc7a351899d",
+    "source": "2bb473dd2e169d1b4d1bf44a84d38d0645615b7e",
     "observed_date": "2026-11-18 IST",
     "checks_observed": 22,
-    "passed": 18,
-    "failed": 0,
-    "cancelled": 4,
-    "classification": "ENVIRONMENT_CANCELED_BEFORE_APPLICATION_TESTS",
-    "previous_head_technical_22_of_22": "6128804c610674af32e8a02000fd4fdf13449032",
-    "new_candidate": "4 Ubuntu official mirror CI-only workflow fixes, new head CI PENDING",
-    "creative_accepted": false
+    "passed": 20,
+    "failed": 1,
+    "cancelled": 1,
+    "context": "Four prior mirror environment changes reached 20 PASS on same head. Offline Project Brain validator itself PASS but its test fixture FAIL 80147>80000; native MLT 20-min apt timeout CANCELLED before running tests. Other original test/code remained untouched. New exact-head CI pending after narrowly scoped corrections.",
+    "previous_complete_head": "6128804c610674af32e8a02000fd4fdf13449032",
+    "previous_complete_head_passed": 22,
+    "creativity_release_accepted": false
   },
   "indexed_brain_verified_wav_affordance_2026_11_17": {
     "parent_source_head": "80e395ef348df28edbaae81eb48a1bf48f0f74f8",

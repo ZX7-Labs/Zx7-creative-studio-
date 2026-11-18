@@ -246,7 +246,14 @@ class ProjectBrainContractTests(unittest.TestCase):
             root = _copy_scope_fixture(temp)
             path = root / "EXECUTION_LEDGER.json"
             record = json.loads(path.read_text(encoding="utf-8"))
-            record["snapshot"]["notes"] += " synthetic-source-linked-receipts " + "r" * 26000
+            # This fixture must remain valid as the real typed ledger grows.
+            # Force a >40 KB case without pushing the sample beyond the 80 KB
+            # bound it is designed to test. Preserve the negative >80 KB test.
+            baseline_bytes = path.stat().st_size
+            padding = max(0, min(75_000 - baseline_bytes - 256,
+                                 max(1_024, 43_000 - baseline_bytes)))
+            record["snapshot"]["notes"] += (
+                " synthetic-source-linked-receipts " + "r" * padding)
             path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
             self.assertGreater(path.stat().st_size, 40_000)
             self.assertLess(path.stat().st_size, 80_000)
