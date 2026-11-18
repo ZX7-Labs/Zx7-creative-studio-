@@ -562,9 +562,10 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         raise ValueError("Audiovisual cloud trial needs explicit audio diagnostics consent")
     if allow_cloud_audio_diagnostics and not audiovisual:
         raise ValueError("Cloud audio diagnostics require audiovisual trial mode")
-    if allow_cloud_synthetic_wav and (not audiovisual or model_id != NVIDIA_OMNI_AUDIO_MODEL_ID):
+    if type(allow_cloud_synthetic_wav) is not bool or (allow_cloud_synthetic_wav and not audiovisual):
         raise ValueError("Synthetic WAV requires the audited Omni audiovisual trial")
-    if model_id != (_ALLOWED_MODEL if not allow_cloud_synthetic_wav else NVIDIA_OMNI_AUDIO_MODEL_ID):
+    expected_model = NVIDIA_OMNI_AUDIO_MODEL_ID if allow_cloud_synthetic_wav else _ALLOWED_MODEL
+    if model_id != expected_model:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
     roots, cfg = prepare_trial(workspace, source=_SOURCE_EDITOR,
                                audiovisual=audiovisual)
@@ -590,7 +591,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
             "reviewed-av-revision" if audiovisual else "reviewed-revision"),
         *(["--allow-cloud-audio-diagnostics", "--record-av-project-snapshots"]
           if audiovisual else []),
-        *(["--indexed-catalog", "--allow-cloud-original-wav-upload"] if allow_cloud_synthetic_wav else []),
+        *(["--allow-cloud-original-wav-upload"] if allow_cloud_synthetic_wav else []),
         "--max-turns", str(_TRIAL_MAX_TURNS),
         "--model-timeout", str(_TRIAL_MODEL_TIMEOUT_SECONDS),
         "--source", str(_SOURCE_EDITOR),
@@ -715,6 +716,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         "physical_export_verify_receipts": summary.get("independently_verified_export_receipts"),
         "decoded_real_exports": media,
         "decoded_audio_errors": len(audio_rejections) if audiovisual else None,
+        **({"original_media_sent_to_model": False} if not allow_cloud_synthetic_wav else {}),
         "private_owner_media_sent_to_model": False,
         "synthetic_wav_upload_authorized": allow_cloud_synthetic_wav,
         "synthetic_frame_upload_explicitly_authorized": True,
