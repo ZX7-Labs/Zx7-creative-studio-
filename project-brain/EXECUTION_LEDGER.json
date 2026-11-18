@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify corrected Omni transport through native G1 from a fresh synthetic brief. Independently inspect WAV-conditioned decisions on both reviewed exports, editable sources and decoded media. Human co-edit and professional review remain open."
+    "next_action": "Inspect the shape of synthetic Omni arguments with field-name/type-only diagnostics and compare a directly typed native signature against the existing inputs/reason envelope. Keep strict host validation and bounded recovery. A genuine G1 pass, human co-edit and independent professional evaluation are open."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -1007,6 +1007,15 @@
     "minimal_probe": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44346676472",
     "schema_probe": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44349699051",
     "schema_result": "Actual native A/V window declaration with uniqueItems: required 400, auto 200 with tool call. Removing uniqueItems: required 200. Removing exclusiveMinimum alone: required 400.",
-    "correction": "Omni uses auto on wire with the full schema. Host still requires exactly one granted structured call. WAV pair verification requires a subsequent returned model decision for each reviewed export. Focused tests: 63 pass."
+    "correction": "Omni uses auto on wire with the full schema. Host still requires exactly one granted structured call. WAV pair verification requires a subsequent returned model decision for each reviewed export. Focused tests: 63 pass.",
+    "post_schema_fix_trial": {
+      "run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44350134767",
+      "source": "e44bb2248689457cc4b390015f126cb5e29ff0ae",
+      "integration_source": "48bd5545bbb47784519c2070b2f8b7b24a87a836",
+      "artifact": 14447619853,
+      "zip_sha256": "53d0abad45f17483049c16eefa9fe48e519047448c64e06a68e3c3567a71e137",
+      "result": "FAILED_MODEL_ARGUMENT_SHAPE",
+      "observed": "Omni returned three malformed native tool argument envelopes (turns 0–2). The host rejected each before native dispatch. Zero model edits, exports or WAV observations. The model response passed provider transport; the exact malformed arguments are redacted. Paired creative revision remains unverified."
+    }
   }
 }

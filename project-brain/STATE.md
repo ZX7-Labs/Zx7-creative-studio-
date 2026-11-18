@@ -2,9 +2,9 @@
 
 > **2026-11-18 verified technical checkpoint:** draft [PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) exact head `2cd9c149504bfe24663fe52608a832c974d95083` and tested merge share tree `0fcc63716be66ea57e90b98ce8aced56fab7f3de`. **22/22 PR workflows passed**. The previously cancelled source/native job passed [#44270901079](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901079/job/134686954161). Installed artifact: 24/24 manifest hashes verified, three movies decoded locally, 1,551 tests passed, 27 skipped. The real NVIDIA job was skipped. G1 semantic A/V revision, actual human co-edit, independent professional acceptance, and A–L release remain open. Refresh live PR/head checks before acting.
 
-> **Omni integration:** [indexed trial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44347011076) created a native project and failed on turn 2. A [live schema comparison](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44349699051) isolated an Omni required-mode grammar rejection for the native A/V window. The corrected transport keeps its full native schema and validates every returned tool call. 63 focused tests passed. Full creative retest pending.
+> **Omni integration:** [schema probe](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44349699051) isolated the native uniqueItems grammar incompatibility. Omni now uses auto tool choice. [Post-fix real run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44350134767) reached inference and failed native_function_inputs_shape on turns 0–2. Zero edits or exports. G1 remains open.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=f2662e972cbfca780bc0365d02c4bc5d19fcd3d4` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=bdcbe3e25a65157963431400307f5d2006fdd5f8` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 
