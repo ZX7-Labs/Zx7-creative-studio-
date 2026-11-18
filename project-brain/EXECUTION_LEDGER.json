@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "After ongoing exact-head integration jobs settle, fast-forward only this same-source FFmpeg CI environment candidate (if branch parent unchanged), re-run all exact new-head gates. Preserve original #44267906098 cancellation and prior CI negatives. No new capabilities, no duplicate media checks, no paid/private inference, and no draft PR #356 merge without independent full creative/system acceptance."
+    "next_action": "Verify a genuine source-bound G1 picture and semantic-sound review/revision on a capable authorized Brain using the existing native path, then obtain actual human co-edit and independent professional evaluation. The prior paid grant is spent. Keep PR #356 draft."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -961,7 +961,31 @@
     "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44267906098",
     "precise_trigger": "runner used us-east-2.ec2.archive.ubuntu.com and fetched recommended pocketsphinx-en-us (27.4 MB) after many FFmpeg packages; already passing sibling python311-original-wav job uses official Ubuntu mirror + --no-install-recommends ffmpeg.",
     "patch_scope": "Only pre-existing source-and-native-project apt install line in same workflow: official Ubuntu mirror list and no-install-recommends ffmpeg. All test cases, native code, media/rights rules, concurrency, timeout, packages otherwise unchanged.",
-    "status": "DETACHED_CI_ENV_FIX_PREPARED; OTHER_EXACT_HEAD_CI_STILL_RUNNING; NOT_COMMITTED_TO_PR",
-    "caution": "Original canceled job is not a product failure nor test pass. Verify physical exact-new-head CI; no claim of G1 artistic acceptance."
+    "status": "CORRECTED_EXACT_HEAD_PASS",
+    "caution": "Original cancellation occurred before application tests. The corrected source/native gate passed; genuine G1 artistic acceptance remains open."
+  },
+  "verified_technical_head_2026_11_18": {
+    "pr": 356,
+    "source_head": "2cd9c149504bfe24663fe52608a832c974d95083",
+    "synthetic_merge": "7709c4737b1413ed2e64c090ae7983d4ee6cb25f",
+    "shared_tree": "0fcc63716be66ea57e90b98ce8aced56fab7f3de",
+    "main_at_inspection": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "workflows_passed": 22,
+    "workflows_observed": 22,
+    "source_native_run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901079",
+    "source_native_job": 134686954161,
+    "installed_artifact": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901045/artifacts/14413716263",
+    "installed_zip_sha256": "790dd774f7376cf6f7c76de649d89fd8aeb50a511473a46375ce227876658550",
+    "manifest_hashes_verified": 24,
+    "tests_run": 1578,
+    "tests_passed": 1551,
+    "tests_skipped": 27,
+    "tests_failed": 0,
+    "tests_errors": 0,
+    "locally_decoded_movies": 3,
+    "native_60s_artifact": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901172/artifacts/14412771635",
+    "nvidia_run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901285",
+    "nvidia_real_model_job": "SKIPPED",
+    "release_accepted": false
   }
 }
