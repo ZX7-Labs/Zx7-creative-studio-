@@ -1,0 +1,43 @@
+name: ZX7 Omni native read schema compatibility
+on:
+  push:
+    branches: [trial/g1-omni-indexed-20261118]
+permissions:
+  contents: read
+jobs:
+  schema:
+    if: github.event.head_commit.message == 'Measure Omni verified A/V read schema'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare exact native read declaration on synthetic text
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          python - <<'PY'
+          import ast, copy, json, os, urllib.error, urllib.request
+          from pathlib import Path
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args): raise RuntimeError("redirect refused")
+          opener=urllib.request.build_opener(NoRedirect())
+          tree=ast.parse(Path("studio_next/body_editor_mcp.py").read_text())
+          schema=next(ast.literal_eval(node.value) for node in ast.walk(tree) if isinstance(node,ast.Assign) and any(isinstance(x,ast.Name) and x.id=="av_window_schema" for x in node.targets))
+          for label,choice in [("original","required"),("original","auto"),("omit_unique","required"),("omit_exclusive","required")]:
+              wire=copy.deepcopy(schema)
+              if label=="omit_unique": del wire["properties"]["frame_seconds"]["uniqueItems"]
+              if label=="omit_exclusive": del wire["properties"]["duration_seconds"]["exclusiveMinimum"]
+              params=dict(type="object",properties=dict(inputs=wire,reason=dict(type="string")),required=["inputs","reason"],additionalProperties=False)
+              p=dict(model="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",messages=[dict(role="user",content="Propose the available synthetic observation of demo.mp4, the first two seconds and two frames. No execution.")],tools=[dict(type="function",function=dict(name="zx7_native_zx7_observe_verified_export_av_window",description="Select a synthetic read",parameters=params))], tool_choice=choice,parallel_tool_calls=False,max_tokens=256,temperature=0.2,stream=False,chat_template_kwargs=dict(enable_thinking=False))
+              req=urllib.request.Request("https://integrate.api.nvidia.com/v1/chat/completions",data=json.dumps(p).encode(),headers={"Content-Type":"application/json","Authorization":"Bearer "+os.environ["NVIDIA_API_KEY"]})
+              try:
+                  with opener.open(req,timeout=40) as response:
+                      result=json.load(response)
+                      print(label,choice,response.status,bool(result["choices"][0]["message"].get("tool_calls")))
+              except urllib.error.HTTPError as exc:
+                  body=exc.read(16384).lower()
+                  print(label,choice,exc.code,[k for k in ("schema","uniqueitems","exclusiveminimum","grammar","tool_choice","max_tokens","unsupported","not supported","pattern","minimum","array") if k.encode() in body])
+                  if exc.code!=400: break
+          PY
