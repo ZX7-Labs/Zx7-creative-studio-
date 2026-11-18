@@ -1,8 +1,8 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
-> **2026-11-18 / whole-system checkpoint:** [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) `6128804c610674af32e8a02000fd4fdf13449032` has **22/22 exact-head technical GitHub CI PASS**, not A-L/artistic/release acceptance. Cross-engine BODY movie witness lacked physical dimension recheck despite persisted receipt width/height; scoped source+regression prepared, **changed-head CI PENDING**. No synthetic demo, duplicate engine or architecture rebuild. Preserve A–L, one Brain–BODY/shared native project and prior failed neural trial. No new paid/private inference or release merge without evidence.
+> **2026-11-18 whole-system integration-only checkpoint:** current [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) parent `5f39a1eca5311e80f0b1e010f42b1bc7a351899d` exact CI **18/22 technical PASS, 4 CANCELLED before product tests** during verified slow Ubuntu regional mirror downloads. Installed release job was canceled twice, including one scoped retry. Prior different source `6128804c610674af32e8a02000fd4fdf13449032` had 22/22 technical PASS. **Four existing CI workflow-only mirror corrections prepared; new changed-head CI PENDING.** All original Brain–BODY, local native editor, graphics, sound, Blender source and existing checks preserved; no new capabilities. G1 real competent-model creative A/V, human co-edit, independent A–L professional release remain **NOT_ACCEPTED**. No paid/private inference or main merge.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=120cd7d7be83ded9db8c60f123d5ee8d52d5c114` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=9d409750b6efdf942170257be892e1f122afcb1d` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

@@ -105,3 +105,13 @@ Record `failure_id`, `observed_at`, `head/source SHA`, `job/run/attempt id`, `mo
 ### F-CI-006 follow-up — current editorial installer source parity candidate
 
 Original failed workflow #44122006732 used old `collab_editorial_revision=7df0aef57c5c3a22621d75eaced1eaa17005533e`, but the owner-facing `scripts/install-zx7-linux.sh --editorial-collaboration` already selects pinned `collab_save_order_revision=d5b712ccc510f5ca703848ee1e5d854ce44b423c`. Corrected **the same** full physical editorial workflow to use actual installed source (already source-corrected save timestamp), preserving native saved-file equality, A/V, GUI edits, process death and source locks; added source-parity regression. **Exact new-head CI PENDING.** The old failed job remains negative, stable default owner source remains separate and neural/professional acceptance remains open.
+
+## F-CI-007 — regional Ubuntu package mirror caused four cancelled technical integration gates (2026-11-18)
+
+- **Exact source:** [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) `5f39a1eca5311e80f0b1e010f42b1bc7a351899d`, 18 PASS, 4 CANCELLED. Prior `6128804c...` 22 PASS is a different code head.
+- **Original source-custody:** [run #44205389876](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44205389876) job `134469882432`, 12-minute timeout while apt installed ffmpeg; no native tests started.
+- **Original WAV source:** [run #44205390599](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44205390599) job `134469884804` cancelled during apt; the other three source-contract jobs passed.
+- **Full MLT editorial:** [run #44205390244](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44205390244) job `134469883095`, 40-minute timeout during second apt install (Blender).
+- **Installed wheel/GUI/crash:** [run #44205389818](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44205389818) first job `134469881729` and one unchanged-source retry `134483317203`, both 25-minute timeout downloading Ubuntu dependencies before native tests.
+- **Observed common mechanism:** the GitHub Ubuntu 24.04 runner selected `http://us-east-2.ec2.archive.ubuntu.com/ubuntu` from `/etc/apt/apt-mirrors.txt`; original logs show very slow continuous package transfers. Exact mirror/network root beyond the observed endpoint is unproven. No application test failure nor success should be claimed from these cancellations.
+- **Scoped CI-only candidate:** four existing workflows prefer signed official `https://archive.ubuntu.com/ubuntu` in the runner's mirror list, keeping all requested packages, timeout limits, code, native rights/media checks and tests unchanged. New exact source CI PENDING. No paid model, new feature or release approval.

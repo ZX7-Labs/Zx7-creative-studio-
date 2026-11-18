@@ -29,6 +29,12 @@ jobs:
           python-version: "3.11"
       - name: Provision genuine original picture, soundtrack and PNG decoders
         run: |
+          # The GitHub-hosted regional Ubuntu mirror exhausted CI timeout before
+          # any product tests ran. The official Ubuntu archive uses the same
+          # signed package Release metadata; preserve every physical test.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://us-east-2.ec2.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt
+          fi
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
             sudo apt-get update -qq
             sudo apt-get install -y ffmpeg

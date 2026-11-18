@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify exact new-head CI for cross-engine film witness metadata recheck; continue shared Brain-BODY A-L integration from real gaps, not scripts/demos/duplicate systems. Preserve 22/22 prior-head technical success. Genuine Brain original semantic picture/sound revision, human co-edit, security/rights and professional A-L exit remain unaccepted. Paid/private inference blocked without explicit consent; do not merge before evidence."
+    "next_action": "Review exact CI after narrowly changed four affected workflow Ubuntu archive mirrors. Original 18 PASS/4 CANCELLED source 5f39 remains negative; do not claim product pass until installed code checks run. Do not duplicate existing media guards, change Brain-BODY, merge PR #356, run paid/private models or mark A-L professional acceptance."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -766,14 +766,16 @@
     "remaining": "not genuine AI-authored art, independent human usability, semantic hearing, or full A-L"
   },
   "latest_ci_checkpoint": {
-    "source": "6128804c610674af32e8a02000fd4fdf13449032",
+    "source": "5f39a1eca5311e80f0b1e010f42b1bc7a351899d",
     "observed_date": "2026-11-18 IST",
     "checks_observed": 22,
-    "passed": 22,
+    "passed": 18,
     "failed": 0,
-    "successful_scope": "exact-head GitHub technical CI including installed native editor, BODY, MLT A/V and integrity",
-    "creative_or_professional_release_accepted": false,
-    "next_source_change": "cross-engine movie witness persisted picture profile revalidation with unit regression; new CI pending"
+    "cancelled": 4,
+    "classification": "ENVIRONMENT_CANCELED_BEFORE_APPLICATION_TESTS",
+    "previous_head_technical_22_of_22": "6128804c610674af32e8a02000fd4fdf13449032",
+    "new_candidate": "4 Ubuntu official mirror CI-only workflow fixes, new head CI PENDING",
+    "creative_accepted": false
   },
   "indexed_brain_verified_wav_affordance_2026_11_17": {
     "parent_source_head": "80e395ef348df28edbaae81eb48a1bf48f0f74f8",
@@ -884,5 +886,46 @@
     "change": "Reprobe stored movie and check width+height alongside current duration, audio and SHA-256; missing or malformed movie metadata fails closed without write/retry.",
     "evidence": "Standalone exact legacy predicate reproduces forged 1px width accepted for 1280px physical picture. New studio_next/test_body_integration.py regression checks width, height, duration, sound, missing malformed keys and SHA tamper. New exact-head CI pending.",
     "limitations": "No claim of model creativity, independent audio/video semantics, human editing, rights or A-L professional completion."
+  },
+  "ci_runner_mirror_2026_11_18": {
+    "prior_source": "5f39a1eca5311e80f0b1e010f42b1bc7a351899d",
+    "prior_exact_head": {
+      "workflows": 22,
+      "success": 18,
+      "cancelled": 4
+    },
+    "failed_to_run": [
+      {
+        "run": 44205389876,
+        "job": 134469882432,
+        "kind": "original source custody",
+        "timeout_min": 12
+      },
+      {
+        "run": 44205390599,
+        "job": 134469884804,
+        "kind": "python311 original WAV",
+        "timeout_min": 12
+      },
+      {
+        "run": 44205390244,
+        "job": 134469883095,
+        "kind": "MLT whole-app fidelity",
+        "timeout_min": 40
+      },
+      {
+        "run": 44205389818,
+        "jobs": [
+          134469881729,
+          134483317203
+        ],
+        "kind": "separately installed full BODY desktop/wheel/crash",
+        "timeout_min": 25
+      }
+    ],
+    "observed": "GitHub Ubuntu24 runner regional us-east-2.ec2.archive.ubuntu.com downloads did not finish before job timeouts, no cancelled job application tests executed. Root network cause unknown.",
+    "change": "CI ONLY: in four affected existing workflows prefer Ubuntu's official https://archive.ubuntu.com/ubuntu via runner apt-mirrors.txt; source, dependency list, accepted tests, limits, grants unchanged.",
+    "exact_corrected_head_status": "PENDING",
+    "no_acceptance": "No genuine neural creative artwork, human-verified co-edit, independent A-L or release acceptance; last real model trial remains failed."
   }
 }
