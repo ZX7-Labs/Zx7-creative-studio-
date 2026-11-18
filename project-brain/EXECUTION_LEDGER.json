@@ -1016,6 +1016,17 @@
       "zip_sha256": "53d0abad45f17483049c16eefa9fe48e519047448c64e06a68e3c3567a71e137",
       "result": "FAILED_MODEL_ARGUMENT_SHAPE",
       "observed": "Omni returned three malformed native tool argument envelopes (turns 0–2). The host rejected each before native dispatch. Zero model edits, exports or WAV observations. The model response passed provider transport; the exact malformed arguments are redacted. Paired creative revision remains unverified."
+    },
+    "offline_argument_shape_diagnostics_2026_11_19": {
+      "corrected_source": "b6e341d9afb83ad4cb8bea2bf23b9115ce3995d1",
+      "first_diagnostic_code_error": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390018255",
+      "corrected_offline_matrix": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390763892",
+      "python_versions_passed": ["3.11", "3.12", "3.13"],
+      "tests_per_python": 163,
+      "canonical_model_rejection_code": "native_function_inputs_shape",
+      "status": "OFFLINE_VALUE_FREE_ARGUMENT_DIAGNOSTICS_PASSED; EXACT_HEAD_NATIVE_CI_UNVERIFIED; REAL_MODEL_G1_FAILED",
+      "change": "Strict pre-dispatch rejection preserved; only envelope type and native-field counts are reported, never provider-supplied unknown names or values.",
+      "next_gate": "Inspect source-attested argument layout in a separately authorized bounded synthetic trial before changing transport; keep native permissions, consent and model-acceptance gates unchanged."
     }
   }
 }
