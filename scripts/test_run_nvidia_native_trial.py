@@ -427,10 +427,23 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: false", group)
         self.assertIn("if: github.event_name == 'pull_request'", workflow)
         self.assertIn(
-            "if: github.event_name == 'workflow_dispatch' && "
+            "github.event_name == 'workflow_dispatch' && "
             "github.ref == 'refs/heads/main' && inputs.trial_mode == 'audiovisual'",
             workflow)
-        self.assertNotIn("  push:", workflow, "Ordinary push must never launch paid AI")
+        # Single owner-approved synthetic push lane; not PR/main/general push.
+        self.assertEqual(workflow.count("  push:"), 1)
+        self.assertIn(
+            "branches: [trial/g1-omni-native-schema-20261118]",
+            workflow)
+        self.assertIn('      - "research/nvidia-native-audiovisual-branch-authorized.json"', workflow)
+        self.assertIn(
+            "github.event_name == 'push' && "
+            "github.ref == 'refs/heads/trial/g1-omni-native-schema-20261118' && "
+            "github.event.head_commit.message == 'zx7: verify corrected synthetic Omni native schema'",
+            workflow)
+        self.assertIn("ZX7_OWNER_OMNI_SCHEMA_20261118_ONCE", workflow)
+        self.assertIn('if [ "$GITHUB_EVENT_NAME" = "push" ]; then', workflow)
+        self.assertNotIn("github.ref == 'refs/heads/main' && github.event_name == 'push'", workflow)
         self.assertIn("approval_request_id:", workflow)
         self.assertIn("scripts.nvidia_av_trial_request", workflow)
         self.assertIn("--audiovisual-trial --allow-cloud-audio-diagnostics", workflow)
