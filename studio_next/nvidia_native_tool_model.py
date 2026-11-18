@@ -114,6 +114,17 @@ def _rejected_native_argument_layout(args: dict, schema: dict) -> str:
             f"nested_native={nested_native}")
 
 
+class _NativeFunctionInputsShapeError(LocalModelOutputError):
+    """Keep the host's finite error code and append only non-value diagnostics."""
+
+    def __init__(self, args: dict, schema: dict):
+        super().__init__("native_function_inputs_shape")
+        self.layout = _rejected_native_argument_layout(args, schema)
+
+    def __str__(self):
+        return f"{super().__str__()} [{self.layout}]"
+
+
 class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
     """Provider-native function selection, native host grants never broadened."""
 
@@ -285,8 +296,7 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                     contract = next(spec["input_schema"] for spec in
                                     context["host_native_tool_contracts"]
                                     if spec["name"] == name)
-                    detail = _rejected_native_argument_layout(args, contract)
-                    raise LocalModelOutputError("native_function_inputs_shape " + detail)
+                    raise _NativeFunctionInputsShapeError(args, contract)
                 return {"action": "invoke",
                         "arguments": {"tool": name, "inputs": args["inputs"]},
                         "reason": args["reason"]}

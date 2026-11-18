@@ -176,7 +176,7 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                 with self.assertRaises(LocalModelOutputError) as raised:
                     model.decide(_context())
                 detail = str(raised.exception)
-                self.assertTrue(detail.startswith("native_function_inputs_shape "))
+                self.assertEqual(raised.exception.code, "native_function_inputs_shape")
                 self.assertIn(expected, detail)
                 for private in ("OWNER_PRIVATE_MEDIA", "OWNER_PRIVATE_REASON",
                                 "OWNER_PRIVATE_FIELD"):
