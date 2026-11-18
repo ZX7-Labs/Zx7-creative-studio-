@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "NVIDIA Omni rejected the first text/tool inference request (HTTP 400, turn 0). The journal contains the host bootstrap read and model decision failure. No creative action, output, or WAV observation. The response omitted field-level diagnostics. Isolate provider request compatibility on a synthetic text-only fixture before another full trial."
+    "next_action": "Verify a genuine source-bound G1 picture and semantic-sound review/revision on a capable authorized Brain using the existing native path, then obtain actual human co-edit and independent professional evaluation. The prior paid grant is spent. Keep PR #356 draft."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -987,17 +987,5 @@
     "nvidia_run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901285",
     "nvidia_real_model_job": "SKIPPED",
     "release_accepted": false
-  },
-  "omni_synthetic_trial_20261118": {
-    "source": "f09521694d4d8658a065b990157c67dd9e1fc4dd",
-    "run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44342694162",
-    "artifact": 14446026819,
-    "sha256": "6fd6d349b7e73d415ec0750c9f69e857f578475db4b69a8702edbb96ca6ff0e5",
-    "result": "FAILED_PROVIDER_HTTP_400",
-    "turn": 0,
-    "model_edits": 0,
-    "exports": 0,
-    "scope": "Generated synthetic media only",
-    "trigger_revoked": "56d748cc9275e7cdf152852694c179f32bd7d767"
   }
 }

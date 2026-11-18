@@ -63,13 +63,12 @@ def validate_av_trial_request(path: Path, *, dispatch_request_id: str) -> str:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--print-model", action="store_true",
-                        help="Print only the validated model ID for the workflow launcher")
     parser.add_argument("request_file", type=Path)
     parser.add_argument("--dispatch-request-id", required=True)
     args = parser.parse_args(argv)
-    model = validate_av_trial_request(args.request_file, dispatch_request_id=args.dispatch_request_id)
-    print(model if args.print_model else f"New synthetic A/V trial admitted: {model}")
+    print("New synthetic A/V trial admitted:",
+          validate_av_trial_request(
+              args.request_file, dispatch_request_id=args.dispatch_request_id))
 
 
 if __name__ == "__main__":
