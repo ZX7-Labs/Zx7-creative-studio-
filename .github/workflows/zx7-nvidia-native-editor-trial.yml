@@ -13,13 +13,6 @@ on:
         description: "Exact new reviewed ID in research/nvidia-native-audiovisual-request.json"
         required: true
         type: string
-  # One owner-approved synthetic test on this exact integration branch.
-  # Never run paid credentials for ordinary pushes, PRs or unreviewed media.
-  # Remove this single-use trigger as soon as its authorized run is queued.
-  push:
-    branches: [trial/g1-synthetic-omni-20261118]
-    paths:
-      - "research/nvidia-native-audiovisual-branch-authorized.json"
   # Pull requests only validate the reviewed request. They never execute a
   # cloud neural trial, upload frames or access the NVIDIA credential.
   pull_request:
@@ -61,9 +54,7 @@ jobs:
         run: python -m unittest -v scripts.test_nvidia_av_trial_request
 
   real-model-native-editor-and-export:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.trial_mode == 'audiovisual') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/trial/g1-synthetic-omni-20261118' && github.event.head_commit.message == 'zx7: authorize one synthetic NVIDIA Omni G1 trial')
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.trial_mode == 'audiovisual'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -80,15 +71,11 @@ jobs:
           node-version: "24"
       - name: Require a newly approved synthetic picture+sound experiment BEFORE building or exposing credentials
         env:
-          APPROVAL_REQUEST_ID: ${{ github.event_name == 'push' && 'ZX7_OWNER_SYNTHETIC_OMNI_20261118_ONCE' || inputs.approval_request_id }}
+          APPROVAL_REQUEST_ID: ${{ inputs.approval_request_id }}
         run: |
           set -euo pipefail
-          request="research/nvidia-native-audiovisual-request.json"
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            request="research/nvidia-native-audiovisual-branch-authorized.json"
-          fi
           python -m scripts.nvidia_av_trial_request \
-            "$request" \
+            research/nvidia-native-audiovisual-request.json \
             --dispatch-request-id "$APPROVAL_REQUEST_ID"
       - name: Install original-media codec, sandbox and real MCP dependencies
         run: |
@@ -113,14 +100,10 @@ jobs:
             scripts.test_run_nvidia_native_trial -v
       - name: Revalidate the exact newly admitted A/V consent and fixed provider model
         env:
-          APPROVAL_REQUEST_ID: ${{ github.event_name == 'push' && 'ZX7_OWNER_SYNTHETIC_OMNI_20261118_ONCE' || inputs.approval_request_id }}
+          APPROVAL_REQUEST_ID: ${{ inputs.approval_request_id }}
         run: |
-          request="research/nvidia-native-audiovisual-request.json"
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            request="research/nvidia-native-audiovisual-branch-authorized.json"
-          fi
           python -m scripts.nvidia_av_trial_request \
-            "$request" \
+            research/nvidia-native-audiovisual-request.json \
             --dispatch-request-id "$APPROVAL_REQUEST_ID"
       - name: Build actual existing source editor with no provider credential available
         working-directory: third_party/velorn
@@ -146,11 +129,7 @@ jobs:
             echo "No NVIDIA_API_KEY Actions secret. Refusing cloud trial."
             exit 2
           fi
-          extra=()
-          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            extra=(--model-id nvidia/nemotron-3-nano-omni-30b-a3b-reasoning --allow-cloud-synthetic-wav)
-          fi
-          python -u -m scripts.run_nvidia_native_trial "${extra[@]}" \
+          python -u -m scripts.run_nvidia_native_trial \
             --workspace "$RUNNER_TEMP/zx7-nvidia-native-trial" \
             --xvfb-binary /usr/bin/Xvfb --display 127.0.0.1:95 \
             --audiovisual-trial --allow-cloud-audio-diagnostics
