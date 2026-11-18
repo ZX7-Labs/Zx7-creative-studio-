@@ -126,7 +126,8 @@ class SealedGraphSources:
         for _,media,_ in self.sources.values():self.vault.inspect(media["asset_id"],attestation_id=media["attestation_id"])
 
 
-def render_visual_graph(plan_file,workspace,vault_root,output,*,budget=None):
+def render_visual_graph(plan_file,workspace,vault_root,output,*,
+                        budget=None,convolution_backend="numpy"):
     from PIL import Image,PngImagePlugin
     root,plan_file,output=Path(workspace).resolve(),Path(plan_file).resolve(),Path(output).resolve()
     if not plan_file.is_relative_to(root) or not output.is_relative_to(root) or output.exists():
@@ -136,7 +137,9 @@ def render_visual_graph(plan_file,workspace,vault_root,output,*,budget=None):
     # different creative directions between those two operations.
     with plan_file.open("rb") as stream:raw_plan=stream.read(16777217)
     if len(raw_plan)>16777216:raise ValueError("Visual graph exceeds host input size budget")
-    plan_sha=hashlib.sha256(raw_plan).hexdigest();graph=VisualGraph(json.loads(raw_plan),budget=budget)
+    plan_sha=hashlib.sha256(raw_plan).hexdigest()
+    graph=VisualGraph(json.loads(raw_plan),budget=budget,
+                      convolution_backend=convolution_backend)
     selection=graph.plan["render"];suffix={"png":".png","rgba_mov":".mov","exr32":".exr"}[selection["format"]]
     if output.suffix.lower()!=suffix:raise ValueError("Output suffix differs from authored format")
     if graph.canvas["width"]*graph.canvas["height"]*4*selection["frame_count"]>graph.budget.max_decode_bytes:
@@ -206,4 +209,9 @@ def render_visual_graph(plan_file,workspace,vault_root,output,*,budget=None):
         "delivery_precision":"float32_linear_srgb_associated_rgba" if selection["format"]=="exr32" else "8bit_srgb_straight_rgba",
         "explicitly_clipped_rgb_components":clipped,
         "audio_policy":"separate_editable_tracks","source_assets":len(sources.sources),
-        "project_node_fingerprints":graph.node_fingerprints(),"aesthetic_quality_approved":False}
+        "project_node_fingerprints":graph.node_fingerprints(),
+        "convolution_backend":graph.convolution_backend,
+        "convolution_backend_runtime_version": (
+            __import__("scipy").__version__ if graph.convolution_backend=="scipy"
+            else __import__("numpy").__version__),
+        "aesthetic_quality_approved":False}
