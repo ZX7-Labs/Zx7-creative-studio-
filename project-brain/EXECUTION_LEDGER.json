@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify exact-head CI after bounded ledger fixture correction and MLT official mirror + no-recommends installer; inspect any failures and preserve both negatives. No new creative capability, media validator, broad refactor, provider call, private egress or main merge. The real model-directed original A/V creative improvement and human/professional A-L acceptance remain unverified."
+    "next_action": "After ongoing exact-head integration jobs settle, fast-forward only this same-source FFmpeg CI environment candidate (if branch parent unchanged), re-run all exact new-head gates. Preserve original #44267906098 cancellation and prior CI negatives. No new capabilities, no duplicate media checks, no paid/private inference, and no draft PR #356 merge without independent full creative/system acceptance."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -952,5 +952,16 @@
     "change": "CI ONLY: in four affected existing workflows prefer Ubuntu's official https://archive.ubuntu.com/ubuntu via runner apt-mirrors.txt; source, dependency list, accepted tests, limits, grants unchanged.",
     "exact_corrected_head_status": "PENDING",
     "no_acceptance": "No genuine neural creative artwork, human-verified co-edit, independent A-L or release acceptance; last real model trial remains failed."
+  },
+  "ci_source_native_ffmpeg_environment_2026_11_18": {
+    "source_head": "135bd501412609a6647c0a89c857b3bc546297e9",
+    "workflow_id": 44267906098,
+    "job_id": 134676909972,
+    "first_observation": "CANCELLED after 15-minute job limit while unmodified source-and-native-project step apt installed ffmpeg; no source/native application tests ran.",
+    "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44267906098",
+    "precise_trigger": "runner used us-east-2.ec2.archive.ubuntu.com and fetched recommended pocketsphinx-en-us (27.4 MB) after many FFmpeg packages; already passing sibling python311-original-wav job uses official Ubuntu mirror + --no-install-recommends ffmpeg.",
+    "patch_scope": "Only pre-existing source-and-native-project apt install line in same workflow: official Ubuntu mirror list and no-install-recommends ffmpeg. All test cases, native code, media/rights rules, concurrency, timeout, packages otherwise unchanged.",
+    "status": "DETACHED_CI_ENV_FIX_PREPARED; OTHER_EXACT_HEAD_CI_STILL_RUNNING; NOT_COMMITTED_TO_PR",
+    "caution": "Original canceled job is not a product failure nor test pass. Verify physical exact-new-head CI; no claim of G1 artistic acceptance."
   }
 }
