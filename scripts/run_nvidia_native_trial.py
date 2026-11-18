@@ -552,6 +552,24 @@ def trial_delivery_profile_compliant(
     return True
 
 
+def exports_with_wav_decisions(events):
+    """Match host-verified WAV delivery to a returned decision on the next turn."""
+    received = set()
+    pending = {}
+    for event in events:
+        turn = event.get("turn")
+        if type(turn) is not int:
+            continue
+        if (event.get("kind") == "native_tool_result" and
+                event.get("audio_sent_to_model_for_next_decision") is True and
+                event.get("audio_sha256") and event.get("observed_export_sha256")):
+            pending[turn + 1] = event["observed_export_sha256"]
+        if (turn in pending and "measured_model_wall_ms" in event and
+                event.get("kind") not in {"model_decision_failed", "model_protocol_response_rejected"}):
+            received.add(pending.pop(turn))
+    return received
+
+
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
               audiovisual=False, allow_cloud_audio_diagnostics=False,
               allow_cloud_synthetic_wav=False):
@@ -698,7 +716,14 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
             changed_reviewed_audio = bool(
                 reviewed_pair_audio_acceptable and
                 a.pcm_sha256 != b.pcm_sha256)
+    wav_pair_verified = None
+    if allow_cloud_synthetic_wav:
+        with receipt.open(encoding="utf-8") as journal:
+            observed = exports_with_wav_decisions(json.loads(line) for line in journal)
+        wav_pair_verified = bool(pair and len(pair) == 2 and
+                                 all(item["export_sha256"] in observed for item in pair))
     evaluated = {
+        "both_reviewed_exports_returned_wav_conditioned_decisions": wav_pair_verified,
         **saved_native,
         "different_decoded_export_count": export_variants,
         "different_decoded_picture_sequence_count": independently_different_picture_exports,
@@ -731,6 +756,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
                  (audiovisual and changed_reviewed_audio)) or
             (audiovisual and (
                 not reviewed_pair_audio_acceptable or bool(audio_rejections))) or
+            wav_pair_verified is False or
             not reviewed_pair_delivery_profile_compliant or
             saved_native["native_saved_project_verified"] is not True):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")

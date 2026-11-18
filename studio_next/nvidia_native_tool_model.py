@@ -203,7 +203,9 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             "messages": (self._messages_with_audio(context, images, audio)
                          if audio else self._messages(context, images)),
             "tools": functions,
-            "tool_choice": "required",
+            # Omni's required-mode grammar rejects native uniqueItems schemas.
+            # Preserve the full schema; the host still requires exactly one typed call.
+            "tool_choice": "auto" if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID else "required",
             "parallel_tool_calls": False,
         }
         payload.update(self.settings.sampling)

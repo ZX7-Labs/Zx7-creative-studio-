@@ -2,9 +2,9 @@
 
 > **2026-11-18 verified technical checkpoint:** draft [PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) exact head `2cd9c149504bfe24663fe52608a832c974d95083` and tested merge share tree `0fcc63716be66ea57e90b98ce8aced56fab7f3de`. **22/22 PR workflows passed**. The previously cancelled source/native job passed [#44270901079](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901079/job/134686954161). Installed artifact: 24/24 manifest hashes verified, three movies decoded locally, 1,551 tests passed, 27 skipped. The real NVIDIA job was skipped. G1 semantic A/V revision, actual human co-edit, independent professional acceptance, and A–L release remain open. Refresh live PR/head checks before acting.
 
-> **Latest genuine Omni trial** [#44342694162](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44342694162). NVIDIA Omni rejected the first text/tool inference request (HTTP 400, turn 0). The journal contains the host bootstrap read and model decision failure. No creative action, output, or WAV observation. The response omitted field-level diagnostics. Isolate provider request compatibility on a synthetic text-only fixture before another full trial.
+> **Omni integration:** [indexed trial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44347011076) created a native project and failed on turn 2. A [live schema comparison](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44349699051) isolated an Omni required-mode grammar rejection for the native A/V window. The corrected transport keeps its full native schema and validates every returned tool call. 63 focused tests passed. Full creative retest pending.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=c2c557c249205a21f5aa6265f15d788a961daf93` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=f2662e972cbfca780bc0365d02c4bc5d19fcd3d4` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

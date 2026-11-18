@@ -6,6 +6,8 @@ This is a **causal retrieval index**, not a reconstructed raw transcript or a se
 
 [Run 44342694162](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44342694162), source `f09521694d4d8658a065b990157c67dd9e1fc4dd`. NVIDIA Omni rejected the first text/tool inference request (HTTP 400, turn 0). The journal contains the host bootstrap read and model decision failure. No creative action, output, or WAV observation. The response omitted field-level diagnostics. Isolate provider request compatibility on a synthetic text-only fixture before another full trial.
 
+**Follow-up:** [indexed trial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44347011076) created a project, then failed after selecting the native A/V window. The [controlled provider experiment](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44349699051) identified the uniqueItems grammar incompatibility for this declaration. Omni now sends the complete schema with auto tool choice and validates the model response before dispatch.
+
 ## F-REAL-001 — Qwen local 4B autonomous editor run
 
 - **Original:** [real workflow #42711402879](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879), failed native job `129481639892`; artifact `13722569378` (unexpired at 2026-11-15 audit, originally scheduled expiration 2026-11-24 UTC). Qwen3.5-4B local HTTP/llama.cpp, real 46-turn native decision trial.

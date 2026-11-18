@@ -263,6 +263,20 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
             "exact_original_audio_pts_proven": False,
         }
 
+    def test_omni_uses_auto_preserves_schema_and_rejects_text_only(self):
+        model = self._model()
+        ctx = _context()
+        schema = ctx["host_native_tool_contracts"][1]["input_schema"]
+        schema["properties"]["frames"] = {"type": "array", "uniqueItems": True,
+                                          "items": {"type": "number"}}
+        reply = BytesIO(b'{"choices":[{"message":{"content":"done"}}]}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            with self.assertRaisesRegex(LocalModelOutputError, "missing_or_multiple"):
+                model.decide(ctx)
+        body = remote.call_args.args[0]
+        self.assertEqual(body["tool_choice"], "auto")
+        self.assertEqual(body["tools"][1]["function"]["parameters"]["properties"]["inputs"], schema)
+
     def test_consent_false_wrong_model_and_ambiguous_custody_reject_before_network(self):
         sample = self._wav()
         digest = hashlib.sha256(sample).hexdigest()
