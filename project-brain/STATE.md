@@ -1,8 +1,8 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
-> **2026-11-17 DRAFT PR #356:** parent `d5f021ed151539778a42a03815162501e8418127` → current installed editorial CI source-parity fix, **new CI PENDING**. Old [editorial FAIL #44122006732](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122006732) used `collab_editorial_revision` while owner installer already uses corrected `collab_save_order_revision`. Existing full real GUI/A-V/crash test now targets actual opt-in installed source; original negative retained. [Source-save #44122005619](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122005619) and [atomic-range #44122005764](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122005764) earlier PASS. Stable default source first-fail/same-head pass remains unresolved. A–L **NOT_ACCEPTED**; no authorized new paid/private model run, human/professional release proof or public launch. Refresh live Git/CI.
+> **2026-11-18 / whole-system checkpoint:** [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) `6128804c610674af32e8a02000fd4fdf13449032` has **22/22 exact-head technical GitHub CI PASS**, not A-L/artistic/release acceptance. Cross-engine BODY movie witness lacked physical dimension recheck despite persisted receipt width/height; scoped source+regression prepared, **changed-head CI PENDING**. No synthetic demo, duplicate engine or architecture rebuild. Preserve A–L, one Brain–BODY/shared native project and prior failed neural trial. No new paid/private inference or release merge without evidence.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=8add4aa5ddc774181fd94840c03b1a46191443d6` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=120cd7d7be83ded9db8c60f123d5ee8d52d5c114` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

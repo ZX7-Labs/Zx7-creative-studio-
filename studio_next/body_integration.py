@@ -125,9 +125,17 @@ def _verify_witness(result):
         try:return bool(verify_motion_bundle(p)["native"])
         except (ValueError,KeyError,OSError,zipfile.BadZipFile):return False
     if p.suffix.lower() in (".mp4",".mov",".mkv",".webm"):
-        observed=_probe_details(p)
-        return (abs(observed["duration_seconds"]-result["duration_seconds"])<.08
-                and observed["audio_stream_present"]==result["audio_present"])
+        # A content hash ties the file to this receipt, but does not prove
+        # fields inside the receipt are true. Recheck the complete stored
+        # physical picture/audio profile before trusting a durable replay.
+        try:
+            observed=_probe_details(p)
+            return (abs(observed["duration_seconds"]-result["duration_seconds"])<.08
+                    and observed["width"]==result["width"]
+                    and observed["height"]==result["height"]
+                    and observed["audio_stream_present"]==result["audio_present"])
+        except (KeyError,TypeError,ValueError,RuntimeError,OSError,OverflowError):
+            return False
     if p.suffix.lower()==".zip":
         try:
             return bool(verify_exr_bundle(p)["original_exr_passes_real"])

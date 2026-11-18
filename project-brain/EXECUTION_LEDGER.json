@@ -565,7 +565,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Confirm exact-head native editorial installed save-order physical suite and new source-parity regression, with all other CI failures retained. Do not merge draft #356 until release/security, a genuine model-authored image/audio first+revision pair, human workflow and independent A-L professional acceptance are proven; no paid/private media inference without new consent."
+    "next_action": "Verify exact new-head CI for cross-engine film witness metadata recheck; continue shared Brain-BODY A-L integration from real gaps, not scripts/demos/duplicate systems. Preserve 22/22 prior-head technical success. Genuine Brain original semantic picture/sound revision, human co-edit, security/rights and professional A-L exit remain unaccepted. Paid/private inference blocked without explicit consent; do not merge before evidence."
   },
   "exact_head_checkpoint_2026_11_17": {
     "pr": 356,
@@ -766,18 +766,14 @@
     "remaining": "not genuine AI-authored art, independent human usability, semantic hearing, or full A-L"
   },
   "latest_ci_checkpoint": {
-    "source": "471af1ee1e9c83da1168be79f0700996e3042d30",
-    "observed_date": "2026-11-17",
-    "checks_observed": 20,
-    "passed": 19,
-    "failed": 1,
-    "failed_workflow": "ZX7 Canonical Project Brain — Offline Integrity",
-    "failed_run": 44099891001,
-    "failed_job": 134096752072,
-    "failed_reason": "too_large: EXECUTION_LEDGER.json",
-    "native_and_other_checks": "19 completed successful workflows on exact code head; no genuine artistic acceptance",
-    "correction": "bounded typed-ledger growth regression and checker cap prepared; exact changed-head CI not yet observed",
-    "exact_head_not_final_green": true
+    "source": "6128804c610674af32e8a02000fd4fdf13449032",
+    "observed_date": "2026-11-18 IST",
+    "checks_observed": 22,
+    "passed": 22,
+    "failed": 0,
+    "successful_scope": "exact-head GitHub technical CI including installed native editor, BODY, MLT A/V and integrity",
+    "creative_or_professional_release_accepted": false,
+    "next_source_change": "cross-engine movie witness persisted picture profile revalidation with unit regression; new CI pending"
   },
   "indexed_brain_verified_wav_affordance_2026_11_17": {
     "parent_source_head": "80e395ef348df28edbaae81eb48a1bf48f0f74f8",
@@ -879,5 +875,14 @@
     "issue": "Old editorial CI tested collab_editorial_revision 7df0aef57c5c3a22621d75eaced1eaa17005533e although actual owner --editorial-collaboration installer uses collab_save_order_revision d5b712ccc510f5ca703848ee1e5d854ce44b423c.",
     "change": "Existing Electron editorial GUI/AI co-edit, original A/V, crash and save authority full workflow now prepares the exact currently owner-installed pinned source via prepare-native-save-order-candidate.sh and checks that expected SHA; new static regression protects installer/CI source pin parity.",
     "constraints": "Original legacy CI failure retained; never weaken saved-file physical comparison, alter installed stable default, run paid model or infer artistic quality from source CI. New exact-head CI pending."
+  },
+  "whole_system_durable_media_witness_2026_11_18": {
+    "source_parent": "6128804c610674af32e8a02000fd4fdf13449032",
+    "scope": "Shared BODY durable media recovery and delivery across all A-L media-producing domains, not a scripted creative demo",
+    "status": "OLD_PREDICATE_RED_REPRODUCED; SOURCE_AND_REGRESSION_PREPARED_NEW_HEAD_CI_PENDING",
+    "defect": "BODY _witness persists physical movie width and height but _verify_witness validates only sha256, duration and audio presence; fabricated receipt width/height accepted despite a genuine file digest.",
+    "change": "Reprobe stored movie and check width+height alongside current duration, audio and SHA-256; missing or malformed movie metadata fails closed without write/retry.",
+    "evidence": "Standalone exact legacy predicate reproduces forged 1px width accepted for 1280px physical picture. New studio_next/test_body_integration.py regression checks width, height, duration, sound, missing malformed keys and SHA tamper. New exact-head CI pending.",
+    "limitations": "No claim of model creativity, independent audio/video semantics, human editing, rights or A-L professional completion."
   }
 }
