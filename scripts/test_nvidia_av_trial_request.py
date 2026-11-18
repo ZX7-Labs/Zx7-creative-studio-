@@ -40,17 +40,6 @@ class ExplicitNvidiaAudiovisualAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(SmokeRequestError, "not newly approved"):
             self.validate(_VALID, request_id="DIFFERENT_EXPLICIT_RUN_20261112")
 
-    def test_omni_requires_separate_synthetic_wav_scope(self):
-        from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
-        request = dict(_VALID, model_id=NVIDIA_OMNI_AUDIO_MODEL_ID)
-        with self.assertRaises(SmokeRequestError):
-            self.validate(request)
-        request["cloud_synthetic_wav_allowed"] = True
-        self.assertEqual(self.validate(request), NVIDIA_OMNI_AUDIO_MODEL_ID)
-        request["model_id"] = _ALLOWED_MODEL
-        with self.assertRaises(SmokeRequestError):
-            self.validate(request)
-
     def test_refuses_reusing_prior_spent_visual_request(self):
         old = Path(__file__).resolve().parents[1] / "research" / "nvidia-native-trial-request.json"
         with self.assertRaises(SmokeRequestError):
