@@ -154,6 +154,34 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                 with self.assertRaises(LocalModelOutputError):
                     NvidiaNativeToolCreativeModel(system_prompt="test").decide(_context())
 
+    def test_native_malformed_argument_layout_never_leaks_model_values(self):
+        """Only typed/count metadata crosses the rejected-provider boundary."""
+        failures = (
+            ({"assetId": "OWNER_PRIVATE_MEDIA", "previewOnly": False,
+              "reason": "OWNER_PRIVATE_REASON"},
+             "inputs=missing reason=string native_direct=2 unknown=0 nested_native=0"),
+            ({"inputs": ["OWNER_PRIVATE_MEDIA"], "reason": "OWNER_PRIVATE_REASON"},
+             "inputs=array reason=string native_direct=0 unknown=0 nested_native=0"),
+            ({"inputs": {"assetId": "OWNER_PRIVATE_MEDIA"},
+              "reason": "OWNER_PRIVATE_REASON",
+              "OWNER_PRIVATE_FIELD": "OWNER_PRIVATE_MEDIA"},
+             "inputs=object reason=string native_direct=0 unknown=1 nested_native=1"),
+        )
+        for args, expected in failures:
+            response = _reply(_provider_function("add_asset_to_timeline"),
+                              json.dumps(args))
+            model = NvidiaNativeToolCreativeModel(system_prompt="Offline fixture")
+            with self.subTest(expected=expected), patch.object(
+                    model, "_open_request", return_value=response):
+                with self.assertRaises(LocalModelOutputError) as raised:
+                    model.decide(_context())
+                detail = str(raised.exception)
+                self.assertTrue(detail.startswith("native_function_inputs_shape "))
+                self.assertIn(expected, detail)
+                for private in ("OWNER_PRIVATE_MEDIA", "OWNER_PRIVATE_REASON",
+                                "OWNER_PRIVATE_FIELD"):
+                    self.assertNotIn(private, detail)
+
     def test_host_finish_requires_actual_evidence_not_a_model_claim(self):
         context = _context()
         functions, mapping = NvidiaNativeToolCreativeModel._tool_surface(context)

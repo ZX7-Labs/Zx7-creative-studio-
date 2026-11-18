@@ -78,6 +78,42 @@ def _meta_parameters(action: str, choices: list[str] | None = None) -> dict:
         "required": needed + ["reason"], "additionalProperties": False}
 
 
+def _rejected_native_argument_layout(args: dict, schema: dict) -> str:
+    """Bounded, value-free diagnostics for malformed provider function arguments.
+
+    Only the fixed envelope names are printed. Unknown field names, tool
+    arguments, reasons, media paths and prompt text must never enter logs.
+    """
+    def kind(key):
+        if key not in args:
+            return "missing"
+        value = args[key]
+        if value is None:
+            return "null"
+        if type(value) is bool:
+            return "boolean"
+        if type(value) is dict:
+            return "object"
+        if type(value) is list:
+            return "array"
+        if type(value) is str:
+            return "string"
+        if type(value) in (int, float):
+            return "number"
+        return "other"
+
+    properties = schema.get("properties")
+    native = set(properties) if type(properties) is dict else set()
+    envelope = {"inputs", "reason"}
+    native_direct = sum(key in native and key not in envelope for key in args)
+    unknown = sum(key not in envelope and key not in native for key in args)
+    nested = args.get("inputs")
+    nested_native = sum(key in native for key in nested) if type(nested) is dict else 0
+    return (f"inputs={kind('inputs')} reason={kind('reason')} "
+            f"native_direct={native_direct} unknown={unknown} "
+            f"nested_native={nested_native}")
+
+
 class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
     """Provider-native function selection, native host grants never broadened."""
 
@@ -246,7 +282,11 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             action, name = mapping[fn["name"]]
             if action == "invoke":
                 if set(args) != {"inputs", "reason"} or type(args["inputs"]) is not dict:
-                    raise LocalModelOutputError("native_function_inputs_shape")
+                    contract = next(spec["input_schema"] for spec in
+                                    context["host_native_tool_contracts"]
+                                    if spec["name"] == name)
+                    detail = _rejected_native_argument_layout(args, contract)
+                    raise LocalModelOutputError("native_function_inputs_shape " + detail)
                 return {"action": "invoke",
                         "arguments": {"tool": name, "inputs": args["inputs"]},
                         "reason": args["reason"]}
