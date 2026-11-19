@@ -1021,12 +1021,77 @@
       "corrected_source": "b6e341d9afb83ad4cb8bea2bf23b9115ce3995d1",
       "first_diagnostic_code_error": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390018255",
       "corrected_offline_matrix": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390763892",
-      "python_versions_passed": ["3.11", "3.12", "3.13"],
+      "python_versions_passed": [
+        "3.11",
+        "3.12",
+        "3.13"
+      ],
       "tests_per_python": 163,
       "canonical_model_rejection_code": "native_function_inputs_shape",
       "status": "OFFLINE_VALUE_FREE_ARGUMENT_DIAGNOSTICS_PASSED; EXACT_HEAD_NATIVE_CI_UNVERIFIED; REAL_MODEL_G1_FAILED",
       "change": "Strict pre-dispatch rejection preserved; only envelope type and native-field counts are reported, never provider-supplied unknown names or values.",
       "next_gate": "Inspect source-attested argument layout in a separately authorized bounded synthetic trial before changing transport; keep native permissions, consent and model-acceptance gates unchanged."
     }
+  },
+  "verified_technical_head_2026_11_19": {
+    "pr": 356,
+    "source_head": "c08ab9545261bb4f9e67b88ce4b0780135503412",
+    "merge_head": "279c05bfa55e807a6d10ba3c81f64169e0c0c522",
+    "identical_tree": "6273ba1e4c52f864885a06580852579e230a8520",
+    "main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "workflows_success": 22,
+    "workflows_observed": 22,
+    "initially_cancelled_rerun_pass": [
+      {
+        "run": 44392665565,
+        "passed_rerun_job": 135329334457,
+        "subject": "physical AV"
+      },
+      {
+        "run": 44392665778,
+        "passed_rerun_jobs": [
+          135329323319,
+          135329616233
+        ],
+        "subject": "installed unified native Blender-to-editor"
+      }
+    ],
+    "exact_installed_release": {
+      "run": 44392665838,
+      "artifact_id": 14471950430,
+      "zip_sha256": "1ed77cdbeb6951baebe74bdd073e5bcb3d3db9ca6153148760dc7e7d2ee46644",
+      "manifest_entries_sha256_checked": 24,
+      "tests_run": 1581,
+      "tests_passed": 1554,
+      "tests_skipped": 27,
+      "tests_failed": 0,
+      "tests_errors": 0,
+      "fully_decoded_movie_frames": [
+        57,
+        33,
+        24
+      ],
+      "audio_present_in_first_two": true
+    },
+    "synthetic_native_end_to_end": {
+      "run": 44392665778,
+      "artifact_id": 14497449323,
+      "zip_sha256": "974fa487b7628e3f3e5f3b0e33ca4596ca475d44ea76786cb578a3439cfc376e",
+      "manifest_entries_sha256_checked": 16,
+      "editable_native_assets": 3,
+      "native_clips": 5,
+      "decoded_first_frames": 72,
+      "decoded_revised_frames": 66,
+      "decoded_relocated_frames": 66,
+      "all_three_AAC_non_silent": true,
+      "original_and_revised_native_snapshots_distinct": true,
+      "final_and_portable_native_snapshots_identical": true,
+      "revised_and_relocated_decoded_video_and_pcm_identical": true,
+      "original_sound_sha256_matched_portable_asset": true,
+      "creative_decisions_scripted_not_neural": true
+    },
+    "original_cancelled_jobs_cause": "not independently established; retain initial negative and exact-code targeted passing rerun",
+    "real_nvidia_job": "SKIPPED in successful CI; last real model Omni #44350134767 failed before editing",
+    "acceptance": "SCOPED_TECHNICAL_NATIVE_INTEGRATION_PASS__REAL_MODEL_ARTISTIC_HUMAN_SECURITY_RELEASE_UNACCEPTED"
   }
 }
