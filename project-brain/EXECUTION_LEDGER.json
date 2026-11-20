@@ -1100,5 +1100,23 @@
     "fix": "Retain the host correction budget and rejection classification. Ask for one offered function call on the fresh turn.",
     "offline_tests_passed": 164,
     "comparable_real_model_retest": "PENDING"
+  },
+  "exact_head_technical_verification_2026_11_20": {
+    "source_sha": "2c3595597bf915a676b4bf4984de487f45b623a7",
+    "draft_pr": 356,
+    "workflow_conclusions": "22/22 SUCCESS",
+    "installed_body_run": 44776215098,
+    "installed_tests_total": 1582,
+    "installed_tests_passed": 1555,
+    "installed_tests_skipped": 27,
+    "installed_editorial_run": 44776215097,
+    "mlt_run": 44776215139,
+    "nvidia_admission_run": 44776215100,
+    "nvidia_real_model_job": "SKIPPED",
+    "post_fix_genuine_model_retest": "NOT_RUN",
+    "github_artifact_id": 14649644352,
+    "github_published_sha256": "2236b1bfcf9fc0991e9135cc49647153da03b6a09d7d4927be862939d39bdb76",
+    "artifact_independent_byte_audit": "NOT_PERFORMED",
+    "artistic_human_professional_release": "NOT_ACCEPTED"
   }
 }
