@@ -1093,5 +1093,12 @@
     "original_cancelled_jobs_cause": "not independently established; retain initial negative and exact-code targeted passing rerun",
     "real_nvidia_job": "SKIPPED in successful CI; last real model Omni #44350134767 failed before editing",
     "acceptance": "SCOPED_TECHNICAL_NATIVE_INTEGRATION_PASS__REAL_MODEL_ARTISTIC_HUMAN_SECURITY_RELEASE_UNACCEPTED"
+  },
+  "native_function_recovery": {
+    "failure_run": 44350134767,
+    "reproduced_offline": "Generic JSON-object recovery instruction reached provider-native function-call request.",
+    "fix": "Retain the host correction budget and rejection classification. Ask for one offered function call on the fresh turn.",
+    "offline_tests_passed": 164,
+    "comparable_real_model_retest": "PENDING"
   }
 }

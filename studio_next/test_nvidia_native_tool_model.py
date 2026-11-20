@@ -91,6 +91,26 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertNotIn("response_format", body)
         self.assertEqual(len(context["host_native_tool_contracts"]), 2)
 
+    def test_native_recovery_requests_one_function_call_instead_of_plain_json(self):
+        model = NvidiaNativeToolCreativeModel(system_prompt="Native test")
+        feedback = {"return_one_unambiguous_json_object": True,
+                    "reason_code": "native_function_inputs_shape",
+                    "no_native_dispatch": True,
+                    "remaining_model_output_corrections": 1}
+        context = dict(_context(), last_rejected_model_output_feedback=feedback)
+        reply = _reply(_provider_function("get_project"),
+                       json.dumps({"inputs": {}, "reason": "Inspect project"}))
+        with patch.object(model, "_open_request", return_value=reply) as request:
+            model.decide(context)
+        payload = request.call_args.args[0]
+        sent = json.loads(payload["messages"][1]["content"])["last_rejected_model_output_feedback"]
+        self.assertNotIn("return_one_unambiguous_json_object", sent)
+        self.assertTrue(sent["choose_one_offered_function_call"])
+        self.assertEqual(sent["reason_code"], feedback["reason_code"])
+        self.assertEqual(sent["remaining_model_output_corrections"], 1)
+        self.assertTrue(sent["no_native_dispatch"])
+        self.assertTrue(feedback["return_one_unambiguous_json_object"])
+
     def test_selected_indexed_tools_are_the_only_native_functions_and_search_is_available(self):
         context = _context(compact=True)
         functions, mapping = NvidiaNativeToolCreativeModel._tool_surface(context)

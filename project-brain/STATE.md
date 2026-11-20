@@ -1,10 +1,12 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
+> **Native function recovery:** The NVIDIA adapter now asks for one offered function on a fresh correction turn. Local transport, audio and controller suites passed 164 tests. A comparable genuine Omni retry is pending. [Handoff](../docs/HANDOFF.md).
+
 > **2026-11-19 verified technical checkpoint:** [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) head `c08ab9545261bb4f9e67b88ce4b0780135503412`, merge `279c05bfa55e807a6d10ba3c81f64169e0c0c522`, identical Git tree `6273ba1e4c52f864885a06580852579e230a8520`. **22/22 exact-source workflows succeeded** after two cancelled jobs were individually rerun. [Installed artifact](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44392665838/artifacts/14471950430): 24/24 hashes, 1,554 passed, 27 skipped, three decoded movies. [Native E2E](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44392665778/artifacts/14497449323): 16/16 hashes, first/revised A/V different, portable reopen preserved 3 assets/5 clips and identical relocated decoded picture/sound. **Scripted technical only**; real model, human coedit, professional and A–L release unaccepted.
 
 > **Omni integration (2026-11-19):** Real [#44350134767](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44350134767) FAILED: three malformed model tool calls rejected, zero edits/exports. Strict rejection preserved by diagnostic fix `b6e341d9`; [offline Python 3.11–3.13 #44390763892](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390763892) passed (163 tests per version) after initial RED #44390018255. Source native CI and genuine G1 acceptance remain open. [Evidence](EVIDENCE/INDEX.md).
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=0e9a460d3fdf9fc0d8f79b99fbf8cc1fcb3cefad` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=ee5226d54c65f6308fe74203658f3741bb09fcf4` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

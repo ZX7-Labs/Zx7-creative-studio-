@@ -146,6 +146,9 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
         compact = copy.deepcopy(context)
         compact.pop("host_native_tool_contracts", None)
         compact.pop("host_declared_tool_hints", None)
+        feedback = compact.get("last_rejected_model_output_feedback")
+        if isinstance(feedback, dict) and feedback.pop("return_one_unambiguous_json_object", False):
+            feedback["choose_one_offered_function_call"] = True
         return super()._messages(compact, images)
 
     @staticmethod
