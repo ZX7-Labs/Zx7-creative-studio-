@@ -149,13 +149,14 @@ class CapabilityGateway:
                         not isinstance(identity["rules"], Mapping) or
                         not 1 <= len(identity["rules"]) <= 256):
                     raise CapabilityExecutionError("Invalid native identity policy")
+                identity_grants = grants() if callable(grants) else grants
                 compiled = {}
                 try:
                     for tool_name, rules in identity["rules"].items():
                         if (not isinstance(tool_name, str) or
                                 len(tool_name) > 160 or
-                                not isinstance(grants, Mapping) or
-                                grants.get(tool_name) != "write"):
+                                not isinstance(identity_grants, Mapping) or
+                                identity_grants.get(tool_name) != "write"):
                             raise CapabilityReferenceError(
                                 "invalid_host_reference_policy")
                         compiled[tool_name] = compile_reference_rules(rules)

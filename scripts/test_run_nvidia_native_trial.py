@@ -245,6 +245,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         granted = {
             "create_project": "write", "import_asset_from_path": "write",
             "add_text_clip": "write", "save_project": "write",
+            "export_timeline": "read",
         }
         requires, effects = method(granted, fresh=True)
         self.assertEqual(

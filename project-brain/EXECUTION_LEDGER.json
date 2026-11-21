@@ -1131,5 +1131,22 @@
     "terminal_layout": "inputs=missing reason=string native_direct=0 unknown=0 nested_native=0",
     "grant_closed_at": "768eb3d870a580d0634652427c86031c68235977",
     "post_trial_feedback": "164 offline checks passed; no subsequent hosted retest"
+  },
+  "branch_integration_review": {
+    "base": "70f3f5601f8780fc37ebe8b5d8c6506d5b0e3342",
+    "ref_inventory": "EVIDENCE/branch-review-20261121.tsv",
+    "refs": 407,
+    "ancestor": 149,
+    "identical_merge_tree": 18,
+    "clean_delta": 25,
+    "conflicted": 215,
+    "selected_ports": [
+      203,
+      204,
+      218,
+      354
+    ],
+    "local_affected_tests_passed": 70,
+    "semantic_reconciliation_complete": false
   }
 }

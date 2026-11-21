@@ -140,7 +140,7 @@ def trial_machine_contracts(grants, *, fresh):
     if grants.get("create_project") != "write":
         raise ValueError("Fresh trial requires the real authorized project creator")
     return ({name: list(facts) for name, facts in prerequisites.items()
-             if name in grants},
+             if grants.get(name) == "write"},
             {"create_project": ["project_open"]})
 
 

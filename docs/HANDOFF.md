@@ -17,3 +17,11 @@ The [genuine synthetic-only Omni trial](https://github.com/ZX7-Labs/Zx7-creative
 3. Observe a human edit surviving a real collaboration session and obtain independent professional, rights and security review against the existing A–L criteria.
 
 The last paid grant covered one trial. Keep the PR draft and future provider calls separately scoped. Preserve the existing editor, host validation and export provenance. The [ledger](../project-brain/EXECUTION_LEDGER.json) and [failure register](../project-brain/EVIDENCE/FAILURE_REGISTER.md) retain exact positive and negative receipts.
+
+## Branch reconciliation
+
+All 407 remote heads compared against 70f3f560: 149 reachable, 18 three-way merges with identical result, 25 clean but different trees, 215 conflicting. These counts describe Git trees before ports. Python test-name comparisons are leads only. [Per-branch receipts](../project-brain/EVIDENCE/branch-review-20261121.tsv).
+
+Integrated the optional installed BODY asset inventory from #203/#204 with current callable grants, session read accounting and durable write checks. Ported #354's recorded audio handoff with the current capability and consent checks. Restored #218's write-only prerequisite filter in the canonical native session. Seventy affected tests passed locally. #180's historical malformed Crossref test passed unchanged against the current implementation. #283's live research path already exists in the installed editor test. Existing native, consent and independent review gates still apply.
+
+The table records related PRs by branch name. A merged PR label alone cannot establish that a later tip was integrated. Review remaining distinct source by behavior before combining it. Keep historical paid requests, experiments and explicit reversions out of normal runtime. The historical X11 helper in 5cd3c8e5 creates private display authority; the current launcher and documented external CI clients use a different authentication contract. Porting this changes client setup and needs an explicit compatibility decision.
