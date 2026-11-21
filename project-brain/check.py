@@ -71,7 +71,8 @@ def validate(root: pathlib.Path = ROOT) -> list[str]:
             continue
         maximum = (14_000 if relative == "STATE.md" else
                    240_000 if relative in ("DECISIONS.md", "EVIDENCE/INDEX.md") else
-                   160_000 if relative.startswith("../docs/") else 40_000)
+                   160_000 if relative.startswith("../docs/") else
+                   80_000 if relative == "EXECUTION_LEDGER.json" else 40_000)
         if path.stat().st_size > maximum:
             errors.append(f"too_large: {relative}")
             continue

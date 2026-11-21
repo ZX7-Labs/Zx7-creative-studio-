@@ -184,7 +184,14 @@ class NativeEditorIdentityReader:
         after = _project_state(after_object)
         # A renderer changed source/head during observation: never authorize
         # the caller's old object references on a mixed project snapshot.
-        if before != after:
+        # Pinned Velorn regenerates generatedAt on the snapshot heartbeat,
+        # even when its synchronous source-owned mutation revision is stable.
+        # A heartbeat is not an edit. ONLY the exact source-fenced writer may
+        # ignore that volatile timestamp: its live revision is checked below
+        # across both reads and synchronously again at native commit.
+        # Unfenced/legacy sources retain the conservative timestamp guard.
+        if (before[:2] != after[:2] or before[3:] != after[3:] or
+                (not self._require_live_revision and before[2] != after[2])):
             raise ValueError("native_identity_project_changed_during_read")
         live_revision = None
         if self._require_live_revision:

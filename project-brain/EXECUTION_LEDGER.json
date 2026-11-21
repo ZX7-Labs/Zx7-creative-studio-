@@ -2,19 +2,19 @@
   "schema_version": "zx7.execution-ledger.v1",
   "purpose": "Typed, source-linked snapshot of what is built, physically verified, actually failed, and still unaccepted. NOT raw action log, not a new planning spec, not automatic live status.",
   "snapshot": {
-    "observed_utc": "2026-11-15T06:25:56Z",
-    "github_main_at_audit": "11f905245a7b6cf27ecf603300342e392bab96f7",
-    "tracked_git_tree_entries": 624,
-    "tracked_markdown_at_audit": 26,
-    "branches": 397,
-    "prs_total": 344,
+    "observed_utc": "2026-11-16T03:27:48Z",
+    "github_main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "tracked_git_tree_entries": 629,
+    "tracked_markdown_at_audit": 30,
+    "branches": 403,
+    "prs_total": 350,
     "open_prs": 85,
-    "open_prs_draft": 70,
-    "open_prs_nondraft": 15,
-    "merged_prs": 220,
-    "closed_unmerged_prs": 39,
-    "workflow_runs_repository_total_observed": 8612,
-    "notes": "Counts are timestamped live inventory, not authoritative tomorrow. Refresh before writing; branch counts do not equal unfinished features. Ledger baseline was deliberately recorded before doc-restructuring PR #351; never treat this source SHA as current main after later merges."
+    "open_prs_draft": 71,
+    "open_prs_nondraft": 14,
+    "merged_prs": 224,
+    "closed_unmerged_prs": 41,
+    "workflow_runs_repository_total_observed": 9028,
+    "notes": "Dated GitHub API inventory observed 2026-11-16; 403 branch refs include historical work, not 403 active features. 30 Markdown files have explicit authority/archive roles, not 30 competing plans. PR #289 was closed as superseded after #311 merge. Active #356 remains draft/unmerged: code head 276d30ac9c648d487739bf9de06d07c98e3479a6 had 13/13 technical workflows pass; latest independent evidence-only head bde314237196070e61cbf13ea6e971330e12afc1 was not yet fully retested at this snapshot. No real model artistic acceptance. 2026-11-16 exact G1 synthetic NVIDIA failures #43875955529 and #43883369538 were newly inspected against original retained artifacts; 35/35 latest #356 checks are technical only, not artistic acceptance. Earlier dated inventory counts are not refreshed. Explicitly one owner-authorized synthetic-only NVIDIA G1 trial #43991467485 (2026-11-17) FAILED genuine A/V reviewed pair despite three decoded distinct videos; exact frame observation timestamps lacked overlap and sound PCM did not change. 48 model turns, two safe output_exists denials; post-fix retest NOT RUN and spent grant revoked. Earlier 2026-11-16 inventory counts are historical, not refreshed."
   },
   "claims_policy": {
     "fixed_requirements_source": "docs/BUILD_BLUEPRINT.md",
@@ -304,6 +304,16 @@
       "tested_code_head": "11fc1aef2de11b4790e50085039e430dcf39ef6e",
       "merged_tree": "2d0857c0d003ade1e807f8cb2f6fc45a51704988",
       "creative_acceptance": "SCRIPTED_NOT_AUTONOMOUS"
+    },
+    {
+      "id": "M-G1-SELECTED-RENDER-SNAPSHOT",
+      "kind": "technical",
+      "result": "PHYSICAL_TECHNICAL_DRAFT_UNMERGED",
+      "evidence": "Draft PR #356 code head 276d30ac9c648d487739bf9de06d07c98e3479a6: 13/13 GitHub technical workflows success, with independent synthetic native A/V artifact #14191830274 (16/16 file digests; 72/66/66 frames, complete relocatable 3-source closure and matching decoded relocated picture/sound) and installed release artifact #14190804292 (24/24 manifest digests; 1542 tests run, 1515 passed, 27 skipped, 0 failed; 57-frame 320x480 A/V film). Exact evidence and limits in EVIDENCE/INDEX. Source/custody/portability is technical, not neural creative, human coediting or professional acceptance.",
+      "prs": [
+        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356"
+      ],
+      "creative_acceptance": "NOT_PROVEN"
     }
   ],
   "failures": [
@@ -314,7 +324,7 @@
       "run": 42711402879,
       "job": 129481639892,
       "details": "Qwen3.5 4B 46 decisions; 9068 vs 8192 context and final HTTP 400; wrong-profile mostly-black output; no qualifying reviewed revision",
-      "source_or_fix": "PR #289 open/unmerged offline payload dedup; no accepted equivalent neural retest",
+      "source_or_fix": "PR #311 already merged the source-compatible model-payload context dedup from still-open historical #289 (2026-11-12, 89990723aec8abb3b5c5eee79546c57de0591631); no accepted equivalent real-model retest",
       "root_confidence": "context-overflow supported; entire creative failure not fully attributed",
       "post_fix_real_model_retest": "NOT_PASSED",
       "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879",
@@ -357,6 +367,45 @@
       "root_confidence": "exact first-run predicate unknown",
       "post_fix_real_model_retest": "NOT_APPLICABLE",
       "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43680525680",
+      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+    },
+    {
+      "id": "F-REAL-004",
+      "kind": "GENUINE_MODEL",
+      "result": "FAILED",
+      "run": 43875955529,
+      "job": 133328916078,
+      "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07fe1a84c7249df8a76f8ec83f838c96358604d2: two identical SHA/decoded 640x360 24fps 6s H264/AAC outputs with native video+audio; 5 export_delivery_mismatch pre-dispatch rejections; 48-turn budget exhaustion; no accepted review pair.",
+      "source_or_fix": "Git commit 3c4b91e814ec0bc950f68e7a1bf384e8c1535021 later exposed owner-specific native export target metadata to the model; subsequent run #43883369538 produced distinct video but failed full G1.",
+      "root_confidence": "Exact model journal and original retained synthetic artifact ZIP #14230378968 independently inspected; source-cause of entire creative failure not fully proven.",
+      "post_fix_real_model_retest": "FAILED_NO_ACCEPTED_REVIEW",
+      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43875955529",
+      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+    },
+    {
+      "id": "F-REAL-005",
+      "kind": "GENUINE_MODEL",
+      "result": "FAILED",
+      "run": 43883369538,
+      "job": 133354875086,
+      "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07487c0babc36b7eaf6bc02f3a70b8e4b2334f85: two distinct conformant decoded 640x360 24fps 6s H264/AAC files, 107/144 RGB frame hashes different, same decoded 48kHz stereo PCM; real native project and video/audio; 6 safe output_exists pre-dispatch rejections; 48 turns exhausted, reviewed A/V pair absent; no semantic hearing.",
+      "source_or_fix": "Export target metadata fix was present. Current #356 exact head 00dcfc69c3d20455bbc875d2e8eef0406c9188f2 35/35 technical checks PASS but no succeeding comparable real model trial. Next isolate source-bound review pairing/model competence before spending another authorized trial.",
+      "root_confidence": "Retained artifact #14233632889 independently downloaded, ZIP SHA256 5f393460bcb8dca0de243148e458dfba92533de96f69dc658bc457f6e3efbd95, FFprobe/FFmpeg picture/audio decoding and native JSONL journal inspected.",
+      "post_fix_real_model_retest": "NOT_PASSED",
+      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43883369538",
+      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+    },
+    {
+      "id": "F-REAL-006",
+      "kind": "GENUINE_MODEL",
+      "result": "FAILED",
+      "run": 43991467485,
+      "job": 133732842887,
+      "details": "2026-11-17 one explicitly owner-authorized synthetic-only NVIDIA Nemotron 3.5 Super VL 120B G1 trial at exact executing commit 10ef5a992acde37bd680976cb8a0a44aa35d12a6, 48 turns (46 submitted model tools), 118 host journal events, 13 model-selected native writes, 2 independently verified H264/AAC exports plus a third not verified. Three actual six-second 640x360 24fps/144-frame videos with 3 distinct RGB sequences and identical audible decoded PCM, physical first vs second 144/144 corresponding frames differ. First real model frame observation times [1,3,5] seconds versus second [0.5,2.6,4.7], no intersection, PCM unchanged: host correctly cannot certify revised A/V pair, though both cuts had full-duration numeric audio observation. Subsequent edits and third unverified output consumed budget; host_evidence_satisfied=false; artistic_quality_approved=false. Two safe output_exists pre-dispatch denials, no original owner media upload.",
+      "source_or_fix": "One-use guarded branch authorization 10ef5a992acde37bd680976cb8a0a44aa35d12a6 was revoked by 2ddef2aef87e2a0f50a27ebcc2b295b51a49b707, restoring exactly previously 35/35 CI-green source tree 1c9cfdd33d253b1a046a49d483671a1dcf044a4f. Offline TDD candidate in this PR surfaces earlier source-verified model-selected picture sample timestamps to the model for a comparable read; does not relax actual reviewed_render_pair acceptance, automatically dispatch reads, choose art or grant another paid trial.",
+      "root_confidence": "HIGH for incomparable sampled timestamps as immediate A/V-pair rejection: original model journal, pinned source state machine, separately independently decoded physical synthetic ZIP #14287639311 SHA256 93480cd1c2dbc0468506ffc32d6d78b03ecbb156fd67c2c59594692101906ede. No claim model would finish after feedback fix; professional/audio-semantics untested.",
+      "post_fix_real_model_retest": "NOT_RUN_GRANT_SPENT",
+      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43991467485",
       "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
     }
   ],
@@ -451,13 +500,6 @@
   ],
   "open_prs_needing_overlap_review": [
     {
-      "number": 289,
-      "head": "6a2e0344f3e49c02249dcdb14c572277601bc12b",
-      "status": "OPEN_NON_DRAFT",
-      "meaning": "Qwen context dedup offline fix; no real model success",
-      "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/289"
-    },
-    {
       "number": 288,
       "head": "cd6ff58b7882e6d961af51169d6976e93cd47060",
       "status": "OPEN_DRAFT",
@@ -523,6 +565,588 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Inspect PR #289 overlap and source-current real-model controller/observation path, then remove the highest-value actual G1 acceptance blocker without repeating existing physical fixtures. Separate authorization needed for paid or private-model inference."
+    "next_action": "Inspect the shape of synthetic Omni arguments with field-name/type-only diagnostics and compare a directly typed native signature against the existing inputs/reason envelope. Keep strict host validation and bounded recovery. A genuine G1 pass, human co-edit and independent professional evaluation are open."
+  },
+  "exact_head_checkpoint_2026_11_17": {
+    "pr": 356,
+    "source_head": "fa676757dffab425993502ce9317c3de2886244f",
+    "main_at_inspection": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "synthetic_merge": "051130b3d98f1b851dadd9db0ec37bfecc986f92",
+    "shared_tree": "fe3e0c4473e4dc0d2d8e55908284b26835fa99e7",
+    "exact_head_github_checks": "35/35 SUCCESS",
+    "installed_artifact": {
+      "run_id": 43994896374,
+      "artifact_id": 14290715802,
+      "zip_sha256": "9cf40e5e985ab167d7370002ea2e65f7f8edeb2eae3452d2aeedb081e37fabcd",
+      "manifest_hashes": "24/24",
+      "tests": {
+        "run": 1563,
+        "passed": 1536,
+        "skipped": 27,
+        "failed": 0
+      },
+      "independent_wheel_tests": "144/144 eligible",
+      "physical_media": "3/3 decoded; CGI video-only"
+    },
+    "real_model": {
+      "run_id": 43991467485,
+      "artifact_id": 14287639311,
+      "zip_sha256": "93480cd1c2dbc0468506ffc32d6d78b03ecbb156fd67c2c59594692101906ede",
+      "outcome": "FAILED",
+      "before_after_picture_times": "disjoint",
+      "audio_pcm": "unchanged",
+      "exact_source_journal_hint_replay": "PASS fail-closed",
+      "post_fix_paid_retest": "NOT_RUN"
+    },
+    "technical_scope": "VERIFIED",
+    "artistic_and_a_l": "NOT_ACCEPTED",
+    "paid_or_private_egress_consent": "REQUIRES_NEW_PURPOSE_SPECIFIC_APPROVAL",
+    "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356#issuecomment-6937688565",
+    "note": "Latest checkpoint is a dated independent verification of the source-changing head; if later commits are docs-only do not claim their exact heads have the same Git checks."
+  },
+  "owner_studio_inventory_2026_11_17": {
+    "pr": 356,
+    "source_parent": "6b73899854a4b6a5fba32cb31abcba9a52592c75",
+    "changed_head_status": "EXACT_SOURCE_HEAD_GITHUB_36_OF_36_SUCCESS",
+    "feature": "Opt-in zx7-studio doctor --installed-body-tools uses same actual installed BODY executable catalog; source-neutral capability inventory, no new engine",
+    "files": [
+      "studio_next/studio_cli.py",
+      "studio_next/body_integration.py",
+      "studio_next/media_vault.py",
+      "studio_next/test_studio_cli.py",
+      "studio_next/test_media_vault.py"
+    ],
+    "local_red": "3 CLI missing-feature cases and redirected vault-root case fail before fix",
+    "local_green": {
+      "total": 72,
+      "passed": 72,
+      "failed": 0,
+      "runner": "Python 3.13; inert test-only MCP import shim (no actual editor or model dispatch)"
+    },
+    "security": "No local vault/SQLite created by read-only catalog inspection; rejects directly symlinked source vault root; default runtime vault initialization unchanged; hosted BODY inventory not permitted",
+    "acceptance": "TECHNICAL_CANDIDATE_ONLY_NOT_G1_OR_A_L_ACCEPTED",
+    "next": "First inspect changed-head exact CI; then capable Brain source-bound real picture and semantic sound native first/revision and human/pro review",
+    "source_sha": "1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de",
+    "exact_head_checks": {
+      "success": 36,
+      "total": 36
+    },
+    "provenance": "https://github.com/ZX7-Labs/Zx7-creative-studio-/commit/1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de"
+  },
+  "body_gateway_read_only_discovery_2026_11_17": {
+    "parent": "1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de",
+    "pr": 356,
+    "status": "LOCAL_TDD_GREEN_CHANGED_HEAD_CI_PENDING",
+    "problem": "Real installed BODY tool list and host grant refresh created MediaVault/SQLite without an operation; read-only tool discovery affected actual shared Brain–BODY session, not just doctor",
+    "red": "2 genuine real InstalledBodyAdapter and connect_installed_zx7_body discovery tests FAILED on exact previous package source, showing unexpected /vault directory",
+    "green": {
+      "local_tests": 107,
+      "passed": 107,
+      "failed": 0,
+      "skipped": 0,
+      "source_blob": "488376fa857790505948fa43aee0916b4d769f63",
+      "test_blob": "2f3b1649190165b6970c518412c5e60ac1fe3cc3",
+      "environment": "Python 3.13, installed wheel at parent source, inert test-only MCP import shim, no real editor/model requests"
+    },
+    "changed_source": [
+      "studio_next/body_capability_adapter.py",
+      "studio_next/test_body_capability_adapter.py"
+    ],
+    "behavior": "list_tools and trusted_grants call existing catalog with initialize_vault=False; call_tool retains normal initialized-vault path for actual operations; no new backend, scheduler or data model",
+    "exact_head_ci": "35_OF_36_SUCCESS_ONE_NATIVE_SCENE_FAILURE",
+    "acceptance": "SAFE_LOCAL_INTEGRATION_ONLY_NOT_G1_OR_FULL_A_L",
+    "source_head": "a27f22a3edcc5fed68fdbc1c1da3cdbd7ef9b470",
+    "ci_failure_scope": "External pinned pre-save-authority native scene source, unrelated to read-only installed BODY discovery; failure preserved, do not claim exact full check pass"
+  },
+  "ci_failures_and_retests": [
+    {
+      "run_id": 44018376571,
+      "exact_source_sha": "1c5b46e768be7b67c25ef8da9a6c1e8deb9e73de",
+      "job_first": 133821797690,
+      "first_status": "FAILURE",
+      "causal_location": "engines/velorn/mcp-e2e.py:176 native second saved project did not converge to acknowledged modified revision in 15s",
+      "targeted_rerun_job": 133823050037,
+      "rerun_status": "SUCCESS",
+      "root_cause": "UNKNOWN_NOT_PROVEN_FLAKY",
+      "source_file_changed_by_inventory_commit": false,
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44018376571",
+      "warning": "Retain original fail; rerun pass does not establish absence of race"
+    },
+    {
+      "run_id": 44079766155,
+      "source_head": "a27f22a3edcc5fed68fdbc1c1da3cdbd7ef9b470",
+      "job_failed": 134027387589,
+      "status": "FAILURE",
+      "site": "mcp-e2e.py:1853 -> render_and_verify:176",
+      "error": "Native saved document never converged to acknowledged revision",
+      "root_cause": "LEGACY_SCENE_SOURCE_OMITS_LATER_SAVE_TIMESTAMP_AND_ORDERING_FIX; PHYSICAL_COMPARABLE_RETEST_REQUIRED",
+      "future_comparable_test": "Run corrected same real scene/X11/native A/V workflow on source-pinned later save-order revision",
+      "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44079766155"
+    },
+    {
+      "run_id": 44099891001,
+      "exact_source_sha": "471af1ee1e9c83da1168be79f0700996e3042d30",
+      "status": "FAILURE",
+      "job_id": 134096752072,
+      "failure": "offline-continuity-integrity: too_large: EXECUTION_LEDGER.json",
+      "root_cause": "40_000-byte generic document cap applied to growing typed source-linked execution evidence (41+ KB); no schema/semantic failure established in this run",
+      "action": "Add separate bounded 80_000-byte limit for typed ledger; keep STATE 14_000, other files original limits; add RED/GREEN-style synthetic 40k-80k growth and >80k rejection regression",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44099891001",
+      "corrective_code_check": "PREPARED; EXACT_NEW_HEAD_CI_PENDING",
+      "effect_on_creative_workflow": "NONE; documentation validator only; does not certify runtime or artistic acceptance"
+    },
+    {
+      "run_id": 44119756861,
+      "exact_source_sha": "bc1f74f7b90df09e4efdf2948cf7a8a76eea50b7",
+      "job_first": 134168493469,
+      "first_status": "FAILURE",
+      "causal_location": "engines/velorn/mcp-e2e.py:562 through NativeEditorIdentityReader pre-dispatch for set_clip_keyframes",
+      "original_error_code": "native_identity_project_changed_during_read",
+      "native_write_dispatched": false,
+      "source_mechanism": "Pinned upstream buildMcpSnapshot() regenerates generatedAt on heartbeat even when source-owned zx7NativeRevision is unchanged. Existing reader compared generatedAt even for a source-fenced CAS writer. The precise field that changed in this particular failed CI wasn't logged, so original causal attribution remains a hypothesis.",
+      "corrective_scope": "For exact source-fenced live revision ONLY, stable identity, timeline/counts and stable validated zx7NativeRevision determine read consistency. Legacy/unfenced reads still fail on generatedAt drift. No write replay or bypass of synchronous renderer revision fence.",
+      "tests_prepared": "Heartbeat-only with stable live token accepted, changed live token refused, missing token refused, legacy fallback remains strict; exact source CI pending.",
+      "targeted_same_source_rerun": {
+        "status": "SUCCESS",
+        "run_id": 44119756861,
+        "job_id": 134170794631,
+        "source_sha": "bc1f74f7b90df09e4efdf2948cf7a8a76eea50b7",
+        "conclusion": "Original first attempt FAILED, exact same-code targeted rerun PASS, root cause remains UNKNOWN; do NOT classify as proven flaky."
+      },
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44119756861",
+      "root_confidence": "UNDERLYING_VOLATILE_GENERATED_AT_SOURCE_CONFIRMED; SPECIFIC_FAILED_RUN_CAUSE_NOT_FULLY_PROVEN"
+    },
+    {
+      "run_id": 44122005810,
+      "first_job_id": 134175592452,
+      "source_sha": "b2c9a1446beb7b3b29ed865337e74136a5400b5c",
+      "first_status": "FAILURE",
+      "site": "engines/velorn/mcp-e2e.py:176, first render_and_verify after save",
+      "observed": "Native saved document never converged to acknowledged revision for pinned supported desktop_revision 58361e3810e8f5c459bf656d14a0832dbc0c7e7a.",
+      "same_source_rerun_job": 134179442943,
+      "same_source_rerun": "SUCCESS",
+      "root_source": "Pinned upstream fileSystem.saveProject computes disk modified from internal Date, while projectStore.saveProject computes and returns a separate prior Date; source-level defect predates collab_save_revision. Exact failing run did not log both timestamp values.",
+      "safe_existing_fix": "engines/velorn/native-save-timestamp.patch already source-pinned and physically exercised in current save-authority CI; do not replace default supported desktop installer silently.",
+      "status": "LEGACY_SUPPORTED_PROFILE_RELEASE_UNVERIFIED",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122005810"
+    },
+    {
+      "run_id": 44122006732,
+      "first_job_id": 134176199462,
+      "source_sha": "b2c9a1446beb7b3b29ed865337e74136a5400b5c",
+      "first_status": "FAILURE",
+      "site": "engines/velorn/mcp-e2e.py:1432 baseline render_and_verify after native save",
+      "observed": "Native saved document never converged to acknowledged revision on historical collab_editorial_revision 7df0aef57c5c3a22621d75eaced1eaa17005533e.",
+      "root_source": "This pinned editorial variant predates native-save-timestamp.patch, which corrects separate persisted and acknowledged modified timestamp; actual mismatch values not logged.",
+      "safe_existing_fix": "Later collab_save_revision 03b03c5d252950b0e7345449720e6685ec00e596, save_order d5b712ccc510f5ca703848ee1e5d854ce44b423c and loss_aware_extract f34141851c4db5228962984e31475e61a7faa647 reuse the reviewed fix and are tested separately.",
+      "status": "HISTORICAL_PROFILE_FAILED_NATIVE_PHYSICAL_CI_UNRESOLVED",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122006732"
+    },
+    {
+      "run_id": 44218675250,
+      "job_id": 134514813617,
+      "source_sha": "2bb473dd2e169d1b4d1bf44a84d38d0645615b7e",
+      "first_status": "FAILURE",
+      "location": "project-brain/test_check.py:252 synthetic typed ledger fixture",
+      "exact_error": "AssertionError: 80147 not less than 80000",
+      "root_cause": "The test appended 26,000 bytes to a growing legitimate ledger. The fixture itself exceeded the 80KB cap; the real canonical file and check.py validation had passed, and 15/16 other adversarial tests passed.",
+      "scope": "Replace fixture's constant 26KB addition with bounded adaptive padding; both existing >40KB positive and >80KB rejection assertions remain. Do not relax checker 80KB cap.",
+      "status": "CODE_AND_TEST_FIX_PREPARED_EXACT_NEW_HEAD_CI_PENDING",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44218675250",
+      "creative_impact": "NONE"
+    },
+    {
+      "run_id": 44218675449,
+      "job_id": 134514814346,
+      "source_sha": "2bb473dd2e169d1b4d1bf44a84d38d0645615b7e",
+      "first_status": "CANCELLED",
+      "location": "MLT renderer CI: install open-source native editor and physical decoder",
+      "observed": "20-minute GitHub job timeout while apt downloaded Ubuntu packages from regional us-east-2.ec2.archive.ubuntu.com, including optional pocketsphinx-en-us; native tests not reached.",
+      "scope": "Use same official Ubuntu mirror that helped 4 other previously cancelled workflows to succeed; request only mandatory packages via --no-install-recommends. No package/test/timeout/engine/product changes.",
+      "status": "CI_ENVIRONMENT_FIX_PREPARED_EXACT_NEW_HEAD_CI_PENDING",
+      "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44218675449",
+      "creative_impact": "NONE"
+    }
+  ],
+  "native_scene_save_convergence_ci_2026_11_17": {
+    "previous_native_scene_variant": "02e95d36ab140991d4dbd663db571778b33befd0",
+    "later_source_accepted_by_scene_verifier": "d5b712ccc510f5ca703848ee1e5d854ce44b423c",
+    "repeated_real_failure_runs": [
+      44018376571,
+      44079766155
+    ],
+    "new_failed_job": 134027387589,
+    "original_failure_site": "engines/velorn/mcp-e2e.py:176; first prior run at 788, repeated run at 1853",
+    "evidence": "Earlier scene-only installed workflow excluded already reviewed native-save-timestamp.patch and native-save-ordering.patch; save_project acknowledged modified values can disagree with source file. Prior save patch explicitly reconciles persisted timestamp to acknowledged native UI revision.",
+    "narrow_fix": "Retarget existing native scene CI workflow to existing pinned save-order descendant; retain real Electron/X11, exact source SHA, source closure, GUI conflicts and renderer tests. No production source authority expanded and no CI skipped.",
+    "corrected_workflow": ".github/workflows/zx7-native-scene-candidate.yml",
+    "status": "SCOPED_NATIVE_SCENE_REAL_PHYSICAL_PASS",
+    "new_pass": "PASS_ELECTRON_X11_SAVE_ACK_FILE_TIMESTAMP_GUI_AV_REOPEN_SIGKILL_RECOVERY",
+    "causal_confidence": "SOURCE_CODE_MECHANISM_PROVEN; THE TWO FAILED LIVE RUNS DID NOT CONTAIN PER-SAVE_TIMESTAMP_DIAGNOSTICS",
+    "product": "G1_ARTISTIC_AND_HUMAN_NOT_ACCEPTED",
+    "exact_source_head": "d32d187eea6c078e40b3997cd4dd0115ced917c5",
+    "workflow_run": 44081413347,
+    "installed_job": 134033406399,
+    "proof_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44081413347/job/134033406399",
+    "remaining": "not genuine AI-authored art, independent human usability, semantic hearing, or full A-L"
+  },
+  "latest_ci_checkpoint": {
+    "source": "2bb473dd2e169d1b4d1bf44a84d38d0645615b7e",
+    "observed_date": "2026-11-18 IST",
+    "checks_observed": 22,
+    "passed": 20,
+    "failed": 1,
+    "cancelled": 1,
+    "context": "Four prior mirror environment changes reached 20 PASS on same head. Offline Project Brain validator itself PASS but its test fixture FAIL 80147>80000; native MLT 20-min apt timeout CANCELLED before running tests. Other original test/code remained untouched. New exact-head CI pending after narrowly scoped corrections.",
+    "previous_complete_head": "6128804c610674af32e8a02000fd4fdf13449032",
+    "previous_complete_head_passed": 22,
+    "creativity_release_accepted": false
+  },
+  "indexed_brain_verified_wav_affordance_2026_11_17": {
+    "parent_source_head": "80e395ef348df28edbaae81eb48a1bf48f0f74f8",
+    "implementation_status": "EXACT_BLOB_TDD_GREEN_NEW_SOURCE_CI_PENDING",
+    "scope": "Already implemented host-bound source-verified WAV reader selectable for capable, permitted native indexed Brain after actual export verification; no auto audio fetch or model decision",
+    "controller_blob": "8f04a55a6a5bdaa9f0bfbb3de1bb888a1ee09871",
+    "test_blob": "2fc3151e35c28f5af872ae973ed275e5f9b1c4a9",
+    "red": "New source-verified raw WAV affordance missing in context and indexed selectable list; additionally explicit Omni WAV egress disabled case failed prior to consent guard.",
+    "green": {
+      "targeted_cases": "7 capability, grant, source and prior-observation scenarios",
+      "offline_eligible_tests": 174,
+      "passed": 174,
+      "failed": 0,
+      "excluded_repository_only_tests": 3,
+      "exclusion_reason": "Installed release wheel does not include scripts/run_native_model_trial.py; full repo CI required",
+      "environment": "Python 3.13, installed exact code wheel, inert MCP import shim, no actual model/server calls"
+    },
+    "safety": "Only native read tool pre-existing in exact runtime AND host grant, verified export in current journal, callable decide_with_audio and explicit Omni consent when defined. No unsolicited model/owner source transport; provider still validates binary source timing and consent.",
+    "followup": "GitHub code-head CI and independently competent actual neural visual+audio creative trial NOT RUN",
+    "artistic_acceptance": "NOT_ACCEPTED",
+    "owner_private_paid_permission": "NOT_GRANTED",
+    "source_code_head": "5e040ff256ce638869d74dc7acd08114003da9ca",
+    "source_check_status_at_candidate": "34_OF_36_SUCCESS_TWO_RUNNING"
+  },
+  "explicit_model_wav_transport_gate_2026_11_17": {
+    "parent_head": "5e040ff256ce638869d74dc7acd08114003da9ca",
+    "pr": 356,
+    "status": "PREPARED_LOCAL_RED_GREEN_NEW_SOURCE_CI_PENDING",
+    "original_problem": "Standard visual-only NvidiaNativeToolCreativeModel inherits callable decide_with_audio from NvidiaCreativeModel, but inherited implementation explicitly raises no reviewed original-WAV contract. New verified WAV tool frontier incorrectly offered this incapable model because callable() returned true and consent attribute was absent, defaulting true.",
+    "reproduced_negative": "Actual visual-only NvidiaNativeToolCreativeModel receives false verified WAV hint in a host-granted, actual-export-sha-scoped, read-only controller fixture; RED failed with unexpected raw tool in selectable_native_tools.",
+    "source_blobs": {
+      "studio_next/providers.py": "ce00ef2f790141367832c64cb4934a7fa233cd81",
+      "studio_next/nvidia_model.py": "b25c08d428a9fb91ceaa1e6692adb54b6b08a346",
+      "studio_next/nvidia_native_tool_model.py": "9b171e617b49960fe3fcb97f0ceaeac443ae9b58",
+      "studio_next/native_creative_control.py": "1b067cabe278cdbe155396013effda190401a382",
+      "studio_next/test_native_creative_control.py": "11d09b288e6103068fb639d1c7df7ea202f1a7cc",
+      "studio_next/test_native_audio_model_input.py": "b87d1a761afcb6d06b23824b81461b08f8452a72"
+    },
+    "gate": "Model adapter must explicitly declare supports_source_bound_wav_input=True and provide callable decide_with_audio. NVIDIA native visual adapter False, Omni exact model True but still requires allow_original_audio_upload=True, local JSON model adapter True (transport, NOT proven server semantic competence); missing or unreviewed adapters False. Original host-granted native read and verified export SHA still required.",
+    "red_green_local": {
+      "one_failed_before_and_passed_after": "actual installed NVIDIA subclass inherited unsupported WAV stub",
+      "other_real_adapter_variants": "unconsented Omni false; consented exact-model Omni true; local native structured audio transport true",
+      "eligible_tests_run": 165,
+      "passed": 165,
+      "failed": 0,
+      "errors": 0,
+      "excluded_checkout_only": 3,
+      "environment": "Python 3.13, exact installed wheel source patched with current branch code, inert MCP import-only shim; no native/model/cloud calls; 3 checkout-only scripts not shipped in wheel",
+      "independent_real_loopback_http_test": "PASS; actual localhost TCP JSON-Schema response + SHA-bound original binary WAV input; synthetic fixture only, no real neural hearing or cloud."
+    },
+    "exact_head_ci": "PENDING",
+    "actual_semantic_hearing": "NOT_EVALUATED",
+    "owner_paid_private_consent": "NO_NEW_PURPOSE_SPECIFIC_APPROVAL"
+  },
+  "matching_native_av_review_frontier_2026_11_17": {
+    "source_parent": "472a627dbbb02334d8059c8e4febe5e6ae37bb2d",
+    "originating_failure_run": 43991467485,
+    "status": "EXACT_HEAD_OFFLINE_REGRESSION_CI_PASSED_NOT_NEURAL",
+    "defect": "A real first and revised A/V export can each be physically verified and have genuine timed picture observations, but the indexed controller only boosts an observer if no current frame was observed. Disjoint requested sample seconds then leave a same-time follow-up read buried behind another catalog search.",
+    "change": "When current trust-bound A/V pairing supplies original validated reference seconds and installed TIMED_FRAMES is truly host-granted READ, promote only that existing native read into the indexed choice frontier. No native dispatch, model choice, permission change, extra engine, status waiver or acceptance bypass.",
+    "regression": "Three scripted receipt cases: disjoint verified samples exposes only installed same-time read; already comparable pair and post-write invalidation do not. Strict reviewed A/V proof remains unchanged.",
+    "caveat": "Real neural outcome, semantic listening, original independent creative revision and professional acceptance remain UNVERIFIED. No paid NVIDIA inference or private egress.",
+    "code_ci": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44122005832"
+  },
+  "native_live_revision_vs_volatile_snapshot_2026_11_17": {
+    "parent_head": "bc1f74f7b90df09e4efdf2948cf7a8a76eea50b7",
+    "status": "SOURCE_AND_TEST_VERIFIED_SCOPED_CI_WITH_OTHER_NATIVE_LEGACY_PROFILE_FAILURES",
+    "observed_ci_run": 44119756861,
+    "failed_job": 134168493469,
+    "upstream_source": "VelornLabs/velorn b3c02adbd5c0779feb8abf34978299e9502cc0e7 src/services/mcpSnapshot.js; ZX7 pinned native-live-revision.patch",
+    "objective": "Refuse actual human/model edits during identity admission, while allowing harmless publisher heartbeat when native mutation token is unchanged",
+    "remediation": "Do not remove or auto-retry the host CAS; compare stable identity and counts, then exact native revision on source-fenced paths. Keep non-fenced generatedAt equality as before.",
+    "proof": "Two independent negative tests for live revision change and missing token, and one strict legacy case. Fresh exact-head installed Electron/FFmpeg regression required. Same-code rerun installed job 134170794631 PASSED; original failing job 134168493469 is retained. Exact-head revision evidence workflow #44122005832 (3.11/3.12/3.13) PASS; independent installed saver/atomic range workflows #44122005619/#44122005764 PASS. Different legacy native profile save timestamp failures separately unresolved.",
+    "authorization": "No hosted model calls, private media egress, third-party source rewrite or new architecture."
+  },
+  "exact_head_ci_2026_11_17_b2c9": {
+    "source_sha": "b2c9a1446beb7b3b29ed865337e74136a5400b5c",
+    "pr": 356,
+    "observed": "2026-11-17",
+    "exact_head_workflows": 22,
+    "success": 19,
+    "confirmed_failures": 1,
+    "unfinished": 2,
+    "original_initial_failed_then_same_source_rerun_succeeded": "workflow 44122005810, jobs 134175592452 FAIL / 134179442943 PASS; retain original negative",
+    "distinct_failed_legacy_workflow": "44122006732, job 134176199462",
+    "source_save_timestamp_authority_succeeded": "44122005619",
+    "native_atomic_range_real_editor_succeeded": "44122005764",
+    "brain_native_revision_offline_succeeded": "44122005832",
+    "canonical_brain_integrity_succeeded": "44122005928",
+    "other_tests": "19 successful latest recorded workflow conclusions include offline, physical and source checks; no creative/artistic acceptance.",
+    "source_tracked_mutation": "No additional runtime rewrite justified without independent review of legacy default support and exact first-run source discrepancy",
+    "status": "RELEASE_NO_GO; 22/22 NOT GREEN; NO A-L ACCEPTED"
+  },
+  "editorial_installer_source_parity_2026_11_17": {
+    "parent": "d5f021ed151539778a42a03815162501e8418127",
+    "old_failing_run": 44122006732,
+    "old_failing_job": 134176199462,
+    "status": "SOURCE_CI_AND_REGRESSION_PREPARED_EXACT_NEW_HEAD_PHYSICAL_CI_PENDING",
+    "issue": "Old editorial CI tested collab_editorial_revision 7df0aef57c5c3a22621d75eaced1eaa17005533e although actual owner --editorial-collaboration installer uses collab_save_order_revision d5b712ccc510f5ca703848ee1e5d854ce44b423c.",
+    "change": "Existing Electron editorial GUI/AI co-edit, original A/V, crash and save authority full workflow now prepares the exact currently owner-installed pinned source via prepare-native-save-order-candidate.sh and checks that expected SHA; new static regression protects installer/CI source pin parity.",
+    "constraints": "Original legacy CI failure retained; never weaken saved-file physical comparison, alter installed stable default, run paid model or infer artistic quality from source CI. New exact-head CI pending."
+  },
+  "whole_system_durable_media_witness_2026_11_18": {
+    "source_parent": "6128804c610674af32e8a02000fd4fdf13449032",
+    "scope": "Shared BODY durable media recovery and delivery across all A-L media-producing domains, not a scripted creative demo",
+    "status": "OLD_PREDICATE_RED_REPRODUCED; SOURCE_AND_REGRESSION_PREPARED_NEW_HEAD_CI_PENDING",
+    "defect": "BODY _witness persists physical movie width and height but _verify_witness validates only sha256, duration and audio presence; fabricated receipt width/height accepted despite a genuine file digest.",
+    "change": "Reprobe stored movie and check width+height alongside current duration, audio and SHA-256; missing or malformed movie metadata fails closed without write/retry.",
+    "evidence": "Standalone exact legacy predicate reproduces forged 1px width accepted for 1280px physical picture. New studio_next/test_body_integration.py regression checks width, height, duration, sound, missing malformed keys and SHA tamper. New exact-head CI pending.",
+    "limitations": "No claim of model creativity, independent audio/video semantics, human editing, rights or A-L professional completion."
+  },
+  "ci_runner_mirror_2026_11_18": {
+    "prior_source": "5f39a1eca5311e80f0b1e010f42b1bc7a351899d",
+    "prior_exact_head": {
+      "workflows": 22,
+      "success": 18,
+      "cancelled": 4
+    },
+    "failed_to_run": [
+      {
+        "run": 44205389876,
+        "job": 134469882432,
+        "kind": "original source custody",
+        "timeout_min": 12
+      },
+      {
+        "run": 44205390599,
+        "job": 134469884804,
+        "kind": "python311 original WAV",
+        "timeout_min": 12
+      },
+      {
+        "run": 44205390244,
+        "job": 134469883095,
+        "kind": "MLT whole-app fidelity",
+        "timeout_min": 40
+      },
+      {
+        "run": 44205389818,
+        "jobs": [
+          134469881729,
+          134483317203
+        ],
+        "kind": "separately installed full BODY desktop/wheel/crash",
+        "timeout_min": 25
+      }
+    ],
+    "observed": "GitHub Ubuntu24 runner regional us-east-2.ec2.archive.ubuntu.com downloads did not finish before job timeouts, no cancelled job application tests executed. Root network cause unknown.",
+    "change": "CI ONLY: in four affected existing workflows prefer Ubuntu's official https://archive.ubuntu.com/ubuntu via runner apt-mirrors.txt; source, dependency list, accepted tests, limits, grants unchanged.",
+    "exact_corrected_head_status": "PENDING",
+    "no_acceptance": "No genuine neural creative artwork, human-verified co-edit, independent A-L or release acceptance; last real model trial remains failed."
+  },
+  "ci_source_native_ffmpeg_environment_2026_11_18": {
+    "source_head": "135bd501412609a6647c0a89c857b3bc546297e9",
+    "workflow_id": 44267906098,
+    "job_id": 134676909972,
+    "first_observation": "CANCELLED after 15-minute job limit while unmodified source-and-native-project step apt installed ffmpeg; no source/native application tests ran.",
+    "evidence_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44267906098",
+    "precise_trigger": "runner used us-east-2.ec2.archive.ubuntu.com and fetched recommended pocketsphinx-en-us (27.4 MB) after many FFmpeg packages; already passing sibling python311-original-wav job uses official Ubuntu mirror + --no-install-recommends ffmpeg.",
+    "patch_scope": "Only pre-existing source-and-native-project apt install line in same workflow: official Ubuntu mirror list and no-install-recommends ffmpeg. All test cases, native code, media/rights rules, concurrency, timeout, packages otherwise unchanged.",
+    "status": "CORRECTED_EXACT_HEAD_PASS",
+    "caution": "Original cancellation occurred before application tests. The corrected source/native gate passed; genuine G1 artistic acceptance remains open."
+  },
+  "verified_technical_head_2026_11_18": {
+    "pr": 356,
+    "source_head": "2cd9c149504bfe24663fe52608a832c974d95083",
+    "synthetic_merge": "7709c4737b1413ed2e64c090ae7983d4ee6cb25f",
+    "shared_tree": "0fcc63716be66ea57e90b98ce8aced56fab7f3de",
+    "main_at_inspection": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "workflows_passed": 22,
+    "workflows_observed": 22,
+    "source_native_run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901079",
+    "source_native_job": 134686954161,
+    "installed_artifact": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901045/artifacts/14413716263",
+    "installed_zip_sha256": "790dd774f7376cf6f7c76de649d89fd8aeb50a511473a46375ce227876658550",
+    "manifest_hashes_verified": 24,
+    "tests_run": 1578,
+    "tests_passed": 1551,
+    "tests_skipped": 27,
+    "tests_failed": 0,
+    "tests_errors": 0,
+    "locally_decoded_movies": 3,
+    "native_60s_artifact": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901172/artifacts/14412771635",
+    "nvidia_run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44270901285",
+    "nvidia_real_model_job": "SKIPPED",
+    "release_accepted": false
+  },
+  "omni_synthetic_trial_20261118": {
+    "source": "f09521694d4d8658a065b990157c67dd9e1fc4dd",
+    "run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44342694162",
+    "artifact": 14446026819,
+    "sha256": "6fd6d349b7e73d415ec0750c9f69e857f578475db4b69a8702edbb96ca6ff0e5",
+    "result": "FAILED_PROVIDER_HTTP_400",
+    "turn": 0,
+    "model_edits": 0,
+    "exports": 0,
+    "scope": "Generated synthetic media only",
+    "trigger_revoked": "56d748cc9275e7cdf152852694c179f32bd7d767",
+    "indexed_trial": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44347011076",
+    "indexed_source": "ce072a92eee60041516c1e67854d47f6ba4703db",
+    "indexed_artifact": 14448171074,
+    "indexed_zip_sha256": "f9f9f93194643d15b2e695a1911ae2d79bbace6c0f04439bdd2bb5c82175ba3d",
+    "indexed_result": "One acknowledged project creation. HTTP 400 at turn 2 after A/V window search. No export.",
+    "minimal_probe": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44346676472",
+    "schema_probe": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44349699051",
+    "schema_result": "Actual native A/V window declaration with uniqueItems: required 400, auto 200 with tool call. Removing uniqueItems: required 200. Removing exclusiveMinimum alone: required 400.",
+    "correction": "Omni uses auto on wire with the full schema. Host still requires exactly one granted structured call. WAV pair verification requires a subsequent returned model decision for each reviewed export. Focused tests: 63 pass.",
+    "post_schema_fix_trial": {
+      "run": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44350134767",
+      "source": "e44bb2248689457cc4b390015f126cb5e29ff0ae",
+      "integration_source": "48bd5545bbb47784519c2070b2f8b7b24a87a836",
+      "artifact": 14447619853,
+      "zip_sha256": "53d0abad45f17483049c16eefa9fe48e519047448c64e06a68e3c3567a71e137",
+      "result": "FAILED_MODEL_ARGUMENT_SHAPE",
+      "observed": "Omni returned three malformed native tool argument envelopes (turns 0–2). The host rejected each before native dispatch. Zero model edits, exports or WAV observations. The model response passed provider transport; the exact malformed arguments are redacted. Paired creative revision remains unverified."
+    },
+    "offline_argument_shape_diagnostics_2026_11_19": {
+      "corrected_source": "b6e341d9afb83ad4cb8bea2bf23b9115ce3995d1",
+      "first_diagnostic_code_error": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390018255",
+      "corrected_offline_matrix": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390763892",
+      "python_versions_passed": [
+        "3.11",
+        "3.12",
+        "3.13"
+      ],
+      "tests_per_python": 163,
+      "canonical_model_rejection_code": "native_function_inputs_shape",
+      "status": "OFFLINE_VALUE_FREE_ARGUMENT_DIAGNOSTICS_PASSED; EXACT_HEAD_NATIVE_CI_UNVERIFIED; REAL_MODEL_G1_FAILED",
+      "change": "Strict pre-dispatch rejection preserved; only envelope type and native-field counts are reported, never provider-supplied unknown names or values.",
+      "next_gate": "Inspect source-attested argument layout in a separately authorized bounded synthetic trial before changing transport; keep native permissions, consent and model-acceptance gates unchanged."
+    }
+  },
+  "verified_technical_head_2026_11_19": {
+    "pr": 356,
+    "source_head": "c08ab9545261bb4f9e67b88ce4b0780135503412",
+    "merge_head": "279c05bfa55e807a6d10ba3c81f64169e0c0c522",
+    "identical_tree": "6273ba1e4c52f864885a06580852579e230a8520",
+    "main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "workflows_success": 22,
+    "workflows_observed": 22,
+    "initially_cancelled_rerun_pass": [
+      {
+        "run": 44392665565,
+        "passed_rerun_job": 135329334457,
+        "subject": "physical AV"
+      },
+      {
+        "run": 44392665778,
+        "passed_rerun_jobs": [
+          135329323319,
+          135329616233
+        ],
+        "subject": "installed unified native Blender-to-editor"
+      }
+    ],
+    "exact_installed_release": {
+      "run": 44392665838,
+      "artifact_id": 14471950430,
+      "zip_sha256": "1ed77cdbeb6951baebe74bdd073e5bcb3d3db9ca6153148760dc7e7d2ee46644",
+      "manifest_entries_sha256_checked": 24,
+      "tests_run": 1581,
+      "tests_passed": 1554,
+      "tests_skipped": 27,
+      "tests_failed": 0,
+      "tests_errors": 0,
+      "fully_decoded_movie_frames": [
+        57,
+        33,
+        24
+      ],
+      "audio_present_in_first_two": true
+    },
+    "synthetic_native_end_to_end": {
+      "run": 44392665778,
+      "artifact_id": 14497449323,
+      "zip_sha256": "974fa487b7628e3f3e5f3b0e33ca4596ca475d44ea76786cb578a3439cfc376e",
+      "manifest_entries_sha256_checked": 16,
+      "editable_native_assets": 3,
+      "native_clips": 5,
+      "decoded_first_frames": 72,
+      "decoded_revised_frames": 66,
+      "decoded_relocated_frames": 66,
+      "all_three_AAC_non_silent": true,
+      "original_and_revised_native_snapshots_distinct": true,
+      "final_and_portable_native_snapshots_identical": true,
+      "revised_and_relocated_decoded_video_and_pcm_identical": true,
+      "original_sound_sha256_matched_portable_asset": true,
+      "creative_decisions_scripted_not_neural": true
+    },
+    "original_cancelled_jobs_cause": "not independently established; retain initial negative and exact-code targeted passing rerun",
+    "real_nvidia_job": "SKIPPED in successful CI; last real model Omni #44350134767 failed before editing",
+    "acceptance": "SCOPED_TECHNICAL_NATIVE_INTEGRATION_PASS__REAL_MODEL_ARTISTIC_HUMAN_SECURITY_RELEASE_UNACCEPTED"
+  },
+  "native_function_recovery": {
+    "failure_run": 44350134767,
+    "reproduced_offline": "Generic JSON-object recovery instruction reached provider-native function-call request.",
+    "fix": "Retain the host correction budget and rejection classification. Ask for one offered function call on the fresh turn.",
+    "offline_tests_passed": 164,
+    "comparable_real_model_retest": "PENDING"
+  },
+  "exact_head_technical_verification_2026_11_20": {
+    "source_sha": "2c3595597bf915a676b4bf4984de487f45b623a7",
+    "draft_pr": 356,
+    "workflow_conclusions": "22/22 SUCCESS",
+    "installed_body_run": 44776215098,
+    "installed_tests_total": 1582,
+    "installed_tests_passed": 1555,
+    "installed_tests_skipped": 27,
+    "installed_editorial_run": 44776215097,
+    "mlt_run": 44776215139,
+    "nvidia_admission_run": 44776215100,
+    "nvidia_real_model_job": "SKIPPED",
+    "post_fix_genuine_model_retest": "NOT_RUN",
+    "github_artifact_id": 14649644352,
+    "github_published_sha256": "2236b1bfcf9fc0991e9135cc49647153da03b6a09d7d4927be862939d39bdb76",
+    "artifact_independent_byte_audit": "NOT_PERFORMED",
+    "artistic_human_professional_release": "NOT_ACCEPTED"
+  },
+  "omni_native_recovery_trial": {
+    "run": 44913064897,
+    "trial_commit": "f10b71c244f006cef64c193bf6fcf394c0b42555",
+    "artifact_id": 14710477148,
+    "artifact_sha256": "1115209939c749c6e7d598a301689445137dddbae2d9e3249b51011a1d31d592",
+    "conclusion": "FAILED",
+    "model_turns": 3,
+    "model_edits": 0,
+    "model_exports": 0,
+    "terminal_layout": "inputs=missing reason=string native_direct=0 unknown=0 nested_native=0",
+    "grant_closed_at": "768eb3d870a580d0634652427c86031c68235977",
+    "post_trial_feedback": "164 offline checks passed; no subsequent hosted retest"
+  },
+  "branch_integration_review": {
+    "base": "70f3f5601f8780fc37ebe8b5d8c6506d5b0e3342",
+    "ref_inventory": "EVIDENCE/branch-review-20261121.tsv",
+    "refs": 407,
+    "ancestor": 149,
+    "identical_merge_tree": 18,
+    "clean_delta": 25,
+    "conflicted": 215,
+    "selected_ports": [
+      203,
+      204,
+      218,
+      354
+    ],
+    "local_affected_tests_passed": 70,
+    "semantic_reconciliation_complete": false
   }
 }

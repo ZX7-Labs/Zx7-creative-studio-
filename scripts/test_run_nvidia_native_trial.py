@@ -23,6 +23,40 @@ from scripts.run_nvidia_native_trial import (
 
 
 class RealNvidiaTrialBootstrapTests(unittest.TestCase):
+    def test_omni_synthetic_wav_flag_reaches_only_the_exact_authorized_native_session(self):
+        from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            args = dict(xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                        audiovisual=True, allow_cloud_audio_diagnostics=True)
+            with patch("scripts.run_nvidia_native_trial.prepare_trial") as stage:
+                for model, wav in [(_ALLOWED_MODEL, True), (NVIDIA_OMNI_AUDIO_MODEL_ID, False)]:
+                    with self.assertRaises(ValueError):
+                        run_trial(root, model_id=model, allow_cloud_synthetic_wav=wav, **args)
+                stage.assert_not_called()
+                stage.return_value = ({"state": root, "outputs": root}, root / "host.json")
+                with patch("scripts.run_nvidia_native_trial.subprocess.run",
+                           return_value=subprocess.CompletedProcess([], 1, "", "")) as child:
+                    with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                        run_trial(root, model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+                                  allow_cloud_synthetic_wav=True, **args)
+                cmd = child.call_args.args[0]
+                self.assertIn("--allow-cloud-original-wav-upload", cmd)
+                self.assertEqual(cmd[cmd.index("--model-id") + 1], NVIDIA_OMNI_AUDIO_MODEL_ID)
+
+    def test_wav_decision_receipt_excludes_failed_or_missing_next_turn(self):
+        from scripts.run_nvidia_native_trial import exports_with_wav_decisions
+
+        def wav(turn, export):
+            return dict(kind="native_tool_result", turn=turn, audio_sha256="a" * 64,
+                        observed_export_sha256=export, audio_sent_to_model_for_next_decision=True)
+
+        events = [wav(2, "first"), dict(turn=3, kind="model_finished", measured_model_wall_ms=2),
+                  wav(5, "revised"), dict(turn=6, kind="model_decision_failed", measured_model_wall_ms=1),
+                  wav(8, "unobserved")]
+        self.assertEqual(exports_with_wav_decisions(events), {"first"})
+
     def test_host_only_grants_and_real_owned_media_are_created(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "fresh"
@@ -211,6 +245,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         granted = {
             "create_project": "write", "import_asset_from_path": "write",
             "add_text_clip": "write", "save_project": "write",
+            "export_timeline": "read",
         }
         requires, effects = method(granted, fresh=True)
         self.assertEqual(

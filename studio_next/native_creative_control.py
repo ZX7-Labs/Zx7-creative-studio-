@@ -30,8 +30,9 @@ from .native_editor_source_pin import source_verified_preview_intent
 from .native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
-    SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
+    SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
+    reviewed_av_reference_frame_times, valid_av_review_values,
 )
 
 
@@ -288,6 +289,81 @@ def _native_placement_assets(texts):
                 choice[field] = asset[field]
         choices.append(choice)
     return {"assets": choices, "count": count, "complete": not limited, "staged_files_require_import": True}
+
+
+def _native_clip_style_targets(texts, timeline_id, inputs):
+    """Match the *pinned editor's* clip selectors against a complete real READ.
+
+    In NVIDIA trial #43855560474 the model-selected set_clip_style returned
+    the exact pinned pre-mutation "No matching clips found" error. The host
+    may reject an evidently empty target BEFORE sending an uncertain WRITE;
+    it must never invent a replacement clip or execute a different edit.
+    Return None for missing, stale, truncated, or ambiguous read evidence.
+    """
+    try:
+        snapshot = _strict_receipt(texts, "native clip style targets")
+    except NativeCreativeControlError:
+        return None
+    clips = snapshot.get("clips")
+    if (snapshot.get("id") != timeline_id or
+            snapshot.get("clipLimitApplied") is not False or
+            type(clips) is not list or len(clips) > 1000):
+        return None
+    seen = set()
+    for clip in clips:
+        if (type(clip) is not dict or
+                type(clip.get("id")) is not str or
+                not 1 <= len(clip["id"]) <= 128 or
+                clip["id"] in seen):
+            return None
+        seen.add(clip["id"])
+    all_ids = sorted(seen)
+    raw = inputs.get("clipIds") or inputs.get("clipId") or ""
+    explicit = (raw if type(raw) is list else raw.split(",") if type(raw) is str else [])
+    explicit = {item.strip() for item in explicit
+                if type(item) is str and item.strip()}
+    candidates = [clip for clip in clips if not explicit or clip["id"] in explicit]
+
+    selector = str(inputs.get("filter") or "").strip().lower()
+    selector = re.sub(r"[\s_-]+", "", selector)
+    # The renderer's selectedClipIds are not in get_timeline. Do not
+    # manufacture a selection from the clip array or claim zero matches.
+    if selector == "selected" and not explicit:
+        return {"all_ids": all_ids, "matched_ids": None,
+                "selection_unobservable": True}
+    if selector == "disabled":
+        candidates = [x for x in candidates if x.get("enabled") is False]
+    elif selector == "enabled":
+        candidates = [x for x in candidates if x.get("enabled") is not False]
+    elif selector == "visual":
+        candidates = [x for x in candidates
+                      if x.get("type") in ("video", "image", "text", "shape")]
+    elif selector == "audio":
+        candidates = [x for x in candidates if x.get("type") == "audio"]
+    elif selector in ("colored", "labeled"):
+        candidates = [x for x in candidates if bool(x.get("labelColor"))]
+    type_filter = str(inputs.get("type") or "").lower().strip()
+    if type_filter:
+        types = {item.strip() for item in type_filter.split(",") if item.strip()}
+        candidates = [x for x in candidates if str(x.get("type") or "").lower() in types]
+    track_id = str(inputs.get("trackId") or "").strip()
+    if track_id:
+        candidates = [x for x in candidates if x.get("trackId") == track_id]
+    name_query = str(inputs.get("nameIncludes") or "").lower().strip()
+    if name_query:
+        candidates = [x for x in candidates if name_query in
+                      str(x.get("name") or x.get("assetName") or x["id"]).lower()]
+    # Pinned Velorn's resolveMcpClipTargets also treats labelColor as an
+    # existing-label *filter*, even when set_clip_style is changing it.
+    # Preserve that real behavior in the preflight; don't falsely certify a
+    # new color as an already-matching clip and then send a doomed write.
+    color = str(inputs.get("labelColor") or "").strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        candidates = [x for x in candidates
+                      if str(x.get("labelColor") or "").lower() == color.lower()]
+    return {"all_ids": all_ids,
+            "matched_ids": sorted(x["id"] for x in candidates),
+            "selection_unobservable": False}
 
 
 def _pinned_source_clip_edit_plan_matches(name, plan):
@@ -1005,6 +1081,10 @@ class NativeCreativeControl:
         completion evidence. Historical receipts remain intact for forensics.
         """
         by_destination = {}
+        # Only trusted source-hash-matched, full-duration read receipts count.
+        # This is numeric audio coverage, NOT model semantic listening.
+        durations = {}
+        full_audio = set()
         unbound = set()  # Compatible with older, non-reviewed test journals.
         frames = set()
         any_write = saw_frame = post_review_write = False
@@ -1015,10 +1095,13 @@ class NativeCreativeControl:
             destination = event.get(DESTINATION_FIELD)
             if kind == "native_read_tool_reported_error":
                 if (destination is not None and
-                        (tool == _VERIFIED_EXPORT_TOOL or tool in _VERIFIED_FRAME_TOOLS)):
+                        (tool == _VERIFIED_EXPORT_TOOL or tool in _VERIFIED_FRAME_TOOLS or
+                         (self._requires_av_review and tool == AUDIO_ENVELOPE))):
                     invalid = by_destination.pop(destination, None)
                     if invalid is not None:
                         frames.discard(invalid)
+                        full_audio.discard(invalid)
+                    durations.pop(destination, None)
                 continue
             if kind != "native_tool_result":
                 continue
@@ -1028,6 +1111,8 @@ class NativeCreativeControl:
                 if saw_frame and tool in self.host_content_revision_tools:
                     post_review_write = True
                 by_destination.clear()
+                durations.clear()
+                full_audio.clear()
                 unbound.clear()
                 frames.clear()
                 verified_receipts = 0
@@ -1042,8 +1127,23 @@ class NativeCreativeControl:
                     previous = by_destination.get(destination)
                     if previous is not None and previous != sha:
                         frames.discard(previous)
+                        full_audio.discard(previous)
+                        durations.pop(destination, None)
                     by_destination[destination] = sha
+                    values = event.get(AV_REVIEW_FIELD)
+                    if (tool == _VERIFIED_EXPORT_TOOL and
+                            valid_av_review_values(_VERIFIED_EXPORT_TOOL, values)):
+                        durations[destination] = values[0]
             observed = event.get("observed_export_sha256")
+            if (tool == AUDIO_ENVELOPE and destination in by_destination and
+                    by_destination[destination] == observed and
+                    destination in durations and
+                    valid_av_review_values(AUDIO_ENVELOPE, event.get(AV_REVIEW_FIELD)) and
+                    event[AV_REVIEW_FIELD][0] == 0 and
+                    abs(event[AV_REVIEW_FIELD][1] - durations[destination]) <= 0.02 and
+                    isinstance(event.get(AV_PCM_FIELD), str) and
+                    re.fullmatch(r"[a-f0-9]{64}", event[AV_PCM_FIELD])):
+                full_audio.add(observed)
             if observed is not None and event.get("image_sha256"):
                 if ((destination is not None and by_destination.get(destination) == observed)
                         or (destination is None and observed in unbound)):
@@ -1055,6 +1155,7 @@ class NativeCreativeControl:
             "post_review_write_acknowledged": post_review_write,
             "current_verified": current_verified,
             "current_frames": frames,
+            "current_full_audio": full_audio,
             "current_verified_output_count": len(by_destination) + len(unbound),
             "same_export_reverification_count": max(
                 0, verified_receipts - len(distinct_receipts)),
@@ -1454,6 +1555,17 @@ class NativeCreativeControl:
                                 "possibilities_not_creative_instructions": True,
                             }
                 export_evidence = self._current_export_evidence()
+                # The last real 120B source-backed A/V trial sampled the
+                # first verified cut at 1/3/5s and the revised cut at
+                # 0.5/2.6/4.7s. Both physical films differed, but there was
+                # no identical-time visual comparison and their PCM matched.
+                # Report only the model's earlier validated sample times for
+                # another already-verified export. No native read/write, new
+                # grant or creative revision is selected by the host.
+                comparison_frame_seconds = (
+                    reviewed_av_reference_frame_times(
+                        self.events, self.host_content_revision_tools)
+                    if self._requires_av_review else None)
                 # Actual Qwen3.5-4B run #42621894429 verified the exact
                 # same MP4 eight times, then kept `verify` as the only
                 # selectable indexed tool. The verified-frame READ required
@@ -1469,6 +1581,53 @@ class NativeCreativeControl:
                          export_evidence["current_frames"]) and
                     ("verified_export_frame_observed" in self.required_evidence or
                      REVIEWED_RENDER_PAIR in self.required_evidence))
+                audio_review_pending = (
+                    self.catalog_mode == "indexed" and self._requires_av_review and
+                    bool(export_evidence["current_verified"] -
+                         export_evidence["current_full_audio"]))
+                # The existing original-WAV read is a real source-bound
+                # acoustic input, unlike the numeric full-film envelope.
+                # Offer it ONLY to an audio-capable Brain after actual export
+                # verification. This is an inspectable READ choice, never a
+                # host-dispatched probe or a semantic-listening certificate.
+                # The previous audio sample for the same verified export must
+                # not be repeatedly offered as if no evidence was observed.
+                raw_audio_reader = "zx7_observe_verified_export_audio"
+                actual_audio_observed = {
+                    event.get("observed_export_sha256")
+                    for event in self.events
+                    if event.get("kind") == "native_tool_result" and
+                       event.get("tool") == raw_audio_reader and
+                       event.get("audio_sent_to_model_for_next_decision") is True and
+                       _digest(event.get("audio_sha256"))
+                }
+                audio_excerpt_pending = (
+                    self.catalog_mode == "indexed" and
+                    self._requires_av_review and
+                    # A callable inherited stub (such as visual-only NVIDIA)
+                    # does not mean that a model can actually consume WAV.
+                    getattr(self.model, "supports_source_bound_wav_input", False) is True and
+                    callable(getattr(self.model, "decide_with_audio", None)) and
+                    # An Omni cloud adapter without an explicit one-use WAV
+                    # upload grant must never be offered this route. Local
+                    # models have no cloud-upload policy property.
+                    getattr(self.model, "allow_original_audio_upload", True) is True and
+                    raw_audio_reader in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(raw_audio_reader) == "read" and
+                    bool(export_evidence["current_verified"] - actual_audio_observed))
+                # An earlier verified cut and this verified revised cut
+                # may each have frames, but at disjoint timestamps. The old
+                # pending-frame check then hid the exact same-time READ behind
+                # another catalog search. Surface only the existing granted
+                # timed observer; never choose timestamps, dispatch, or count
+                # another review on the Brain's behalf.
+                matching_frame_review_pending = (
+                    self.catalog_mode == "indexed" and
+                    bool(comparison_frame_seconds) and
+                    TIMED_FRAMES in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(TIMED_FRAMES) == "read")
                 if frame_review_pending:
                     actual_frame_tools = [
                         tool for tool in sorted(_VERIFIED_FRAME_TOOLS)
@@ -1482,6 +1641,27 @@ class NativeCreativeControl:
                         actual_frame_tools +
                         [tool for tool in self._host_frontier_tools
                          if tool not in actual_frame_tools])
+                if matching_frame_review_pending:
+                    self._host_frontier_tools = (
+                        [TIMED_FRAMES] +
+                        [tool for tool in self._host_frontier_tools
+                         if tool != TIMED_FRAMES])
+                if audio_review_pending and (
+                        AUDIO_ENVELOPE in self.tools and
+                        self.host_tool_access.get(AUDIO_ENVELOPE) == "read"):
+                    # A genuine first export in run #43883369538 had picture
+                    # observations but no timed sound observation before a
+                    # content edit. Surface an already-granted READ, without
+                    # executing it or choosing the Brain's creative next step.
+                    self._host_frontier_tools = (
+                        [AUDIO_ENVELOPE] + [tool for tool in self._host_frontier_tools
+                                             if tool != AUDIO_ENVELOPE])
+                if audio_excerpt_pending:
+                    # Retain the existing full-film numeric envelope and real
+                    # frame candidates. Offer only the real, permitted WAV
+                    # observer; the Brain decides whether and when to listen.
+                    insertion = 1 if audio_review_pending else 0
+                    self._host_frontier_tools.insert(insertion, raw_audio_reader)
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
                 placement_validator = None
@@ -1642,6 +1822,28 @@ class NativeCreativeControl:
                             name for name in visible_selectable
                             if frame_review_pending and name in _VERIFIED_FRAME_TOOLS],
                         "current_frame_observation_not_automatically_executed": True,
+                        "current_same_time_picture_comparison_read_selectable": (
+                            [TIMED_FRAMES] if matching_frame_review_pending and
+                            TIMED_FRAMES in visible_selectable else []),
+                        "verified_export_still_needs_full_duration_audio": (
+                            self._requires_av_review and
+                            bool(export_evidence["current_verified"] -
+                                 export_evidence["current_full_audio"])),
+                        "current_audio_observation_read_selectable": (
+                            [AUDIO_ENVELOPE] if audio_review_pending and
+                            AUDIO_ENVELOPE in visible_selectable else []),
+                        "audio_observation_is_numeric_not_semantic_hearing": True,
+                        "audio_observation_not_automatically_executed": True,
+                        "current_source_audio_excerpt_read_selectable": (
+                            [raw_audio_reader] if audio_excerpt_pending and
+                            raw_audio_reader in visible_selectable else []),
+                        "audio_excerpt_was_automatically_dispatched": False,
+                        "raw_audio_transport_not_independent_semantic_hearing": True,
+                        **({
+                            "previous_source_review_seconds_for_matching_frames":
+                                comparison_frame_seconds,
+                            "matching_picture_seconds_are_read_only_and_not_auto_dispatched": True,
+                        } if comparison_frame_seconds else {}),
                     },
                 }
                 if placement_tracks is not None:
@@ -1979,6 +2181,62 @@ class NativeCreativeControl:
                 # The editor's createTrack/newTrack/newTopTrack path remains
                 # unrestricted: it is a distinct genuine creative operation.
                 content_inputs = args["inputs"]
+                # Before a model-selected clip style WRITE, perform one
+                # host-granted fresh READ of the exact current clip inventory.
+                # The pinned editor rejects an empty target before mutation.
+                # Keep that failure out of the uncertain-write path without
+                # guessing a replacement target, replaying, or trusting the
+                # model's claimed clip ID. The native editor still rechecks.
+                if (native_name == "set_clip_style" and
+                        self.host_tool_access is not None and
+                        self.host_tool_access.get("get_timeline") == "read" and
+                        "get_timeline" in validators and
+                        validators["get_timeline"].is_valid({
+                            "includeClips": True, "limit": 1000})):
+                    observed_targets = None
+                    timeline_id = self._trusted_project_active_timeline_id()
+                    if timeline_id is not None:
+                        try:
+                            checked = await self.session.call_tool(
+                                "get_timeline", {"includeClips": True, "limit": 1000})
+                            if not _native_mcp_error_status(checked):
+                                checked_texts, checked_images, checked_audio = (
+                                    _native_content(checked))
+                                if not checked_images and not checked_audio:
+                                    observed_targets = _native_clip_style_targets(
+                                        checked_texts, timeline_id, content_inputs)
+                        except (NativeCreativeControlError, ValueError, OSError):
+                            # No trustworthy, complete source read: do not
+                            # turn uncertainty into a guessed positive match.
+                            pass
+                    if (observed_targets is None or
+                            observed_targets["matched_ids"] is None or
+                            not observed_targets["matched_ids"]):
+                        keyword = ("host_clip_style_target_unconfirmed"
+                                   if observed_targets is None or
+                                      observed_targets["matched_ids"] is None
+                                   else "host_clip_style_no_matching_clip")
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": keyword,
+                            "host_observed_clip_ids": (
+                                observed_targets["all_ids"][:32]
+                                if observed_targets is not None else []),
+                            "host_source_attested_read_only": True,
+                            "choose_exact_existing_clip_id_from_native_state": True,
+                            "label_color_is_also_a_selector_in_pinned_editor": (
+                                bool(content_inputs.get("labelColor"))),
+                            "no_native_dispatch": True,
+                            "no_automatic_retry": True}
+                        self._append({
+                            "kind": "model_action_rejected", "turn": turn,
+                            **timing, "tool": native_name,
+                            "inputs_sha256": hashlib.sha256(
+                                _wire(content_inputs).encode()).hexdigest(),
+                            "validation_keyword": keyword,
+                            "schema_location": "native/get_timeline/clips",
+                            "no_native_dispatch": True})
+                        continue
                 needs_existing_video_track = (
                     native_name in _CONTENT_VIDEO_TRACK_WRITES and
                     type(content_inputs.get("trackId")) is str and
@@ -2642,16 +2900,18 @@ class NativeCreativeControl:
                          and event.get("tool") != RENDER_TOOL), None)
                     if previous_write == "save_project":
                         try:
-                            project_sha, options_sha = await asyncio.to_thread(
+                            project_sha, options_sha, media_sha = await asyncio.to_thread(
                                 self._capture_render_project, host_response, render_binding,
                                 self._explicit_render_save_identity)
-                            if not _digest(project_sha) or not _digest(options_sha):
-                                raise ValueError("Render snapshot lacks trusted digests")
+                            if not all(_digest(value) for value in
+                                       (project_sha, options_sha, media_sha)):
+                                raise ValueError("Render snapshot lacks trusted media digests")
                         except (OSError, ValueError):
                             render_binding[SAVED_RENDER_FAILURE] = True
                         else:
                             render_binding[SAVED_RENDER_FIELD] = project_sha
                             render_binding[SAVED_RENDER_OPTIONS_FIELD] = options_sha
+                            render_binding[SAVED_RENDER_MEDIA_FIELD] = media_sha
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,

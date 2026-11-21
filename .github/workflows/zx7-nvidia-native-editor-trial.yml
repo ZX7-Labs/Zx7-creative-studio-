@@ -99,12 +99,14 @@ jobs:
             scripts.test_nvidia_av_trial_request \
             scripts.test_run_nvidia_native_trial -v
       - name: Revalidate the exact newly admitted A/V consent and fixed provider model
+        id: grant
         env:
           APPROVAL_REQUEST_ID: ${{ inputs.approval_request_id }}
         run: |
-          python -m scripts.nvidia_av_trial_request \
+          model=$(python -m scripts.nvidia_av_trial_request --print-model \
             research/nvidia-native-audiovisual-request.json \
-            --dispatch-request-id "$APPROVAL_REQUEST_ID"
+            --dispatch-request-id "$APPROVAL_REQUEST_ID")
+          echo "model=$model" >> "$GITHUB_OUTPUT"
       - name: Build actual existing source editor with no provider credential available
         working-directory: third_party/velorn
         run: |
@@ -121,6 +123,7 @@ jobs:
           test "$(stat -c '%u:%a' "$helper")" = "0:4755"
       - name: Real NVIDIA creative decisions -> native A/V edit -> timed review -> revised output
         env:
+          APPROVED_MODEL: ${{ steps.grant.outputs.model }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         shell: bash
         run: |
@@ -129,7 +132,11 @@ jobs:
             echo "No NVIDIA_API_KEY Actions secret. Refusing cloud trial."
             exit 2
           fi
-          python -u -m scripts.run_nvidia_native_trial \
+          audio_flags=()
+          if [[ "$APPROVED_MODEL" == nvidia/nemotron-3-nano-omni-30b-a3b-reasoning ]]; then
+            audio_flags+=(--allow-cloud-synthetic-wav)
+          fi
+          python -u -m scripts.run_nvidia_native_trial --model-id "$APPROVED_MODEL" "${audio_flags[@]}" \
             --workspace "$RUNNER_TEMP/zx7-nvidia-native-trial" \
             --xvfb-binary /usr/bin/Xvfb --display 127.0.0.1:95 \
             --audiovisual-trial --allow-cloud-audio-diagnostics

@@ -1,10 +1,14 @@
-name: ZX7 Native Editorial Collaboration — Source-Pinned Runtime
+name: ZX7 Native Editorial Collaboration — Installed Save-Authoritative Source
 
 on:
   pull_request:
     paths:
       - 'engines/velorn/native-editorial-revision.patch'
       - 'engines/velorn/prepare-native-editorial-candidate.sh'
+      - 'engines/velorn/prepare-native-save-candidate.sh'
+      - 'engines/velorn/prepare-native-save-order-candidate.sh'
+      - 'engines/velorn/native-save-timestamp.patch'
+      - 'engines/velorn/native-save-ordering.patch'
       - 'studio_next/editor_runtime/source-lock.json'
       - 'studio_next/editor_runtime/launcher.mjs'
       - 'studio_next/native_editor_source_pin.py'
@@ -37,7 +41,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Verify editorial patch applies to exact clean source-pinned scene
+      - name: Verify installed editorial profile save-authority source chain
         run: |
           set -euo pipefail
           bash -n scripts/install-zx7-linux.sh
@@ -45,7 +49,9 @@ jobs:
           node --check studio_next/editor_runtime/mcp.mjs
           node --check studio_next/editor_runtime/launcher.mjs
           bash -n engines/velorn/prepare-native-editorial-candidate.sh
-          bash engines/velorn/prepare-native-editorial-candidate.sh \
+          bash -n engines/velorn/prepare-native-save-candidate.sh
+          bash -n engines/velorn/prepare-native-save-order-candidate.sh
+          bash engines/velorn/prepare-native-save-order-candidate.sh \
             "$GITHUB_WORKSPACE/third_party/velorn" \
             "$RUNNER_TEMP/zx7-native-editorial" --inspect
           test ! -e "$RUNNER_TEMP/zx7-native-editorial"
@@ -81,12 +87,12 @@ jobs:
             studio_next.test_native_crash_proof \
             studio_next.test_native_revision_fence \
             studio_next.test_native_scene_revision -v
-      - name: Install reviewed editorial Git source variant into isolated root
+      - name: Install current owner opt-in editorial source variant into isolated root
         run: |
           editor="$RUNNER_TEMP/zx7-native-editorial"
-          bash engines/velorn/prepare-native-editorial-candidate.sh \
+          bash engines/velorn/prepare-native-save-order-candidate.sh \
             "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
-          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_editorial_revision"])')
+          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["collab_save_order_revision"])')
           test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
           git -C "$editor" diff --exit-code HEAD --
           echo "ZX7_EDITORIAL_EDITOR=$editor" >> "$GITHUB_ENV"

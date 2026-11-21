@@ -78,6 +78,53 @@ def _meta_parameters(action: str, choices: list[str] | None = None) -> dict:
         "required": needed + ["reason"], "additionalProperties": False}
 
 
+def _rejected_native_argument_layout(args: dict, schema: dict) -> str:
+    """Bounded, value-free diagnostics for malformed provider function arguments.
+
+    Only the fixed envelope names are printed. Unknown field names, tool
+    arguments, reasons, media paths and prompt text must never enter logs.
+    """
+    def kind(key):
+        if key not in args:
+            return "missing"
+        value = args[key]
+        if value is None:
+            return "null"
+        if type(value) is bool:
+            return "boolean"
+        if type(value) is dict:
+            return "object"
+        if type(value) is list:
+            return "array"
+        if type(value) is str:
+            return "string"
+        if type(value) in (int, float):
+            return "number"
+        return "other"
+
+    properties = schema.get("properties")
+    native = set(properties) if type(properties) is dict else set()
+    envelope = {"inputs", "reason"}
+    native_direct = sum(key in native and key not in envelope for key in args)
+    unknown = sum(key not in envelope and key not in native for key in args)
+    nested = args.get("inputs")
+    nested_native = sum(key in native for key in nested) if type(nested) is dict else 0
+    return (f"inputs={kind('inputs')} reason={kind('reason')} "
+            f"native_direct={native_direct} unknown={unknown} "
+            f"nested_native={nested_native}")
+
+
+class _NativeFunctionInputsShapeError(LocalModelOutputError):
+    """Keep the host's finite error code and append only non-value diagnostics."""
+
+    def __init__(self, args: dict, schema: dict):
+        super().__init__("native_function_inputs_shape")
+        self.layout = _rejected_native_argument_layout(args, schema)
+
+    def __str__(self):
+        return f"{super().__str__()} [{self.layout}]"
+
+
 class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
     """Provider-native function selection, native host grants never broadened."""
 
@@ -99,6 +146,12 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
         compact = copy.deepcopy(context)
         compact.pop("host_native_tool_contracts", None)
         compact.pop("host_declared_tool_hints", None)
+        feedback = compact.get("last_rejected_model_output_feedback")
+        if isinstance(feedback, dict) and feedback.pop("return_one_unambiguous_json_object", False):
+            feedback["choose_one_offered_function_call"] = True
+            if feedback.get("reason_code") == "native_function_inputs_shape":
+                feedback["required_native_function_arguments"] = {
+                    "inputs": "object (use {} for no inputs)", "reason": "nonempty string"}
         return super()._messages(compact, images)
 
     @staticmethod
@@ -203,7 +256,9 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             "messages": (self._messages_with_audio(context, images, audio)
                          if audio else self._messages(context, images)),
             "tools": functions,
-            "tool_choice": "required",
+            # Omni's required-mode grammar rejects native uniqueItems schemas.
+            # Preserve the full schema; the host still requires exactly one typed call.
+            "tool_choice": "auto" if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID else "required",
             "parallel_tool_calls": False,
         }
         payload.update(self.settings.sampling)
@@ -244,7 +299,10 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             action, name = mapping[fn["name"]]
             if action == "invoke":
                 if set(args) != {"inputs", "reason"} or type(args["inputs"]) is not dict:
-                    raise LocalModelOutputError("native_function_inputs_shape")
+                    contract = next(spec["input_schema"] for spec in
+                                    context["host_native_tool_contracts"]
+                                    if spec["name"] == name)
+                    raise _NativeFunctionInputsShapeError(args, contract)
                 return {"action": "invoke",
                         "arguments": {"tool": name, "inputs": args["inputs"]},
                         "reason": args["reason"]}
@@ -294,6 +352,9 @@ class NvidiaOmniNativeToolCreativeModel(NvidiaNativeToolCreativeModel):
     competence and semantic sound perception require separate live evaluation.
     No WAV leaves the process without explicit consent and source-hash binding.
     """
+
+    # Exact Omni adapter implements separately consented original WAV transport.
+    supports_source_bound_wav_input = True
 
     def __init__(self, settings=None, *, system_prompt=None,
                  allow_image_upload=False, allow_original_audio_upload=False):

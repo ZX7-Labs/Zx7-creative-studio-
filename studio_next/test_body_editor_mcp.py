@@ -36,6 +36,30 @@ TOOLS = [
 ]
 
 
+class OwnerDeliveryGuidanceTests(unittest.TestCase):
+    def test_pinned_native_delivery_guidance_is_exact_and_bounded(self):
+        from studio_next.body_editor_delivery import owner_delivery_native_tool_hint
+        approved = {"width": 640, "height": 360, "fps": 24,
+                    "max_duration": 6, "video_codec": "h264"}
+        hint = owner_delivery_native_tool_hint(approved)
+        self.assertIn("640x360", hint)
+        self.assertIn("24fps", hint)
+        self.assertIn("h264_project", hint)
+        self.assertIn("resolution=project", hint)
+        self.assertIn("h264_hd", hint)
+        self.assertIn("readiness.deliveryTarget", hint)
+        self.assertIn("new outputPath", hint)
+        self.assertLessEqual(len(hint), 245)  # NVIDIA native tool description truncates at 256.
+        self.assertNotIn("/home/", hint)
+
+    def test_owner_delivery_guidance_is_absent_without_verified_host_profile(self):
+        from studio_next.body_editor_delivery import owner_delivery_native_tool_hint
+        self.assertIsNone(owner_delivery_native_tool_hint(None))
+        with self.assertRaisesRegex(ValueError, "dimensions"):
+            owner_delivery_native_tool_hint({"width": 641, "height": 360,
+                "fps": 24, "max_duration": 6, "video_codec": "h264"})
+
+
 @unittest.skipUnless(HAS_MCP, "Install the editor extra to test the official MCP protocol")
 class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -258,6 +282,16 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                     "endSeconds": 6, "previewOnly": False}
 
             async def check(session):
+                tools = {t.name: t for t in (await session.list_tools()).tools}
+                for name in ("export_timeline", "check_export_readiness"):
+                    metadata = tools[name]
+                    self.assertIn("OWNER DELIVERY:", metadata.description)
+                    self.assertIn("640x360", metadata.description[:256])
+                    self.assertIn("target=h264_project", metadata.description[:256])
+                    self.assertIn("resolution=project", metadata.description[:256])
+                    self.assertIn("h264_hd default overrides custom", metadata.description[:256])
+                    self.assertIn("check_export_readiness.deliveryTarget", metadata.description[:256])
+                    self.assertIn("OWNER DELIVERY", metadata.input_schema["description"])
                 def receipt(width=640, height=360, fps=24, duration=6, codec="h264"):
                     return json.dumps({
                         "ready": True, "blockers": [],
@@ -315,6 +349,10 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                     "container": "mp4", "videoCodec": "h264",
                     "width": 1920, "height": 1080, "fps": 24, "duration": 6}})
             async def no_constraint(session):
+                unscoped = {t.name: t for t in (await session.list_tools()).tools}
+                for tool_name in ("check_export_readiness", "export_timeline"):
+                    self.assertNotIn("OWNER DELIVERY", unscoped[tool_name].description or "")
+                    self.assertNotIn("description", unscoped[tool_name].input_schema)
                 unconstrained_args = {**args, "codec": "h265"}
                 accepted = await session.call_tool("export_timeline", unconstrained_args)
                 self.assertFalse(accepted.is_error)

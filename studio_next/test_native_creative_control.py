@@ -86,6 +86,125 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(type="text", text='No placeable asset matched "not-imported.mp4".')])
         return session
 
+    @staticmethod
+    def _live_clip_style_session(*, complete=True):
+        session = FakeSession()
+        session.tools = [
+            SimpleNamespace(name="get_project", description="Real native state",
+                            input_schema={"type": "object", "properties": {}}),
+            SimpleNamespace(name="get_timeline", description="Real native clips",
+                            input_schema={"type": "object", "properties": {
+                                "includeClips": {"type": "boolean"},
+                                "limit": {"type": "integer"}}}),
+            SimpleNamespace(name="set_clip_style", description="Pinned clip style edit",
+                            input_schema={"type": "object", "properties": {
+                                "clipId": {"type": "string"}, "positionX": {"type": "number"},
+                                "labelColor": {"type": "string"},
+                                "filter": {"type": "string"},
+                                "previewOnly": {"type": "boolean"}}}),
+        ]
+
+        async def native_call(name, arguments):
+            session.calls.append((name, arguments))
+            if name == "get_project":
+                result = {"mcp": {"hasProject": True},
+                          "project": {"currentTimelineId": "timeline-native"},
+                          "currentTimeline": {"id": "timeline-native", "clipCount": 2}}
+            elif name == "get_timeline":
+                result = {"id": "timeline-native", "clipLimitApplied": not complete,
+                          "clips": [{"id": "clip-1", "type": "video",
+                                     "trackId": "video-1", "enabled": True,
+                                     "labelColor": ""},
+                                    {"id": "clip-2", "type": "audio",
+                                     "trackId": "audio-1", "enabled": True,
+                                     "labelColor": ""}]}
+            elif name == "set_clip_style":
+                # The genuine pinned editor returns an error when an explicit
+                # clip target does not exist. Never trust a fake success for it.
+                assert arguments.get("clipId") == "clip-1"
+                result = {"success": True, "clipCount": 1}
+            else:
+                raise AssertionError("Unknown native test tool")
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text", text=json.dumps(result))])
+        session.call_tool = native_call
+        return session
+
+    async def test_nvidia_retry_unknown_style_clip_is_rejected_before_write(self):
+        """Actual trial #43855560474 terminated on exact no-matching-clips."""
+        session = self._live_clip_style_session()
+        model = ScriptedModel([
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-not-in-real-editor",
+                             "positionX": 40, "previewOnly": False}),
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-1", "positionX": 40,
+                             "previewOnly": False}),
+            decision("finish", summary="Technical fixture, not approved art"),
+        ])
+        grants = {"get_project": "read", "get_timeline": "read",
+                  "set_clip_style": "write"}
+        with tempfile.TemporaryDirectory() as root:
+            journal = Path(root) / "native.jsonl"
+            result = await NativeCreativeControl(
+                session, model, host_tool_access=grants, max_turns=3,
+                receipt_path=journal).run("Edit the real source footage")
+            self.assertEqual(result["status"], "model_finished_unverified")
+            self.assertEqual(sum(name == "set_clip_style" for name, _ in session.calls), 1)
+            self.assertEqual(next(a for name, a in session.calls
+                                  if name == "set_clip_style")["clipId"], "clip-1")
+            rejected = [event for event in result["events"]
+                        if event["kind"] == "model_action_rejected"]
+            self.assertEqual(len(rejected), 1)
+            self.assertEqual(rejected[0]["validation_keyword"],
+                             "host_clip_style_no_matching_clip")
+            self.assertTrue(rejected[0]["no_native_dispatch"])
+            feedback = model.observed[1]["last_rejected_native_action_feedback"]
+            self.assertEqual(feedback["host_observed_clip_ids"], ["clip-1", "clip-2"])
+            self.assertTrue(feedback["no_automatic_retry"])
+            self.assertNotIn("clip-not-in-real-editor", journal.read_text())
+            self.assertTrue(any(x["kind"] == "native_tool_result" and
+                                x["tool"] == "set_clip_style"
+                                for x in result["events"]))
+
+    async def test_pinned_style_label_color_filter_cannot_fake_target(self):
+        session = self._live_clip_style_session()
+        model = ScriptedModel([
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-1", "labelColor": "#ff0000",
+                             "previewOnly": False}),
+            decision("finish", summary="Missing target is not a write"),
+        ])
+        grants = {"get_project": "read", "get_timeline": "read",
+                  "set_clip_style": "write"}
+        result = await NativeCreativeControl(
+            session, model, host_tool_access=grants, max_turns=2).run(
+                "Change a model-chosen native clip style")
+        self.assertFalse(any(name == "set_clip_style" for name, _ in session.calls))
+        self.assertEqual(model.observed[1]["last_rejected_native_action_feedback"][
+            "validation_keyword"], "host_clip_style_no_matching_clip")
+        self.assertTrue(model.observed[1]["last_rejected_native_action_feedback"][
+            "label_color_is_also_a_selector_in_pinned_editor"])
+        self.assertEqual(result["status"], "model_finished_unverified")
+
+    async def test_incomplete_clip_inventory_cannot_authorize_style_write(self):
+        session = self._live_clip_style_session(complete=False)
+        model = ScriptedModel([
+            decision("invoke", tool="set_clip_style",
+                     inputs={"clipId": "clip-1", "positionX": 40,
+                             "previewOnly": False}),
+            decision("finish", summary="Incomplete read cannot prove a target"),
+        ])
+        grants = {"get_project": "read", "get_timeline": "read",
+                  "set_clip_style": "write"}
+        result = await NativeCreativeControl(
+            session, model, host_tool_access=grants, max_turns=2).run(
+                "Do not guess with an incomplete real clip inventory")
+        self.assertFalse(any(name == "set_clip_style" for name, _ in session.calls))
+        self.assertEqual(model.observed[1]["last_rejected_native_action_feedback"][
+            "validation_keyword"], "host_clip_style_target_unconfirmed")
+        self.assertEqual(result["status"], "model_finished_unverified")
+
     async def test_source_attested_failed_preview_allows_only_a_new_model_decision(self):
         for preview in (None, True):
             with self.subTest(preview=preview):
@@ -861,6 +980,356 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             result["events"], host_tool_access=grants,
             expected_required_evidence=required)["journal_chain_structurally_valid"])
 
+    async def test_real_120b_full_catalog_gets_same_time_audiovisual_revision_hint(self):
+        """Real #43991467485 chose disjoint before/after picture sample
+        timestamps. A host-verified, same-timeline timestamp reference is
+        factual feedback, not a generated creative edit or a weaker gate.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES)
+        from studio_next.test_native_render_evidence import ReviewedAVPairTests
+        events = ReviewedAVPairTests().events()
+        events[7]["native_av_review"] = [0.5, 4.5]
+        model = ScriptedModel([decision("discover")])
+        session = FakeSession()
+        for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE):
+            session.tools.append(SimpleNamespace(
+                name=name, description="Trusted existing native tool",
+                input_schema={"type": "object", "properties": {}}))
+        grants = {tool.name: ("write" if tool.name in (
+            "export_timeline", "update_text_clip") else "read")
+            for tool in session.tools}
+        control = NativeCreativeControl(session, model,
+            max_turns=1, catalog_mode="full", host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",))
+        control.events.extend(events)
+        control._verified_exports.update(("a" * 64, "b" * 64))
+        result = await control.run("Review current verified picture and sound")
+        progress = model.observed[0]["host_verified_execution_progress"]
+        self.assertEqual(progress["previous_source_review_seconds_for_matching_frames"], [1, 4])
+        self.assertTrue(progress["matching_picture_seconds_are_read_only_and_not_auto_dispatched"])
+        self.assertIn(REVIEWED_AV_PAIR, model.observed[0]["missing_completion_evidence"])
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+        self.assertFalse(any(call[0] in {"export_timeline", "update_text_clip", TIMED_FRAMES,
+                                         AUDIO_ENVELOPE} for call in session.calls))
+        self.assertNotIn("/private/", json.dumps(result["events"]))
+
+    async def test_indexed_same_time_av_comparison_keeps_verified_native_reader_visible(self):
+        """Failed real 120B G1 had two physically verified, already-observed
+        cuts at incompatible times. The indexed Brain must be able to choose
+        a new same-time *read* without rediscovering the actual native tool.
+        This is a scripted contract test, NOT proof of neural creative review.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES)
+        from studio_next.test_native_render_evidence import ReviewedAVPairTests
+
+        for scenario, expected in (
+                ("disjoint", True), ("already_comparable", False),
+                ("invalidated_by_write", False)):
+            with self.subTest(scenario=scenario):
+                events = ReviewedAVPairTests().events()
+                if scenario != "already_comparable":
+                    events[7]["native_av_review"] = [0.5, 4.5]
+                if scenario == "invalidated_by_write":
+                    events.append({
+                        "kind": "native_tool_result", "tool": "add_text_clip",
+                        "host_application_write_acknowledged": True})
+                session = FakeSession()
+                session.tools.extend([
+                    SimpleNamespace(name=name,
+                        description="Existing real native engine capability",
+                        input_schema={"type": "object", "properties": {}})
+                    for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE)])
+                grants = {tool.name: (
+                    "write" if tool.name in {"export_timeline", "update_text_clip"}
+                    else "read") for tool in session.tools}
+                model = ScriptedModel([
+                    decision("search", query="unrelated native action")])
+                control = NativeCreativeControl(
+                    session, model, max_turns=1, catalog_mode="indexed",
+                    host_tool_access=grants,
+                    host_content_revision_tools=("update_text_clip",),
+                    required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR))
+                control.events.extend(events)
+                control._verified_exports.update(("a" * 64, "b" * 64))
+                result = await control.run("Inspect real revisions; choose your own next step")
+                context = model.observed[0]
+                progress = context["host_verified_execution_progress"]
+                self.assertEqual(
+                    progress.get("previous_source_review_seconds_for_matching_frames"),
+                    [1, 4] if expected else None)
+                self.assertEqual(TIMED_FRAMES in context["selectable_native_tools"],
+                                 expected)
+                self.assertEqual(
+                    progress["current_same_time_picture_comparison_read_selectable"],
+                    [TIMED_FRAMES] if expected else [])
+                self.assertEqual(session.calls, [])
+                self.assertEqual(result["status"], "turn_budget_exhausted")
+                self.assertIn(REVIEWED_AV_PAIR, context["missing_completion_evidence"]
+                              ) if expected else None
+
+    async def test_real_neural_av_missing_audio_surfaces_granted_read_without_dispatch(self):
+        """Regression for failed real model #43883369538: its first export was
+        visually reviewed but not audio-reviewed before its creative edit.
+        A verified export must expose the *existing* read-only audio affordance;
+        the host must never fetch sound, choose an edit, or change acceptance.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD,
+            REVIEWED_AV_PAIR, TIMED_FRAMES, destination_digest,
+        )
+        path, sha = "/private/outputs/verified-first.mp4", "a" * 64
+        destination = destination_digest(path)
+        model = ScriptedModel([decision("search", query="not_a_real_native_tool")])
+        session = FakeSession()
+        session.tools.extend([
+            SimpleNamespace(name=name, description="Actual host-native reader",
+                            input_schema={"type": "object", "properties": {}})
+            for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE)])
+        grants = {tool.name: ("write" if tool.name in
+                  {"update_text_clip", "export_timeline"} else "read")
+                  for tool in session.tools}
+        control = NativeCreativeControl(
+            session, model, catalog_mode="indexed", max_turns=1,
+            host_tool_access=grants, required_evidence=("reviewed_native_render_pair_verified", REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",))
+        verified_events = [
+            {"kind": "native_tool_result", "tool": "export_timeline",
+             "host_application_write_acknowledged": True, DESTINATION_FIELD: destination},
+            {"kind": "native_tool_result", "tool": "zx7_verify_native_export",
+             DESTINATION_FIELD: destination,
+             "independently_verified_export_sha256": sha, AV_REVIEW_FIELD: [6]},
+            {"kind": "native_tool_result", "tool": TIMED_FRAMES,
+             DESTINATION_FIELD: destination, "observed_export_sha256": sha,
+             "image_sha256": ["b" * 64, "c" * 64], AV_REVIEW_FIELD: [1, 4]},
+        ]
+        control.events.extend(verified_events)
+        control._verified_exports.add(sha)
+        result = await control.run("Observe real A/V evidence")
+        progress = model.observed[0]["host_verified_execution_progress"]
+        self.assertTrue(progress["verified_export_still_needs_full_duration_audio"])
+        self.assertIn(AUDIO_ENVELOPE, progress["current_audio_observation_read_selectable"])
+        self.assertIn(AUDIO_ENVELOPE, model.observed[0]["selectable_native_tools"])
+        self.assertNotIn("finish", model.observed[0]["available_actions"])
+        self.assertEqual(session.calls, [])  # no automatic read or edit
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+        self.assertNotIn("/private/", json.dumps(result["events"]))
+
+        good_audio = {"kind": "native_tool_result", "tool": AUDIO_ENVELOPE,
+                      DESTINATION_FIELD: destination, "observed_export_sha256": sha,
+                      AV_PCM_FIELD: "d" * 64, AV_REVIEW_FIELD: [0, 6]}
+        for bad_audio in (
+            {**good_audio, AV_REVIEW_FIELD: [0, 1]},
+            {**good_audio, AV_REVIEW_FIELD: [0, 6.1]},
+            {**good_audio, AV_PCM_FIELD: "not-a-verified-sha"},
+            {**good_audio, "observed_export_sha256": "e" * 64},
+        ):
+            control.events.append(bad_audio)
+            self.assertEqual(control._current_export_evidence()["current_full_audio"], set())
+            control.events.pop()
+        control.events.append(good_audio)
+        current = control._current_export_evidence()
+        self.assertEqual(current["current_full_audio"], {sha})
+        control.events.append({**good_audio, "observed_export_sha256": "e" * 64})
+        self.assertEqual(control._current_export_evidence()["current_full_audio"], {sha})
+        control.events.append({"kind": "native_read_tool_reported_error",
+                               "tool": AUDIO_ENVELOPE, DESTINATION_FIELD: destination})
+        self.assertEqual(control._current_export_evidence()["current_full_audio"], set())
+        control.events.append({"kind": "native_tool_result", "tool": "update_text_clip",
+                               "host_application_write_acknowledged": True})
+        self.assertEqual(control._current_export_evidence()["current_full_audio"], set())
+
+    async def test_real_verified_sound_is_model_selectable_only_for_audio_capable_brain(self):
+        """Source-bound native raw-WAV is already installed, but the previous
+        indexed frontier buried it behind discovery after verifying A/V.
+        Never fetch sound, infer musical semantics or create a new grant.
+        """
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, DESTINATION_FIELD, REVIEWED_AV_PAIR,
+            destination_digest,
+        )
+        path, sha = "/private/outputs/source-verified.mp4", "a" * 64
+        source = destination_digest(path)
+        raw = "zx7_observe_verified_export_audio"
+
+        class AudioCapableModel(ScriptedModel):
+            # A callable method alone is insufficient; explicit trusted transport contract.
+            supports_source_bound_wav_input = True
+            def decide_with_audio(self, context, sounds):
+                raise AssertionError("The host may not fetch WAV or call model audio proactively")
+
+        for capable, granted, physical, already_observed, egress_allowed, expected in (
+            (True, True, True, False, None, True),
+            (True, False, True, False, None, False),
+            (False, True, True, False, None, False),
+            (True, True, False, False, None, False),
+            (True, True, True, True, None, False),
+            (True, True, True, False, False, False),
+            (True, True, True, False, True, True),
+        ):
+            with self.subTest(audio_capable=capable, host_grant=granted,
+                              verified=physical, heard=already_observed):
+                session = FakeSession()
+                session.tools.append(SimpleNamespace(
+                    name=raw, description="Host-verified original WAV excerpt",
+                    input_schema={"type":"object","properties":{
+                        "path":{"type":"string"},
+                        "start_seconds":{"type":"number"},
+                        "duration_seconds":{"type":"number"}}}))
+                session.tools.extend([SimpleNamespace(
+                    name="export_timeline",description="Real native export",
+                    input_schema={"type":"object", "properties":{}}),
+                    SimpleNamespace(name="zx7_observe_verified_export_samples",
+                    description="Source verified timed decoded picture",
+                    input_schema={"type":"object", "properties":{}})])
+                session.tools.append(SimpleNamespace(
+                    name=AUDIO_ENVELOPE,description="Only numeric full audio envelope",
+                    input_schema={"type":"object", "properties":{}}))
+                grants = {tool.name:"read" for tool in session.tools}
+                grants["update_text_clip"] = "write"
+                grants["export_timeline"] = "write"
+                if not granted:
+                    session.tools = [tool for tool in session.tools if tool.name != raw]
+                    grants.pop(raw)
+                model = (AudioCapableModel if capable else ScriptedModel)([
+                    decision("search",query="nothing here")])
+                if egress_allowed is not None:
+                    model.allow_original_audio_upload = egress_allowed
+                ctl = NativeCreativeControl(session, model, max_turns=1,
+                    catalog_mode="indexed", host_tool_access=grants,
+                    required_evidence=("reviewed_native_render_pair_verified", REVIEWED_AV_PAIR),
+                    host_content_revision_tools=("update_text_clip",))
+                if physical:
+                    ctl._verified_exports.add(sha)
+                    ctl.events.extend([
+                        {"kind":"native_tool_result", "tool":"export_timeline",
+                         "host_application_write_acknowledged":True,
+                         DESTINATION_FIELD:source},
+                        {"kind":"native_tool_result", "tool":"zx7_verify_native_export",
+                         "independently_verified_export_sha256":sha,
+                         DESTINATION_FIELD:source, "native_av_review":[6]},
+                    ])
+                    if already_observed:
+                        ctl.events.append({
+                            "kind":"native_tool_result", "tool":raw,
+                            "observed_export_sha256":sha,
+                            "audio_sha256":"b"*64,
+                            "audio_sent_to_model_for_next_decision":True,
+                        })
+                result = await ctl.run("Inspect actual original audiovisual sources")
+                observed = model.observed[0]
+                choices = observed["selectable_native_tools"]
+                progress = observed["host_verified_execution_progress"]
+                self.assertEqual(raw in choices, expected)
+                self.assertEqual(raw in progress["current_source_audio_excerpt_read_selectable"],
+                                 expected)
+                self.assertFalse(observed["audio_semantically_reviewed"])
+                self.assertFalse(progress["audio_excerpt_was_automatically_dispatched"])
+                self.assertEqual(session.calls, [],
+                    "A read-only affordance must not dispatch audio or editing")
+                self.assertEqual(result["status"], "turn_budget_exhausted")
+                self.assertNotIn("/private/", json.dumps(result["events"]))
+
+    async def test_actual_local_omni_and_visual_only_adapters_advertise_only_supported_wav(self):
+        """The real visual-only NVIDIA subclass inherits an audio method which
+        deliberately raises, so callable(decide_with_audio) is NOT capability.
+        A model may see the real native WAV observer only when its adapter
+        declares implemented transport and explicit egress (if hosted).
+        No native or provider operation is dispatched in this fixture.
+        """
+        from studio_next.nvidia_native_tool_model import (
+            NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
+            NVIDIA_OMNI_AUDIO_MODEL_ID,
+        )
+        from studio_next.nvidia_model import NvidiaModelSettings
+        from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
+        from studio_next.providers import LocalModelSettings
+        from studio_next.native_render_evidence import (
+            REVIEWED_AV_PAIR, DESTINATION_FIELD, destination_digest,
+        )
+        variants = [
+            ("visual_only_nvidia", NvidiaNativeToolCreativeModel(
+                NvidiaModelSettings(model_id="nvidia/test-visual-only"),
+                system_prompt="Use only native host-authorized tools"), False),
+            ("unconsented_omni", NvidiaOmniNativeToolCreativeModel(
+                NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID),
+                system_prompt="Use only native host-authorized tools",
+                allow_original_audio_upload=False), False),
+            ("consented_omni", NvidiaOmniNativeToolCreativeModel(
+                NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID),
+                system_prompt="Use only native host-authorized tools",
+                allow_original_audio_upload=True), True),
+            ("local_native_audio_transport", LocalNativeStructuredCreativeModel(
+                LocalModelSettings(model_id="compatible-local-multimodal"),
+                system_prompt="Use only native host-authorized tools"), True),
+        ]
+        raw = "zx7_observe_verified_export_audio"
+        for label, model, expected in variants:
+            with self.subTest(adapter=label):
+                session = FakeSession()
+                session.tools.extend([
+                    SimpleNamespace(name=raw, description="Source-verified WAV reader",
+                        input_schema={"type": "object", "properties": {
+                            "path": {"type": "string"},
+                            "start_seconds": {"type": "number"},
+                            "duration_seconds": {"type": "number"}}}),
+                    SimpleNamespace(name="export_timeline", description="Real native renderer",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="zx7_observe_verified_export_samples",
+                        description="Verified timed picture frames",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="zx7_observe_verified_export_audio_timeline",
+                        description="Source-bound numerical PCM envelope",
+                        input_schema={"type": "object", "properties": {}}),
+                ])
+                grants = {tool.name: "read" for tool in session.tools}
+                grants.update({"update_text_clip": "write", "export_timeline": "write"})
+                model_observations = []
+                model.decide = lambda context: (
+                    model_observations.append(context),
+                    decision("search", query="real available source tools"))[1]
+                self.assertTrue(callable(getattr(model, "decide_with_audio", None)),
+                    "Inherited NVIDIA audio stub must be distinguished from real support")
+                controller = NativeCreativeControl(session, model,
+                    max_turns=1, catalog_mode="indexed", host_tool_access=grants,
+                    required_evidence=("reviewed_native_render_pair_verified", REVIEWED_AV_PAIR),
+                    host_content_revision_tools=("update_text_clip",))
+                sha = "a" * 64
+                controller._verified_exports.add(sha)
+                controller.events.append({
+                    "kind": "native_tool_result", "tool": "zx7_verify_native_export",
+                    "independently_verified_export_sha256": sha,
+                    DESTINATION_FIELD: destination_digest("/private/exports/film.mp4"),
+                    "native_av_review": [6],
+                })
+                result = await controller.run("Review original source picture and sound")
+                self.assertEqual(result["status"], "turn_budget_exhausted")
+                self.assertTrue(model_observations)
+                self.assertEqual(raw in model_observations[0]["selectable_native_tools"], expected)
+                self.assertFalse(model_observations[0]["audio_semantically_reviewed"])
+                self.assertEqual(session.calls, [],
+                    "A read-only capability hint must never invoke native tools or cloud model")
+
+    def test_visual_only_session_does_not_lose_valid_export_from_failed_audio_probe(self):
+        """Non-A/V contracts must not retroactively require an audio proof."""
+        from studio_next.native_render_evidence import DESTINATION_FIELD, destination_digest, AUDIO_ENVELOPE
+        session = FakeSession()
+        grants = {tool.name: ("write" if tool.name == "update_text_clip" else "read")
+                  for tool in session.tools}
+        control = NativeCreativeControl(
+            session, ScriptedModel([]), host_tool_access=grants,
+            required_evidence=("physical_export_verified",))
+        sha, destination = "a" * 64, destination_digest("/private/movie.mp4")
+        control._verified_exports.add(sha)
+        control.events = [{"kind": "native_tool_result", "tool": "zx7_verify_native_export",
+                           DESTINATION_FIELD: destination, "independently_verified_export_sha256": sha}]
+        self.assertEqual(control._current_export_evidence()["current_verified"], {sha})
+        control.events.append({"kind": "native_read_tool_reported_error", "tool": AUDIO_ENVELOPE,
+                               DESTINATION_FIELD: destination})
+        self.assertEqual(control._current_export_evidence()["current_verified"], {sha})
+
     async def test_current_verified_bytes_offer_real_frame_read_without_rescanning(self):
         """Actual 4B transcript: once the same export is verified, an observer
         must be selectable without a new catalog search. This scripted model
@@ -1137,7 +1606,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 def capture(_receipt, _binding, _save):
                     if scenario == "capture-failed":
                         raise OSError("private path must not enter the journal")
-                    return "f" * 64, "e" * 64
+                    return "f" * 64, "e" * 64, "d" * 64
 
                 result = await NativeCreativeControl(
                     session, model, max_turns=len(actions), host_tool_access=grants,
@@ -1172,6 +1641,10 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     [event[SAVED_RENDER_FIELD] for event in events if SAVED_RENDER_FIELD in event],
                     ["f" * 64, "f" * 64])
+                self.assertEqual(
+                    [event["native_render_media_sha256"] for event in events
+                     if "native_render_media_sha256" in event],
+                    ["d" * 64, "d" * 64])
                 audio_receipts = [
                     payload for context in model.observed
                     for payload in map(json.loads, context["last_native_result_texts"])

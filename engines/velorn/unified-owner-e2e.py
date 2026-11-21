@@ -11,7 +11,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
@@ -29,6 +29,8 @@ from studio_next.native_editor_identity import pinned_native_editor_identity_pol
 from studio_next.capability_gateway import CapabilityGateway
 from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
 from studio_next.capability_session_budget import CapabilitySessionBudget
+from studio_next.native_editor_project import capture_render_project
+from studio_next.native_render_evidence import native_render_binding, DESTINATION_FIELD
 
 
 def digest(file):
@@ -84,7 +86,7 @@ def graphic_plan():
 
 
 async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
-                   with_atomic_range=False):
+                   with_atomic_range=False, evidence_out=None):
     if with_atomic_range and not with_blender:
         raise ValueError("Atomic cross-engine range acceptance requires real Blender footage")
     assert shutil.which("ffmpeg") and shutil.which("ffprobe")
@@ -371,13 +373,28 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert saved_sha in initial_snapshots, (
                 "First committed native project is missing from autosave recovery")
             # A native render must be physically decoded, including sound.
-            await invoke(studio, "export_timeline", {
+            first_render = await invoke(studio, "export_timeline", {
                 "outputPath": str(export), "target": "h264_project",
                 "width": 320, "height": 180, "fps": 24,
                 "range": "custom", "startSeconds": 0,
                 "endSeconds": 3 if with_blender else 2,
                 "includeAudio": True,
                 "previewOnly": False})
+            if with_atomic_range:
+                # Reuse exactly the host callback exercised by native Brain
+                # sessions; this is a physical source-custody check, NOT a
+                # synthetic model decision or professional creative rating.
+                render_snapshots = root / "state" / "native-owner-render-bindings"
+                render_snapshots.mkdir(mode=0o700)
+                first_binding = native_render_binding(str(export), first_render)
+                assert first_binding, "Native renderer did not bind real export to actual timeline"
+                first_native_sha, first_options_sha, first_media_sha = capture_render_project(
+                    root / "projects", render_snapshots, first_render, first_binding,
+                    (str(project), save["result"]["project"]["modified"]),
+                    expected_project=project)
+                assert first_native_sha == saved_sha
+                assert digest(render_snapshots /
+                    (first_binding[DESTINATION_FIELD] + ".comfystudio")) == saved_sha
             deadline = time.monotonic() + 90
             video_pcm = audio_pcm = None
             while time.monotonic() < deadline:
@@ -502,12 +519,28 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 assert persisted["modified"] == updated_save["result"]["project"]["modified"]
                 assert any(len(t.get("clips") or []) == 5 for t in persisted["timelines"])
                 edited_export = root / "outputs" / "graph-cgi-atomic-range.mp4"
-                await invoke(studio, "export_timeline", {
+                final_render = await invoke(studio, "export_timeline", {
                     "outputPath": str(edited_export), "target": "h264_project",
                     "width": 320, "height": 180, "fps": 24,
                     "range": "custom", "startSeconds": 0,
                     "endSeconds": 2.75, "includeAudio": True,
                     "previewOnly": False})
+                final_binding = native_render_binding(str(edited_export), final_render)
+                assert final_binding, "Second native render lacks actual project binding"
+                revised_native_sha, revised_options_sha, revised_media_sha = capture_render_project(
+                    root / "projects", render_snapshots, final_render, final_binding,
+                    (str(project), updated_save["result"]["project"]["modified"]),
+                    expected_project=project)
+                assert revised_native_sha == updated_sha != first_native_sha
+                assert len(first_options_sha) == len(revised_options_sha) == 64
+                assert len(first_media_sha) == len(revised_media_sha) == 64
+                assert first_media_sha == revised_media_sha, (
+                    "Original source media unexpectedly changed between actual renders")
+                assert digest(render_snapshots /
+                    (final_binding[DESTINATION_FIELD] + ".comfystudio")) == updated_sha
+                assert digest(render_snapshots /
+                    (first_binding[DESTINATION_FIELD] + ".comfystudio")) == saved_sha
+                assert first_binding[DESTINATION_FIELD] != final_binding[DESTINATION_FIELD]
                 edited_rgb = edited_pcm = None
                 deadline = time.monotonic() + 90
                 while time.monotonic() < deadline:
@@ -564,6 +597,222 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert saved_sha in native_autosave_digests(project), (
                 "Fresh native reopen lost its committed recovery snapshot")
             assert digest(original) == image_sha and digest(tone) == tone_sha
+        if evidence_out is not None:
+            # This is deliberately a *synthetic, scripted technical sample*.
+            # Preserve exact source-native materials for external inspection;
+            # never call it a Brain-authored film or approved professional art.
+            if not (with_atomic_range and with_blender):
+                raise ValueError("Synthetic native delivery requires real Blender and atomic A/V")
+            destination = Path(evidence_out)
+            if not destination.is_absolute() or destination.is_symlink() or destination.exists():
+                raise ValueError("Synthetic delivery output must be a fresh absolute directory")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.mkdir(mode=0o700)
+            copies = (
+                ("first-native-picture-sound.mp4", export),
+                ("revised-native-picture-sound.mp4", edited_export),
+                ("final-editable-project.comfystudio", document),
+                ("first-render-native-project.comfystudio",
+                 render_snapshots / (first_binding[DESTINATION_FIELD] + ".comfystudio")),
+                ("revised-render-native-project.comfystudio",
+                 render_snapshots / (final_binding[DESTINATION_FIELD] + ".comfystudio")),
+                ("original-editable-visual-graph.json", plan),
+                ("revised-editable-visual-graph.json", revised_plan),
+                ("original-graph-source.png", original),
+                ("original-sound-source.wav", tone),
+                ("original-native-Blender-bundle.zxmotion", original_bundle),
+                ("revised-native-Blender-bundle.zxmotion", revised_bundle),
+            )
+            witnesses = []
+            for name, source_file in copies:
+                if not source_file.is_file() or source_file.is_symlink():
+                    raise AssertionError("Synthetic source/native evidence is unavailable", name)
+                replica = destination / name
+                shutil.copyfile(source_file, replica)
+                current = digest(source_file)
+                assert digest(replica) == current, (
+                    "Archived synthetic evidence differs from actual verified source", name)
+                witnesses.append({
+                    "file": name, "sha256": current, "bytes": replica.stat().st_size})
+            # Independent relocation must retain the native editor's complete
+            # referenced media closure, not only a JSON .comfystudio receipt.
+            # A project with missing asset blobs is NOT portable/editable
+            # outside the temporary CI installation.
+            portable = destination / "portable-native-project"
+            portable.mkdir(mode=0o700)
+            native_document = json.loads(document.read_text(encoding="utf-8"))
+            media = native_document.get("assets")
+            if not isinstance(media, list) or len(media) < 3:
+                raise AssertionError("Native deliverable has no real media asset inventory")
+            source_ids = set()
+            original_media_sha = {
+                "original-art.png": image_sha,
+                "original-tone.wav": tone_sha,
+                "native-3d-original.mp4": motion_video_sha,
+            }
+            original_media_seen = set()
+            for asset in media:
+                if not isinstance(asset, dict):
+                    raise AssertionError("Native media inventory has invalid source")
+                identity, named = asset.get("id"), asset.get("path")
+                if (not isinstance(identity, str) or not identity or
+                        identity in source_ids or not isinstance(named, str) or
+                        not named or "\\" in named or "\x00" in named or
+                        any(bit in ("", ".", "..") for bit in named.split("/"))):
+                    raise AssertionError("Native media source identity/path unsafe")
+                source_ids.add(identity)
+                relative = PurePosixPath(named)
+                if (relative.is_absolute() or len(relative.parts) < 3 or
+                        relative.parts[0] != "assets"):
+                    raise AssertionError("Native source escapes owned relative asset directory")
+                original_asset = project.joinpath(*relative.parts)
+                if (not original_asset.is_file() or
+                        any(original_asset.parents[i].is_symlink()
+                            for i in range(len(relative.parts))) or
+                        original_asset.is_symlink() or
+                        not original_asset.resolve(strict=True).is_relative_to(
+                            project.resolve(strict=True))):
+                    raise AssertionError("Native media source cannot be safely relocated")
+                copied = portable.joinpath(*relative.parts)
+                copied.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                shutil.copyfile(original_asset, copied)
+                actual_sha = digest(original_asset)
+                original_name = asset.get("name")
+                if (not isinstance(original_name, str) or
+                        original_name not in original_media_sha or
+                        original_name in original_media_seen or
+                        actual_sha != original_media_sha[original_name]):
+                    raise AssertionError("Native imported copy differs from owner-authored source")
+                original_media_seen.add(original_name)
+                if digest(copied) != actual_sha or not copied.stat().st_size:
+                    raise AssertionError("Portable native asset is missing or mutated")
+                witnesses.append({
+                    "file": copied.relative_to(destination).as_posix(),
+                    "sha256": actual_sha, "bytes": copied.stat().st_size})
+            assert original_media_seen == set(original_media_sha)
+            if not all(
+                    isinstance(clip, dict) and clip.get("assetId") in source_ids
+                    for timeline in native_document.get("timelines", [])
+                    for clip in timeline.get("clips", [])):
+                raise AssertionError("Saved native timeline refers to missing media identity")
+            portable_doc = portable / "project.comfystudio"
+            shutil.copyfile(document, portable_doc)
+            assert digest(portable_doc) == updated_sha
+            witnesses.append({
+                "file": portable_doc.relative_to(destination).as_posix(),
+                "sha256": updated_sha, "bytes": portable_doc.stat().st_size})
+            # saved_sha now refers to the *final* revision after fresh
+            # reopen; the first real render keeps its own immutable receipt.
+            assert witnesses[3]["sha256"] == first_native_sha
+            assert first_native_sha != updated_sha
+            assert witnesses[4]["sha256"] == updated_sha
+            assert witnesses[2]["sha256"] == updated_sha
+            # Actual relocation test: do not confuse a SHA-complete archive
+            # with a working native project on a fresh editor process.
+            relocated = root / "projects" / "relocated-from-physical-evidence"
+            assert not relocated.exists()
+            shutil.copytree(portable, relocated, symlinks=False)
+            assert digest(relocated / "project.comfystudio") == updated_sha
+            for asset in media:
+                relative = PurePosixPath(asset["path"])
+                assert digest(relocated.joinpath(*relative.parts)) == digest(
+                    portable.joinpath(*relative.parts))
+            relocated_movie = root / "outputs" / "independently-reopened-native.mp4"
+            # Adversarial portable-project check: a successful re-export on
+            # the SAME runner may silently reuse the former absolutePath or
+            # settings.sourcePath. Hide both original imported project media
+            # and all original staging inputs while the copied project opens
+            # and renders. Restore even if the test fails.
+            old_sources = (
+                project / "assets", original, tone, original_3d_video,
+            )
+            quarantine = root / "state" / "original-media-unavailable"
+            quarantine.mkdir(mode=0o700)
+            shifted_sources = []
+            try:
+                for index, original_source in enumerate(old_sources):
+                    assert original_source.exists() and not original_source.is_symlink()
+                    moved = quarantine / f"source-{index}"
+                    original_source.rename(moved)
+                    shifted_sources.append((moved, original_source))
+                assert all(not source.exists() for source in old_sources)
+                async with connected() as (relocated_editor, _):
+                    reopened = await invoke(relocated_editor, "open_project", {
+                        "projectPath": str(relocated), "previewOnly": False})
+                    assert reopened is not None
+                    recovered = await read_until(relocated_editor, lambda state:
+                        (state.get("project") or {}).get("path") == str(relocated) and
+                        state.get("assetCount") == len(media) and
+                        (state.get("currentTimeline") or {}).get("clipCount") == 5)
+                    assert recovered["project"]["path"] == str(relocated)
+                    recovered_timeline = await invoke(relocated_editor, "get_timeline", {
+                        "includeClips": True, "limit": 1000})
+                    assert len(recovered_timeline["clips"]) == 5
+                    assert {clip["assetId"] for clip in recovered_timeline["clips"]} == source_ids
+                    await invoke(relocated_editor, "get_project")
+                    await invoke(relocated_editor, "export_timeline", {
+                        "outputPath": str(relocated_movie), "target": "h264_project",
+                        "width": 320, "height": 180, "fps": 24,
+                        "range": "custom", "startSeconds": 0,
+                        "endSeconds": 2.75, "includeAudio": True,
+                        "previewOnly": False})
+                    independent_rgb = independent_pcm = None
+                    deadline = time.monotonic() + 90
+                    while time.monotonic() < deadline:
+                        try:
+                            if relocated_movie.is_file() and relocated_movie.stat().st_size > 4000:
+                                independent_rgb = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                    "-xerror", "-i", str(relocated_movie), "-map", "0:v:0",
+                                    "-pix_fmt", "rgb24", "-f", "rawvideo", "-"])
+                                independent_pcm = decode(["ffmpeg", "-nostdin", "-v", "error",
+                                    "-xerror", "-i", str(relocated_movie), "-map", "0:a:0",
+                                    "-ac", "1", "-ar", "16000", "-f", "s16le", "-"])
+                                break
+                        except (subprocess.CalledProcessError, OSError):
+                            pass
+                        await asyncio.sleep(.35)
+                    assert independent_rgb is not None and independent_pcm is not None
+                    assert independent_rgb == edited_rgb, (
+                        "Relocated native project changed actual decoded picture")
+                    assert independent_pcm == edited_pcm and any(independent_pcm), (
+                        "Relocated native project changed or lost original sound")
+                    certified = await invoke(relocated_editor, "zx7_verify_native_export", {
+                        "path": str(relocated_movie), "expected": {
+                            "width": 320, "height": 180,
+                            "duration_seconds": 2.75, "require_audio": True}})
+                    assert certified["physical_export_verified"] is True
+                    assert certified["native_export_sha256"] == digest(relocated_movie)
+            finally:
+                for relocated_from, original_source in reversed(shifted_sources):
+                    relocated_from.rename(original_source)
+            assert all(source.exists() for source in old_sources)
+            assert digest(portable_doc) == updated_sha
+            assert digest(document) == updated_sha
+            relocated_copy = destination / "relocated-native-picture-sound.mp4"
+            shutil.copyfile(relocated_movie, relocated_copy)
+            assert digest(relocated_copy) == digest(relocated_movie)
+            witnesses.append({
+                "file": relocated_copy.name, "sha256": digest(relocated_copy),
+                "bytes": relocated_copy.stat().st_size})
+            manifest = {
+                "schema": 2,
+                "kind": "zx7_synthetic_native_blender_graph_av_revision",
+                "synthetic_only": True,
+                "scripted_engine_decisions_not_neural": True,
+                "native_editor_source_identity_verified": True,
+                "first_and_revised_render_snapshots_sha_verified": True,
+                "physical_picture_and_non_silent_audio_decoded": True,
+                "editable_native_project_reopened": True,
+                "portable_native_project_source_closure_verified": True,
+                "portable_native_project_reopened_after_extraction": True,
+                "relocated_export_matches_revision_picture_and_audio": True,
+                "genuine_model_artistry_verified": False,
+                "independent_professional_review": False,
+                "files": witnesses,
+            }
+            (destination / "manifest.json").write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            assert len(list(destination.iterdir())) == len(copies) + 3
         print(("ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_ATOMIC_AV "
                if with_atomic_range else "ACTUAL_OWNER_UNIFIED_GRAPH_BLENDER_NATIVE_AV "
                if with_blender else "ACTUAL_OWNER_UNIFIED_GRAPH_NATIVE_AV ") + json.dumps({
@@ -585,6 +834,8 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                 True if with_atomic_range else None),
             "native_decoded_picture_matches_body_authored_pixels": True,
             "native_export_source_bound_verification": True,
+            "two_actual_render_time_saved_native_snapshots_bound": (
+                True if with_atomic_range else None),
             "genuine_model_artistry_or_professional_VFX_approved": False,
         }, sort_keys=True), flush=True)
 
@@ -598,8 +849,11 @@ if __name__ == "__main__":
                         help="Also prove genuine editable Blender 4.5+ motion in native Studio")
     parser.add_argument("--with-atomic-range", action="store_true",
                         help="Cross-engine source-native ripple, double export and editable reopen")
+    parser.add_argument("--evidence-out", type=Path,
+                        help="Save only this synthetic physical native sample for external inspection")
     args = parser.parse_args()
     asyncio.run(exercise(args.source.resolve(strict=True),
                          args.xvfb_binary, args.display,
                          with_blender=args.with_blender,
-                         with_atomic_range=args.with_atomic_range))
+                         with_atomic_range=args.with_atomic_range,
+                         evidence_out=args.evidence_out))

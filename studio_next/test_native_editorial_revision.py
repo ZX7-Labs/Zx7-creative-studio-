@@ -7,9 +7,10 @@ separately before the source candidate is trusted.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest import IsolatedAsyncioTestCase
+from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import patch
 from pathlib import Path
+import json
 
 from studio_next.body_editor_client import (
     host_pre_dispatch_rejection, host_native_revision_rejection)
@@ -17,6 +18,28 @@ from studio_next.capability_gateway import CapabilityGateway, _source_native_com
 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
 from studio_next.native_editor_identity import pinned_native_editor_identity_policy
 from studio_next.test_native_scene_revision import SourceSceneRenderer, result
+
+class InstalledEditorialSourceProfileTests(TestCase):
+    def test_owner_editorial_installer_matches_full_physical_ci_source(self):
+        """Former #44122006732 workflow tested an obsolete revision, unlike
+        the owner's already supported save-authoritative editorial profile.
+        """
+        root = Path(__file__).resolve().parent.parent
+        installer = (root / "scripts/install-zx7-linux.sh").read_text(encoding="utf-8")
+        ci = (root / ".github/workflows/zx7-native-editorial-candidate.yml").read_text(encoding="utf-8")
+        actual = installer.split('elif [[ "$profile" == editorial ]]; then', 1)[1].split(
+            'elif [[ "$profile" == scene ]]; then', 1)[0]
+        self.assertIn("prepare-native-save-order-candidate.sh", actual)
+        self.assertIn("prepare-native-save-order-candidate.sh", ci)
+        self.assertIn('["collab_save_order_revision"]', ci)
+        self.assertNotIn('["collab_editorial_revision"]', ci)
+        self.assertIn("native-save-timestamp.patch", ci)
+        self.assertIn("native-save-ordering.patch", ci)
+        pinned = json.loads((root / "studio_next/editor_runtime/source-lock.json").read_text(
+            encoding="utf-8"))["collab_save_order_revision"]
+        self.assertEqual(len(pinned), 40)
+        self.assertTrue(all(c in "0123456789abcdef" for c in pinned))
+
 
 EDITORIAL = (
     "move_clips", "trim_clips", "delete_clips",

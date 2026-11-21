@@ -55,11 +55,18 @@ def checkpoint_saved_project(project: Path, destination: Path, *, max_bytes=None
             "sha256": digest.hexdigest()}
 
 
-def capture_render_project(projects_root, snapshots_root, response, binding, save_identity):
-    """Preserve the saved document for an acknowledged, source-bound render."""
+def capture_render_project(projects_root, snapshots_root, response, binding, save_identity,
+                           *, expected_project=None):
+    """Preserve the acknowledged native document for this owner's render.
+
+    Existing owner-project sessions must not silently capture a sibling
+    native document even if that document is inside the same granted root.
+    """
     project = Path(response["projectPath"])
     if not project.is_absolute() or not project.is_relative_to(projects_root):
         raise ValueError("Render project is outside the host-owned root")
+    if expected_project is not None and project != Path(expected_project):
+        raise ValueError("Render source differs from the owner-selected native project")
     destination = snapshots_root / (binding[DESTINATION_FIELD] + ".comfystudio")
     saved = checkpoint_saved_project(project, destination, max_bytes=16 * 1024 * 1024)
     document = _load_json(destination.read_text(encoding="utf-8"))
@@ -77,7 +84,12 @@ def capture_render_project(projects_root, snapshots_root, response, binding, sav
     comparable = [{key: value for key, value in source.items() if key != "filename"}
                   for source in (plan, options)]
     settings = json.dumps(comparable, sort_keys=True, allow_nan=False).encode("utf-8")
-    return saved["sha256"], hashlib.sha256(settings).hexdigest()
+    # Bind physical native media bytes at the SAME render-time host checkpoint.
+    # Current media presence and size alone cannot detect post-export swaps.
+    from .studio_owner_delivery import _verify_native_project_media_closure
+    media = _verify_native_project_media_closure(project, document)
+    return (saved["sha256"], hashlib.sha256(settings).hexdigest(),
+            media["native_media_observation_sha256"])
 
 
 def _receipt(result):

@@ -7,6 +7,17 @@ on:
       - "scripts/release_test_summary.py"
       - "scripts/release_artifact_integrity.py"
       - "scripts/test_release_test_summary.py"
+      # Source-bound G1 changes also affect a separately installed public BODY.
+      # This existing wheel/desktop/crash gate must execute on their exact PR head.
+      - "studio_next/studio_cli.py"
+      - "studio_next/studio_owner_delivery.py"
+      - "studio_next/native_editor_project.py"
+      - "studio_next/native_editor_session.py"
+      - "studio_next/native_render_evidence.py"
+      - "studio_next/native_creative_control.py"
+      - "studio_next/native_creative_audit.py"
+      - "studio_next/body_capability_adapter.py"
+      - "studio_next/body_integration.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +34,12 @@ jobs:
           python-version: "3.11"
       - name: Install actual free native media tools and physical desktop display
         run: |
+          # The GitHub-hosted regional Ubuntu mirror exhausted CI timeout before
+          # any product tests ran. The official Ubuntu archive uses the same
+          # signed package Release metadata; preserve every physical test.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://us-east-2.ec2.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update -qq
           sudo apt-get install -y blender ffmpeg inkscape melt frei0r-plugins xvfb python3-tk fonts-dejavu-core fonts-noto-core
           python -m pip install --no-cache-dir "numpy>=1.26,<3" "Pillow>=10,<13" "opentimelineio>=0.17,<1" "fonttools>=4,<5"

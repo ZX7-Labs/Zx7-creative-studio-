@@ -60,6 +60,39 @@ class TrustedCreativeBodyToolTests(unittest.TestCase):
             p.write_bytes(b"not same artwork"*100)
             self.assertFalse(validate_witness("body.vector_png",result))
 
+    def test_durable_movie_witness_rechecks_actual_physical_dimensions(self):
+        # RED before this correction: the old verifier ignored recorded
+        # width/height although _witness() persisted both. This test mocks
+        # only the ffprobe boundary, never any source/rights/codec approval.
+        import hashlib
+        with tempfile.TemporaryDirectory() as root:
+            movie=Path(root)/"trusted-output.mp4"
+            movie.write_bytes(b"original-native-movie-payload"*64)
+            physical={"duration_seconds":4.0,"width":1280,"height":720,
+                      "audio_stream_present":True}
+            receipt={"path":str(movie),
+                     "sha256":hashlib.sha256(movie.read_bytes()).hexdigest(),
+                     "duration_seconds":4.0,"width":1280,"height":720,
+                     "audio_present":True}
+            with patch("studio_next.body_integration._probe_details",
+                       return_value=physical):
+                self.assertTrue(validate_witness("body.render_edit_owned",receipt))
+                for name,invalid in (("width",640),("height",360),
+                                     ("duration_seconds",6.0),
+                                     ("audio_present",False)):
+                    with self.subTest(field=name):
+                        self.assertFalse(validate_witness(
+                            "body.render_edit_owned",{**receipt,name:invalid}))
+                for missing in ("width","height","duration_seconds","audio_present"):
+                    with self.subTest(missing=missing):
+                        bad=dict(receipt)
+                        del bad[missing]
+                        self.assertFalse(validate_witness("body.render_edit_owned",bad))
+                self.assertFalse(validate_witness(
+                    "body.render_edit_owned",{**receipt,"duration_seconds":"forged"}))
+                movie.write_bytes(movie.read_bytes()+b"tampered")
+                self.assertFalse(validate_witness("body.render_edit_owned",receipt))
+
     def test_single_animated_body_discloses_unavailable_photoreal_gpu_renderer(self):
         with tempfile.TemporaryDirectory() as root:
             fake={"video_generation_options":[{

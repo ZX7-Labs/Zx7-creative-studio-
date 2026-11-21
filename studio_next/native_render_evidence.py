@@ -26,6 +26,7 @@ AV_REVIEW_FIELD = "native_av_review"
 AV_PCM_FIELD = "native_av_pcm_sha256"
 SAVED_RENDER_FIELD = "native_render_saved_project_sha256"
 SAVED_RENDER_OPTIONS_FIELD = "native_render_options_sha256"
+SAVED_RENDER_MEDIA_FIELD = "native_render_media_sha256"
 SAVED_RENDER_FAILURE = "native_render_saved_project_capture_failed"
 
 
@@ -122,8 +123,8 @@ def _decoded_review_changed(before, after):
     )
 
 
-def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
-    """Return the latest qualifying pair of file receipts from one timeline."""
+def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
+    """Shared fail-closed source-bound pairing and read-only candidate state."""
     rendered, used_destinations, verified = {}, set(), {}
     first_verification = {}
     av_reviews = {}
@@ -228,4 +229,85 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
                      "timeline_sha256": scope}
                     for scope, output_path, output_digest, _ in (before_revision, last_review)
                 ]
+    return pair, before_revision, rendered, verified
+
+
+def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
+    """Return the latest qualifying pair of file receipts from one timeline."""
+    pair, _, _, _ = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=audiovisual)
     return pair
+
+
+def reviewed_av_reference_frame_times(events, revision_tools):
+    """Return exact prior-model-observed times for *another* verified A/V cut.
+
+    Trusted receipts, real timeline identity and export SHA must all match the
+    same source-bound pairing state as the acceptance gate. This is a read-only
+    explanation of why identical-time samples may be needed, not a new model
+    action, source attestation, artistic plan or evidence waiver. None means
+    no safely comparable current export (or that the pair already qualifies).
+    """
+    pair, before, rendered, verified = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=True)
+    if pair is not None or before is None or before[3] is None:
+        return None
+    scope, prior_dest, prior_digest, decoded = before
+    times = sorted(decoded[0])
+    if (not 2 <= len(times) <= 4 or not
+            valid_av_review_values(TIMED_FRAMES, times)):
+        return None
+    for current_dest, current_digest in verified.items():
+        if (current_dest != prior_dest and current_digest != prior_digest and
+                rendered.get(current_dest) == scope):
+            return times
+    return None
+
+
+def _reviewed_host_render_hashes(events, pair, field, *, distinct=False):
+    """Bind a reviewed export pair to exact trusted host-captured bytes.
+
+    This is source/receipt consistency, NOT a signature or proof of artistic
+    improvement. Later renders to an identical destination supersede prior
+    receipts; unknown or missing saved hashes fail closed.
+    """
+    if type(pair) is not list or len(pair) != 2 or type(events) is not list:
+        return None
+
+    def is_sha(value):
+        return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+    captures = {}
+    for event in events:
+        if (type(event) is dict and event.get("kind") == "native_tool_result" and
+                event.get("tool") == RENDER_TOOL and
+                event.get("host_application_write_acknowledged") is True):
+            dest = event.get(DESTINATION_FIELD)
+            if is_sha(dest):
+                captures[dest] = event
+
+    shas = []
+    for binding in pair:
+        if type(binding) is not dict or not (
+                is_sha(binding.get("destination_sha256")) and
+                is_sha(binding.get("timeline_sha256"))):
+            return None
+        capture = captures.get(binding["destination_sha256"])
+        if (capture is None or
+                capture.get(SCOPE_FIELD) != binding["timeline_sha256"] or
+                not is_sha(capture.get(SAVED_RENDER_FIELD)) or
+                not is_sha(capture.get(SAVED_RENDER_OPTIONS_FIELD)) or
+                not is_sha(capture.get(field))):
+            return None
+        shas.append(capture[field])
+    return shas if (not distinct or shas[0] != shas[1]) else None
+
+
+def reviewed_native_snapshot_hashes(events, pair):
+    """The exact first and revised native project bytes captured by the host."""
+    return _reviewed_host_render_hashes(events, pair, SAVED_RENDER_FIELD, distinct=True)
+
+
+def reviewed_native_media_hashes(events, pair):
+    """Render-time source-media closure digests for the same physical pair."""
+    return _reviewed_host_render_hashes(events, pair, SAVED_RENDER_MEDIA_FIELD)

@@ -91,6 +91,28 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertNotIn("response_format", body)
         self.assertEqual(len(context["host_native_tool_contracts"]), 2)
 
+    def test_native_recovery_requests_one_function_call_instead_of_plain_json(self):
+        model = NvidiaNativeToolCreativeModel(system_prompt="Native test")
+        feedback = {"return_one_unambiguous_json_object": True,
+                    "reason_code": "native_function_inputs_shape",
+                    "no_native_dispatch": True,
+                    "remaining_model_output_corrections": 1}
+        context = dict(_context(), last_rejected_model_output_feedback=feedback)
+        reply = _reply(_provider_function("get_project"),
+                       json.dumps({"inputs": {}, "reason": "Inspect project"}))
+        with patch.object(model, "_open_request", return_value=reply) as request:
+            model.decide(context)
+        payload = request.call_args.args[0]
+        sent = json.loads(payload["messages"][1]["content"])["last_rejected_model_output_feedback"]
+        self.assertNotIn("return_one_unambiguous_json_object", sent)
+        self.assertTrue(sent["choose_one_offered_function_call"])
+        self.assertEqual(sent["required_native_function_arguments"],
+                         {"inputs": "object (use {} for no inputs)", "reason": "nonempty string"})
+        self.assertEqual(sent["reason_code"], feedback["reason_code"])
+        self.assertEqual(sent["remaining_model_output_corrections"], 1)
+        self.assertTrue(sent["no_native_dispatch"])
+        self.assertTrue(feedback["return_one_unambiguous_json_object"])
+
     def test_selected_indexed_tools_are_the_only_native_functions_and_search_is_available(self):
         context = _context(compact=True)
         functions, mapping = NvidiaNativeToolCreativeModel._tool_surface(context)
@@ -153,6 +175,34 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                     "studio_next.nvidia_model.build_opener", return_value=Opener()):
                 with self.assertRaises(LocalModelOutputError):
                     NvidiaNativeToolCreativeModel(system_prompt="test").decide(_context())
+
+    def test_native_malformed_argument_layout_never_leaks_model_values(self):
+        """Only typed/count metadata crosses the rejected-provider boundary."""
+        failures = (
+            ({"assetId": "OWNER_PRIVATE_MEDIA", "previewOnly": False,
+              "reason": "OWNER_PRIVATE_REASON"},
+             "inputs=missing reason=string native_direct=2 unknown=0 nested_native=0"),
+            ({"inputs": ["OWNER_PRIVATE_MEDIA"], "reason": "OWNER_PRIVATE_REASON"},
+             "inputs=array reason=string native_direct=0 unknown=0 nested_native=0"),
+            ({"inputs": {"assetId": "OWNER_PRIVATE_MEDIA"},
+              "reason": "OWNER_PRIVATE_REASON",
+              "OWNER_PRIVATE_FIELD": "OWNER_PRIVATE_MEDIA"},
+             "inputs=object reason=string native_direct=0 unknown=1 nested_native=1"),
+        )
+        for args, expected in failures:
+            response = _reply(_provider_function("add_asset_to_timeline"),
+                              json.dumps(args))
+            model = NvidiaNativeToolCreativeModel(system_prompt="Offline fixture")
+            with self.subTest(expected=expected), patch.object(
+                    model, "_open_request", return_value=response):
+                with self.assertRaises(LocalModelOutputError) as raised:
+                    model.decide(_context())
+                detail = str(raised.exception)
+                self.assertEqual(raised.exception.code, "native_function_inputs_shape")
+                self.assertIn(expected, detail)
+                for private in ("OWNER_PRIVATE_MEDIA", "OWNER_PRIVATE_REASON",
+                                "OWNER_PRIVATE_FIELD"):
+                    self.assertNotIn(private, detail)
 
     def test_host_finish_requires_actual_evidence_not_a_model_claim(self):
         context = _context()
@@ -262,6 +312,20 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
             "preview_downmixed_and_resampled": True,
             "exact_original_audio_pts_proven": False,
         }
+
+    def test_omni_uses_auto_preserves_schema_and_rejects_text_only(self):
+        model = self._model()
+        ctx = _context()
+        schema = ctx["host_native_tool_contracts"][1]["input_schema"]
+        schema["properties"]["frames"] = {"type": "array", "uniqueItems": True,
+                                          "items": {"type": "number"}}
+        reply = BytesIO(b'{"choices":[{"message":{"content":"done"}}]}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            with self.assertRaisesRegex(LocalModelOutputError, "missing_or_multiple"):
+                model.decide(ctx)
+        body = remote.call_args.args[0]
+        self.assertEqual(body["tool_choice"], "auto")
+        self.assertEqual(body["tools"][1]["function"]["parameters"]["properties"]["inputs"], schema)
 
     def test_consent_false_wrong_model_and_ambiguous_custody_reject_before_network(self):
         sample = self._wav()

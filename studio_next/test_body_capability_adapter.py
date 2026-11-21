@@ -55,6 +55,33 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(real.nextCursor)
 
 
+    async def test_catalog_discovery_and_grant_refresh_are_pure_read_only(self):
+        """Observing possible creative tools must never create a media store."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = InstalledBodyAdapter(root, allowed_access=("read", "write"))
+            expected = adapter.trusted_grants()
+            names = {tool.name for tool in (await adapter.list_tools()).tools}
+            self.assertIn("body.timecode_format", names)
+            self.assertEqual(set(expected), names)
+            self.assertFalse((root / "vault").exists(),
+                "Read-only installed-tool inventory unexpectedly initialized media storage")
+            self.assertFalse((root / ".zx7-host-private").exists())
+            self.assertEqual(list(root.iterdir()), [])
+
+    async def test_attaching_actual_body_gateway_does_not_write_before_tool_dispatch(self):
+        """The live shared Brain/BODY discovery path must remain side-effect free."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gateway = await connect_installed_zx7_body(root, allowed_access=("read",))
+            overview = gateway._current().overview()
+            self.assertGreater(overview["operation_count"], 0)
+            self.assertTrue(gateway.search("timecode", limit=4)["matches"])
+            await gateway.refresh()
+            self.assertEqual(gateway.evidence(), [])
+            self.assertEqual(list(root.iterdir()), [],
+                "Tool discovery, gateway attachment or refresh wrote owner workspace")
+
     async def test_real_installed_body_respects_host_supplied_call_budget(self):
         with tempfile.TemporaryDirectory() as root:
             budget = CapabilitySessionBudget(

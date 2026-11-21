@@ -20,7 +20,8 @@ from .providers import MODEL_OUTPUT_REJECTION_CODES
 from .native_render_evidence import (
     AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
-    SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES, reviewed_render_pair,
+    SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES,
+    reviewed_render_pair,
     valid_av_review_values,
 )
 
@@ -641,6 +642,10 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                     raise NativeJournalError("Invalid decoded audio checksum")
                 if (SAVED_RENDER_FIELD in event) != (SAVED_RENDER_OPTIONS_FIELD in event):
                     raise NativeJournalError("Invalid saved project render binding")
+                if (SAVED_RENDER_MEDIA_FIELD in event and
+                        (SAVED_RENDER_FIELD not in event or
+                         not _sha(event[SAVED_RENDER_MEDIA_FIELD]))):
+                    raise NativeJournalError("Invalid render-time native media digest")
                 if {SAVED_RENDER_FIELD, SAVED_RENDER_FAILURE} & event.keys():
                     if (not requires_av_review or tool != RENDER_TOOL or scope is None
                             or next((name for _, name in reversed(writes) if name != RENDER_TOOL),

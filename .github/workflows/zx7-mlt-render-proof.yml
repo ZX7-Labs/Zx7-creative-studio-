@@ -22,8 +22,15 @@ jobs:
           python-version: "3.12"
       - name: Install open-source native editor and physical media decoder
         run: |
+          # The preceding exact-head test never reached the renderer:
+          # 20-min GitHub job timeout expired downloading regional apt archives,
+          # including large recommended speech data unrelated to this native ABI.
+          # Keep Ubuntu's signed archive and install all required test engines.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://us-east-2.ec2.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update -qq
-          sudo apt-get install -y melt ffmpeg frei0r-plugins
+          sudo apt-get install -y --no-install-recommends melt ffmpeg frei0r-plugins
       - name: Compile trusted BODY implementation and exact tool interfaces
         run: python -m compileall -q studio_next
       - name: Prove MLT original source-to-verified MP4 rendering

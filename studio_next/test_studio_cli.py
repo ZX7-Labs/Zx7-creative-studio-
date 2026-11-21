@@ -46,6 +46,96 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
             self.init(model_id="changed")
         self.assertEqual((root / "studio.json").read_bytes(), original)
 
+    def test_staging_refuses_original_mutation_with_restored_mtime(self):
+        """Changing bytes and restoring mtime must not forge stable source custody."""
+        original = self.base / "owned-source.bin"
+        initial = b"original-media-bytes-for-verified-custody"
+        original.write_bytes(initial)
+        before = original.stat()
+        staging = self.base / "stage"
+        staging.mkdir()
+        regular_open = Path.open
+        mutated = []
+
+        class MutatingReader:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def __enter__(self):
+                self.stream.__enter__()
+                return self
+
+            def __exit__(self, *exc):
+                return self.stream.__exit__(*exc)
+
+            def fileno(self):
+                return self.stream.fileno()
+
+            def read(self, *args):
+                data = self.stream.read(*args)
+                if data and not mutated:
+                    # Another local process modifies the already-open original
+                    # without replacing its inode, then restores its mtime.
+                    fd = os.open(original, os.O_WRONLY)
+                    try:
+                        os.pwrite(fd, b"X" * len(initial), 0)
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                    os.utime(original, ns=(before.st_atime_ns, before.st_mtime_ns))
+                    mutated.append(True)
+                return data
+
+        def open_with_mutation(path, *args, **kwargs):
+            stream = regular_open(path, *args, **kwargs)
+            if Path(path) == original and args and args[0] == "rb":
+                return MutatingReader(stream)
+            return stream
+
+        with patch.object(Path, "open", open_with_mutation):
+            with self.assertRaisesRegex(ValueError, "Source changed while staging"):
+                studio._stage_asset(original, staging, "I own this source")
+        self.assertTrue(mutated)
+        self.assertEqual(original.stat().st_ino, before.st_ino)
+        self.assertEqual(original.stat().st_mtime_ns, before.st_mtime_ns)
+        self.assertNotEqual(original.read_bytes(), initial)
+        self.assertFalse(list(staging.iterdir()), "No accepted source should remain")
+
+    def test_staging_refuses_read_descriptor_not_matching_admitted_source(self):
+        """Source pathname identity alone must not authenticate a different open fd."""
+        admitted = self.base / "admitted.wav"
+        substituted = self.base / "other.wav"
+        admitted.write_bytes(b"original owned audio")
+        substituted.write_bytes(b"untrusted other wav")
+        staging = self.base / "stage"
+        staging.mkdir()
+        regular_open = Path.open
+
+        def swap_open(path, *args, **kwargs):
+            if Path(path) == admitted and args and args[0] == "rb":
+                return regular_open(substituted, *args, **kwargs)
+            return regular_open(path, *args, **kwargs)
+
+        with patch.object(Path, "open", swap_open):
+            with self.assertRaisesRegex(ValueError, "Source changed while staging"):
+                studio._stage_asset(admitted, staging, "I own the original")
+        self.assertFalse(list(staging.iterdir()))
+        self.assertEqual(admitted.read_bytes(), b"original owned audio")
+
+    def test_staging_intact_original_still_preserves_bytes_and_rights(self):
+        original = self.base / "owned-original.wav"
+        content = b"RIFF0000WAVE-source-validity-test"
+        original.write_bytes(content)
+        staging = self.base / "stage"
+        staging.mkdir()
+        receipt = studio._stage_asset(original, staging, "I own the sound")
+        self.assertEqual(Path(receipt["path"]).read_bytes(), content)
+        self.assertEqual(receipt["sha256"], hashlib.sha256(content).hexdigest())
+        self.assertEqual(receipt["bytes"], len(content))
+        self.assertEqual(receipt["rights"], "I own the sound")
+        self.assertIs(receipt["rights_independently_verified"], False)
+        self.assertEqual(original.read_bytes(), content)
+
     def test_doctor_checks_actual_local_server_model_inventory_without_inference(self):
         requests = []
         models = [{"id": "local-fixture"}]
@@ -83,6 +173,46 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
             studio.initialize_workspace(second, source=self.source, base_url=base_url)
         self.assertFalse(second.exists())
         self.assertEqual(requests, ["/v1/models"] * 4)
+
+    def test_doctor_opt_in_reports_actual_installed_body_tools_without_writes(self):
+        """One Studio reports host-executable engines, not artistic acceptance."""
+        self.init()
+        self.assertFalse((self.root / "vault").exists())
+        self.assertFalse((self.root / ".zx7-host-private").exists())
+        original = (self.root / "editor-grants.json").read_bytes()
+        baseline = studio.doctor(self.root, check_model=False)
+        self.assertNotIn("installed_body", baseline)
+        observed = studio.doctor(
+            self.root, check_model=False, inspect_installed_body=True)
+        body = observed["installed_body"]
+        self.assertEqual(body["scope"], "installed_host_granted_operations_only")
+        self.assertGreater(body["operation_count"], 0)
+        self.assertIn("body.timecode_format", body["operations"])
+        self.assertEqual(body["operation_count"], len(body["operations"]))
+        self.assertEqual(body["operations"], sorted(body["operations"]))
+        self.assertFalse(body["professional_creative_acceptance_verified"])
+        self.assertIn("installed_body_catalog", {x["name"] for x in observed["checks"]})
+        self.assertEqual((self.root / "editor-grants.json").read_bytes(), original)
+        self.assertFalse((self.root / "vault").exists())
+        self.assertFalse((self.root / ".zx7-host-private").exists())
+
+    def test_doctor_creative_inventory_refuses_hosted_provider_without_probe(self):
+        from studio_next.native_editor_session import attest_owner_body_source
+        self.init(provider="nvidia")
+        with patch("studio_next.native_editor_session.attest_owner_body_source") as source:
+            with self.assertRaisesRegex(ValueError, "local-only"):
+                studio.doctor(self.root, check_model=False, inspect_installed_body=True)
+            source.assert_not_called()
+
+    def test_doctor_installed_body_cli_flag_is_explicit_and_read_only(self):
+        self.init()
+        result = io.StringIO()
+        with contextlib.redirect_stdout(result):
+            code = studio.main(["doctor", str(self.root), "--installed-body-tools"])
+        report = json.loads(result.getvalue())
+        self.assertIn("installed_body", report)
+        self.assertFalse(report["installed_body"]["professional_creative_acceptance_verified"])
+        self.assertEqual(code, 2, "No native editor or local model should be invented")
 
     def test_unreadable_local_model_inventory_does_not_create_workspace(self):
         with patch("studio_next.local_model_http.urlopen", side_effect=BadStatusLine("invalid")):
@@ -226,12 +356,47 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(args.provider, "local")
         self.assertEqual(result["session_id"], args.receipt.parent.name)
 
+    def test_explicit_owner_delivery_target_is_bound_to_private_session_before_model_use(self):
+        from studio_next import native_editor_session
+        self.init()
+        target = {"width": 640, "height": 360, "duration_seconds": 6.0}
+        mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
+        with patch.object(studio, "doctor", return_value={"ready": True}), \
+                patch.object(native_editor_session, "run_native_session", mocked):
+            result = studio.run_workspace(
+                self.root, brief="An original motion and sound experiment",
+                reviewed_av_revision=True, delivery_target=target)
+        self.assertEqual(result["owner_delivery_target"], target)
+        text = (self.root / "sessions" / result["session_id"] / "brief.txt").read_text()
+        self.assertIn('"owner_delivery_target":', text)
+        self.assertIn('"width": 640', text)
+        count = len(list((self.root / "sessions").iterdir()))
+        for invalid in (
+            {"width": 640, "height": 360},
+            {"width": True, "height": 360, "duration_seconds": 6.0},
+            {"width": 640, "height": 360, "duration_seconds": float("inf")},
+            {"width": 640, "height": 360, "duration_seconds": 6.0,
+             "require_audio": False},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                studio.run_workspace(
+                    self.root, brief="Must reject before side effects",
+                    reviewed_av_revision=True, delivery_target=invalid)
+        with self.assertRaises(ValueError):
+            studio.run_workspace(
+                self.root, brief="No A/V acceptance", delivery_target=target)
+        self.assertEqual(len(list((self.root / "sessions").iterdir())), count)
+
     def test_owner_existing_project_audiovisual_revision_does_not_fake_freshness(self):
         from studio_next import native_editor_session
         self.init()
         project = self.root / "projects" / "owned-editable"
         project.mkdir()
-        (project / "project.comfystudio").write_text('{"timelines":[]}')
+        original = '{"timelines":[]}'
+        (project / "project.comfystudio").write_text(original)
+        unrelated = self.root / "projects" / "unrelated-editable"
+        unrelated.mkdir()
+        (unrelated / "project.comfystudio").write_text('{"timelines":[{"id":"other"}]}')
         mocked = AsyncMock(return_value={"evaluation_evidence_satisfied": False})
         with patch.object(studio, "doctor", return_value={"ready": True}), \
                 patch.object(native_editor_session, "run_native_session", mocked):
@@ -242,7 +407,12 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
         self.assertEqual(args.project, project)
         self.assertEqual(args.evaluation_evidence, "reviewed-av-revision")
         self.assertFalse(args.fresh_trial_project)
-        self.assertFalse(args.record_av_project_snapshots)
+        self.assertTrue(args.record_av_project_snapshots)
+        self.assertTrue(result["render_snapshots_required"])
+        checkpoint = self.root / "sessions" / result["session_id"] / "prior-project.comfystudio"
+        self.assertEqual(checkpoint.read_text(), original)
+        self.assertEqual((unrelated / "project.comfystudio").read_text(),
+                         '{"timelines":[{"id":"other"}]}')
         self.assertEqual(result["state"], "needs_attention")
 
     def test_owner_nvidia_audio_review_consent_precedes_any_workspace_side_effect(self):

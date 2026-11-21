@@ -63,8 +63,15 @@ jobs:
         run: python -m pip install --no-cache-dir '.[production,editor]' 'PyYAML>=6,<7' 'setuptools>=77'
       - name: Install actual native FFmpeg encoder for decoder-backed output check
         run: |
+          # This runner's regional Ubuntu mirror timed out while downloading
+          # FFmpeg recommended speech data, before any native contract ran.
+          # Use the same signed official archive and exact mandatory codec set
+          # as the already-passing Python 3.11 original-WAV sibling job.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://us-east-2.ec2.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Verify actual owner-custody recovery uses a live stage lease (Python 3.12)
         run: |
           python -m unittest studio_next.test_body_owned_edit.TrueOwnerAttestedGenericEditorTests.test_exact_owned_cas_render_recovery_reuses_physical_original_without_reencoding -v
@@ -134,6 +141,12 @@ jobs:
           python-version: "3.11"
       - name: Install original-audio source inspection and real decoders
         run: |
+          # The GitHub-hosted regional Ubuntu mirror exhausted CI timeout before
+          # any product tests ran. The official Ubuntu archive uses the same
+          # signed package Release metadata; preserve every physical test.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://us-east-2.ec2.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update -qq
           # The cancelled public run spent its bounded budget fetching optional
           # speech datasets (pocketsphinx-en-us) from Ubuntu mirrors. FFmpeg
