@@ -10,6 +10,8 @@ This is a **causal retrieval index**, not a reconstructed raw transcript or a se
 
 **Post-fix genuine retest:** [run 44350134767](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44350134767). Omni returned three malformed native tool argument envelopes (turns 0–2). The host rejected each before native dispatch. Zero model edits, exports or WAV observations. The model response passed provider transport; the exact malformed arguments are redacted. Paired creative revision remains unverified. Inspect the shape of synthetic Omni arguments with field-name/type-only diagnostics and compare a directly typed native signature against the existing inputs/reason envelope. Keep strict host validation and bounded recovery. A genuine G1 pass, human co-edit and independent professional evaluation are open.
 
+**Follow-up on the recovery adapter:** [Real trial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44913064897) reached Omni and rejected two malformed calls before terminal turn 2. Only the terminal layout is known: reason string, missing inputs, zero other keys. The selected native function and reasons for the omission are unknown. The adapter now explains the required object explicitly after this classification. Local regression RED before correction, 164 combined tests GREEN. No model edit or export.
+
 ## F-REAL-001 — Qwen local 4B autonomous editor run
 
 - **Original:** [real workflow #42711402879](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879), failed native job `129481639892`; artifact `13722569378` (unexpired at 2026-11-15 audit, originally scheduled expiration 2026-11-24 UTC). Qwen3.5-4B local HTTP/llama.cpp, real 46-turn native decision trial.

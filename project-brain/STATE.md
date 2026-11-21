@@ -1,12 +1,12 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
-> **Native function recovery:** The NVIDIA adapter now asks for one offered function on a fresh correction turn. Local transport, audio and controller suites passed 164 tests. A comparable genuine Omni retry is pending. [Handoff](../docs/HANDOFF.md).
+> **Latest genuine Omni [trial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44913064897) failed:** three model turns, zero edits/exports. Terminal call omitted inputs and supplied a reason alone. Shape-specific correction now explains the required inputs object, including empty objects. 164 offline tests passed. A subsequent hosted retest and independent human review remain open.
 
 > **2026-11-20 exact-head technical checkpoint:** [PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), source `2c3595597bf915a676b4bf4984de487f45b623a7`: **22/22 workflows SUCCESS**. [Installed BODY](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44776215098) logged **1,582 tests (1,555 PASS, 27 SKIP)**; [Electron native editorial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44776215097) and MLT passed. NVIDIA actual model job **SKIPPED**, only request admission ran. Latest artifact digest is published metadata, **not independently rehashed** here; 2026-11-19 artifacts were independently audited. [EVIDENCE](EVIDENCE/INDEX.md). Genuine neural A/V, human collaboration, professional A–L release remain **NOT ACCEPTED**.
 
 > **Omni integration (2026-11-19):** Real [#44350134767](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44350134767) FAILED: three malformed model tool calls rejected, zero edits/exports. Strict rejection preserved by diagnostic fix `b6e341d9`; [offline Python 3.11–3.13 #44390763892](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44390763892) passed (163 tests per version) after initial RED #44390018255. Source native CI and genuine G1 acceptance remain open. [Evidence](EVIDENCE/INDEX.md).
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=3ec5b12b3eaf02607f97237d6127425539df2fed` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=d66701dcecb30b4b3f851cbf786f0af50fe814a9` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

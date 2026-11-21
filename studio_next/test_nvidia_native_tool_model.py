@@ -106,6 +106,8 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         sent = json.loads(payload["messages"][1]["content"])["last_rejected_model_output_feedback"]
         self.assertNotIn("return_one_unambiguous_json_object", sent)
         self.assertTrue(sent["choose_one_offered_function_call"])
+        self.assertEqual(sent["required_native_function_arguments"],
+                         {"inputs": "object (use {} for no inputs)", "reason": "nonempty string"})
         self.assertEqual(sent["reason_code"], feedback["reason_code"])
         self.assertEqual(sent["remaining_model_output_corrections"], 1)
         self.assertTrue(sent["no_native_dispatch"])

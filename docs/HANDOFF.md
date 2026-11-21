@@ -1,13 +1,19 @@
 # ZX7 integration handoff
 
-## Exact 2026-11-20 source verification
+## Vision and quality bar
 
-[Draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) head `2c3595597bf915a676b4bf4984de487f45b623a7`; audited main `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. **22/22 exact-head workflows passed**, including [installed BODY](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44776215098) (**1,582 tests, 1,555 pass, 27 skip**), [installed Electron native editorial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44776215097) and [MLT](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44776215139). Prior [cancelled editorial #44457497560](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44457497560) remains negative historical evidence.
+A creator gives a brief, co-edits a native project with the Brain, and can reopen the project with the original media intact. BODY must independently verify both audiovisual exports and preserve the human edit. Professional acceptance requires independent review of the actual work.
 
-The model adapter recovery now asks for one provider-native function after malformed arguments, rather than generic plain JSON; regression first RED, 164 local transport/audio/controller tests GREEN. But the newest [NVIDIA workflow](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44776215100) passed **admission only** and the real model job was **SKIPPED**. Prior [Omni real trial #44350134767](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44350134767) produced zero edits/exports; no comparable post-fix trial occurred.
+## Current evidence
 
-GitHub published installed artifact #14649644352 digest `sha256:2236b1bfcf9fc0991e9135cc49647153da03b6a09d7d4927be862939d39bdb76`; its bytes were **not** independently downloaded or decoded at this checkpoint. Earlier 2026-11-19 artifact independent checks are in [EVIDENCE](../project-brain/EVIDENCE/INDEX.md).
+The installed build at PR #356 head 992939612660d95c69240b02242fc0e71cb964af passed 22/22 workflows. [Installed evidence](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44791524915/artifacts/14657496976) was independently rehashed, including 24/24 manifest files. All three films decoded, with 57, 33 and 24 picture frames respectively for the mixed, 2D and 3D films. The test log reports 1,555 passed and 27 skipped.
 
-## Done, in progress, next, decisions
+The [genuine synthetic-only Omni trial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44913064897) failed after three decisions. It made zero model edits or exports. Both recovery turns followed strict rejection. The terminal response supplied a reason and omitted inputs. The downloaded [artifact](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44913064897/artifacts/14710477148) matched the published SHA-256. The one-use branch grant closed at 768eb3d8. The controller never dispatched the malformed calls.
 
-**Done:** source-head technical integration / installed native tests. **In progress:** real Brain creative acceptance; keep PR draft. **Next:** separately purpose-approved bounded synthetic-only capable-model first A/V render, timed picture and semantic sound review, model-selected meaningful edit, distinct source-preserving native second A/V render; then real human co-edit, rights/security and independent professional craft review. **Open:** capable model resource/consent and independent participants. **Settled:** A–L scope, local-first replaceable Brain + host-owned BODY, existing pinned editor, no uncertain native write replay, no new framework, no cloud media uploads or paid calls without separately scoped approval, no merge/release until gates close. Refer to [STATE](../project-brain/STATE.md), [LEDGER](../project-brain/EXECUTION_LEDGER.json), [RISKS](../project-brain/RISKS.md), [BRIEF](../project-brain/BRIEF.md).
+## Priorities and decisions
+
+1. Establish whether Omni can emit the declared native arguments on a fresh decision. The correction now describes the required inputs object, including the empty case. Local offline transport, audio and controller tests passed 164/164. The correction has no genuine model receipt yet. A bounded text-only comparison can isolate transport behavior before another full creative run.
+2. Once transport works, verify an actual model-selected first export, timed picture and sound review, meaningful revision and distinct second editable delivery.
+3. Observe a human edit surviving a real collaboration session and obtain independent professional, rights and security review against the existing A–L criteria.
+
+The last paid grant covered one trial. Keep the PR draft and future provider calls separately scoped. Preserve the existing editor, host validation and export provenance. The [ledger](../project-brain/EXECUTION_LEDGER.json) and [failure register](../project-brain/EVIDENCE/FAILURE_REGISTER.md) retain exact positive and negative receipts.

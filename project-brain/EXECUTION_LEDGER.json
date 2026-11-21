@@ -1118,5 +1118,18 @@
     "github_published_sha256": "2236b1bfcf9fc0991e9135cc49647153da03b6a09d7d4927be862939d39bdb76",
     "artifact_independent_byte_audit": "NOT_PERFORMED",
     "artistic_human_professional_release": "NOT_ACCEPTED"
+  },
+  "omni_native_recovery_trial": {
+    "run": 44913064897,
+    "trial_commit": "f10b71c244f006cef64c193bf6fcf394c0b42555",
+    "artifact_id": 14710477148,
+    "artifact_sha256": "1115209939c749c6e7d598a301689445137dddbae2d9e3249b51011a1d31d592",
+    "conclusion": "FAILED",
+    "model_turns": 3,
+    "model_edits": 0,
+    "model_exports": 0,
+    "terminal_layout": "inputs=missing reason=string native_direct=0 unknown=0 nested_native=0",
+    "grant_closed_at": "768eb3d870a580d0634652427c86031c68235977",
+    "post_trial_feedback": "164 offline checks passed; no subsequent hosted retest"
   }
 }
