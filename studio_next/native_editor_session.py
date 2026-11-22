@@ -340,7 +340,9 @@ async def run_native_session(args):
         from .native_editor_project import capture_render_project as capture
         from .native_revision_observation import NativeRevisionObservationMcpSession
         from .native_render_evidence import DESTINATION_FIELD
-        # This is needed for both fresh and owner-selected native projects.\n        # Do not assume the fresh-only preflight initialized project_root.\n        project_root = Path(configuration["projects_root"])\n        snapshots_root = args.state.resolve() / "av-project-snapshots"
+        # Both fresh and selected projects need the same source-bound root.
+        project_root = Path(configuration["projects_root"])
+        snapshots_root = args.state.resolve() / "av-project-snapshots"
         snapshots_root.mkdir(mode=0o700)
         native_revision_source = NativeRevisionObservationMcpSession(snapshots_root)
         physical_capture = partial(
