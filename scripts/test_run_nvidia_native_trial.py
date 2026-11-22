@@ -23,6 +23,43 @@ from scripts.run_nvidia_native_trial import (
 
 
 class RealNvidiaTrialBootstrapTests(unittest.TestCase):
+    def test_integrated_trial_uses_exact_cumulative_native_source_not_bare_upstream(self):
+        """Real neural proof must use the reviewed cumulative BODY editor."""
+        from scripts.run_nvidia_native_trial import _PINNED_EDITOR
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            integrated = base / "reviewed-native-source"
+            integrated.mkdir()
+            workspace = base / "separate-output"
+            # An upstream-only checkout cannot impersonate the complete editor.
+            fake_git = subprocess.CompletedProcess([], 0, _PINNED_EDITOR + "\n", "")
+            with patch("scripts.run_nvidia_native_trial.subprocess.run",
+                       return_value=fake_git):
+                with self.assertRaisesRegex(ValueError, "Unpinned native editor source"):
+                    prepare_trial(workspace, source=integrated,
+                                  audiovisual=True, integrated_native=True)
+            self.assertFalse(workspace.exists())
+
+            # The actual native client, not only the preflight, must receive
+            # this exact reviewed source. No hosted provider is called here.
+            workspace.mkdir()
+            roots = {"state": workspace / "state", "outputs": workspace / "outputs"}
+            with patch("scripts.run_nvidia_native_trial.prepare_trial",
+                       return_value=(roots, workspace / "host-grants.json")) as staged, patch(
+                    "scripts.run_nvidia_native_trial.subprocess.run",
+                    return_value=subprocess.CompletedProcess([], 1, "", "")) as child:
+                with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                    run_trial(workspace, model_id=_ALLOWED_MODEL,
+                              xvfb_binary="/usr/bin/Xvfb",
+                              display="127.0.0.1:95",
+                              audiovisual=True, allow_cloud_audio_diagnostics=True,
+                              integrated_editor_source=integrated)
+            staged.assert_called_once_with(
+                workspace, source=integrated.resolve(),
+                audiovisual=True, integrated_native=True)
+            cli = child.call_args.args[0]
+            self.assertEqual(cli[cli.index("--source") + 1], str(integrated.resolve()))
+
     def test_omni_synthetic_wav_flag_reaches_only_the_exact_authorized_native_session(self):
         from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
 

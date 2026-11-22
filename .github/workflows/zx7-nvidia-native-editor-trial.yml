@@ -52,6 +52,8 @@ jobs:
         run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
       - name: Verify new A/V mode is DENIED until new source approval and exact dispatch ID
         run: python -m unittest -v scripts.test_nvidia_av_trial_request
+      - name: Reject non-integrated editor source and require exact trial route offline
+        run: python -m unittest -v scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_integrated_trial_uses_exact_cumulative_native_source_not_bare_upstream
 
   real-model-native-editor-and-export:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.trial_mode == 'audiovisual'
