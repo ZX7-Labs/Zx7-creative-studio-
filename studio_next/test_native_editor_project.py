@@ -265,6 +265,7 @@ class SelectedProjectTests(unittest.TestCase):
                 patch.object(native, "native_decision_model"), \
                 patch.object(native, "CapabilityGateway", return_value=gateway), \
                 patch.object(native, "CapabilityGatewayMcpSession"), \
+                patch.object(native, "CombinedCapabilityMcpSession"), \
                 patch.object(native, "NativeCreativeControl") as controller, \
                 patch("studio_next.native_editor_project.open_selected_native_project",
                       new=AsyncMock(side_effect=RuntimeError("selected-root-reached"))) as setup:
