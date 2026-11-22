@@ -30,8 +30,9 @@ NATIVE_DIRECT_TOOL_SYSTEM = """You control a real native creative editor.
 Independently choose original artistic edits from the owner's brief and real
 observations. Use the ACTUAL named functions offered in this request. Each
 zx7_native_* function maps to exactly one installed host-authorized editor
-operation; its inputs are typed under the required inputs field. Supply your
-own concise reason. You may choose any exposed creative operation; the
+operation; its inputs are typed under the inputs field when offered. A function
+with only a reason parameter needs no native inputs. Supply your own concise
+reason. You may choose any exposed creative operation; the
 host does not prescribe a shot list or author edits.
 You do not need to discover/describe tools already provided as functions.
 Use real read results to learn asset IDs, project state, frame identities and
@@ -76,6 +77,20 @@ def _meta_parameters(action: str, choices: list[str] | None = None) -> dict:
         **arguments,
         "reason": {"type": "string", "minLength": 1}},
         "required": needed + ["reason"], "additionalProperties": False}
+
+
+def _exact_empty_native_schema(schema: dict) -> bool:
+    """Only omit a wrapper for a zero-field object under host preflight.
+
+    NativeCreativeControl closes top-level declared properties when the
+    native schema omits additionalProperties. Explicitly open or otherwise
+    constrained objects retain their entire inputs wrapper.
+    """
+    return (set(schema) <= {"type", "properties", "required", "additionalProperties"}
+            and schema.get("type") == "object"
+            and schema.get("properties") == {}
+            and schema.get("required", []) == []
+            and schema.get("additionalProperties", False) is False)
 
 
 def _rejected_native_argument_layout(args: dict, schema: dict) -> str:
@@ -151,11 +166,14 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             feedback["choose_one_offered_function_call"] = True
             if feedback.get("reason_code") == "native_function_inputs_shape":
                 feedback["required_native_function_arguments"] = {
-                    "inputs": "object (use {} for no inputs)", "reason": "nonempty string"}
+                    "inputs": ("object when offered; omit only if not offered"
+                               if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
+                               else "object (use {} for no inputs)"),
+                    "reason": "nonempty string"}
         return super()._messages(compact, images)
 
     @staticmethod
-    def _tool_surface(context):
+    def _tool_surface(context, *, omit_empty_inputs=False):
         if not isinstance(context, dict):
             raise NvidiaConfigurationError("Trusted native tool context required")
         allowed = context.get("available_actions")
@@ -190,6 +208,9 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             if fn_name in mapping:
                 raise NvidiaConfigurationError("Native tool function name collision")
             mapping[fn_name] = ("invoke", name)
+            empty = omit_empty_inputs and _exact_empty_native_schema(schema)
+            properties = {} if empty else {"inputs": copy.deepcopy(schema)}
+            properties["reason"] = {"type": "string", "minLength": 1}
             functions.append({"type": "function", "function": {
                 "name": fn_name,
                 "description": (
@@ -197,11 +218,8 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                     ". Native source description: " + spec["description"][:256]),
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "inputs": copy.deepcopy(schema),
-                        "reason": {"type": "string", "minLength": 1},
-                    },
-                    "required": ["inputs", "reason"],
+                    "properties": properties,
+                    "required": ["reason"] if empty else ["inputs", "reason"],
                     "additionalProperties": False,
                 },
             }})
@@ -246,7 +264,8 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
 
     def _call_as_native_tool(self, context, *, images=(), audio=()):
         self.last_call_usage = None
-        functions, mapping = self._tool_surface(context)
+        omit_empty_inputs = self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
+        functions, mapping = self._tool_surface(context, omit_empty_inputs=omit_empty_inputs)
         payload = {
             "model": self.settings.model_id,
             "stream": False,
@@ -298,13 +317,23 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                 raise LocalModelOutputError("native_function_missing_reason")
             action, name = mapping[fn["name"]]
             if action == "invoke":
-                if set(args) != {"inputs", "reason"} or type(args["inputs"]) is not dict:
-                    contract = next(spec["input_schema"] for spec in
-                                    context["host_native_tool_contracts"]
-                                    if spec["name"] == name)
+                contract = next(spec["input_schema"] for spec in
+                                context["host_native_tool_contracts"]
+                                if spec["name"] == name)
+                if omit_empty_inputs and _exact_empty_native_schema(contract):
+                    # Both the advertised reason-only form and the previous
+                    # explicit empty object select precisely the same inputs.
+                    if set(args) == {"reason"} or (
+                            set(args) == {"inputs", "reason"} and args["inputs"] == {}):
+                        inputs = {}
+                    else:
+                        raise _NativeFunctionInputsShapeError(args, contract)
+                elif set(args) == {"inputs", "reason"} and type(args["inputs"]) is dict:
+                    inputs = args["inputs"]
+                else:
                     raise _NativeFunctionInputsShapeError(args, contract)
                 return {"action": "invoke",
-                        "arguments": {"tool": name, "inputs": args["inputs"]},
+                        "arguments": {"tool": name, "inputs": inputs},
                         "reason": args["reason"]}
             if action == "search":
                 allowed_keys = ({"query", "reason"}, {"query", "limit", "reason"})

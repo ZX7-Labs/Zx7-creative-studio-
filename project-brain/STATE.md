@@ -1,12 +1,12 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
-> **2026-11-22 exact prior head:** [#356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) `e324132481801cbed35b014901c5a7c8c81aac29`: 22/23 workflows successful at audit; full MLT suite still running then. [Installed artifact #14741353983](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44989933441/artifacts/14741353983) independently verified 24/24 files and decoded 3 movies; 1,596 tests, 1,569 pass, 27 skip. Actual VFX regression [#44989933536](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44989933536) passed 9/9. Prior exact 7ffa full MLT suite passed 1,595/1,596; only Chromium skipped. Earlier save-convergence failure retained. Real-model jobs skipped.
+> **2026-11-22 exact prior head:** [#356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356) `282ed04ec160b1db525b1d44937fb378cd115253`: 23/24 workflows successful; installed release artifact upload succeeded but immediate download failed. Independent retained artifact #14741968897: 24/24 hashes, 1,569 pass, 30 skip, 3 decodes. Actual model jobs skipped. [Evidence](EVIDENCE/INDEX.md).
 
-> **Integration batch:** reused #210's exact optional SciPy graph, renderer and test blobs; original NumPy remains default, local 18/18 visual and 8/8 tool tests pass, no speed guarantee. Existing Chromium gate now pre-merge and fail-closed: reproduced false greens, shell harness corrected, real hosted browser pending. [Evidence](EVIDENCE/INDEX.md). New head CI not yet accepted.
+> **Integration:** #210 SciPy port retained; Chromium gate fail-closed. **Omni contract candidate:** exact pinned zero-field native signatures no longer require redundant empty input generation; strict parameterized tools unchanged. 45 scoped local tests pass, hosted CI and actual model retest pending. No new provider consent. Failed trace does not identify the invoked tool.
 
 > **Branch reconciliation in progress:** [407 refs](EVIDENCE/branch-review-20261121.tsv), 51 conflicting refs grouped into three exact review frontiers (#178/#179/#189); semantic gaps remain. Historical GUI candidate omits current native ripple marker commit and source pin; raw source preview uses obsolete inventory schema. Preserve history, do not bulk merge. [Omni trial](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44913064897) failed (3 decisions, zero edits/exports). No further hosted real-model retest; human and independent acceptance open. Refresh live head.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=51936600c29de8de4f9f1520480f4148982361ff` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=d7b9fe5aad51c1cc9843d6d94f8def7c413fdae2` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

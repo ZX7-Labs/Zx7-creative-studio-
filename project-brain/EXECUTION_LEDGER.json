@@ -1143,7 +1143,23 @@
     "model_exports": 0,
     "terminal_layout": "inputs=missing reason=string native_direct=0 unknown=0 nested_native=0",
     "grant_closed_at": "768eb3d870a580d0634652427c86031c68235977",
-    "post_trial_feedback": "164 offline checks passed; no subsequent hosted retest"
+    "post_trial_feedback": "164 offline checks passed; no subsequent hosted retest",
+    "zero_field_contract_candidate": {
+      "parent": "282ed04ec160b1db525b1d44937fb378cd115253",
+      "adapter_blob": "9af59eaf250560d84e92be236889af224174b23d",
+      "tests_blob": "e12b51670106d3ab55a05d03db1df4f92dd97b83",
+      "local": "45 scoped passes; 3 MCP-dependent tests unavailable locally, hosted pending",
+      "scope": "Omni only, exact declared zero-field tool, reason-only or explicitly empty inputs; other schemas unchanged; no inferred required values",
+      "neural_status": "UNVERIFIED; failed trace does not identify selected tool; no inference authorization"
+    },
+    "installed_head_audit": {
+      "head": "282ed04ec160b1db525b1d44937fb378cd115253",
+      "run": 44991268254,
+      "artifact": 14741968897,
+      "manifest": "24/24",
+      "tests": "1569 passed, 30 skipped",
+      "run_result": "FAILED at immediate artifact download by name; independent later download verified"
+    }
   },
   "branch_integration_review": {
     "base": "70f3f5601f8780fc37ebe8b5d8c6506d5b0e3342",

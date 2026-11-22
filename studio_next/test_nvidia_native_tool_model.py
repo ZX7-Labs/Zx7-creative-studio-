@@ -83,6 +83,7 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                                  _provider_function("add_asset_to_timeline")})
         typed = next(t["function"]["parameters"] for t in body["tools"]
                      if t["function"]["name"] == _provider_function("add_asset_to_timeline"))
+        self.assertEqual(list(typed["properties"]), ["inputs", "reason"])
         self.assertEqual(typed["properties"]["inputs"], context[
             "host_native_tool_contracts"][1]["input_schema"])
         self.assertNotIn("host_native_tool_contracts",
@@ -326,6 +327,56 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
         body = remote.call_args.args[0]
         self.assertEqual(body["tool_choice"], "auto")
         self.assertEqual(body["tools"][1]["function"]["parameters"]["properties"]["inputs"], schema)
+
+    def test_omni_exact_empty_schema_reason_only_is_a_complete_decision(self):
+        model = self._model()
+        for extra in ({}, {"additionalProperties": False},
+                      {"additionalProperties": False, "required": []}):
+            with self.subTest(extra=extra):
+                ctx = _context()
+                # Pinned Velorn get_project omits additionalProperties;
+                # controller preflight explicitly closes declared objects.
+                ctx["host_native_tool_contracts"][0]["input_schema"] = {
+                    "type": "object", "properties": {}, **extra}
+                reply = _reply(_provider_function("get_project"),
+                               '{"reason":"Inspect project"}')
+                with patch.object(model, "_open_request", return_value=reply) as remote:
+                    decision = model.decide(ctx)
+                self.assertEqual(decision, {"action": "invoke", "arguments": {
+                    "tool": "get_project", "inputs": {}}, "reason": "Inspect project"})
+                parameters = remote.call_args.args[0]["tools"][0]["function"]["parameters"]
+                self.assertEqual(set(parameters["properties"]), {"reason"})
+                self.assertEqual(parameters["required"], ["reason"])
+                self.assertFalse(parameters["additionalProperties"])
+
+    def test_omni_omitted_arguments_never_guess_native_values(self):
+        model = self._model()
+        for schema in (
+            {"type": "object", "properties": {"assetId": {"type": "string"}},
+             "required": ["assetId"], "additionalProperties": False},
+            {"type": "object", "properties": {"previewOnly": {"type": "boolean"}},
+             "additionalProperties": False},
+            {"type": "object", "properties": {}, "additionalProperties": True},
+            {"type": "object", "properties": {}, "additionalProperties": False,
+             "minProperties": 1},
+        ):
+            ctx = _context()
+            ctx["host_native_tool_contracts"][0]["input_schema"] = schema
+            with self.subTest(schema=schema), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("get_project"),
+                                        '{"reason":"Inspect project"}')):
+                with self.assertRaisesRegex(LocalModelOutputError, "native_function_inputs_shape"):
+                    model.decide(ctx)
+
+    def test_omni_exact_empty_schema_rejects_extra_or_nonempty_arguments(self):
+        model = self._model()
+        for value in ('{"reason":"Inspect","unexpected":1}',
+                      '{"reason":"Inspect","inputs":{"assetId":"x"}}',
+                      '{"reason":"Inspect","inputs":null}'):
+            with self.subTest(value=value), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("get_project"), value)):
+                with self.assertRaisesRegex(LocalModelOutputError, "native_function_inputs_shape"):
+                    model.decide(_context())
 
     def test_consent_false_wrong_model_and_ambiguous_custody_reject_before_network(self):
         sample = self._wav()
