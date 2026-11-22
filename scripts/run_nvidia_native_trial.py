@@ -20,12 +20,14 @@ from typing import NamedTuple
 from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
 from studio_next.native_render_evidence import destination_digest, timeline_scope_digest
 from studio_next.body_editor_export import native_export_file_identity
+from studio_next.native_editor_source_pin import PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION
 
 ROOT = Path(__file__).resolve().parents[1]
 _SOURCE_EDITOR = ROOT / "third_party" / "velorn"
 _EDITOR_CLIENT = ROOT / "engines" / "velorn" / "native-model-client.py"
 _EXAMPLE = ROOT / "engines" / "velorn" / "editor.example.json"
 _PINNED_EDITOR = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+_PINNED_INTEGRATED_EDITOR = PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION
 _ALLOWED_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 # A previous genuine 40-turn hosted run verified two real exports and observed
 # their frames, but spent its last turns exporting a post-review revision and
@@ -81,7 +83,7 @@ def _sha256(path):
     return digest.hexdigest()
 
 
-def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
+def prepare_trial(workspace: Path, *, source: Path, audiovisual=False, integrated_native=False):
     """Private, non-overwriting real media and host grants; no user footage."""
     workspace = Path(workspace).resolve()
     source = Path(source).resolve()
@@ -92,7 +94,8 @@ def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
     rev = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"],
                          check=True, capture_output=True, text=True, timeout=15,
                          env=_no_cloud_credentials()).stdout.strip()
-    if rev != _PINNED_EDITOR:
+    if type(integrated_native) is not bool or rev != (
+            _PINNED_INTEGRATED_EDITOR if integrated_native else _PINNED_EDITOR):
         raise ValueError("Unpinned native editor source cannot enter trial")
     os.umask(0o077)
     workspace.mkdir(mode=0o700)
@@ -572,7 +575,7 @@ def exports_with_wav_decisions(events):
 
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
               audiovisual=False, allow_cloud_audio_diagnostics=False,
-              allow_cloud_synthetic_wav=False):
+              allow_cloud_synthetic_wav=False, integrated_editor_source=None):
     # Runtime API and CLI enforce the same explicit paid/provider disclosure.
     # An old reviewed visual-only request is not authority to send synthetic
     # sound statistics to a hosted model or to launch a new cloud evaluation.
@@ -585,8 +588,11 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
     expected_model = NVIDIA_OMNI_AUDIO_MODEL_ID if allow_cloud_synthetic_wav else _ALLOWED_MODEL
     if model_id != expected_model:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
-    roots, cfg = prepare_trial(workspace, source=_SOURCE_EDITOR,
-                               audiovisual=audiovisual)
+    source = (Path(integrated_editor_source).resolve() if integrated_editor_source is not None
+              else _SOURCE_EDITOR)
+    roots, cfg = prepare_trial(
+        workspace, source=source, audiovisual=audiovisual,
+        **({"integrated_native": True} if integrated_editor_source is not None else {}))
     workspace = Path(workspace).resolve()
     if allow_cloud_synthetic_wav:
         with (workspace / "brief.txt").open("a", encoding="utf-8") as brief:
@@ -616,7 +622,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         *(["--allow-cloud-original-wav-upload"] if allow_cloud_synthetic_wav else []),
         "--max-turns", str(_TRIAL_MAX_TURNS),
         "--model-timeout", str(_TRIAL_MODEL_TIMEOUT_SECONDS),
-        "--source", str(_SOURCE_EDITOR),
+        "--source", str(source),
         "--config", str(cfg),
         "--state", str(roots["state"]),
         "--brief-file", str(workspace / "brief.txt"),
@@ -781,9 +787,14 @@ def main(argv=None):
                         help="Separate consent for sending synthetic audio statistics to NVIDIA")
     parser.add_argument("--allow-cloud-synthetic-wav", action="store_true",
                         help="Permit source-bound generated WAV excerpts on the audited Omni trial")
+    parser.add_argument("--integrated-editor-source", type=Path,
+                        help="Use only the rebuilt, exact source-pinned cumulative ZX7 editor")
     args = parser.parse_args(argv)
     if args.prepare_audiovisual_only:
-        prepare_trial(args.workspace, source=_SOURCE_EDITOR, audiovisual=True)
+        prepare_trial(args.workspace,
+                      source=(args.integrated_editor_source or _SOURCE_EDITOR),
+                      audiovisual=True,
+                      integrated_native=args.integrated_editor_source is not None)
         return
     if args.audiovisual_trial and not args.allow_cloud_audio_diagnostics:
         parser.error("Audiovisual NVIDIA trial requires explicit cloud audio diagnostics consent")
@@ -793,7 +804,8 @@ def main(argv=None):
               xvfb_binary=args.xvfb_binary, display=args.display,
               audiovisual=args.audiovisual_trial,
               allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics,
-              allow_cloud_synthetic_wav=args.allow_cloud_synthetic_wav)
+              allow_cloud_synthetic_wav=args.allow_cloud_synthetic_wav,
+              integrated_editor_source=args.integrated_editor_source)
 
 
 if __name__ == "__main__":

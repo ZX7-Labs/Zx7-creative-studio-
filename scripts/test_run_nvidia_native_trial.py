@@ -59,6 +59,10 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 audiovisual=True, integrated_native=True)
             cli = child.call_args.args[0]
             self.assertEqual(cli[cli.index("--source") + 1], str(integrated.resolve()))
+            workflow = (Path(__file__).resolve().parents[1] /
+                        ".github/workflows/zx7-nvidia-native-editor-trial.yml").read_text()
+            self.assertIn("prepare-native-loss-aware-extract-candidate.sh", workflow)
+            self.assertIn('--integrated-editor-source "$ZX7_INTEGRATED_NATIVE_EDITOR"', workflow)
 
     def test_omni_synthetic_wav_flag_reaches_only_the_exact_authorized_native_session(self):
         from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
