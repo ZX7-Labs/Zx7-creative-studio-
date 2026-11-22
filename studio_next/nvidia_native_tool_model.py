@@ -30,8 +30,8 @@ NATIVE_DIRECT_TOOL_SYSTEM = """You control a real native creative editor.
 Independently choose original artistic edits from the owner's brief and real
 observations. Use the ACTUAL named functions offered in this request. Each
 zx7_native_* function maps to exactly one installed host-authorized editor
-operation; its inputs are typed under the inputs field when offered. A function
-with only a reason parameter needs no native inputs. Supply your own concise
+operation; its native parameters are typed directly or under the inputs field as offered.
+A function with only a reason parameter needs no native inputs. Supply your own concise
 reason. You may choose any exposed creative operation; the
 host does not prescribe a shot list or author edits.
 You do not need to discover/describe tools already provided as functions.
@@ -79,18 +79,34 @@ def _meta_parameters(action: str, choices: list[str] | None = None) -> dict:
         "required": needed + ["reason"], "additionalProperties": False}
 
 
-def _exact_empty_native_schema(schema: dict) -> bool:
-    """Only omit a wrapper for a zero-field object under host preflight.
-
-    NativeCreativeControl closes top-level declared properties when the
-    native schema omits additionalProperties. Explicitly open or otherwise
-    constrained objects retain their entire inputs wrapper.
-    """
+def _direct_native_fields(schema: dict) -> bool:
+    """Only project a plain closed native object; keep scoped schemas wrapped."""
+    props = schema.get("properties")
+    required = schema.get("required", [])
     return (set(schema) <= {"type", "properties", "required", "additionalProperties"}
             and schema.get("type") == "object"
-            and schema.get("properties") == {}
-            and schema.get("required", []) == []
+            and type(props) is dict and not ({"reason", "inputs"} & props.keys())
+            and type(required) is list and all(type(k) is str and k in props for k in required)
+            and len(required) == len(set(required))
             and schema.get("additionalProperties", False) is False)
+
+
+def _has_schema_scope(value):
+    if isinstance(value, dict):
+        return bool({"$ref", "$dynamicRef", "$recursiveRef", "$id", "$anchor",
+                     "$dynamicAnchor", "$schema", "$defs", "definitions"} & value.keys()) or any(
+                         _has_schema_scope(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_has_schema_scope(v) for v in value)
+    return False
+
+
+def _direct_native_signature(schema):
+    # Optional-only nonempty schemas keep an explicit inputs envelope, so
+    # omission cannot silently select a default write. Explicit direct fields
+    # can still be normalized losslessly by the decoder.
+    return (_direct_native_fields(schema) and not _has_schema_scope(schema)
+            and (not schema["properties"] or bool(schema.get("required"))))
 
 
 def _rejected_native_argument_layout(args: dict, schema: dict) -> str:
@@ -166,7 +182,7 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             feedback["choose_one_offered_function_call"] = True
             if feedback.get("reason_code") == "native_function_inputs_shape":
                 feedback["required_native_function_arguments"] = {
-                    "inputs": ("object when offered; omit only if not offered"
+                    "inputs": ("use the offered parameters directly or under inputs when offered"
                                if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
                                else "object (use {} for no inputs)"),
                     "reason": "nonempty string"}
@@ -208,8 +224,9 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             if fn_name in mapping:
                 raise NvidiaConfigurationError("Native tool function name collision")
             mapping[fn_name] = ("invoke", name)
-            empty = omit_empty_inputs and _exact_empty_native_schema(schema)
-            properties = {} if empty else {"inputs": copy.deepcopy(schema)}
+            direct = omit_empty_inputs and _direct_native_signature(schema)
+            properties = (copy.deepcopy(schema["properties"]) if direct
+                          else {"inputs": copy.deepcopy(schema)})
             properties["reason"] = {"type": "string", "minLength": 1}
             functions.append({"type": "function", "function": {
                 "name": fn_name,
@@ -219,7 +236,8 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                 "parameters": {
                     "type": "object",
                     "properties": properties,
-                    "required": ["reason"] if empty else ["inputs", "reason"],
+                    "required": (list(schema.get("required", [])) + ["reason"]
+                                 if direct else ["inputs", "reason"]),
                     "additionalProperties": False,
                 },
             }})
@@ -320,13 +338,16 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                 contract = next(spec["input_schema"] for spec in
                                 context["host_native_tool_contracts"]
                                 if spec["name"] == name)
-                if omit_empty_inputs and _exact_empty_native_schema(contract):
-                    # Both the advertised reason-only form and the previous
-                    # explicit empty object select precisely the same inputs.
-                    if set(args) == {"reason"} or (
-                            set(args) == {"inputs", "reason"} and args["inputs"] == {}):
-                        inputs = {}
+                if omit_empty_inputs and _direct_native_fields(contract):
+                    if set(args) == {"inputs", "reason"} and type(args["inputs"]) is dict:
+                        inputs = args["inputs"]
+                    elif "inputs" not in args and (set(args) != {"reason"}
+                          or _direct_native_signature(contract)):
+                        inputs = {k: v for k, v in args.items() if k != "reason"}
                     else:
+                        raise _NativeFunctionInputsShapeError(args, contract)
+                    if (not set(inputs) <= contract["properties"].keys()
+                            or not set(contract.get("required", [])) <= inputs.keys()):
                         raise _NativeFunctionInputsShapeError(args, contract)
                 elif set(args) == {"inputs", "reason"} and type(args["inputs"]) is dict:
                     inputs = args["inputs"]

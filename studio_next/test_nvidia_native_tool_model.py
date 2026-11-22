@@ -326,7 +326,46 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
                 model.decide(ctx)
         body = remote.call_args.args[0]
         self.assertEqual(body["tool_choice"], "auto")
-        self.assertEqual(body["tools"][1]["function"]["parameters"]["properties"]["inputs"], schema)
+        self.assertEqual(body["tools"][1]["function"]["parameters"]["properties"]["frames"],
+                         schema["properties"]["frames"])
+
+    def test_omni_required_native_fields_are_direct_and_lossless(self):
+        model = self._model()
+        ctx = _context()
+        schema = ctx["host_native_tool_contracts"][1]["input_schema"]
+        reply = _reply(_provider_function("add_asset_to_timeline"),
+                       '{"assetId":"native-source","previewOnly":false,"reason":"Place source"}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            decision = model.decide(ctx)
+        self.assertEqual(decision["arguments"], {"tool": "add_asset_to_timeline",
+                         "inputs": {"assetId": "native-source", "previewOnly": False}})
+        parameters = remote.call_args.args[0]["tools"][1]["function"]["parameters"]
+        self.assertEqual(parameters["properties"]["assetId"], schema["properties"]["assetId"])
+        self.assertEqual(parameters["required"], ["assetId", "reason"])
+        self.assertNotIn("inputs", parameters["properties"])
+        self.assertFalse(parameters["additionalProperties"])
+
+    def test_omni_direct_native_fields_reject_unknown_missing_or_mixed_shapes(self):
+        model = self._model()
+        for args in ({"reason": "edit"}, {"previewOnly": False, "reason": "edit"},
+                     {"assetId": "x", "reason": "edit", "extra": True},
+                     {"assetId": "x", "inputs": {}, "reason": "edit"},
+                     {"inputs": {}, "reason": "edit"}):
+            with self.subTest(args=args), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("add_asset_to_timeline"), json.dumps(args))):
+                with self.assertRaisesRegex(LocalModelOutputError, "native_function_inputs_shape"):
+                    model.decide(_context())
+
+    def test_omni_optional_direct_fields_and_explicit_empty_wrapper(self):
+        model = self._model()
+        ctx = _context()
+        ctx["host_native_tool_contracts"][0]["input_schema"] = {
+            "type": "object", "properties": {"previewOnly": {"type": "boolean"}}}
+        for args, expected in (({"previewOnly": False, "reason": "inspect"}, {"previewOnly": False}),
+                               ({"inputs": {}, "reason": "inspect"}, {})):
+            with self.subTest(args=args), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("get_project"), json.dumps(args))):
+                self.assertEqual(model.decide(ctx)["arguments"]["inputs"], expected)
 
     def test_omni_exact_empty_schema_reason_only_is_a_complete_decision(self):
         model = self._model()
