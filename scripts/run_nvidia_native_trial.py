@@ -604,6 +604,10 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         # transport for this trial; all BODY grants/schema checks remain.
         # There is NO host-authored creative edit or automatic invocation.
         "--structured-actions",
+        # Omni full-catalog trial 44998186099 made 25 identical project reads.
+        # Reuse the existing trusted capability frontier for this model only;
+        # the Brain still chooses all actions and the host retains all checks.
+        *(["--indexed-catalog"] if allow_cloud_synthetic_wav else []),
         "--fresh-trial-project",
         "--evaluation-evidence", (
             "reviewed-av-revision" if audiovisual else "reviewed-revision"),

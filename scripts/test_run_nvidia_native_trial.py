@@ -43,6 +43,7 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                                   allow_cloud_synthetic_wav=True, **args)
                 cmd = child.call_args.args[0]
                 self.assertIn("--allow-cloud-original-wav-upload", cmd)
+                self.assertIn("--indexed-catalog", cmd)
                 self.assertEqual(cmd[cmd.index("--model-id") + 1], NVIDIA_OMNI_AUDIO_MODEL_ID)
 
     def test_wav_decision_receipt_excludes_failed_or_missing_next_turn(self):
