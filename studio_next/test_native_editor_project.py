@@ -220,6 +220,62 @@ class SelectedProjectTests(unittest.TestCase):
             setup.assert_awaited_once()
             self.assertEqual(setup.await_args.kwargs["project"], self.selected)
 
+    def test_owner_selected_native_av_snapshot_attests_root_before_model(self):
+        """The same source-owning renderer callback works when fresh=False.
+
+        A real hosted trial formerly raised UnboundLocalError at
+        physical_capture(project_root) before it could open the selected
+        saved native document. Test the production entry and fail closed.
+        """
+        from contextlib import asynccontextmanager
+        from unittest.mock import MagicMock
+        from studio_next import native_editor_session as native
+
+        config = self.root / "host-snapshot.json"
+        config.write_text(json.dumps({
+            "projects_root": str(self.root),
+            "allowed_access": ["read", "write"],
+            "allowed_tools": {
+                "open_project": "write", "get_project": "read",
+                "save_project": "write", "set_clip_audio": "write",
+            },
+            "verify_native_exports": True,
+        }))
+        brief = self.root / "brief-snapshot.txt"
+        brief.write_text("Independently revise my existing native A/V project")
+        args = native.build_parser().parse_args([
+            "--source", str(self.root), "--config", str(config),
+            "--state", str(self.root), "--brief-file", str(brief),
+            "--receipt", str(self.root / "selected-av-journal.jsonl"),
+            "--model-id", "safe-offline-fixture", "--project", str(self.selected),
+            "--record-av-project-snapshots",
+            "--evaluation-evidence", "reviewed-av-revision",
+        ])
+        @asynccontextmanager
+        async def transport(*_):
+            yield (None, None)
+        session = MagicMock()
+        session.initialize = AsyncMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock(return_value=False)
+        gateway = MagicMock()
+        gateway.refresh = AsyncMock()
+        with patch.object(native, "stdio_client", transport), \
+                patch.object(native, "ClientSession", return_value=session), \
+                patch.object(native, "native_decision_model"), \
+                patch.object(native, "CapabilityGateway", return_value=gateway), \
+                patch.object(native, "CapabilityGatewayMcpSession"), \
+                patch.object(native, "NativeCreativeControl") as controller, \
+                patch("studio_next.native_editor_project.open_selected_native_project",
+                      new=AsyncMock(side_effect=RuntimeError("selected-root-reached"))) as setup:
+            with self.assertRaisesRegex(RuntimeError, "selected-root-reached"):
+                asyncio.run(native.run_native_session(args))
+            setup.assert_awaited_once()
+            self.assertEqual(setup.await_args.kwargs["project"], self.selected)
+            self.assertEqual(setup.await_args.kwargs["projects_root"], str(self.root))
+            controller.assert_not_called()
+        self.assertTrue((self.root / "av-project-snapshots").is_dir())
+
     def test_native_model_can_choose_public_references_only_with_owner_consent(self):
         from contextlib import asynccontextmanager
         from types import SimpleNamespace
