@@ -120,6 +120,16 @@ def _native_mcp_error_status(result):
     return present[0]
 
 
+def _contradictory_native_write_receipt(value):
+    """An outer success cannot override a failed or malformed application result."""
+    if not isinstance(value, dict):
+        return False
+    error = value.get("error")
+    return (("success" in value and value["success"] is not True) or
+            not (error is None or error is False or
+                 (type(error) is str and error == "")))
+
+
 def _digest(value):
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
@@ -2739,6 +2749,8 @@ class NativeCreativeControl:
                             outcome = "native_error_requires_state_reconciliation"
                             break
                         if (success is not True or
+                                _contradictory_native_write_receipt(host_response) or
+                                _contradictory_native_write_receipt(host_result) or
                                 (isinstance(host_response, dict) and
                                  host_response.get("previewOnly") is True) or
                                 (isinstance(host_result, dict) and

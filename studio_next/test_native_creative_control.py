@@ -4325,6 +4325,33 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["events"][-1]["kind"],
                              "native_tool_uncertain_outcome")
 
+    async def test_contradictory_application_write_receipts_never_mint_ack(self):
+        from studio_next.native_creative_audit import audit_native_journal
+        tool = "update_text_clip"
+        grants = {tool: "write"}
+        for receipt in (
+            {"success": True, "result": {"success": False}},
+            {"success": True, "result": {"success": 1}},
+            {"success": True, "result": {"success": None}},
+            {"success": True, "result": {"error": "native save refused"}},
+            {"success": True, "error": "native error"},
+        ):
+            with self.subTest(receipt=receipt):
+                session = FakeSession()
+                session.tools = [t for t in session.tools if t.name == tool]
+                session.custom_response = SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(receipt))])
+                inputs = {"clipId": "native-clip", "text": "Edit"}
+                model = ScriptedModel([decision("invoke", tool=tool, inputs=inputs)])
+                result = await NativeCreativeControl(session, model, max_turns=1,
+                    host_tool_access=grants).run("Edit native text once")
+                self.assertEqual(result["status"], "native_error_requires_state_reconciliation")
+                self.assertEqual(session.calls, [(tool, inputs)])
+                self.assertEqual(result["events"][-1]["kind"], "native_tool_uncertain_outcome")
+                self.assertFalse(any(e.get("host_application_write_acknowledged") for e in result["events"]))
+                report = audit_native_journal(result["events"], host_tool_access=grants)
+                self.assertEqual(report["recorded_native_write_result_count"], 0)
+
     async def test_source_attested_sequence_preview_then_model_selected_apply(self):
         """Pinned createTimeline returns a flat plan, not a write ACK."""
         tool = "create_timeline"
