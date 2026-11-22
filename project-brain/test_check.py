@@ -180,7 +180,11 @@ class ProjectBrainContractTests(unittest.TestCase):
 
     def test_current_owner_provider_policy_is_not_mixed_with_old_now_commands(self):
         brief = (_here / "BRIEF.md").read_text(encoding="utf-8")
-        self.assertIn("2026-11-13", brief)
+        # Validate a single dated current owner policy, not a frozen historical date.
+        self.assertRegex(brief, r"\*\*Owner clarification · \d{4}-\d{2}-\d{2} \(CURRENT\):\*\*")
+        self.assertEqual(brief.count("(CURRENT):**"), 1)
+        self.assertIn("Normal CI must never call a hosted provider implicitly", brief)
+        self.assertIn("private", brief.lower())
         self.assertNotIn("- **NOW (historical):**", brief)
         self.assertNotIn("updated 2026-11-10 following the founder's NVIDIA-first", brief)
 
@@ -246,15 +250,16 @@ class ProjectBrainContractTests(unittest.TestCase):
             root = _copy_scope_fixture(temp)
             path = root / "EXECUTION_LEDGER.json"
             record = json.loads(path.read_text(encoding="utf-8"))
-            # This fixture must remain valid as the real typed ledger grows.
-            # Force a >40 KB case without pushing the sample beyond the 80 KB
-            # bound it is designed to test. Preserve the negative >80 KB test.
-            baseline_bytes = path.stat().st_size
-            padding = max(0, min(75_000 - baseline_bytes - 256,
-                                 max(1_024, 43_000 - baseline_bytes)))
-            record["snapshot"]["notes"] += (
-                " synthetic-source-linked-receipts " + "r" * padding)
-            path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+            # Measure the serialization used by the fixture, not the source
+            # file's whitespace. A ledger close to the bound must not be
+            # accidentally inflated by reindenting historical records.
+            def packed(value):
+                return json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n"
+            baseline_bytes = len(packed(record).encode("utf-8"))
+            padding = max(0, 43_000 - baseline_bytes)
+            if padding:
+                record["snapshot"]["notes"] += " synthetic-source-linked-receipts " + "r" * padding
+            path.write_text(packed(record), encoding="utf-8")
             self.assertGreater(path.stat().st_size, 40_000)
             self.assertLess(path.stat().st_size, 80_000)
             self.assertNotIn("too_large: EXECUTION_LEDGER.json", _module.validate(root))

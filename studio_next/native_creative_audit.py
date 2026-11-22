@@ -829,11 +829,12 @@ def main():
             raise NativeJournalError("Native diagnostics source cannot be independently attested")
         from .native_editor_source_pin import (
             pinned_electron_marker_previews, pinned_electron_asset_placement_previews,
-            pinned_electron_clip_edit_previews,
+            pinned_electron_clip_edit_previews, pinned_electron_plan_previews,
         )
         preview_error_tools = (pinned_electron_marker_previews(args.native_source, grants) +
             pinned_electron_asset_placement_previews(args.native_source, grants) +
-            pinned_electron_clip_edit_previews(args.native_source, grants))
+            pinned_electron_clip_edit_previews(args.native_source, grants) +
+            pinned_electron_plan_previews(args.native_source, grants))
         if "read" in config.allowed_access and grants.get("get_timeline") == "read":
             grants["zx7_inspect_native_content"] = "read"
     outcome = audit_native_journal(read_native_journal(args.journal),

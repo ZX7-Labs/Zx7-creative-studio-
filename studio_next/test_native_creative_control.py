@@ -4325,6 +4325,104 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["events"][-1]["kind"],
                              "native_tool_uncertain_outcome")
 
+    async def test_source_attested_sequence_preview_then_model_selected_apply(self):
+        """Pinned createTimeline returns a flat plan, not a write ACK."""
+        tool = "create_timeline"
+        plan = {"action": tool, "previewOnly": True, "requestedName": "Sequence",
+                "name": "Sequence", "nameAdjusted": False, "width": 640,
+                "height": 360, "fps": 24, "durationSeconds": 6,
+                "color": None, "folderId": None, "copySettingsFromCurrent": True,
+                "switchToTimeline": True, "existingTimelineCount": 1,
+                "currentTimeline": {"id": "native-timeline", "name": "Timeline 1",
+                                    "width": 640, "height": 360, "fps": 24}}
+        apply = {k: plan[k] for k in ("name", "width", "height", "fps", "durationSeconds",
+                "copySettingsFromCurrent", "switchToTimeline")}
+        apply["previewOnly"] = False
+        receipt = {"previewOnly": True, "action": tool,
+                   "message": "Sequence creation plan only. No timeline was created.",
+                   "plan": plan, "suggestedApplyCall": {"tool": tool, "arguments": apply}}
+        class SequenceSession(FakeSession):
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                value = ({"success": True, "action": tool, "result": {"timelineId": "new"}}
+                         if inputs.get("previewOnly") is False else receipt)
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(value))])
+        session = SequenceSession()
+        session.tools = [SimpleNamespace(name=tool, description="Native sequence",
+            input_schema={"type": "object", "properties": {
+                "name": {"type": "string"}, "previewOnly": {"type": "boolean"}}})]
+        model = ScriptedModel([decision("invoke", tool=tool, inputs={"name": "Sequence"}),
+            decision("invoke", tool=tool, inputs={"name": "Sequence", "previewOnly": False}),
+            decision("finish", summary="Applied after independent decision")])
+        result = await NativeCreativeControl(session, model, max_turns=3,
+            host_tool_access={tool: "write"}, host_verified_top_level_preview_tools=(tool,)).run("Edit")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(session.calls, [(tool, {"name": "Sequence"}),
+                                        (tool, {"name": "Sequence", "previewOnly": False})])
+        self.assertEqual(len([e for e in result["events"] if e["kind"] == "native_tool_preview"]), 1)
+        self.assertEqual(len([e for e in result["events"] if e.get("host_application_write_acknowledged") is True]), 1)
+
+    def test_flat_plan_attestation_needs_clean_source_and_write_grant(self):
+        from unittest.mock import patch
+        from studio_next.native_editor_source_pin import pinned_electron_plan_previews
+        grants = {"create_timeline": "write", "add_text_clip": "read",
+                  "add_shape_clip": "write", "unknown": "write"}
+        path = Path("/exact-editor-source")
+        target = "studio_next.native_editor_source_pin._source_matches_pinned_electron_mcp"
+        with patch(target, return_value=False):
+            self.assertEqual(pinned_electron_plan_previews(path, grants), ())
+        with patch(target, return_value=True):
+            self.assertEqual(pinned_electron_plan_previews(path, grants),
+                             ("create_timeline", "add_shape_clip"))
+            with self.assertRaises(ValueError):
+                pinned_electron_plan_previews(path, {"create_timeline": "admin"})
+
+    def test_source_attested_flat_plan_receipts_are_strict(self):
+        from studio_next.native_editor_source_pin import source_verified_plan_preview_receipt
+        import copy
+        tool = "create_timeline"
+        plan = {"action": tool, "previewOnly": True, "requestedName": "Sequence",
+                "name": "Sequence", "nameAdjusted": False, "width": 640, "height": 360,
+                "fps": 24, "durationSeconds": 6, "color": None, "folderId": None,
+                "copySettingsFromCurrent": True, "switchToTimeline": True,
+                "existingTimelineCount": 1, "currentTimeline": None}
+        apply = {k: plan[k] for k in ("name", "width", "height", "fps", "durationSeconds",
+                "copySettingsFromCurrent", "switchToTimeline")}
+        receipt = {"previewOnly": True, "action": tool,
+                   "message": "Sequence creation plan only. No timeline was created.",
+                   "plan": plan, "suggestedApplyCall": {"tool": tool,
+                       "arguments": {**apply, "previewOnly": False}}}
+        self.assertTrue(source_verified_plan_preview_receipt(tool, {}, receipt, (tool,)))
+        for inputs, tools in (({"previewOnly": False}, (tool,)), ({}, ()),
+                              ({"previewOnly": 1}, (tool,))):
+            self.assertFalse(source_verified_plan_preview_receipt(tool, inputs, receipt, tools))
+        for key, value in (("success", True), ("action", "other"), ("plan", {}),
+                           ("suggestedApplyCall", {"tool": tool, "arguments": {"previewOnly": False}})):
+            bad = {**receipt, key: value}
+            self.assertFalse(source_verified_plan_preview_receipt(tool, {}, bad, (tool,)))
+        bad = copy.deepcopy(receipt)
+        bad["suggestedApplyCall"]["arguments"]["width"] = 1280
+        self.assertFalse(source_verified_plan_preview_receipt(tool, {}, bad, (tool,)))
+        for kind, message, fields in (
+            ("add_text_clip", "Text clip creation plan only. No timeline change was made.",
+             {"text": "title", "animationPreset": None, "animationMode": "inOut"}),
+            ("add_shape_clip", "Shape clip creation plan only. No timeline change was made.",
+             {"shapeType": "rectangle", "name": "", "crop": {}})):
+            data = {"previewOnly": True, "action": kind, "message": message,
+                    "warning": "", "plan": {**fields, "track": None,
+                    "startSeconds": 0, "durationSeconds": 5, "style": {},
+                    "transform": {}, "keyframes": []}}
+            self.assertTrue(source_verified_plan_preview_receipt(kind, {"previewOnly": True}, data, (kind,)))
+            self.assertFalse(source_verified_plan_preview_receipt(kind, {}, data, (kind,)))
+            self.assertFalse(source_verified_plan_preview_receipt(kind, {"previewOnly": True}, {**data, "success": True}, (kind,)))
+        export = {"previewOnly": True, "action": "export_timeline",
+                  "message": "Export plan only. No render was started.", "projectPath": "/project",
+                  "outputPath": "/output.mp4", "settings": {}, "timeline": {},
+                  "readiness": {"blockers": []}}
+        self.assertTrue(source_verified_plan_preview_receipt("export_timeline", {"previewOnly": True}, export, ("export_timeline",)))
+        self.assertFalse(source_verified_plan_preview_receipt("export_timeline", {}, export, ("export_timeline",)))
+
     async def test_source_pinned_default_clip_edit_previews_do_not_mutate(self):
         """NVIDIA 120B #42436416760 safely reached actual export,
         physical frame inspection and revision, but the native default

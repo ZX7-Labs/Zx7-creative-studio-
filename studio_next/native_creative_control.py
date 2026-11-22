@@ -26,7 +26,9 @@ from .body_editor_client import (
     host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK,
     host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK,
 )
-from .native_editor_source_pin import source_verified_preview_intent
+from .native_editor_source_pin import (
+    source_verified_preview_intent, source_verified_plan_preview_receipt,
+)
 from .native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
@@ -2677,7 +2679,10 @@ class NativeCreativeControl:
                             isinstance(host_result, dict) and
                             host_result.get("action") == native_name)
                         acknowledged_preview = (
-                            top_level_preview or placement_preview or (
+                            top_level_preview or placement_preview or
+                            source_verified_plan_preview_receipt(
+                                native_name, args["inputs"], host_response,
+                                self._host_verified_top_level_previews) or (
                                 preview is True and (
                                     (success is False and (
                                         not isinstance(host_response, dict) or

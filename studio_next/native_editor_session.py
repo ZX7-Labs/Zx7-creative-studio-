@@ -29,6 +29,7 @@ from studio_next.native_editor_source_pin import (
     _PINNED_MARKER_PREVIEWS,
     pinned_electron_marker_previews, pinned_electron_asset_placement_previews,
     pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews,
+    pinned_electron_plan_previews,
 )
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.capability_gateway import CapabilityGateway
@@ -308,7 +309,8 @@ async def run_native_session(args):
         name for name in revision_roles if host_grants.get(name) == "write")
     preview_tools = (pinned_electron_marker_previews(args.source, host_grants) +
                      pinned_electron_asset_placement_previews(args.source, host_grants) +
-                     pinned_electron_clip_edit_previews(args.source, host_grants))
+                     pinned_electron_clip_edit_previews(args.source, host_grants) +
+                     pinned_electron_plan_previews(args.source, host_grants))
     cloud_diagnostics = getattr(args, "allow_cloud_audio_diagnostics", False)
     raw_wav_consent = getattr(args, "allow_cloud_original_wav_upload", False)
     if raw_wav_consent and (args.provider != "nvidia" or
