@@ -149,10 +149,13 @@ def render_planar_insert(plan_file,workspace,vault_root,output):
         encoded=private/'composite.mp4';rate=f'{fps.numerator}/{fps.denominator}'
         cmd=['ffmpeg','-v','error','-nostdin','-n','-framerate',rate,'-i',str(frames/'frame_%08d.png')]
         if plan['audio']=='preserve_source':cmd+=['-i',str(frozen[0])]
-        cmd+=['-map','0:v:0','-c:v','libx264','-crf','17','-pix_fmt','yuv420p','-vf','scale=in_range=full:out_range=tv:out_color_matrix=bt709',
+        cmd+=['-map','0:v:0','-c:v','libx264','-crf','17','-pix_fmt','yuv420p','-vf','scale=in_range=full:out_range=tv:out_color_matrix=bt709,'
+            'setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709',
             '-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','tv']
         cmd+=['-map','1:a:0','-c:a','copy'] if plan['audio']=='preserve_source' else ['-an']
         cmd+=['-movflags','+faststart',str(encoded)];subprocess.run(cmd,check=True,timeout=7200)
+        # Verify actual encoded color metadata before publishing, not only requested flags.
+        _actual_bt709_source(encoded)
         check=full_decode_inspection(encoded,expected={'width':width,'height':height,'duration_seconds':duration,'require_audio':plan['audio']=='preserve_source'})
         if not check['technical_delivery_verified'] or _source_timebase(encoded)!=(fps,count):raise RuntimeError('Actual planar movie failed complete picture/sound verification')
         if sha256_file(document)!=plan_hash:raise ValueError('Original planar direction changed during compositing')

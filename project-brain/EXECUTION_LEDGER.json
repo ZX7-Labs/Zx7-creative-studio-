@@ -407,6 +407,19 @@
       "post_fix_real_model_retest": "NOT_RUN_GRANT_SPENT",
       "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43991467485",
       "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+    },
+    {
+      "id": "F-CI-010",
+      "kind": "TECHNICAL_CI",
+      "result": "FIRST_ATTEMPT_FAILED_RERUN_PASSED",
+      "run": 44917858593,
+      "job": 136887222391,
+      "details": "Original camera fixture failed native acknowledged save revision convergence; unchanged-source rerun job 137106897395 passed actual picture/audio/source and revision checks.",
+      "source_or_fix": "No raw upstream change; existing opt-in save-authority source fixes retained; first failure not resolved merely by rerun.",
+      "root_confidence": "Observed failed convergence predicate; exact timing mechanism not independently established.",
+      "post_fix_real_model_retest": "NOT_APPLICABLE",
+      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44917858593",
+      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
     }
   ],
   "open_gates": [
@@ -1147,6 +1160,63 @@
       354
     ],
     "local_affected_tests_passed": 70,
-    "semantic_reconciliation_complete": false
+    "semantic_reconciliation_complete": false,
+    "clean_delta_path_triage": {
+      "against": "7ffa329741a782df27b355062822f6002c35add1",
+      "count": 25,
+      "documentation_or_research": 3,
+      "workflow_only_historical_evaluation": 15,
+      "trial_requests": 2,
+      "source_candidates": 5,
+      "notes": "All 25 compared by changed paths; not 25 semantic passes. #354 recorded audio already ported; SciPy experiment, historical source preview (old native inventory schema), X11 auth compatibility and GUI range candidate need scoped behavior decisions. #235 and #236 exact tips are ancestors, not extra merge candidates. #202 guard retains every prior nonblank source line and all 15 test names; current installed guard + inventory tests passed locally (29 total); broader gateway equivalence review open. No branches deleted or bulk merged."
+    }
+  },
+  "exact_head_technical_verification_2026_11_22": {
+    "source_sha": "7ffa329741a782df27b355062822f6002c35add1",
+    "synthetic_merge": "64d0df7f42cc9cd7543623dddec6b09b07b1a07f",
+    "shared_tree": "f9e80f8523da5ab6e6e091bad68f07187dd5822b",
+    "draft_pr": 356,
+    "main_at_inspection": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+    "workflow_conclusions": "23/23 SUCCESS after one same-source targeted rerun; NVIDIA and local real-model jobs SKIPPED",
+    "camera_run": 44917858593,
+    "camera_first_failed_job": 136887222391,
+    "camera_rerun_passed_job": 137106897395,
+    "camera_failure": "saved file modified stamp did not converge to MCP acknowledgement; exact cause of this attempt not proven; strict test and upstream profile unchanged",
+    "installed_body_run": 44917858622,
+    "artifact_id": 14713466471,
+    "artifact_sha256": "6856a5e7a12dcd467421d5ce7711e212171be804b3ff8b5079900d3e9fc24d1f",
+    "independent_artifact_audit": {
+      "zip_integrity": "PASS",
+      "manifest_hashes_sizes": "24/24 PASS",
+      "tests_run": 1596,
+      "tests_passed": 1569,
+      "tests_skipped": 27,
+      "tests_failed": 0,
+      "tests_errors": 0,
+      "decoded_picture_frames": [
+        57,
+        33,
+        24
+      ],
+      "first_two_audio": "decoded non-silent stereo 48kHz AAC",
+      "third_audio": "video-only"
+    },
+    "acceptance": "SCOPED_TECHNICAL_OLD_HEAD_ONLY; FULL_PRODUCT_NOT_ACCEPTED"
+  },
+  "planar_vfx_color_integration_2026_11_22": {
+    "baseline": "7ffa329741a782df27b355062822f6002c35add1",
+    "original_blobs": {
+      "body_planar": "2220eb206501ca21653fe7f3223cebbb07f8035d",
+      "test_cgi_tracking": "0a5106873cfa8e83f42d0f76a1b64fbeddbe72d4"
+    },
+    "candidate_blobs": {
+      "body_planar": "2073771c63089aaed6999b9d3d330640c0b09bb7",
+      "test_cgi_tracking": "2f6179d920b2d5388267173be8c6b7c3cece297e",
+      "existing_pr_gate": "45811ad54227be25199dd25477d105434366e79c"
+    },
+    "environment": "Python 3.13.5, real OpenCV/FFmpeg 7.1.5",
+    "red": "Previously skipped native tracking suite failed at source BT.709 admission. Independently encoded fixture showed missing color_primaries/color_transfer despite CLI flags. After making fixture's H.264 VUI explicit, new ffprobe assertion RED at actual output: only range and color_space present; PCM and frame count checks reached. No input validation weakened.",
+    "green": "Reuse already present setparams filter from SDR LUT/compositor; verify actual encoded BT.709 tags before publication. All 9 CGI tests (+29 reference/asset admission = 38/38) and combined CGI, color LUT and chroma VFX 20/20 passed from locally extracted exact wheel with two tested source replacements. Existing source PR gate now installs declared vfx_tracking extra and requires real decoder prerequisites; hosted new-head CI pending.",
+    "remaining": "23 of original 27 skipped tests not independently exercised; four planar tracking tests now locally pass, not a whole-suite rerun. No full-domain or release acceptance."
   }
 }

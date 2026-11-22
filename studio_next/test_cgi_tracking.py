@@ -115,7 +115,7 @@ class PlanarAcceptanceTests(unittest.TestCase):
             with wave.open(str(root/'sound.wav'),'wb') as w:
                 w.setnchannels(1);w.setsampwidth(2);w.setframerate(48000)
                 a=(np.sin(2*np.pi*440*np.arange(48000)/48000)*4000).astype('<i2');w.writeframes(a.tobytes())
-            subprocess.run(['ffmpeg','-v','error','-framerate','8','-i',str(root/'f%03d.png'),'-i',str(root/'sound.wav'),'-c:v','libx264','-crf','12','-pix_fmt','yuv420p','-vf','scale=in_range=full:out_range=tv:out_color_matrix=bt709','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-c:a','aac','-y',str(root/'source.mp4')],check=True)
+            subprocess.run(['ffmpeg','-v','error','-framerate','8','-i',str(root/'f%03d.png'),'-i',str(root/'sound.wav'),'-c:v','libx264','-crf','12','-pix_fmt','yuv420p','-vf','scale=in_range=full:out_range=tv:out_color_matrix=bt709','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','tv','-x264-params','colorprim=bt709:transfer=bt709:colormatrix=bt709','-c:a','aac','-y',str(root/'source.mp4')],check=True)
             art=np.zeros((80,120,4),np.uint8);art[:,:,1]=220;art[:,:,3]=100;cv2.imwrite(str(root/'art.png'),art)
             vault=MediaVault(root/'vault')
             def ref(name,mime):
@@ -128,5 +128,8 @@ class PlanarAcceptanceTests(unittest.TestCase):
             self.assertEqual(r['actual_tracked_frames'],8);self.assertTrue(r['source_sound_bitstream_preserved'])
             def pcm(name):return subprocess.check_output(['ffmpeg','-v','error','-i',str(root/name),'-vn','-f','s16le','-'])
             self.assertEqual(pcm('source.mp4'),pcm('out.mp4'))
+            for name in ('source.mp4','out.mp4'):
+                probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=color_space,color_primaries,color_transfer,color_range','-of','json',str(root/name)]))
+                self.assertEqual(probe['streams'],[{'color_range':'tv','color_space':'bt709','color_transfer':'bt709','color_primaries':'bt709'}],name)
 
 if __name__=='__main__':unittest.main()
