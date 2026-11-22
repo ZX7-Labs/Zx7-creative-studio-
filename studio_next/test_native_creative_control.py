@@ -326,6 +326,23 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(grammar.is_valid(decision("invoke", tool=tool, inputs={"previewOnly": False})))
         self.assertNotIn("required", session.tools[0].input_schema)
 
+    async def test_indexed_provider_requires_explicit_preview_or_commit(self):
+        tool = "create_timeline"
+        session = self.preview_failure_session(tool)
+        implicit = decision("invoke", tool=tool, inputs={})
+        explicit = decision("invoke", tool=tool, inputs={"previewOnly": True})
+        model = ScriptedModel([decision("search", query=tool, limit=1), implicit,
+                               explicit, decision("finish", summary="Preview only")])
+        model.requires_native_function_contracts = True
+        result = await NativeCreativeControl(session, model, max_turns=4,
+            catalog_mode="indexed", host_tool_access={tool: "write"},
+            host_verified_top_level_preview_tools=(tool,)).run("Inspect native timeline")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual(session.calls, [(tool, {"previewOnly": True})])
+        schemas = model.observed[1]["host_native_tool_contracts"]
+        self.assertEqual(schemas[0]["input_schema"]["required"], ["previewOnly"])
+        self.assertNotIn("required", session.tools[0].input_schema)
+
     async def test_preview_failure_without_attestation_or_with_apply_intent_remains_uncertain(self):
         for tool, attested, inputs in (
                 ("add_asset_to_timeline", (), {"assetName": "missing"}),

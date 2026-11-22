@@ -1359,6 +1359,9 @@ class NativeCreativeControl:
         from .body_editor_mcp import _local_schema_references
         local_indexed_contracts = (self.catalog_mode == "indexed" and
             getattr(self.model, "requires_indexed_native_function_contracts", False))
+        indexed_function_contracts = (local_indexed_contracts or
+            (self.catalog_mode == "indexed" and
+             getattr(self.model, "requires_native_function_contracts", False)))
         validators = {}
         for native_name, native_tool in self.tools.items():
             schema = _field(native_tool, "input_schema", _field(native_tool, "inputSchema"))
@@ -1377,10 +1380,10 @@ class NativeCreativeControl:
                     "additionalProperties" not in admission and
                     "patternProperties" not in admission):
                 admission["additionalProperties"] = False
-            if local_indexed_contracts and source_verified_preview_intent(
+            if indexed_function_contracts and source_verified_preview_intent(
                     native_name, {}, self._host_verified_top_level_previews):
                 # An omitted flag on these pinned write tools means preview.
-                # Preserve both choices and require the local model to choose
+                # Preserve both choices and require the indexed model to choose
                 # one explicitly. The native MCP schema remains unchanged.
                 admission["required"] = list(dict.fromkeys(
                     [*admission.get("required", []), "previewOnly"]))
@@ -1388,7 +1391,7 @@ class NativeCreativeControl:
             cls.check_schema(admission)
             validators[native_name] = cls(admission)
         selected_input_schemas = ({name: validator.schema for name, validator in validators.items()}
-                                  if local_indexed_contracts else None)
+                                  if indexed_function_contracts else None)
         track_sensing = (local_indexed_contracts and
             _SINGLE_ASSET_PLACEMENT in self._host_verified_top_level_previews and
             self.host_tool_access.get("get_timeline") == "read")
@@ -1884,7 +1887,7 @@ class NativeCreativeControl:
                         if not local_indexed_contracts and self._host_write_already_acknowledged(candidate):
                             continue
                         item = self.tools[candidate]
-                        schema = (turn_input_schemas[candidate] if local_indexed_contracts else
+                        schema = (turn_input_schemas[candidate] if indexed_function_contracts else
                                   _field(item, "input_schema", _field(item, "inputSchema")))
                         if not isinstance(schema, dict) or schema.get("type") != "object":
                             raise NativeCreativeControlError(
