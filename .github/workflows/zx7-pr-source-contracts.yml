@@ -59,8 +59,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install declared production, planar VFX and audit parser dependencies
-        run: python -m pip install --no-cache-dir '.[production,editor,vfx_tracking]' 'PyYAML>=6,<7' 'setuptools>=77'
+      - name: Install declared production, optional visual engines and audit parser dependencies
+        run: python -m pip install --no-cache-dir '.[production,editor,vfx_tracking,visual_acceleration]' 'PyYAML>=6,<7' 'setuptools>=77'
       - name: Install actual native FFmpeg encoder for decoder-backed output check
         run: |
           # This runner's regional Ubuntu mirror timed out while downloading
@@ -76,6 +76,10 @@ jobs:
         run: |
           python -c "import shutil; from studio_next.test_cgi_tracking import TRACKING_READY; assert TRACKING_READY and shutil.which('ffprobe'), 'Physical planar VFX dependencies unavailable'"
           python -m unittest studio_next.test_cgi_tracking -v
+      - name: Prove existing opt-in SciPy backend is equivalent to native NumPy and real PNG
+        run: |
+          python -c "import scipy, numpy; print(scipy.__version__, numpy.__version__)"
+          python -m unittest studio_next.test_visual_scipy_reuse studio_next.test_body_visual_graph -v
       - name: Verify actual owner-custody recovery uses a live stage lease (Python 3.12)
         run: |
           python -m unittest studio_next.test_body_owned_edit.TrueOwnerAttestedGenericEditorTests.test_exact_owned_cas_render_recovery_reuses_physical_original_without_reencoding -v

@@ -1169,6 +1169,68 @@
       "trial_requests": 2,
       "source_candidates": 5,
       "notes": "All 25 compared by changed paths; not 25 semantic passes. #354 recorded audio already ported; SciPy experiment, historical source preview (old native inventory schema), X11 auth compatibility and GUI range candidate need scoped behavior decisions. #235 and #236 exact tips are ancestors, not extra merge candidates. #202 guard retains every prior nonblank source line and all 15 test names; current installed guard + inventory tests passed locally (29 total); broader gateway equivalence review open. No branches deleted or bulk merged."
+    },
+    "source_reconciliation_20261122": {
+      "against": "e324132481801cbed35b014901c5a7c8c81aac29",
+      "source_stack_frontiers": [
+        {
+          "pr": 178,
+          "sha": "4c4926cabb9c354f15249640fb2a9edea3b0cefd",
+          "all_ahead_commits_retrieved": 230
+        },
+        {
+          "pr": 179,
+          "sha": "5d210c28ba1d9811aab6d5e6455d9770d4f49eda",
+          "all_ahead_commits_retrieved": 221
+        },
+        {
+          "pr": 189,
+          "sha": "d6fffb40bb218f93dab9b3f5191666e82f1f0e0d",
+          "all_ahead_commits_retrieved": 362
+        }
+      ],
+      "distinct_conflicted_ref_names_represented_by_exact_tips": 51,
+      "other_conflicted_refs": 164,
+      "scope": "Ancestry grouping removes repeated review of inherited commits; no proof of semantic reconciliation or merge. #178 and #179 diverge; #189 contains #184–188. Keep all branch history.",
+      "older_mlt_tests": [
+        {
+          "sha": "56417c1fca4e7626f5b0565849380f1d98577fef",
+          "methods": 9,
+          "unchanged_bodies": 7
+        },
+        {
+          "sha": "cb1f1ecbc7651111e93760d4d7c8b5f24a586747",
+          "methods": 30,
+          "unchanged_bodies": 30
+        },
+        {
+          "sha": "2f57ee843166fa7ec30f67a207f9326db8f78f28",
+          "methods": 38,
+          "unchanged_bodies": 37
+        },
+        {
+          "sha": "77d599ab0bed073f95551a01864659bf889d6ce2",
+          "methods": 17,
+          "unchanged_bodies": 17
+        },
+        {
+          "sha": "6ca82cef6d6cd4037b46b2ca8e7daf8c8347e7b6",
+          "methods": 17,
+          "unchanged_bodies": 17
+        },
+        {
+          "sha": "750c960d00e7eb87f786cb7c295a1b33a983ee42",
+          "methods": 25,
+          "unchanged_bodies": 25
+        }
+      ],
+      "current_mlt_editor_test_blob": "40eb4266",
+      "current_all_38_methods_passed_in_prior_full_native_job": 136887222155,
+      "notes": [
+        "#9 and #11 share original five product blobs; #11 merged. Older tests remained present, 3 differing method bodies require semantic review, not blind old code replacement.",
+        "Historical original source-frame candidate bf5d3af4 uses obsolete totalAssetCount/returnedAssetCount, whereas current pinned bridge reads count/limitApplied; old direct path/hash/decoder opens lack the current descriptor-anchored race-resistant custody. Unsafe raw port refused; production source observation gap remains to reconcile.",
+        "Historical GUI range candidate 37152f5c has no native_gui_range_revision in current lock; its store commit applies clips but omits plan.markers and selectedMarkerId, unlike current MCP native-loss-aware-extract.patch. The old marker rejection expectation is stale after #349. Do not merge as-is; one shared planner+GUI atomic marker/undo proof needed. X11 authentication compatibility decision remains open."
+      ]
     }
   },
   "exact_head_technical_verification_2026_11_22": {
@@ -1217,6 +1279,81 @@
     "environment": "Python 3.13.5, real OpenCV/FFmpeg 7.1.5",
     "red": "Previously skipped native tracking suite failed at source BT.709 admission. Independently encoded fixture showed missing color_primaries/color_transfer despite CLI flags. After making fixture's H.264 VUI explicit, new ffprobe assertion RED at actual output: only range and color_space present; PCM and frame count checks reached. No input validation weakened.",
     "green": "Reuse already present setparams filter from SDR LUT/compositor; verify actual encoded BT.709 tags before publication. All 9 CGI tests (+29 reference/asset admission = 38/38) and combined CGI, color LUT and chroma VFX 20/20 passed from locally extracted exact wheel with two tested source replacements. Existing source PR gate now installs declared vfx_tracking extra and requires real decoder prerequisites; hosted new-head CI pending.",
-    "remaining": "23 of original 27 skipped tests not independently exercised; four planar tracking tests now locally pass, not a whole-suite rerun. No full-domain or release acceptance."
+    "remaining": "23 of original 27 skipped tests not independently exercised; four planar tracking tests now locally pass, not a whole-suite rerun. No full-domain or release acceptance.",
+    "hosted_verification": {
+      "source_sha": "e324132481801cbed35b014901c5a7c8c81aac29",
+      "run": 44989933536,
+      "job": 137108547616,
+      "actual_CGI_tests": 9,
+      "passed": 9,
+      "skipped": 0,
+      "conclusion": "SUCCESS"
+    },
+    "optional_coverage_correction": {
+      "previous_source": "7ffa329741a782df27b355062822f6002c35add1",
+      "full_native_run": 44917858589,
+      "full_native_job": 136887222155,
+      "tests_total": 1596,
+      "passed": 1595,
+      "skipped": 1,
+      "only_skipped_case": "RealMobileBrowserAcceptance.test_browser_owner_media_job_tools_and_one_use_exact_download",
+      "note": "The earlier installed 27 skips were not all absent in the complete physical environment: all 26 non-browser cases passed in the same previous source head's full MLT suite, including multiline docstring result. The local planar defect was environment-specific and fixed without weakening input checks. Do not transfer old-head acceptance to the new source."
+    }
+  },
+  "exact_head_followup_20261122": {
+    "source_sha": "e324132481801cbed35b014901c5a7c8c81aac29",
+    "synthetic_merge": "0f6949e302df4c4a1bce7360cb8d277ce1fde02f",
+    "shared_tree": "cec0d2c7026bce2d470357ef9ef7706d53771370",
+    "observed_workflows": 23,
+    "workflows_passed": 22,
+    "remaining_at_observation": [
+      {
+        "id": 44989933512,
+        "status": "in_progress",
+        "conclusion": null
+      }
+    ],
+    "full_native_suite": null,
+    "installed_artifact": {
+      "run": 44989933441,
+      "id": 14741353983,
+      "sha256": "23f83faee04e02e428019203e3e081e1fa11a1f564ec738a01719013e228dbfe",
+      "manifest_entries_verified": 24,
+      "zip_integrity": "PASS",
+      "total_tests": 1596,
+      "passed": 1569,
+      "skipped": 27,
+      "failed": 0,
+      "errors": 0,
+      "full_independent_decodes": [
+        57,
+        33,
+        24
+      ],
+      "audio": "stereo 48kHz AAC in first two; 3D video-only"
+    },
+    "real_model_jobs": "SKIPPED; no implicit provider calls",
+    "product": "NOT_ACCEPTED"
+  },
+  "existing_scipy_branch_port_20261122": {
+    "pr": 210,
+    "original_head": "a06543c8ca589a0c6db352b3592055f37556b934",
+    "target_parent": "e324132481801cbed35b014901c5a7c8c81aac29",
+    "exact_original_branch_blobs": {
+      "graph": "5f2f989cf50096b802ea51bce4f9dd8f227c0388",
+      "render": "e4acfd44600787973c3f010c9cdf63ce0b4cfd44",
+      "tests": "dfaffc4bdaa70c87ccc96e33b0a35543ad779d5a"
+    },
+    "local_baseline_wheel_source_blobs_match_e324": true,
+    "red": "Exact 3 historical differential tests fail on baseline (missing backend API); 62 subtest/individual errors.",
+    "green": "Exact historical source/test blobs reused (not rewritten). 18/18 real visual+SciPy tests pass with NumPy 2.3.5 / SciPy 1.17.0, 8/8 existing tool/capability tests pass; explicit missing-SciPy test confirms default actual PNG delivery works and explicit unavailable backend rejects. Host-only Python opt-in, default NumPy, no changes to existing document schema or native wiring. Declared optional extra plus existing source and full MLT gates select it for tests. No speed guarantee or artistic acceptance.",
+    "new_head_CI": "PENDING"
+  },
+  "browser_gate_repair_20261122": {
+    "prior_blob": "d4671240d79724cc64c0cefa1dc75eeba5514ea1",
+    "candidate_blob": "149457b0af6eed5889581a4894d0d8e8fcbb695a",
+    "reused_summary_parser": "6e01063c5c7644ce6a1a5b97ddaae6ca18c1239a",
+    "red": "Existing push-main/dispatch-only workflow omits premerge current branch browser gate; shell with no pipefail can return 0 when unittest fails after writing screenshot, skipped test with stale screenshot, or non-PNG file. Local exact-candidate shell harness reproduced all 3 false greens.",
+    "green": "Real PR trigger, existing signed archive mirror, pipefail, final unittest summary zero skip, independent PNG decode. 4 shell cases: successful test passes; failed, skipped and invalid PNG each refused. Actual browser not run in local sandbox (blocked by administrator); hosted Chromium newly required, not certified. No production UI changes or external inference."
   }
 }

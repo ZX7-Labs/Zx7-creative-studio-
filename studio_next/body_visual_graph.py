@@ -202,8 +202,26 @@ def sample_image(image,x,y,*,method,border):
             +(1-dx)*dy*fetch(x0,y0+1)+dx*dy*fetch(x0+1,y0+1)).astype(np.float32)
 
 
-def _convolve(image,kernels,border):
+def _convolve(image,kernels,border,*,backend="numpy"):
+    """Separable native filtering with a host-selected and attested backend.
+
+    Existing NumPy numerics remain the default. Optional SciPy executes the
+    SAME artist-authored kernels using compiled ndimage.convolve1d; no image
+    becomes an 8-bit Pillow intermediate and no color/alpha contract changes.
+    The output backend is recorded by the physical renderer for reproducibility.
+    """
     import numpy as np
+    if backend=="scipy":
+        from scipy.ndimage import convolve1d
+        edge={"transparent":"constant","clamp":"nearest","wrap":"wrap"}[border]
+        # Convolution, not correlation: preserve asymmetric signed kernels.
+        result=image
+        for axis,weights in ((1,kernels[0]),(0,kernels[1])):
+            result=convolve1d(result,weights,axis=axis,mode=edge,cval=0.,
+                              output=np.float32)
+        return result
+    if backend!="numpy":
+        raise ValueError("Unsupported visual convolution backend")
     result=image
     for axis,weights in ((1,kernels[0]),(0,kernels[1])):
         radius=len(weights)//2;padding=[(0,0)]*3;padding[axis]=(radius,radius)
@@ -217,7 +235,17 @@ def _convolve(image,kernels,border):
 
 
 class VisualGraph:
-    def __init__(self,plan,*,budget=None):
+    def __init__(self,plan,*,budget=None,convolution_backend="numpy"):
+        # The host opts in explicitly. A project's original JSON remains
+        # independent of installed wheels and creative-model suggestions.
+        if convolution_backend not in ("numpy","scipy"):
+            raise ValueError("Unsupported visual convolution backend")
+        if convolution_backend=="scipy":
+            try:
+                from scipy.ndimage import convolve1d  # noqa: F401
+            except ImportError as exc:
+                raise RuntimeError("Selected SciPy visual engine is not installed") from exc
+        self.convolution_backend=convolution_backend
         self.budget=budget or VisualBudget()
         self.plan=json.loads(json.dumps(plan,allow_nan=False))
         self.nodes,self.order,self.compiled=validate_graph(self.plan,budget=self.budget)
@@ -269,7 +297,8 @@ class VisualGraph:
                 kernels=[[curve_value(k,frame_index) for k in p[key]] for key in ("kernel_x","kernel_y")]
                 divisor=curve_value(p["divisor"],frame_index)
                 if not math.isfinite(divisor) or divisor==0:raise ValueError("Convolution divisor must be finite and nonzero")
-                rgba=_convolve(inputs["image"],kernels,p["border"])/divisor
+                rgba=_convolve(inputs["image"],kernels,p["border"],
+                               backend=self.convolution_backend)/divisor
                 if p.get("channels","rgba")=="rgb":rgba[...,3]=inputs["image"][...,3]
             if not np.all(np.isfinite(rgba)) or np.min(rgba[...,3])< -1e-6 or np.max(rgba[...,3])>1+1e-6:
                 raise ValueError("Node "+name+" produced invalid finite RGBA/alpha")
