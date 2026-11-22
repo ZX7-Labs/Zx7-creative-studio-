@@ -1,0 +1,25 @@
+name: ZX7 selected native A/V snapshot recovery regression
+on:
+  push:
+    branches: ['trial/g1-selected-av-snapshot-offline-smoke-20261122']
+    paths: ['.github/workflows/zx7-selected-av-snapshot-smoke-once.yml']
+permissions:
+  contents: read
+jobs:
+  exact-owner-project-reentry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual installed-client protocol dependencies
+        run: python -m pip install --no-cache-dir '.[editor]'
+      - name: Test source-bound selected A/V snapshots and no unverified owner project switch
+        run: |
+          python -m unittest -v \
+            studio_next.test_native_editor_project.SelectedProjectTests.test_owner_selected_native_av_snapshot_attests_root_before_model \
+            studio_next.test_native_editor_project.SelectedProjectTests.test_native_session_never_starts_controller_when_selected_identity_fails
