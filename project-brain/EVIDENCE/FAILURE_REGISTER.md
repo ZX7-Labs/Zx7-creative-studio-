@@ -151,3 +151,12 @@ Original failed workflow #44122006732 used old `collab_editorial_revision=7df0ae
 ### 2026-11-22: Omni omitted native input object
 
 [Run 44913064897](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44913064897) failed after three invalid decisions; no edits/exports, selected operation absent from trace. Local exact-source regression reproduces the omission for an actual pinned zero-field schema. Candidate advertises reason-only on that narrow subset; parameterized tools fail closed as before. 45 local eligible tests pass, three require unavailable MCP, hosted and genuine-model retests pending. This is not evidence that the failed real decision targeted a zero-field tool. [Evidence](INDEX.md).
+
+### 2026-11-22 recurrent legacy desktop save convergence
+
+[Run 44996791248](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44996791248), job 137129436251 at exact `49ebb46f36856a447390f3e23854d6461cccb227`, genuine installed supported desktop profile fails native SDK render precondition: `Native saved document never converged to acknowledged revision`. Subsequent installed-owner proof skipped. The known legacy divergent UI/disk clock is a source-supported candidate; the exact timestamps from this instance were not logged. Existing save-authoritative and loss-aware cumulative profiles are separate, not evidence of a repaired legacy profile. Retain original failure; no blind retry or relaxed proof.
+
+### 2026-11-22 — actual Omni native retest and typed argument candidate
+
+- [Run 44998186099](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44998186099) failed at turn 27 after 27 successful model-selected `get_project` reads. Artifact #14745086023 (SHA-256 `bdc442efb6ad4e15c217f26827518efea85dae28e8f4a30e2e78bac7a97ce74a`) independently downloaded; 55 journal entries, no edits or exports. Zero-field correction observed working; typed direct nonempty argument layout rejected. No artistic acceptance.
+- Candidate `c64a0a7abbf178b170984de76b8840de7e1cfc08` accepts explicit permitted direct argument fields for plain closed schemas, preserves required values and unknown-field checks, keeps optional-only defaults explicit and complex schema signatures wrapped. RED reproduced; 19 eligible focused tests PASS, 3 not run locally because MCP dependency absent. Exact tested adapter and test blobs match GitHub. Hosted verification and new genuine A/V adjudication pending; repetitive read loop remains open.

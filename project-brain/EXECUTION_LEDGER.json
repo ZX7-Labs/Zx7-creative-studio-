@@ -435,7 +435,7 @@
         "I",
         "J"
       ],
-      "blocking_authorization": "no new paid NVIDIA calls or private egress"
+      "blocking_authorization": "bounded synthetic NVIDIA G1 authorized on 2026-11-22; private egress still prohibited"
     },
     {
       "id": "G1-OBSERVE-REVISE",
@@ -448,7 +448,7 @@
         "G",
         "J"
       ],
-      "blocking_authorization": "capable local model if available; otherwise new separate owner authorization for paid/private models"
+      "blocking_authorization": "bounded synthetic NVIDIA G1 authorized; local model optional; private egress prohibited"
     },
     {
       "id": "G1-HUMAN",
@@ -1363,7 +1363,7 @@
     "local_baseline_wheel_source_blobs_match_e324": true,
     "red": "Exact 3 historical differential tests fail on baseline (missing backend API); 62 subtest/individual errors.",
     "green": "Exact historical source/test blobs reused (not rewritten). 18/18 real visual+SciPy tests pass with NumPy 2.3.5 / SciPy 1.17.0, 8/8 existing tool/capability tests pass; explicit missing-SciPy test confirms default actual PNG delivery works and explicit unavailable backend rejects. Host-only Python opt-in, default NumPy, no changes to existing document schema or native wiring. Declared optional extra plus existing source and full MLT gates select it for tests. No speed guarantee or artistic acceptance.",
-    "new_head_CI": "PENDING"
+    "new_head_CI": "49ebb46f actual installed and browser gates passed; remaining workflow conclusions separate"
   },
   "browser_gate_repair_20261122": {
     "prior_blob": "d4671240d79724cc64c0cefa1dc75eeba5514ea1",
@@ -1371,5 +1371,6 @@
     "reused_summary_parser": "6e01063c5c7644ce6a1a5b97ddaae6ca18c1239a",
     "red": "Existing push-main/dispatch-only workflow omits premerge current branch browser gate; shell with no pipefail can return 0 when unittest fails after writing screenshot, skipped test with stale screenshot, or non-PNG file. Local exact-candidate shell harness reproduced all 3 false greens.",
     "green": "Real PR trigger, existing signed archive mirror, pipefail, final unittest summary zero skip, independent PNG decode. 4 shell cases: successful test passes; failed, skipped and invalid PNG each refused. Actual browser not run in local sandbox (blocked by administrator); hosted Chromium newly required, not certified. No production UI changes or external inference."
-  }
+  },
+  "current_synthetic_trial_and_body_audit_20261122": {"source":"49ebb46f36856a447390f3e23854d6461cccb227","synthetic_merge":"66c816e52e313cdad9155cec8a121e8f65246d6f","shared_tree":"cfd2e7d9a4a515676b78c51038b80cf1864102ae","checks":"22/24 successful, 1 failed, 1 pending","installed_run":44996791435,"artifact":14744732641,"sha256":"1140ff7a302fb465b5ac96943b40d619316400b496d49bc17a5eefd956dd0abc","manifest":24,"tests":"1572 pass, 30 skip, 0 fail","decoded_frames":[57,33,24],"legacy_save_failure":44996791248,"trial":{"run":44998186099,"head":"9bcf6f813ba7d372a302a99c45a3531a240928d6","grant_closed":"4cd52dad58df4351177d8ece8a4cfbe60d6dc7e7","status":"FAIL: 27 reads; next invalid native arguments; 0 edits/exports","max_turns":48,"private_data":false},"candidate":"c64a0a7abbf178b170984de76b8840de7e1cfc08","acceptance":"NOT_ACCEPTED"}
 }

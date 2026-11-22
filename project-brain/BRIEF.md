@@ -1,6 +1,6 @@
 # ZX7 Creative Studio — enduring founder brief
 
-Status: ACTIVE founder product brief; current model-use policy is the **2026-11-13 owner clarification**. Older provider-first wording is historical in Git/DECISIONS, not a second active instruction. This is NOT a completion announcement.
+Status: ACTIVE founder product brief; current model-use policy is the **2026-11-22 owner clarification**. Older provider-first wording is historical in Git/DECISIONS, not a second active instruction. This is NOT a completion announcement.
 
 ## Product and non-negotiable bar
 
@@ -12,7 +12,7 @@ Maintain one coherent native workspace and host-granted capability boundary; use
 
 ## Current development and inference policy — one active instruction
 
-**Owner clarification · 2026-11-13 (CURRENT):** Build the complete Master Plan. During offline/native engineering, **do not invoke paid NVIDIA inference** or send private image, sound, prompts or owner media externally. A future justified bounded capable-model trial needs explicit purpose-specific approval; raw-audio and private-media egress require separate consent. Normal CI must never call a hosted provider implicitly.
+**Owner clarification · 2026-11-22 (CURRENT):** Complete the full integration and verification without reducing A–L. Standing authorization covers necessary purpose-bounded NVIDIA G1 trials using only generated synthetic picture, audio diagnostics and synthetic WAV, up to 48 model turns per trial, with a separately recorded exact-source request and one-use trigger. No duplicate or indefinite inference loop; keep cost and time bounded. No private owner media, private prompts or other private data may be sent externally. Normal CI must never call a hosted provider implicitly. Costs or data outside this tested scope still require separate authorization.
 
 **Provider choice:** NVIDIA-first was an earlier development candidate, now superseded as a timing instruction. Original wording and evidence remain in Git history and [DECISIONS](DECISIONS.md), not as a competing **NOW** command. BODY remains local-first, free/open-source, self-hostable and model-neutral. Local/specialist model testing waits for useful hardware and meaningful competence experiments; do not repeat failed weak CPU whole-workflow loops for activity alone.
 
@@ -28,6 +28,6 @@ First accepted native platform: Ubuntu 24.04 x86-64; mobile/remote and full A–
 4. Independently review professional creative quality on diverse briefs and compare with relevant existing editor workflows. A non-empty MP4, still frame or passing test suite alone does not close an A–L domain.
 5. Preserve explicit consent boundaries for private inputs, production deployment, destructive changes and paid/nontrivial API usage. Do not leak existing NVIDIA credentials into public CI artifacts, logs or the creative editor.
 
-Owner delegated routine reversible architecture, repository changes, tests and normal integration. One historical synthetic-only NVIDIA trial was specifically authorized and failed; subsequent paid trials are NOT implicitly authorized. Explicit approval remains necessary for spending, private transfers, destructive changes and public launch.
+Owner delegated routine reversible architecture, repository changes, tests and normal integration, including the bounded synthetic G1 trials above. Separate authorization remains necessary for spending outside that scope, private transfers, destructive changes and public launch.
 
 See [DECISIONS.md](DECISIONS.md), [STATE.md](STATE.md) and [RISKS.md](RISKS.md) for current decisions and gates.
