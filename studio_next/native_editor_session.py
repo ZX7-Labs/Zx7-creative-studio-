@@ -363,7 +363,12 @@ async def run_native_session(args):
     brief = args.brief_file.read_text(encoding="utf-8")
     if REVIEWED_AV_PAIR in required:
         brief += (
-            "\n\nHost audiovisual review requirement. Independently verify the physical "
+            "\n\nHost audiovisual review requirement. Before each native A/V export, "
+            "independently choose and APPLY save_project with previewOnly:false "
+            "after your latest edit; an autosave or project-open acknowledgement "
+            "does not establish immutable render source custody. If the editor "
+            "reports output_exists, select a NEW authorized output filename, "
+            "not the rejected path. Independently verify the physical "
             "first export with sound (up to 300 seconds in this evidence mode), "
             "view two to four frames covering separated moments "
             "at least a third of its duration apart, and inspect the decoded audio "
