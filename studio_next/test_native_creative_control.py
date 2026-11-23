@@ -1540,8 +1540,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         source-bound immutable render snapshots because the model never
         invoked save_project. Reject before native RPC, never save for it.
         """
-        from studio_next.native_render_evidence import REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR
+        from studio_next.native_render_evidence import (
+            REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES, AUDIO_ENVELOPE)
         session = FakeSession()
+        session.tools.extend([
+            SimpleNamespace(name=name, description="Source-bound A/V reader",
+                            input_schema={"type": "object", "properties": {}})
+            for name in (TIMED_FRAMES, AUDIO_ENVELOPE)])
         session.tools.extend([
             SimpleNamespace(
                 name="save_project", description="Save native project",
@@ -1561,8 +1566,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         captures = []
         control = NativeCreativeControl(
             session, model, max_turns=2,
-            host_tool_access={"export_timeline": "write",
-                              "save_project": "write", "update_text_clip": "write"},
+            host_tool_access={name.name: (
+                "write" if name.name in ("export_timeline", "save_project", "update_text_clip")
+                else "read") for name in session.tools},
             required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
             host_content_revision_tools=("update_text_clip",),
             host_capture_render_project=lambda *a: captures.append(a),
@@ -1599,7 +1605,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                "projectPath": "/private/native", "timeline": {"id": "film"},
                                "result": {"started": True, "outputPath": path}}
                 elif name == "save_project":
-                    receipt = {"success": True, "action": name}
+                    receipt = {"success": True, "action": name,
+                               "result": {"project": {"path": "/private/native",
+                                                      "modified": "saved-native-iteration"}}}
                 elif name == "zx7_verify_native_export":
                     receipt = {"physical_export_verified": True, "native_export_sha256": digests[path],
                                "observation": {"duration_seconds": 6, "audio_present": True,

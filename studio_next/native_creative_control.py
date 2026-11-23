@@ -2329,6 +2329,42 @@ class NativeCreativeControl:
                                       "schema_location": ",".join(failures)[:512],
                                       "no_native_dispatch": True})
                         continue
+                # A reviewed A/V export must capture the exact native project
+                # bytes and source closure at the LAST model-confirmed save.
+                # Actual 120B G1 exported three audible films without ever
+                # selecting save_project, leaving zero immutable render-bound
+                # snapshots. Do not render unprovable footage then call it a
+                # verified native revision. This is admission, never a
+                # model-selected creative action or automatic save.
+                if (native_name == RENDER_TOOL and
+                        self._capture_render_project is not None and
+                        args["inputs"].get("previewOnly") is not True):
+                    last_non_render_write = next(
+                        (e.get("tool") for e in reversed(self.events)
+                         if e.get("kind") == "native_tool_result" and
+                         e.get("host_application_write_acknowledged") is True and
+                         e.get("tool") != RENDER_TOOL), None)
+                    saved = self._explicit_render_save_identity
+                    saved_valid = (type(saved) is tuple and len(saved) == 2 and
+                                   all(type(value) is str and value for value in saved))
+                    if last_non_render_write != "save_project" or not saved_valid:
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "native_export_needs_acknowledged_save",
+                            "required_prior_native_tool": "save_project",
+                            "required_save_previewOnly_false": True,
+                            "model_must_choose_save_action": True,
+                            "no_automatic_save": True,
+                            "no_native_dispatch": True}
+                        self._append({"kind": "model_action_rejected", "turn": turn,
+                                      **timing, "tool": native_name,
+                                      "inputs_sha256": hashlib.sha256(
+                                          _wire(args["inputs"]).encode()).hexdigest(),
+                                      "validation_keyword":
+                                          "native_export_needs_acknowledged_save",
+                                      "schema_location": "native/reviewed_av_source_snapshot",
+                                      "no_native_dispatch": True})
+                        continue
                 self._last_preflight_feedback = None
                 source_preview_only = source_verified_preview_intent(
                     native_name, args["inputs"], self._host_verified_top_level_previews)
