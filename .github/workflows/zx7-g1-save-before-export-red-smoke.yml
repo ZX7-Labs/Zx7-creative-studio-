@@ -1,0 +1,22 @@
+name: ZX7 source-bound export preflight RED regression
+on:
+  push:
+    branches: ['trial/g1-native-export-save-red-20261124']
+    paths: ['.github/workflows/zx7-g1-save-before-export-red-smoke.yml']
+permissions:
+  contents: read
+jobs:
+  reproduce-actual-source-loss:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install exact source and native protocol dependencies without provider access
+        run: python -m pip install --no-cache-dir '.[editor]'
+      - name: Reproduce previous real model export without source save
+        run: python -m unittest -v studio_next.test_native_creative_control.NativeCreativeControlTests.test_reviewed_native_av_cannot_render_without_explicit_saved_project_revision
