@@ -178,3 +178,5 @@ Historical #178 source behavior missing from current controller: wrappers with s
 
 ### 2026-11-24 cumulative GUI gate prerequisite
 [Run #45260395720/job 137993289825](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45260395720/job/137993289825): SDK client failed on missing `xdotool` with explicit display. Restore existing prerequisite; physical retest pending. [Evidence](INDEX.md).
+
+Retest [#45267857272](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45267857272): crash guard :95 != :97; align display, retain guard.

@@ -225,3 +225,64 @@ class CombinedCapabilityMcpSession:
         if not isinstance(name, str) or name not in self._routes:
             raise CapabilityExecutionError("Creative operation is not granted to this session")
         return await self._routes[name].call_tool(name, arguments)
+
+
+def create_combined_mcp_server(view: CombinedCapabilityMcpSession):
+    """Export one admitted, model-independent creative BODY via official MCP.
+
+    No provider, prompt, duplicate runner or new permissions. The existing
+    combined session and gateway remain the only execution boundary. Serialize
+    calls from this client so its last observed native revision cannot race
+    another call in the same client session.
+    """
+    import anyio
+    from mcp import types
+    from mcp.server import Server
+
+    if not isinstance(view, CombinedCapabilityMcpSession):
+        raise CapabilityExecutionError("A host-admitted combined BODY session is required")
+    lock = anyio.Lock()
+
+    def failure(message):
+        return types.CallToolResult(is_error=True, content=[
+            types.TextContent(type="text", text=message)])
+
+    async def list_tools(_context, _params=None):
+        async with lock:
+            actual = await view.list_tools()
+        return types.ListToolsResult(tools=[types.Tool(
+            name=tool.name, description=tool.description,
+            inputSchema=tool.input_schema) for tool in actual.tools])
+
+    async def call_tool(_context, params):
+        # Shield an admitted native call from cancellation: do not abandon a
+        # possibly applied write or let the next request race its readback.
+        async with lock:
+            with anyio.CancelScope(shield=True):
+                try:
+                    result = await view.call_tool(
+                        params.name, {} if params.arguments is None else params.arguments)
+                except (CapabilityExecutionError, CapabilityContractError):
+                    return failure("BODY admission or receipt failed; inspect current state and rediscover before retrying.")
+                except Exception:
+                    return failure("BODY operation failed; a write may have occurred. Inspect native state before retrying.")
+        # Preserve official editor SDK results, including image/audio content
+        # and trusted no-dispatch/conflict metadata, without reconstruction.
+        if isinstance(result, types.CallToolResult):
+            return result
+        # Installed local BODY and trusted gateway rejections return the
+        # existing MCP-shaped text result. Reject unknown shapes, do not infer
+        # success or silently drop a sensor/metadata block.
+        blocks = getattr(result, "content", None)
+        status = getattr(result, "is_error", None)
+        if (type(status) is not bool or not isinstance(blocks, (list, tuple)) or
+                not all(getattr(block, "type", None) == "text" and
+                        isinstance(getattr(block, "text", None), str) for block in blocks)):
+            return failure("BODY returned an unsupported receipt; inspect native state before retrying.")
+        meta = getattr(result, "meta", None)
+        return types.CallToolResult(is_error=status, content=[
+            types.TextContent(type="text", text=block.text) for block in blocks],
+            **({"_meta": meta} if meta is not None else {}))
+
+    return Server("zx7-creative-studio", version="0.2.0",
+                  on_list_tools=list_tools, on_call_tool=call_tool)

@@ -40,6 +40,7 @@ def fixture(root):
     (root / "staging" / "session-1").mkdir()
     (root / "outputs" / "session-1").mkdir()
     return {
+        "allowed_access": ["read", "write"],
         "projects_root": str(root / "projects"),
         "staging_root": str(root / "staging" / "session-1"),
         "outputs_root": str(root / "outputs" / "session-1"),
@@ -47,6 +48,45 @@ def fixture(root):
 
 
 class OwnerInstalledBodyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_editor_read_only_or_default_grant_cannot_attach_writable_body(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config = fixture(root)
+            for policy in ({**config, "allowed_access": ["read"]},
+                           {k: v for k, v in config.items() if k != "allowed_access"}):
+                adapter = attest_owner_body_source(root, configuration=policy, provider="local")
+                grants = adapter.trusted_grants()
+                self.assertIn("body.timecode_format", grants)
+                self.assertTrue(all(mode == "read" for mode in grants.values()))
+                self.assertNotIn("body.visual_author", grants)
+                with self.assertRaises(ValueError):
+                    attest_owner_body_source(root, configuration=policy, provider="local",
+                                             allowed_access=("read", "write"))
+
+    async def test_standard_attachment_uses_validated_roots_and_never_calls_model(self):
+        from studio_next.studio_mcp import prepare_attachment
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config = fixture(root)
+            config.update(endpoint="http://127.0.0.1:19790/mcp",
+                          allowed_tools={"get_project": "read"}, allowed_access=["read"])
+            file = root / "editor.json"
+            file.write_text(json.dumps(config), encoding="utf-8")
+            state = root / "state"
+            state.mkdir(mode=0o700)
+            canonical, adapter, budget = prepare_attachment(
+                root, file, state, max_calls=8, max_writes=0)
+            self.assertEqual(canonical["projects_root"], str(root / "projects"))
+            self.assertEqual(canonical["allowed_access"], ["read"])
+            self.assertTrue(all(v == "read" for v in adapter.trusted_grants().values()))
+            self.assertEqual(budget.snapshot()["reserved_calls"], 0)
+            self.assertFalse((root / "vault").exists())
+            for invalid in (root, root / "outputs", Path("state")):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    prepare_attachment(root, file, invalid, max_calls=8, max_writes=0)
+            with self.assertRaises(ValueError):
+                prepare_attachment(root, file, state, max_calls=2, max_writes=3)
+
     async def test_real_installed_catalog_is_optional_host_source_not_model_grants(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

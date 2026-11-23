@@ -173,13 +173,53 @@ def _verify_witness(result):
     return False
 
 
-def _trusted_body_revision(tool_id):
+class _BodyRevisionInputs:
+    """Read shared fingerprint inputs once per catalog build, never across builds.
+
+    Exact bytes, executable identities and installed library versions still feed
+    the original per-operation digest. The cache lifetime is one synchronous
+    catalog construction, not a session or a process.
+    """
+    def __init__(self):
+        self.files = {}
+        self.commands = {}
+        self.libraries = {}
+
+    def source_bytes(self, path):
+        if path not in self.files:
+            self.files[path] = path.read_bytes()
+        return self.files[path]
+
+    def command_identity(self, command):
+        if command not in self.commands:
+            executable = shutil.which(command)
+            if executable is None:
+                raise ValueError("Cannot fingerprint missing actual creative renderer")
+            file = Path(executable).resolve()
+            stat = file.stat()
+            self.commands[command] = json.dumps({"command": command, "binary_path": str(file),
+                "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}, sort_keys=True).encode()
+        return self.commands[command]
+
+    def library_identity(self, library):
+        if library not in self.libraries:
+            try:
+                version = importlib.metadata.version(library)
+            except importlib.metadata.PackageNotFoundError:
+                version = "not_installed"
+            self.libraries[library] = json.dumps({"library": library,
+                "version": version}, sort_keys=True).encode()
+        return self.libraries[library]
+
+
+def _trusted_body_revision(tool_id, *, revision_inputs=None):
     """Per-tool code and installed executable revision, not a fixed schema label.
 
     Renderer implementation changes invalidate cached creative media only for
     that operation and downstream consumers of its physical output.
     """
     base=Path(__file__).resolve().parent
+    revision_inputs = revision_inputs if revision_inputs is not None else _BodyRevisionInputs()
     dependencies={
         "body.inspect":["delivery_audit.py"],
         "body.timecode_format":["body_timecode.py"],
@@ -295,15 +335,9 @@ def _trusted_body_revision(tool_id):
                  "body_tool_contracts.py","body_document_schemas.py","registry.py")+tuple(known):
         p=base/item
         h.update(item.encode())
-        h.update(p.read_bytes())
+        h.update(revision_inputs.source_bytes(p))
     for cmd in commands[tool_id]:
-        executable=shutil.which(cmd)
-        if executable is None:
-            raise ValueError("Cannot fingerprint missing actual creative renderer")
-        file=Path(executable).resolve()
-        stat=file.stat()
-        h.update(json.dumps({"command":cmd,"binary_path":str(file),
-              "size":stat.st_size,"mtime_ns":stat.st_mtime_ns},sort_keys=True).encode())
+        h.update(revision_inputs.command_identity(cmd))
     runtime_libraries={"body.planar_insert":("opencv-python-headless","numpy"),
                        "body.visual_graph":("numpy","Pillow","OpenEXR"),
                        "body.motion2d":("numpy","Pillow","fonttools","supertonic"),
@@ -319,9 +353,7 @@ def _trusted_body_revision(tool_id):
                        "body.aces2_preview":("OpenEXR","opencolorio","Pillow","numpy"),
                        "body.aces2_movie":("OpenEXR","opencolorio","numpy")}
     for library in runtime_libraries.get(tool_id,()):
-        try:version=importlib.metadata.version(library)
-        except importlib.metadata.PackageNotFoundError:version="not_installed"
-        h.update(json.dumps({"library":library,"version":version},sort_keys=True).encode())
+        h.update(revision_inputs.library_identity(library))
     return "sha256:"+h.hexdigest()
 
 
@@ -382,6 +414,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     root=Path(workspace).resolve()
     vault=MediaVault(vault_root or (root/"vault"),initialize=initialize_vault)
     catalog=ToolCatalog()
+    revision_inputs = _BodyRevisionInputs()
     # Research cannot become a source-rights attestation or a media writer.
     # Its explicit 'network' permission is not included in ordinary read grants.
     # The caller can attach an independently configured trusted client.
@@ -429,7 +462,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             resource="local machine",
             operation_schema=real_operation_schema(id,required)),fn if ready else None,
             idempotent=idempotent,
-            implementation_revision=_trusted_body_revision(id) if ready else None,
+            implementation_revision=_trusted_body_revision(id, revision_inputs=revision_inputs) if ready else None,
             material_fingerprint=(lambda inputs,name=id:
                 fingerprint_physical_inputs(name,inputs,root)) if ready else None)
 

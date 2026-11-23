@@ -42,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def attest_owner_body_source(workspace, *, configuration, provider,
-                             allowed_access=("read", "write")):
+                             allowed_access=None):
     """Admit already-installed creative BODY instruments from one owner workspace.
 
     The trusted owner process supplies this path, not the model. A separate
@@ -55,6 +55,13 @@ def attest_owner_body_source(workspace, *, configuration, provider,
         raise ValueError("Full installed BODY source is local-only until distinct cloud consent review")
     if not isinstance(configuration, dict) or not isinstance(workspace, (str, Path)):
         raise ValueError("Installed BODY requires trusted owner workspace and roots")
+    # The editor configuration is the owner's shared access ceiling. An
+    # omitted policy is read-only, exactly like the native editor config.
+    from .body_editor_policy import _access
+    ceiling = _access(configuration.get("allowed_access", ("read",)))
+    requested = ceiling if allowed_access is None else _access(allowed_access)
+    if not requested or not requested.issubset(ceiling):
+        raise ValueError("Installed BODY access exceeds the owner workspace grant")
     candidate = Path(workspace)
     if not candidate.is_absolute() or candidate.is_symlink():
         raise ValueError("Installed BODY workspace must be an absolute non-symlink owner root")
@@ -76,7 +83,7 @@ def attest_owner_body_source(workspace, *, configuration, provider,
     except (OSError, KeyError, TypeError) as exc:
         raise ValueError("Owner workspace roots are missing or invalid") from exc
     from .body_capability_adapter import InstalledBodyAdapter
-    return InstalledBodyAdapter(root, allowed_access=allowed_access)
+    return InstalledBodyAdapter(root, allowed_access=requested)
 
 
 

@@ -87,6 +87,31 @@ hosted NVIDIA route explicitly. An alternative install prefix can be passed as
 the installer argument. An existing prefix is refused. The install builds
 the pinned editor and downloads its public build dependencies.
 
+## Attach an external local Brain through one standard MCP connection
+
+For an already prepared owner workspace and the installed **cumulative
+source-pinned** editor, a trusted local MCP client can use the installed
+`zx7-studio-mcp` command (stdio), without a separate model server or a
+Studio-authored system prompt:
+
+```sh
+zx7-studio-mcp --workspace /absolute/my-studio \
+  --source /absolute/installed/velorn \
+  --config /absolute/my-studio/editor-grants.json \
+  --state /absolute/my-studio/state
+```
+
+Configure the executable and arguments in the local client's MCP settings.
+The command starts the existing native editor and exposes one live, host-granted
+catalog of native and installed BODY tools through the existing gateway.
+The host config is the shared read/write ceiling; the state directory must
+already exist privately. The model cannot grant more tools. The workspace
+lock prevents a second Studio session; native revision fences, source custody,
+call budgets and readback remain in force. It does not itself run a model,
+upload media or certify creative results. Use only an owner-trusted local
+client/model; the stdio server cannot determine where an external client sends
+its observations. No network research is implicitly admitted.
+
 ## Create and revise a native project
 
 On Linux, install Python 3.11+, Node, FFmpeg/FFprobe and the pinned editor's

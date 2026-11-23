@@ -597,6 +597,43 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             assert saved_sha in native_autosave_digests(project), (
                 "Fresh native reopen lost its committed recovery snapshot")
             assert digest(original) == image_sha and digest(tone) == tone_sha
+        # Exercise the actual standard stdio attachment (no model/provider),
+        # reusing the real authored sources rather than creating another film.
+        if with_atomic_range:
+            attachment = StdioServerParameters(command=sys.executable, args=[
+                "-m", "studio_next.studio_mcp", "--workspace", str(root),
+                "--source", str(source), "--config", str(config),
+                "--state", str(root / "state"), "--max-calls", "40",
+                "--max-writes", "4", "--xvfb-binary", xvfb, "--display", display,
+            ], cwd=Path(__file__).resolve().parents[2],
+                env=native_editor_child_environment())
+            async with stdio_client(attachment) as (read, write):
+                async with ClientSession(read, write, read_timeout_seconds=120) as attached:
+                    await attached.initialize()
+                    tools = {t.name for t in (await attached.list_tools()).tools}
+                    assert {"body.visual_author", "body.visual_document", "body.timecode_format",
+                            "body.motion_project", "get_project", "get_timeline",
+                            "open_project", "extract_range", "zx7_verify_native_export"}.issubset(tools)
+                    assert "body.research_assets" not in tools
+                    clock = await invoke(attached, "body.timecode_format", {
+                        "frame_index": 48, "numerator": 24, "denominator": 1,
+                        "drop_frame": False})
+                    assert "00:00:02:00" in json.dumps(clock)
+                    graph = await invoke(attached, "body.visual_document",
+                                         {"plan": "creative-graphs/original-art.json"})
+                    assert graph["sha256"] == graph_sha and graph["graph"] == first_document
+                    authored = await invoke(attached, "body.visual_author", {
+                        "document": first_document, "out": "creative-graphs/attached-art.json"})
+                    assert authored["editable_source_file_committed"] is True
+                    assert digest(root / "creative-graphs/attached-art.json") == authored["sha256"]
+                    await invoke(attached, "open_project", {
+                        "projectPath": str(project), "previewOnly": False})
+                    await read_until(attached, lambda state:
+                        (state.get("currentTimeline") or {}).get("clipCount") == 5)
+                    assert len((await invoke(attached, "get_timeline",
+                                             {"includeClips": True}))["clips"]) == 5
+                    assert digest(document) == saved_sha
+            print("ACTUAL_STANDARD_MCP_UNIFIED_BODY_ATTACH_REOPEN_AND_AUTHOR_PASS", flush=True)
         if evidence_out is not None:
             # This is deliberately a *synthetic, scripted technical sample*.
             # Preserve exact source-native materials for external inspection;

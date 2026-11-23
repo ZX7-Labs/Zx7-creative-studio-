@@ -97,7 +97,7 @@ jobs:
           python -u engines/velorn/mcp-e2e.py \
             --source "$ZX7_SUPPORTED_EDITOR" \
             --xvfb-binary /usr/bin/Xvfb \
-            --display 127.0.0.1:95
+            --display 127.0.0.1:97
       - name: Prove installed Studio creates and revises an editable project outside the checkout
         run: |
           PATH="$ZX7_STUDIO_ENV/bin:$PATH" "$ZX7_STUDIO_ENV/bin/python" -u engines/velorn/installed-studio-e2e.py \
