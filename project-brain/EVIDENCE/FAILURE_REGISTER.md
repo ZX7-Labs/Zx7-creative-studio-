@@ -175,3 +175,6 @@ Canonical gate [#44998716977](https://github.com/ZX7-Labs/Zx7-creative-studio-/a
 ### 2026-11-22 reconstructed nested application false ACK regression
 
 Historical #178 source behavior missing from current controller: wrappers with success:true but nested success false/nonboolean or outer/nested error were counted as native writes. RED 5/5 fixtures, GREEN all fail closed with uncertain outcome, no second dispatch, no write receipt. Local controller and audit combined 165 passed, 2 repository-only import errors; exact new source hosted acceptance pending. [Evidence](INDEX.md).
+
+### 2026-11-24 cumulative GUI gate prerequisite
+[Run #45260395720/job 137993289825](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45260395720/job/137993289825): SDK client failed on missing `xdotool` with explicit display. Restore existing prerequisite; physical retest pending. [Evidence](INDEX.md).
