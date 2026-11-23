@@ -1535,6 +1535,49 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NativeJournalError):
             audit_native_journal(forged, **kwargs)
 
+    async def test_reviewed_native_av_cannot_render_without_explicit_saved_project_revision(self):
+        """Reproduce real 120B G1: three rendered/decoded exports, zero
+        source-bound immutable render snapshots because the model never
+        invoked save_project. Reject before native RPC, never save for it.
+        """
+        from studio_next.native_render_evidence import REVIEWED_AV_PAIR
+        session = FakeSession()
+        session.tools.extend([
+            SimpleNamespace(
+                name="save_project", description="Save native project",
+                input_schema={"type": "object", "properties": {
+                    "previewOnly": {"type": "boolean"}}}),
+            SimpleNamespace(
+                name="export_timeline", description="Render native A/V",
+                input_schema={"type": "object", "properties": {
+                    "outputPath": {"type": "string"}}, "required": ["outputPath"],
+                    "additionalProperties": False}),
+        ])
+        model = ScriptedModel([
+            decision("invoke", tool="export_timeline",
+                     inputs={"outputPath": "/synthetic/outputs/revised.mp4"}),
+            decision("finish", summary="Unverified source cannot pass"),
+        ])
+        captures = []
+        control = NativeCreativeControl(
+            session, model, max_turns=2,
+            host_tool_access={"export_timeline": "write",
+                              "save_project": "write"},
+            required_evidence=(REVIEWED_AV_PAIR,),
+            host_capture_render_project=lambda *a: captures.append(a),
+        )
+        result = await control.run("Original editable media with trusted source")
+        self.assertEqual(session.calls, [])
+        self.assertEqual(captures, [])
+        refusal = next(e for e in result["events"] if e["kind"] == "model_action_rejected")
+        self.assertEqual(refusal["validation_keyword"],
+                         "native_export_needs_acknowledged_save")
+        self.assertTrue(refusal["no_native_dispatch"])
+        self.assertEqual(model.observed[1]["last_rejected_native_action_feedback"][
+            "required_prior_native_tool"], "save_project")
+        self.assertFalse(any(e.get("host_application_write_acknowledged")
+                             for e in result["events"]))
+
     async def test_audiovisual_finish_requires_complete_observation_of_both_renders(self):
         from studio_next.native_creative_audit import NativeJournalError, audit_native_journal
         from studio_next.native_render_evidence import (
