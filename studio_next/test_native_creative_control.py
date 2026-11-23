@@ -1540,7 +1540,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         source-bound immutable render snapshots because the model never
         invoked save_project. Reject before native RPC, never save for it.
         """
-        from studio_next.native_render_evidence import REVIEWED_AV_PAIR
+        from studio_next.native_render_evidence import REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR
         session = FakeSession()
         session.tools.extend([
             SimpleNamespace(
@@ -1562,8 +1562,9 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         control = NativeCreativeControl(
             session, model, max_turns=2,
             host_tool_access={"export_timeline": "write",
-                              "save_project": "write"},
-            required_evidence=(REVIEWED_AV_PAIR,),
+                              "save_project": "write", "update_text_clip": "write"},
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",),
             host_capture_render_project=lambda *a: captures.append(a),
         )
         result = await control.run("Original editable media with trusted source")
