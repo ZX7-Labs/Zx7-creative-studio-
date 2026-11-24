@@ -8,7 +8,9 @@
 
 > **Remaining full-integration gates:** verify exact current hosted CI, genuine model-selected save/first A/V -> review -> creative revision -> new save/second A/V -> matched-time audio/picture evidence, native reopen, independent professional creative blind review, A–L field acceptance and release promotion. Historic #178/#179/#189 overlap review remains open; do not bulk merge or rerun solved work.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=e7c485c7d4f82ed8cceab558d3bae6eb15935334` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=7b67c9b3e3c4ae7b0f0709623119443d23821ef9` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+
+> **Historical execution-lane recovery (#189):** restored honest durable-graph readiness from committed executor revision + material witness + owner access. Direct native MCP remains available on its original lane; no graph submission of session-only or unsupported network/paid tools. Restored four prior tests and added separate missing-witness/direct-execution regression. Hosted exact-head proof pending; remaining branch semantics and A–L acceptance open.
 
 ## Product authority — do not replan
 

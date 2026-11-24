@@ -412,10 +412,9 @@ class LiveBodySignal:
                 raise BodyCommandRejected("Original creative Film IR object required")
             catalog=self._factory(self._workspace(workspace_id))
             validation=validate_film_ir(ir,
-                installed_tool_ids=(
-                    catalog.executable_ids(
-                        allowed_access=self._authority.tool_access)
-                    -_LEGACY_UNATTESTED),
+                installed_tool_ids={identity for identity, detail in
+                    catalog.execution_admission(self._authority.tool_access).items()
+                    if detail["can_attempt_durable_graph"]} - _LEGACY_UNATTESTED,
                 fact_ids=set(self._authority.fact_ids))
             if not validation.render_ready:
                 raise BodyCommandRejected("Proposed film is not physically runnable: "+

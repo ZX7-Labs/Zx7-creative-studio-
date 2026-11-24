@@ -1,7 +1,7 @@
 """Discoverable, least-privilege tool catalog. No arbitrary shell commands."""
 from dataclasses import dataclass
 from typing import Callable
-from .contracts import ToolSpec, _json_like
+from .contracts import ACCESS_MODES, ToolSpec, _json_like
 
 # Kept for explicit historical migration, never autonomous model-facing admission.
 MODEL_UNATTESTED_TOOLS = frozenset({"body.render_edit", "body.otio"})
@@ -81,6 +81,50 @@ class ToolCatalog:
         return {name for name,item in self._tools.items()
                 if item.spec.status=="installed" and item.runner is not None
                 and item.idempotent}
+    def execution_admission(self, allowed_access=frozenset({"read","write"})):
+        """Host fact: distinguish *discoverable* from *DAG-admissible* tools.
+
+        A renderer/plug-in must have trusted source-material revalidation and
+        a trusted implementation revision before the durable graph can safely
+        accept it. A stateful native editor's presence in the catalog does not
+        mean that it is a verifiable, retryable film DAG operation.
+
+        This examines actual registered host-owned callables and versions. It
+        does not invoke a tool, certify a rendered output or attribute model
+        creativity. Generic future domains use the same contract.
+        """
+        permitted=frozenset(allowed_access)
+        if not permitted or not permitted.issubset(ACCESS_MODES):
+            raise ValueError("Host execution admission needs known access grants")
+        result={}
+        for identity,entry in self._tools.items():
+            tool=entry.spec
+            exposed=tool.status=="installed" and entry.runner is not None
+            granted=tool.access in permitted
+            revision=bool(entry.implementation_revision)
+            materials=entry.material_fingerprint is not None
+            local=tool.access in {"read","write"}
+            dag=exposed and granted and local and revision and materials
+            blockers=[]
+            if not exposed:blockers.append("backend_not_installed")
+            if not granted:blockers.append("access_not_granted")
+            if not local:blockers.append("unsupported_durable_access")
+            if exposed and not revision:blockers.append("no_committed_executor_revision")
+            if exposed and not materials:blockers.append("no_trusted_material_fingerprint")
+            result[identity]={
+                "catalog_id":identity,
+                "capability":tool.capability,
+                "access":tool.access,
+                "native_runner_registered":exposed,
+                "trusted_material_adapter":materials,
+                "committed_execution_revision":revision,
+                "can_attempt_durable_graph":dag,
+                "actually_executed_and_verified":False,
+                "model_creative_quality_assessed":False,
+                "blocked_by":blockers,
+                "retry_requires_host_idempotence":not entry.idempotent,
+            }
+        return result
     def discover(self):
         return [entry.spec.public() for entry in self._tools.values()]
     def executable_ids(self, allowed_access=None):
