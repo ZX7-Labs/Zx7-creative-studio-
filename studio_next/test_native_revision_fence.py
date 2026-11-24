@@ -167,6 +167,57 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
             denied_again, "update_text_clip", proposed),
             "native_identity_model_observation_required")
 
+    async def test_model_selected_complete_timeline_observation_renews_own_write_epoch(self):
+        """A model's real timeline read after its own ACK is not another blind write."""
+        brain = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        self.assertFalse((await brain.call_tool("get_project", {})).is_error)
+        self.assertFalse((await brain.call_tool("update_text_clip", {
+            "clipId": "clip-A", "text": "First acknowledged title"})).is_error)
+        self.renderer.publish()
+        self.assertFalse((await brain.call_tool("get_timeline", {
+            "includeClips": True})).is_error)
+        revision = await brain.call_tool("update_text_clip", {
+            "clipId": "clip-A", "text": "Second model-chosen title"})
+        self.assertFalse(revision.is_error)
+        self.assertEqual(self.renderer.writes, 2)
+        self.assertEqual(self.renderer.clip_text, "Second model-chosen title")
+
+    async def test_timeline_observation_does_not_override_later_human_edit(self):
+        """Current native IDs are NOT a waiver of last-mile human revision CAS."""
+        brain = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        await brain.call_tool("get_project", {})
+        await brain.call_tool("update_text_clip", {
+            "clipId": "clip-A", "text": "AI first title"})
+        self.renderer.publish()
+        await brain.call_tool("get_timeline", {"includeClips": True})
+        self.renderer.human_gui_edit("Human later title")
+        self.renderer.publish()
+        payload = {"clipId": "clip-A", "text": "AI stale override"}
+        denied = await brain.call_tool("update_text_clip", payload)
+        self.assertEqual(host_pre_dispatch_rejection(
+            denied, "update_text_clip", payload),
+            "native_identity_model_observation_stale")
+        self.assertEqual(self.renderer.writes, 1)
+        self.assertEqual(self.renderer.clip_text, "Human later title")
+
+    async def test_partial_timeline_read_cannot_renew_protected_native_write(self):
+        """An inventory without clips is not a source-observed creative state."""
+        brain = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        await brain.call_tool("get_project", {})
+        await brain.call_tool("update_text_clip", {
+            "clipId": "clip-A", "text": "First title"})
+        self.renderer.publish()
+        await brain.call_tool("get_timeline", {"includeClips": False})
+        payload = {"clipId": "clip-A", "text": "Unobserved second change"}
+        denied = await brain.call_tool("update_text_clip", payload)
+        self.assertEqual(host_pre_dispatch_rejection(
+            denied, "update_text_clip", payload),
+            "native_identity_model_observation_required")
+        self.assertEqual(self.renderer.writes, 1)
+
     async def test_gui_edit_after_model_observation_is_refused_before_native_dispatch(self):
         model_view = CapabilityGatewayMcpSession(
             self.gateway, "editor", require_model_native_observation=True)
