@@ -16,7 +16,7 @@ from .body_picture_observation import TOOL as BODY_PICTURE_TOOL, validate_pictur
 from .capability_fabric import (
     discover_all_live_tools, CapabilityContractError, CapabilityFabric)
 from .capability_gateway import (CapabilityExecutionError, CapabilityGateway,
-                                 NativeReferencePreDispatchError,
+                                 NativeReferencePreDispatchError, CapabilityPreDispatchError,
                                  _source_native_commit_intent)
 from .native_editor_identity import _project_state, _read_json_result
 from .body_editor_client import (
@@ -115,7 +115,10 @@ class CapabilityGatewayMcpSession:
                 # or changed long description masquerading as host authority.
                 allowed.append(SimpleNamespace(
                     name=name, description=current["description"],
-                    input_schema=copy.deepcopy(current["input_schema"])))
+                    input_schema=copy.deepcopy(current["input_schema"]),
+                    access=current["access"],
+                    requires=list(current["requires"]),
+                    may_enable=list(current["may_enable"])))
         return SimpleNamespace(tools=allowed, nextCursor=None)
 
     async def call_tool(self, name, arguments):
@@ -230,6 +233,41 @@ class CombinedCapabilityMcpSession:
         return await self._routes[name].call_tool(name, arguments)
 
 
+def _model_tool_description(tool):
+    """Expose host-owned affordances, not invented artistic instructions."""
+    notes = ["Host access: " + tool.access + "."]
+    if tool.requires:
+        notes.append("Requires: " + ", ".join(tool.requires) + ".")
+    if tool.may_enable:
+        notes.append("May enable: " + ", ".join(tool.may_enable) + ".")
+    return " ".join([tool.description, *notes]).strip()
+
+
+_PRE_DISPATCH_FEEDBACK = {
+    "host_session_call_budget_exhausted":
+        "Host session call budget exhausted. Stop; a new owner-authorized session is required.",
+    "host_session_write_budget_exhausted":
+        "Host session write budget exhausted. Stop writes; read-only inspection may remain available.",
+    "host_source_call_budget_exhausted":
+        "Host source call budget exhausted. Stop calls to this source.",
+    "invalid_native_parameters":
+        "Arguments do not match the admitted input schema. Inspect that schema and correct the arguments.",
+    "invalid_input_object":
+        "Arguments must be a JSON object. Inspect the admitted input schema.",
+    "invalid_input_json":
+        "Arguments must be finite JSON values. Correct the arguments.",
+    "input_budget_exceeded":
+        "Arguments exceed the host input size budget. Reduce the request without changing its meaning.",
+}
+
+
+def _pre_dispatch_feedback(error):
+    message = _PRE_DISPATCH_FEEDBACK.get(error.code)
+    if message is None:
+        return None
+    return "No native operation was dispatched. " + message
+
+
 def create_combined_mcp_server(view: CombinedCapabilityMcpSession):
     """Export one admitted, model-independent creative BODY via official MCP.
 
@@ -254,8 +292,10 @@ def create_combined_mcp_server(view: CombinedCapabilityMcpSession):
         async with lock:
             actual = await view.list_tools()
         return types.ListToolsResult(tools=[types.Tool(
-            name=tool.name, description=tool.description,
-            inputSchema=tool.input_schema) for tool in actual.tools])
+            name=tool.name, description=_model_tool_description(tool),
+            inputSchema=tool.input_schema,
+            annotations=types.ToolAnnotations(readOnlyHint=(tool.access == "read"))
+            ) for tool in actual.tools])
 
     async def call_tool(_context, params):
         # Shield an admitted native call from cancellation: do not abandon a
@@ -265,8 +305,11 @@ def create_combined_mcp_server(view: CombinedCapabilityMcpSession):
                 try:
                     result = await view.call_tool(
                         params.name, {} if params.arguments is None else params.arguments)
+                except CapabilityPreDispatchError as exc:
+                    return failure(_pre_dispatch_feedback(exc) or
+                        "BODY could not establish a safe operation outcome; inspect current state. Do not blindly retry writes.")
                 except (CapabilityExecutionError, CapabilityContractError):
-                    return failure("BODY admission or receipt failed; inspect current state and rediscover before retrying.")
+                    return failure("BODY admission or receipt failed; inspect actual state. Do not blindly retry a write.")
                 except Exception:
                     return failure("BODY operation failed; a write may have occurred. Inspect native state before retrying.")
         # Preserve official editor SDK results, including image/audio content

@@ -2,11 +2,13 @@
 
 > **2026-11-24 BODY-first:** [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356). `7dd40002` 27/27 workflows PASS; current `cb7e0a29` 27 PASS, one matrix fails optional PNG inventory assertion on editor-only dependency profile. Fresh cumulative owner installer/actual external MCP without model PASS (#45328903523/job 138225019244). Actual installed artifact #14892185433 independently rehashed, 24/24 file witnesses, 1623 tests/1593 pass/30 unavailable. RED reproduced missing-PIL assertion; corrected regression verifies both inventory profiles without skipping tests, local 36/36 pass with import-only MCP stub, exact hosted matrix pending. No new production behavior in this correction. Full A–L and independent acceptance remain open. [Evidence](EVIDENCE/INDEX.md).
 
+> **BODY external contract candidate:** source-attested read/write hints and prerequisite/effect discovery, actionable safe schema/budget no-dispatch feedback; source exceptions after dispatch cannot impersonate host refusal. Isolated discovery RED/GREEN; exact repository + physical MCP CI pending. Parent `83010dc9`: 26/28 workflows passed at inspection; two running; installed 1593/1623 pass, 30 skipped. No neural or domain acceptance.
+
 > **Real neural evidence, NOT accepted:** [120B native continuation](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45028270408), artifact #14757401419, 48 model decisions, three 6s 144-frame true H.264/AAC audible synthetic films, six native ACK writes, three physical verifications; final model state **turn_budget_exhausted**, no valid final reviewed A/V pair, and **zero explicitly saved render-bound native source snapshots**. [Source-custody RED/GREEN](https://github.com/ZX7-Labs/Zx7-creative-studio-/commit/f4c5f64ce9fa5a1b5e1f1fe173f87fa422a7edcc) now rejects exports before RPC until the model independently applies save_project. No automatic save, scripted edit, private media, or weakened artistic gate.
 
 > **Remaining full-integration gates:** verify exact current hosted CI, genuine model-selected save/first A/V -> review -> creative revision -> new save/second A/V -> matched-time audio/picture evidence, native reopen, independent professional creative blind review, A–L field acceptance and release promotion. Historic #178/#179/#189 overlap review remains open; do not bulk merge or rerun solved work.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=0f557527fd8349a20a36ab1bf0c3eedf64acc994` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=0f4524a705cdacef3b9ea32e31831e38ba67172d` (Git content ID, **not** a security attestation). A changed JSON ledger requires refreshing this value and the human checkpoint in the same PR; validation detects stale pairing.
 
 ## Product authority — do not replan
 

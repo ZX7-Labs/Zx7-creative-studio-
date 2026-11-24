@@ -610,7 +610,14 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
             async with stdio_client(attachment) as (read, write):
                 async with ClientSession(read, write, read_timeout_seconds=120) as attached:
                     await attached.initialize()
-                    tools = {t.name for t in (await attached.list_tools()).tools}
+                    advertised = {t.name: t for t in (await attached.list_tools()).tools}
+                    tools = set(advertised)
+                    for name in ("get_project", "body.timecode_format", "body.visual_document"):
+                        assert advertised[name].annotations.readOnlyHint is True
+                        assert "Host access: read." in advertised[name].description
+                    for name in ("open_project", "body.visual_author", "extract_range"):
+                        assert advertised[name].annotations.readOnlyHint is False
+                        assert "Host access: write." in advertised[name].description
                     assert {"body.visual_author", "body.visual_document", "body.timecode_format",
                             "body.motion_project", "get_project", "get_timeline",
                             "open_project", "extract_range", "zx7_verify_native_export"}.issubset(tools)

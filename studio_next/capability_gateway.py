@@ -37,7 +37,15 @@ _SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS = frozenset((
 
 
 class CapabilityExecutionError(ValueError):
-    """Rejected BEFORE any native dispatch; no guessed operation is allowed."""
+    """BODY operation could not be admitted or its outcome verified."""
+
+
+class CapabilityPreDispatchError(CapabilityExecutionError):
+    """Host-classified rejection before any selected operation is dispatched."""
+
+    def __init__(self, code, message=None):
+        self.code = code
+        super().__init__(code if message is None else message)
 
 
 _SAFE_NATIVE_IDENTITY_READ_ERRORS = frozenset({
@@ -303,7 +311,7 @@ class CapabilityGateway:
                     self._session_budget.check_available(
                         source=namespace, access=record["access"])
                 except CapabilitySessionBudgetError as exc:
-                    raise CapabilityExecutionError(str(exc)) from exc
+                    raise CapabilityPreDispatchError(str(exc)) from exc
             grants = self._live_grants(namespace)
             advertised = await discover_all_live_tools(session)
             fresh = CapabilityFabric({namespace: (
@@ -321,13 +329,13 @@ class CapabilityGateway:
             _local_schema_references(schema)
             import jsonschema
             if not isinstance(inputs, dict):
-                raise CapabilityExecutionError("BODY inputs must be a structured object")
+                raise CapabilityPreDispatchError("invalid_input_object", "BODY inputs must be a structured object")
             try:
                 encoded_inputs = _wire(inputs).encode("utf-8")
             except (ValueError, TypeError, OverflowError, RecursionError) as exc:
-                raise CapabilityExecutionError("Native model inputs must be finite JSON") from exc
+                raise CapabilityPreDispatchError("invalid_input_json", "Native model inputs must be finite JSON") from exc
             if len(encoded_inputs) > 262_144:
-                raise CapabilityExecutionError("Native model inputs exceed bounded ABI budget")
+                raise CapabilityPreDispatchError("input_budget_exceeded", "Native model inputs exceed bounded ABI budget")
             # Host-named top-level fields are an ABI. Unspecified top-level
             # fields invite model hallucinations; intentionally open nested
             # artistic parameters remain unrestricted by this preflight.
@@ -339,7 +347,7 @@ class CapabilityGateway:
             validator_type.check_schema(schema)
             invalid = next(validator_type(schema).iter_errors(inputs), None)
             if invalid is not None:
-                raise CapabilityExecutionError(
+                raise CapabilityPreDispatchError("invalid_native_parameters",
                     "Invalid native parameters (" + str(invalid.validator)[:40] + ")")
             requirements = record["requires"]
             if requirements:
@@ -428,7 +436,7 @@ class CapabilityGateway:
                     self._session_budget.reserve(
                         source=namespace, access=record["access"])
                 except CapabilitySessionBudgetError as exc:
-                    raise CapabilityExecutionError(str(exc)) from exc
+                    raise CapabilityPreDispatchError(str(exc)) from exc
             digest = hashlib.sha256(encoded_inputs).hexdigest()
             durable_write = (self._attempt_store is not None and
                              record["access"] == "write")
@@ -449,12 +457,18 @@ class CapabilityGateway:
             try:
                 # One submission only; uncertain writes require reconciliation.
                 result = await session.call_tool(name, dispatch_inputs)
-            except BaseException:
+            except BaseException as exc:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
                 if durable_write:
                     self._attempt_store.settle(
                         request_id=request_id, state=trace["state"])
+                # Source exceptions after submission cannot manufacture a host
+                # no-dispatch receipt, even when their class looks familiar.
+                if isinstance(exc, (CapabilityPreDispatchError,
+                                    NativeReferencePreDispatchError)):
+                    raise CapabilityExecutionError(
+                        "Native operation outcome could not be confirmed") from exc
                 raise
             try:
                 failure = _native_mcp_status(result)

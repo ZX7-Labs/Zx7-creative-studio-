@@ -6,9 +6,11 @@ import unittest
 
 from studio_next.body_capability_adapter import connect_installed_zx7_body
 from studio_next.capability_attempts import CapabilityAttemptStore, CapabilityAttemptError
-from studio_next.capability_gateway import CapabilityExecutionError, CapabilityGateway
+from studio_next.capability_gateway import (CapabilityExecutionError, CapabilityGateway,
+    CapabilityPreDispatchError, NativeReferencePreDispatchError)
 from studio_next.capability_fabric import CapabilityContractError
-from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+from studio_next.capability_mcp_session import (CapabilityGatewayMcpSession,
+    CombinedCapabilityMcpSession, _model_tool_description, _pre_dispatch_feedback)
 from studio_next.capability_session_budget import CapabilitySessionBudget
 from studio_next.native_creative_control import NativeCreativeControl
 from studio_next.test_native_creative_control import ScriptedModel, decision
@@ -44,6 +46,74 @@ class GatewayMcpSessionTests(unittest.IsolatedAsyncioTestCase):
         }, session_budget=budget, attempt_store=journal)
         await gateway.refresh()
         return gateway
+
+    async def test_discovery_preserves_host_access_and_typed_affordances(self):
+        source = LocalMcpSource()
+        gateway = CapabilityGateway({"graphics": (
+            source, {"read_native": "read", "write_native": "write"},
+            {"write_native": ["project_open"]}, lambda: {"project_open": True},
+            {"write_native": ["timeline_ready"]})})
+        await gateway.refresh()
+        view = CombinedCapabilityMcpSession(gateway, "graphics")
+        tools = {tool.name: tool for tool in (await view.list_tools()).tools}
+        self.assertEqual(set(tools), {"read_native", "write_native"})
+        self.assertEqual(tools["read_native"].access, "read")
+        write = tools["write_native"]
+        self.assertEqual(write.access, "write")
+        self.assertEqual(write.requires, ["project_open"])
+        self.assertEqual(write.may_enable, ["timeline_ready"])
+        self.assertIn("Host access: write.", _model_tool_description(write))
+        self.assertIn("Requires: project_open.", _model_tool_description(write))
+        self.assertIn("May enable: timeline_ready.", _model_tool_description(write))
+        self.assertNotIn("Requires:", _model_tool_description(tools["read_native"]))
+        write.requires.append("fake")
+        write.input_schema["properties"].clear()
+        fresh = {tool.name: tool for tool in (await view.list_tools()).tools}
+        self.assertEqual(fresh["write_native"].requires, ["project_open"])
+        self.assertIn("value", fresh["write_native"].input_schema["properties"])
+        self.assertEqual(source.calls, [])
+
+    async def test_schema_and_budget_refusals_are_actionable_no_dispatch(self):
+        source = LocalMcpSource()
+        budget = CapabilitySessionBudget(max_calls=1, max_writes=0)
+        gateway = await self._connect(source, budget)
+        view = CapabilityGatewayMcpSession(gateway, "graphics")
+        with self.assertRaises(CapabilityPreDispatchError) as invalid:
+            await view.call_tool("read_native", {"value": "wrong"})
+        self.assertEqual(invalid.exception.code, "invalid_native_parameters")
+        self.assertIn("No native operation was dispatched.", _pre_dispatch_feedback(invalid.exception))
+        self.assertEqual(budget.snapshot()["reserved_calls"], 0)
+        with self.assertRaises(CapabilityPreDispatchError) as denied:
+            await view.call_tool("write_native", {"value": 3})
+        self.assertEqual(denied.exception.code, "host_session_write_budget_exhausted")
+        self.assertIn("Stop writes", _pre_dispatch_feedback(denied.exception))
+        self.assertEqual(source.calls, [])
+        await view.call_tool("read_native", {"value": 3})
+        with self.assertRaises(CapabilityPreDispatchError) as exhausted:
+            await view.call_tool("read_native", {"value": 4})
+        self.assertIn("new owner-authorized session", _pre_dispatch_feedback(exhausted.exception))
+        self.assertEqual(source.calls, [("read_native", {"value": 3})])
+        self.assertIsNone(_pre_dispatch_feedback(CapabilityPreDispatchError("private-source-text")))
+
+    async def test_source_cannot_forge_no_dispatch_after_write_submission(self):
+        for error in (CapabilityPreDispatchError("invalid_native_parameters"),
+                      NativeReferencePreDispatchError("native_identity_model_observation_required")):
+            with self.subTest(error=type(error).__name__):
+                class AmbiguousSource(LocalMcpSource):
+                    async def call_tool(self, name, inputs):
+                        self.calls.append((name, inputs))
+                        raise error
+                source = AmbiguousSource()
+                gateway = await self._connect(source)
+                view = CapabilityGatewayMcpSession(gateway, "graphics")
+                with self.assertRaisesRegex(CapabilityExecutionError,
+                                            "outcome could not be confirmed") as caught:
+                    await view.call_tool("write_native", {"value": 9})
+                self.assertNotIsInstance(caught.exception, CapabilityPreDispatchError)
+                self.assertNotIsInstance(caught.exception, NativeReferencePreDispatchError)
+                self.assertEqual(source.calls, [("write_native", {"value": 9})])
+                self.assertEqual(gateway._events[-1]["state"],
+                                 "write_uncertain_reconciliation_required")
 
     async def test_one_brain_cannot_bypass_shared_write_or_call_ceiling(self):
         source=LocalMcpSource()
