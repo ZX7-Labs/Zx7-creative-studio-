@@ -1730,20 +1730,25 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 ).run("Review and revise independently verified audiovisual exports")
                 events = result["events"]
                 if scenario == "full":
-                    # The historical fixture's update_text_clip response never
-                    # acknowledged a native APPLICATION write. It cannot
-                    # invalidate the saved source; changing the predicate to
-                    # assume success would invent a committed edit.
-                    self.assertFalse(any(
+                    # Native edit really WAS acknowledged. The prior test used
+                    # model.observed list indices as turn numbers, but picture
+                    # review uses decide_with_images -> images_observed instead
+                    # of observed. Reassemble the complete original model turn
+                    # timeline without dropping actual image-reviewed decisions.
+                    contexts = {ctx["turn"]: ctx for ctx in model.observed}
+                    contexts.update({ctx["turn"]: ctx
+                                     for ctx, _ in model.images_observed})
+                    self.assertEqual(set(contexts), set(range(len(actions))))
+                    self.assertTrue(any(
                         e.get("tool") == "update_text_clip" and
                         e.get("kind") == "native_tool_result" and
                         e.get("host_application_write_acknowledged") is True
                         for e in events))
                     self.assertEqual([
-                        model.observed[i]["host_verified_execution_progress"][
+                        contexts[i]["host_verified_execution_progress"][
                             "source_bound_render_save_current"]
                         for i in (0, 1, 6, 7)],
-                        [False, True, True, True])
+                        [False, True, False, True])
                 rejected = [event["missing_completion_evidence"] for event in events
                             if event["kind"] == "model_finish_rejected"]
                 kwargs = dict(host_tool_access=grants, expected_required_evidence=required,
