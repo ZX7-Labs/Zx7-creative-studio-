@@ -14,7 +14,9 @@ concurrency:
 jobs:
   native-source-install:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # A cold source build consumed the old 15-minute budget before assertions.
+    # Match the existing cross-process profile; retain every physical check.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
