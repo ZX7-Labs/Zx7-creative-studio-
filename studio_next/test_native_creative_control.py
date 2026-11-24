@@ -1589,6 +1589,48 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e.get("host_application_write_acknowledged")
                              for e in result["events"]))
 
+    async def test_confirmed_creative_write_invalidates_native_saved_render_readiness(self):
+        """The host never mistakes a previously saved revision for a newer edit.
+
+        This is a receipt-state unit test; real physical media is established
+        independently by the installed editor workflow, not this fixture.
+        """
+        from studio_next.native_render_evidence import REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR
+        session = FakeSession()
+        session.tools.extend([
+            SimpleNamespace(name=name, description="Native source-bound action",
+                            input_schema={"type": "object"})
+            for name in ("save_project", "export_timeline")])
+        grants = {tool.name: ("write" if tool.name in
+                  ("save_project", "export_timeline", "update_text_clip") else "read")
+                  for tool in session.tools}
+        control = NativeCreativeControl(
+            session, ScriptedModel([]), max_turns=2,
+            host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",),
+            host_capture_render_project=lambda *_: ("a" * 64, "b" * 64, "c" * 64))
+        self.assertIs(control._source_bound_render_save_current(), False)
+        control._explicit_render_save_identity = ("/verified/saved-project", "saved-revision")
+        control._append({"kind": "native_tool_result", "tool": "save_project",
+                         "host_application_write_acknowledged": True})
+        self.assertIs(control._source_bound_render_save_current(), True)
+        control._append({"kind": "native_tool_result", "tool": "export_timeline",
+                         "host_application_write_acknowledged": True})
+        self.assertIs(control._source_bound_render_save_current(), True)
+        control._append({"kind": "native_tool_result", "tool": "update_text_clip",
+                         "host_application_write_acknowledged": True})
+        self.assertIs(control._source_bound_render_save_current(), False)
+        # A failed or read-only call never invents a new edit or resets the
+        # last confirmed content write; only a fresh acknowledged save can.
+        control._append({"kind": "native_read_tool_reported_error", "tool": "get_timeline"})
+        self.assertIs(control._source_bound_render_save_current(), False)
+        control._append({"kind": "native_tool_result", "tool": "save_project",
+                         "host_application_write_acknowledged": True})
+        self.assertIs(control._source_bound_render_save_current(), True)
+        control._explicit_render_save_identity = ("/verified/saved-project", None)
+        self.assertIs(control._source_bound_render_save_current(), False)
+
     async def test_audiovisual_finish_requires_complete_observation_of_both_renders(self):
         from studio_next.native_creative_audit import NativeJournalError, audit_native_journal
         from studio_next.native_render_evidence import (
@@ -1688,13 +1730,20 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 ).run("Review and revise independently verified audiovisual exports")
                 events = result["events"]
                 if scenario == "full":
-                    # Host truth toggles across save->export->creative edit->save,
-                    # without selecting actions or pretending the film is good.
+                    # The historical fixture's update_text_clip response never
+                    # acknowledged a native APPLICATION write. It cannot
+                    # invalidate the saved source; changing the predicate to
+                    # assume success would invent a committed edit.
+                    self.assertFalse(any(
+                        e.get("tool") == "update_text_clip" and
+                        e.get("kind") == "native_tool_result" and
+                        e.get("host_application_write_acknowledged") is True
+                        for e in events))
                     self.assertEqual([
                         model.observed[i]["host_verified_execution_progress"][
                             "source_bound_render_save_current"]
                         for i in (0, 1, 6, 7)],
-                        [False, True, False, True])
+                        [False, True, True, True])
                 rejected = [event["missing_completion_evidence"] for event in events
                             if event["kind"] == "model_finish_rejected"]
                 kwargs = dict(host_tool_access=grants, expected_required_evidence=required,
