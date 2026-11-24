@@ -10,9 +10,11 @@
 
 **Current correction:** #45343123415 failed `too_large: STATE.md` (14,301 bytes vs 14,000 cap); preserve [complete previous state](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/af1af5e8717d96674cc538b5dd3a7dcf520341df/project-brain/STATE.md) and shorten this mutable snapshot. Prior ledger size repair and stable installer timeout change retained; no checker limit or test relaxed. Exact new documentation head must pass its own CI.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=1adcbb328ae036206da2a0000f92d4cc4fa6f95b` (Git content ID, not security attestation). Update STATE and ledger atomically after meaningful changes.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=a4c8fcdafb52d672018901890488f19c8e549a70` (Git content ID, not security attestation). Update STATE and ledger atomically after meaningful changes.
 
 **Latest security finding and candidate:** independent exact source host environment audit found native Electron children inherited all provider/GitHub/SSH secrets *except* NVIDIA; fixed with explicit Linux desktop/runtime environment allowlist, source-neutral and optional provider unaffected. Isolated reproduction RED and patched function GREEN; full installed/physical CI required before accepting. Exact technical parent `3a6dee8fc8b34374e596bdf37ff905ce455954f0` completed 28/28 checks including actual native Blender/MCP/A-V handoff; not independent creative acceptance.
+
+**Legacy environment-test correction:** The exact security head `ccc5f9a` [source gate #45352732781](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45352732781) failed one outdated test expecting an unknown `OTHER_SETTING` variable to survive the native-child boundary. Strict environment isolation correctly strips it. Historical test now asserts that restriction; separate real subprocess proof added. Source/technical CI still pending, not certified.
 
 ## Authority and scope
 

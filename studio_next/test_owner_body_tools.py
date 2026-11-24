@@ -10,6 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
+import subprocess
+import sys
 
 from studio_next.native_editor_session import (attest_owner_body_source, native_editor_child_environment)
 from studio_next.body_capability_adapter import InstalledBodyAdapter
@@ -84,6 +86,15 @@ class OwnerInstalledBodyTests(unittest.IsolatedAsyncioTestCase):
         allowed = {key: original[key] for key in
                    ("PATH", "DISPLAY", "CI", "PYTHONPATH", "HOME")}
         self.assertEqual(native_editor_child_environment(original), allowed)
+        isolated = subprocess.run([sys.executable, "-c",
+            "import os; assert 'OPENAI_API_KEY' not in os.environ; "
+            "assert 'NVIDIA_API_KEY' not in os.environ; "
+            "assert 'AWS_SECRET_ACCESS_KEY' not in os.environ; "
+            "assert 'GITHUB_TOKEN' not in os.environ; "
+            "assert 'SSH_AUTH_SOCK' not in os.environ; "
+            "assert os.environ.get('DISPLAY') == ':99'"],
+            env=allowed, capture_output=True, text=True, timeout=5)
+        self.assertEqual(isolated.returncode, 0, isolated.stderr)
         self.assertEqual(original["NVIDIA_API_KEY"], "not-a-real-key")
         self.assertEqual(native_editor_child_environment({
             **original, "PATH": 123})["DISPLAY"], ":99")

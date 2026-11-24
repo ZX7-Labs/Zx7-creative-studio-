@@ -157,10 +157,15 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                   "velorn" / "native-model-client.py")
         module = runpy.run_path(str(script), run_name="native_client_test")
         given = {"PATH": "/usr/bin", "NVIDIA_API_KEY": "synthetic-secret-test-value",
-                 "OTHER_SETTING": "keep"}
+                 "OPENAI_API_KEY": "synthetic-secret-test-value",
+                 "OTHER_SETTING": "unapproved-host-environment"}
         child = module["native_editor_child_environment"](given)
+        # The native child receives only trusted desktop/runtime keys. The
+        # historical expectation that arbitrary host env survives was unsafe.
         self.assertNotIn("NVIDIA_API_KEY", child)
-        self.assertEqual(child, {"PATH": "/usr/bin", "OTHER_SETTING": "keep"})
+        self.assertNotIn("OPENAI_API_KEY", child)
+        self.assertNotIn("OTHER_SETTING", child)
+        self.assertEqual(child, {"PATH": "/usr/bin"})
         self.assertIn("NVIDIA_API_KEY", given)
 
     def test_pinned_real_electron_preview_attestation_requires_clean_exact_source(self):
