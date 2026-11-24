@@ -116,11 +116,31 @@ def native_session_grants(configuration: dict, source: Path) -> dict:
     return grants
 
 
+_NATIVE_CHILD_ENV_ALLOWED = frozenset({
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP",
+    "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "LC_COLLATE", "LC_NUMERIC",
+    "LC_TIME", "LC_MESSAGES", "LC_MONETARY", "DISPLAY", "XAUTHORITY",
+    "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE",
+    "XDG_CURRENT_DESKTOP", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+    "XDG_DATA_HOME", "XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
+    "DBUS_SESSION_BUS_ADDRESS", "GDK_BACKEND", "GTK_PATH", "FONTCONFIG_PATH",
+    "FONTCONFIG_FILE", "FONTCONFIG_SYSROOT", "LD_LIBRARY_PATH", "PYTHONPATH",
+    "PYTHONHOME", "PYTHONUNBUFFERED", "CI", "PULSE_SERVER", "PIPEWIRE_REMOTE",
+    "SSL_CERT_FILE", "SSL_CERT_DIR",
+})
+
+
 def native_editor_child_environment(environ=None):
-    """Never disclose a cloud provider credential to native subprocesses."""
-    child = dict(os.environ if environ is None else environ)
-    child.pop("NVIDIA_API_KEY", None)
-    return child
+    """Pass only local desktop/runtime settings to an untrusted native child.
+
+    No provider key, generic secret/token, cloud credential, SSH agent, GitHub
+    auth, or model-controlled environment reaches Electron or its workers.
+    Caller-provided variables cannot expand the executable allowlist. This is
+    environment isolation, not a replacement for the OS/editor sandbox.
+    """
+    source = os.environ if environ is None else environ
+    return {key: value for key, value in source.items()
+            if key in _NATIVE_CHILD_ENV_ALLOWED and isinstance(value, str)}
 
 
 def trial_machine_contracts(grants, *, fresh):

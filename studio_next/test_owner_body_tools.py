@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import tempfile
 import unittest
 
-from studio_next.native_editor_session import attest_owner_body_source
+from studio_next.native_editor_session import (attest_owner_body_source, native_editor_child_environment)
 from studio_next.body_capability_adapter import InstalledBodyAdapter
 from studio_next.capability_gateway import CapabilityExecutionError, CapabilityGateway
 from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
@@ -62,6 +62,33 @@ class OwnerInstalledBodyTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ValueError):
                     attest_owner_body_source(root, configuration=policy, provider="local",
                                              allowed_access=("read", "write"))
+
+
+    async def test_native_child_never_inherits_cloud_or_host_credentials(self):
+        # Reproduces previously observed host leakage: only NVIDIA_API_KEY
+        # was stripped while unrelated provider and CI credentials survived.
+        original = {
+            "PATH": "/usr/bin", "DISPLAY": ":99", "CI": "true",
+            "PYTHONPATH": "/trusted/runtime", "HOME": "/workspace/private",
+            "NVIDIA_API_KEY": "not-a-real-key",
+            "OPENAI_API_KEY": "not-a-real-key",
+            "AZURE_OPENAI_API_KEY": "not-a-real-key",
+            "HF_TOKEN": "not-a-real-token",
+            "GITHUB_TOKEN": "not-a-real-token",
+            "AWS_SECRET_ACCESS_KEY": "not-a-real-key",
+            "SSH_AUTH_SOCK": "/tmp/ssh-credentials",
+            "GIT_ASKPASS": "/tmp/credential-helper",
+            "MODEL_PROVIDER_SESSION": "not-a-real-token",
+            "ZX7_UNAPPROVED_CHILD_FLAG": "not-an-approval",
+        }
+        allowed = {key: original[key] for key in
+                   ("PATH", "DISPLAY", "CI", "PYTHONPATH", "HOME")}
+        self.assertEqual(native_editor_child_environment(original), allowed)
+        self.assertEqual(original["NVIDIA_API_KEY"], "not-a-real-key")
+        self.assertEqual(native_editor_child_environment({
+            **original, "PATH": 123})["DISPLAY"], ":99")
+        self.assertNotIn("PATH", native_editor_child_environment({
+            **original, "PATH": 123}))
 
     async def test_standard_attachment_uses_validated_roots_and_never_calls_model(self):
         from studio_next.studio_mcp import prepare_attachment
