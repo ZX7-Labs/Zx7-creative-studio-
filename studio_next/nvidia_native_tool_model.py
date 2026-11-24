@@ -23,6 +23,7 @@ _META_DESCRIBE = "zx7_inspect_host_tool"
 _META_FINISH = "zx7_finish_verified_session"
 _KNOWN = frozenset({"search", "describe", "invoke", "discover", "finish"})
 NVIDIA_OMNI_AUDIO_MODEL_ID = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+NVIDIA_QWEN_VL_MODEL_ID = "qwen/qwen3.5-122b-a10b"
 
 # Direct calls are not arbitrary function calls. The provider sees exact
 # current native schemas; the BODY is the sole executor and validator.
@@ -293,9 +294,12 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             "messages": (self._messages_with_audio(context, images, audio)
                          if audio else self._messages(context, images)),
             "tools": functions,
-            # Omni's required-mode grammar rejects native uniqueItems schemas.
+            # Omni required grammar rejects uniqueItems; NVIDIA NIM release notes
+            # also record forced-tool empty-call defects on Qwen3.5 profiles.
+            # Auto mode still requires exactly one valid typed returned function.
             # Preserve the full schema; the host still requires exactly one typed call.
-            "tool_choice": "auto" if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID else "required",
+            "tool_choice": ("auto" if self.settings.model_id in (
+                NVIDIA_OMNI_AUDIO_MODEL_ID, NVIDIA_QWEN_VL_MODEL_ID) else "required"),
             "parallel_tool_calls": False,
         }
         payload.update(self.settings.sampling)
