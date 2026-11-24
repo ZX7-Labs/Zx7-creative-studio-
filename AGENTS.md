@@ -26,6 +26,8 @@ The [resume prompt](docs/continuity/RESUME_PROMPT.md)
 is the owner's entry point for a fresh session. Refresh the live GitHub evidence
 before acting on the status snapshot.
 
+The owner's 2026-11-24 execution instruction: batch routine defect discovery, repair, regression and CI evidence in the repository; do not interrupt work to narrate individual fixes. Continue toward full integration and full verification, preserve the exceptional-quality bar and avoid new capabilities or unnecessary rewrites. Report consolidated acceptance, or a genuine blocking constraint when further authorized progress is impossible; never claim completion from a narrow test.
+
 Own the product outcome across research, architecture, design, implementation,
 ML/model integration, infrastructure, evaluation and delivery. The owner's
 Anthropic reference sets an expectation for rigorous multidisciplinary methods

@@ -48,7 +48,7 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
 
     def test_external_brain_workspace_needs_no_model_and_reports_exact_grants(self):
         from studio_next.studio_mcp import resolve_attachment_paths, prepare_attachment
-        from studio_next.body_capability_adapter import InstalledBodyAdapter
+        from importlib.util import find_spec
         with patch.object(studio, "_local_model_ids", side_effect=AssertionError("model probe")):
             self.init(provider="external", model_id=None)
             root, settings, _ = studio.load_workspace(self.root)
@@ -67,7 +67,17 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
             actual = adapter.trusted_grants()
             self.assertEqual(report["installed_body"]["operations"], sorted(actual))
             self.assertTrue(all(mode == "read" for mode in actual.values()))
-            self.assertIn("body.observe_picture", actual)
+            self.assertIn("body.timecode_format", actual)
+            # Editor-only installations intentionally omit the optional PNG
+            # decoder. The inventory must reflect both environments faithfully.
+            self.assertEqual("body.observe_picture" in actual, find_spec("PIL") is not None)
+            with patch("importlib.util.find_spec", side_effect=lambda name, *args, **kwargs:
+                       None if name == "PIL" else find_spec(name, *args, **kwargs)):
+                limited = adapter.trusted_grants()
+                limited_report = studio.doctor(root, inspect_installed_body=True)
+                self.assertNotIn("body.observe_picture", limited)
+                self.assertEqual(limited_report["installed_body"]["operations"], sorted(limited))
+                self.assertIn("body.timecode_format", limited)
             self.assertNotIn("body.visual_author", actual)
             self.assertFalse(report["model_connection_checked"])
             with self.assertRaisesRegex(ValueError, "external MCP"):
