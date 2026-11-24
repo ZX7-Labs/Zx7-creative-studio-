@@ -371,7 +371,7 @@ def _commit_actual_body_output(final_path,render):
         recovered=recover_publication(
             final_path,witness=_witness,verify=_verify_witness)
         if recovered is not None:
-            return recovered
+            return {**recovered, "success": True}
         if final_path.exists():
             raise FileExistsError("Cannot overwrite original media output")
     stage=final_path.with_name(
@@ -390,14 +390,17 @@ def _commit_actual_body_output(final_path,render):
                 recovered=recover_publication(
                     final_path,witness=_witness,verify=_verify_witness)
                 if recovered is not None:
-                    return recovered
+                    return {**recovered, "success": True}
                 raise FileExistsError("Cannot overwrite original media output")
             prepare_publication(final_path,stage,preliminary)
             os.link(stage,final_path)
             # The same lease transaction covers the durable receipt,
             # final hardlink and directory fsync; no takeover in between.
             sync_published_file(final_path)
-        return _witness(final_path)
+        # This is the source application's acknowledgement of its own
+        # completed publication, not a claim of artistic quality or a
+        # verified native-editor export. Keep the original physical witness.
+        return {**_witness(final_path), "success": True}
     finally:
         # Only our private encoded staging file is ours to remove. A previous
         # hardlink publication has a durable receipt and remains recoverable.
@@ -488,9 +491,10 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         return _witness(path)
 
     def author_visual(inputs):
-        return author_visual_document(
+        receipt = author_visual_document(
             root, document=inputs["document"], out=inputs["out"],
             base=inputs.get("base"), expected_sha256=inputs.get("expected_sha256"))
+        return {**receipt, "success": True}
 
     def read_authored_visual(inputs):
         return read_visual_document(root, plan=inputs["plan"])
@@ -639,7 +643,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             os.link(temp,out)
         finally:
             temp.unlink(missing_ok=True)
-        return {"path":str(out),"sha256":sha256_file(out),
+        return {"path":str(out),"sha256":sha256_file(out),"success":True,
                 "bytes":len(contents),"verified_original_frames":imported["frame_count"],
                 "synchronous_sound_source_verified":True,
                 "industry_otio_edit_preserved_without_silent_drop":True,
@@ -783,7 +787,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         result=_witness(dest)
         if not _verify_witness(result):
             raise ValueError("Rendered EXR stage failed native release verification")
-        result.update({"actual_32bit_float_VFX_passes":True,
+        result.update({"success":True,"actual_32bit_float_VFX_passes":True,
                        "verified_frame_reuse_count":evidence["verified_frame_reuse_count"],
                        "newly_rendered_frame_count":evidence["newly_rendered_frame_count"],
                        "original_scene_sha256":evidence["original_scene_sha256"],
@@ -809,7 +813,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     def import_native_owned_mlt(inputs):
         source=_path_within(root,inputs["edit"],exists=True)
         dest=_body_output(root,inputs["out"],allowed=(".json",))
-        return import_owned_mlt_project(source,root,vault.root,dest)
+        receipt = import_owned_mlt_project(source,root,vault.root,dest)
+        return {**receipt, "success": True}
 
     def relink_native_owned_mlt(inputs):
         source=_path_within(root,inputs["edit"],exists=True)
@@ -929,7 +934,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
                   evidence="Verified original media from a registered trusted executable",
                   owner_or_generator="zx7-authorized-body-graph")
         record=vault.inspect(ref["asset_id"],attestation_id=ref["attestation_id"])
-        return {"path":record["path"],"sha256":ref["asset_id"],
+        return {"path":record["path"],"sha256":ref["asset_id"],"success":True,
                 "asset_id":ref["asset_id"],"attestation_id":ref["attestation_id"],
                 "rights":ref["rights"]}
 

@@ -32,6 +32,38 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(actual["native_result"].content[0].text)
             self.assertEqual(gateway.evidence()[0]["access"], "read")
 
+    async def test_real_body_author_and_render_cross_the_internal_controller_ack_boundary(self):
+        """Scripted choices exercise genuine BODY operations, not neural artistry."""
+        import hashlib
+        import json
+        from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
+        from studio_next.native_creative_control import NativeCreativeControl
+        from studio_next.test_native_creative_control import ScriptedModel, decision
+        from studio_next.test_body_visual_document import graph
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            gateway = await connect_installed_zx7_body(root)
+            grants = gateway._live_grants("zx7")
+            view = CombinedCapabilityMcpSession(gateway, "zx7")
+            plan = "creative-graphs/first.json"
+            model = ScriptedModel([
+                decision("invoke", tool="body.visual_author", inputs={"document": graph(), "out": plan}),
+                decision("invoke", tool="body.visual_graph", inputs={"plan": plan, "out": "first.png"}),
+                decision("finish", summary="fixture only"),
+            ])
+            result = await NativeCreativeControl(view, model, host_tool_access=grants,
+                max_turns=3, required_evidence=("native_write_acknowledged",)).run("Synthetic integration fixture")
+            self.assertEqual(result["status"], "model_finished_unverified")
+            writes = [e for e in result["events"] if e.get("host_application_write_acknowledged") is True]
+            self.assertEqual([e["tool"] for e in writes], ["body.visual_author", "body.visual_graph"])
+            self.assertEqual(json.loads((root / plan).read_text()), graph())
+            with Image.open(root / "first.png") as image:
+                image.load()
+                self.assertEqual(image.size, (32, 24))
+            self.assertEqual(hashlib.sha256((root / plan).read_bytes()).hexdigest(),
+                json.loads(model.observed[1]["last_native_result_texts"][0])["sha256"])
+
     async def test_read_grant_cannot_execute_write_tools(self):
         with tempfile.TemporaryDirectory() as root:
             gateway = await connect_installed_zx7_body(root, allowed_access=("read",))

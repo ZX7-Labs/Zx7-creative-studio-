@@ -2,7 +2,7 @@
 
 Each risk has a falsifiable exit gate. [VERIFIED] applies to a specific recorded fact, **not** a blanket product success.
 
-**2026-11-24:** Genuine 120B produced playable source-backed A/V but no immutable project save/reviewed pair. Latest source-custody admission and cumulative installed-release corrections need exact hosted acceptance; independent professional quality and all A–L field gates remain open. See [failure register](EVIDENCE/FAILURE_REGISTER.md).
+**2026-11-24:** Genuine 120B produced playable source-backed A/V but no immutable project save/reviewed pair. Exact parent feda678b completed 27/27 workflows, external stdio unified native physical attachment and installed artifact integrity. Internal BODY source-ACK mismatch reproduced and corrected locally; new exact-head hosted acceptance pending; independent professional quality and all A–L field gates remain open. See [failure register](EVIDENCE/FAILURE_REGISTER.md).
 
 | ID | Severity | Current evidence / exposure | Closure gate |
 |---|---|---|---|

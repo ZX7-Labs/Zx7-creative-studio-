@@ -82,7 +82,7 @@ def _invoke_existing_durable_producer(workspace, operation, inputs):
         raise ValueError("Native source differs from committed original publication")
     if operation == "body.motion_project":
         witness["native_project_observations"] = verify_motion_bundle(target)["native"]
-    return {**witness, "durable_native_source_published": True}
+    return {**witness, "durable_native_source_published": True, "success": True}
 
 
 class InstalledBodyAdapter:
