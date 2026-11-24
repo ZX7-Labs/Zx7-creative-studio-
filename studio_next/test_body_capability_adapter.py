@@ -136,6 +136,37 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(PermissionError):
                 await denied.call_tool("body.observe_picture", {"source": "picture.png", "source_sha256": sha})
 
+    async def test_model_attachment_cannot_bypass_original_source_custody_policy(self):
+        from studio_next.body_integration import body_catalog
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = InstalledBodyAdapter(root)
+            raw = body_catalog(root, initialize_vault=False)
+            self.assertTrue({"body.render_edit", "body.otio"}.issubset(
+                {item["id"] for item in raw.discover()}))
+            grants = adapter.trusted_grants()
+            for legacy in ("body.render_edit", "body.otio"):
+                self.assertNotIn(legacy, grants)
+                with self.assertRaises(PermissionError):
+                    await adapter.call_tool(legacy, {"edit": "fake.json", "out": "fake.mp4"})
+            self.assertEqual(list(root.iterdir()), [])
+            if "body.render_edit_owned" in raw.executable_ids():
+                self.assertIn("body.render_edit_owned", grants)
+            if "body.otio_owned_export" in raw.executable_ids():
+                self.assertIn("body.otio_owned_export", grants)
+
+    async def test_denied_and_pure_read_calls_do_not_initialize_owner_storage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = InstalledBodyAdapter(root, allowed_access=("read",))
+            with self.assertRaises(PermissionError):
+                await adapter.call_tool("body.visual_author", {})
+            self.assertEqual(list(root.iterdir()), [])
+            result = await adapter.call_tool("body.timecode_format", {
+                "numerator": 24, "denominator": 1, "frame_index": 48, "drop_frame": False})
+            self.assertFalse(result.is_error)
+            self.assertEqual(list(root.iterdir()), [])
+
     async def test_read_grant_cannot_execute_write_tools(self):
         with tempfile.TemporaryDirectory() as root:
             gateway = await connect_installed_zx7_body(root, allowed_access=("read",))

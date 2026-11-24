@@ -13,6 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from .body_integration import body_catalog
+from .registry import MODEL_UNATTESTED_TOOLS
+from .media_vault import MediaVault
 from .body_picture_observation import TOOL as PICTURE_TOOL, SCHEMA as PICTURE_SCHEMA, observe_picture
 from .native_editor_asset_reader import observed_editor_asset_ids
 
@@ -106,7 +108,7 @@ class InstalledBodyAdapter:
         # Actual admitted operations retain the original initialized vault.
         catalog = body_catalog(self._workspace, editor_client=self._editor_client,
                                initialize_vault=initialize_vault)
-        enabled = catalog.executable_ids(self._allowed_access)
+        enabled = catalog.executable_ids(self._allowed_access) - MODEL_UNATTESTED_TOOLS
         descriptors = {item["id"]: item for item in catalog.discover()
                        if item["id"] in enabled}
         # The source-bound picture sensor belongs to this local media transport,
@@ -170,7 +172,7 @@ class InstalledBodyAdapter:
         return {"reader":observe_actual_native_assets,"rules":rules}
 
     async def call_tool(self, name, inputs):
-        catalog, permitted = self._installed(initialize_vault=name != PICTURE_TOOL)
+        catalog, permitted = self._installed(initialize_vault=False)
         if name not in permitted:
             raise PermissionError("BODY operation no longer installed or granted")
         if permitted[name]["access"] not in self._allowed_access:
@@ -189,6 +191,10 @@ class InstalledBodyAdapter:
             result = await asyncio.to_thread(
                 _invoke_existing_durable_producer, self._workspace, name, inputs)
         else:
+            # Admission precedes storage initialization; pure reads and
+            # refused calls never create a new owner media store.
+            if permitted[name]["access"] == "write":
+                await asyncio.to_thread(MediaVault, self._workspace / "vault")
             result = await asyncio.to_thread(
                 catalog.invoke, name, inputs, allowed_access=self._allowed_access)
         return SimpleNamespace(is_error=False, content=[

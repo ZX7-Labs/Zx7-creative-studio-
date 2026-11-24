@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from typing import Callable
 from .contracts import ToolSpec, _json_like
 
+# Kept for explicit historical migration, never autonomous model-facing admission.
+MODEL_UNATTESTED_TOOLS = frozenset({"body.render_edit", "body.otio"})
+
 def _check_technical_input_types(arguments,schema,tool_id):
     """Native minimal JSON-schema subset; code-owned constraints, no styles."""
     if not isinstance(schema,dict) or "properties" not in schema:
