@@ -10,8 +10,7 @@ import json
 from pathlib import Path
 import re
 
-from studio_next.nvidia_native_tool_model import (
-    NVIDIA_OMNI_AUDIO_MODEL_ID, NVIDIA_STEP_FLASH_MODEL_ID)
+from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
 from scripts.nvidia_smoke_request import SmokeRequestError, _unique_json
 from scripts.run_nvidia_native_trial import _ALLOWED_MODEL, _TRIAL_MAX_TURNS
 
@@ -48,7 +47,7 @@ def validate_av_trial_request(path: Path, *, dispatch_request_id: str) -> str:
     if (type(value) is not dict or set(value) != fields or
             (omni and value["cloud_synthetic_wav_allowed"] is not True) or
             type(value["schema"]) is not int or value["schema"] != 1 or
-            value["kind"] != _KIND or value["model_id"] not in (_ALLOWED_MODEL, NVIDIA_OMNI_AUDIO_MODEL_ID, NVIDIA_STEP_FLASH_MODEL_ID) or
+            value["kind"] != _KIND or value["model_id"] not in (_ALLOWED_MODEL, NVIDIA_OMNI_AUDIO_MODEL_ID) or
             value["synthetic_only"] is not True or
             value["cloud_synthetic_frames_allowed"] is not True or
             value["cloud_numerical_audio_diagnostics_allowed"] is not True or

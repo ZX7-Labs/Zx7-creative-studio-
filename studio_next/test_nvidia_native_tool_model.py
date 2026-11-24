@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from studio_next.nvidia_native_tool_model import (
     NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
-    NVIDIA_OMNI_AUDIO_MODEL_ID, NVIDIA_STEP_FLASH_MODEL_ID, _provider_function,
+    NVIDIA_OMNI_AUDIO_MODEL_ID, _provider_function,
 )
 from studio_next.nvidia_model import NvidiaConfigurationError, NvidiaModelSettings
 from studio_next.providers import LocalModelOutputError
@@ -91,34 +91,6 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertNotIn("nvapi-", json.dumps(body))
         self.assertNotIn("response_format", body)
         self.assertEqual(len(context["host_native_tool_contracts"]), 2)
-
-    def test_documented_hosted_step_flash_has_separate_sampling_and_same_native_gate(self):
-        from studio_next.native_editor_session import native_decision_model
-        args = SimpleNamespace(
-            provider="nvidia", base_url="http://127.0.0.1:8080",
-            structured_actions=True, model_id=NVIDIA_STEP_FLASH_MODEL_ID,
-            model_timeout=180, allow_cloud_image_upload=True,
-            allow_cloud_original_wav_upload=False, allow_public_research=False)
-        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-"+"Q"*32}):
-            model = native_decision_model(args)
-        self.assertIsInstance(model, NvidiaNativeToolCreativeModel)
-        self.assertNotIsInstance(model, NvidiaOmniNativeToolCreativeModel)
-        self.assertEqual(model.settings.model_id, NVIDIA_STEP_FLASH_MODEL_ID)
-        self.assertEqual(model.settings.sampling, {
-            "temperature": 0.7})
-        self.assertFalse(model.supports_source_bound_wav_input)
-        with patch.object(model, "_open_request", return_value=_reply(
-                _provider_function("get_project"),
-                '{"inputs":{},"reason":"Read native state"}')) as request:
-            output = model.decide(_context())
-        self.assertEqual(output["arguments"], {"tool": "get_project", "inputs": {}})
-        payload = request.call_args.args[0]
-        self.assertEqual(payload["model"], NVIDIA_STEP_FLASH_MODEL_ID)
-        self.assertEqual(payload["tool_choice"], "auto")
-        self.assertFalse(payload["parallel_tool_calls"])
-        self.assertNotIn("chat_template_kwargs", payload)
-        self.assertNotIn("reasoning_effort", payload)
-        self.assertFalse(any("api_key" in str(x).lower() for x in payload))
 
     def test_native_recovery_requests_one_function_call_instead_of_plain_json(self):
         model = NvidiaNativeToolCreativeModel(system_prompt="Native test")

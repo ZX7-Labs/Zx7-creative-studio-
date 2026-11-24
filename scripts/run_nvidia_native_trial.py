@@ -17,8 +17,7 @@ import subprocess
 import sys
 from typing import NamedTuple
 
-from studio_next.nvidia_native_tool_model import (
-    NVIDIA_OMNI_AUDIO_MODEL_ID, NVIDIA_STEP_FLASH_MODEL_ID)
+from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
 from studio_next.native_render_evidence import destination_digest, timeline_scope_digest
 from studio_next.body_editor_export import native_export_file_identity
 from studio_next.native_editor_source_pin import PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION
@@ -586,9 +585,8 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         raise ValueError("Cloud audio diagnostics require audiovisual trial mode")
     if type(allow_cloud_synthetic_wav) is not bool or (allow_cloud_synthetic_wav and not audiovisual):
         raise ValueError("Synthetic WAV requires the audited Omni audiovisual trial")
-    approved_models = ({NVIDIA_OMNI_AUDIO_MODEL_ID} if allow_cloud_synthetic_wav
-                       else {_ALLOWED_MODEL, NVIDIA_STEP_FLASH_MODEL_ID})
-    if model_id not in approved_models:
+    expected_model = NVIDIA_OMNI_AUDIO_MODEL_ID if allow_cloud_synthetic_wav else _ALLOWED_MODEL
+    if model_id != expected_model:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
     source = (Path(integrated_editor_source).resolve() if integrated_editor_source is not None
               else _SOURCE_EDITOR)
