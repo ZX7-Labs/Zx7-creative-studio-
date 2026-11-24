@@ -1576,6 +1576,10 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         result = await control.run("Original editable media with trusted source")
         self.assertEqual(session.calls, [])
         self.assertEqual(captures, [])
+        self.assertIs(model.observed[0]["host_verified_execution_progress"][
+            "source_bound_render_save_current"], False)
+        self.assertIs(model.observed[1]["host_verified_execution_progress"][
+            "source_bound_render_save_current"], False)
         refusal = next(e for e in result["events"] if e["kind"] == "model_action_rejected")
         self.assertEqual(refusal["validation_keyword"],
                          "native_export_needs_acknowledged_save")
@@ -1683,6 +1687,14 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     host_capture_render_project=capture,
                 ).run("Review and revise independently verified audiovisual exports")
                 events = result["events"]
+                if scenario == "full":
+                    # Host truth toggles across save->export->creative edit->save,
+                    # without selecting actions or pretending the film is good.
+                    self.assertEqual([
+                        model.observed[i]["host_verified_execution_progress"][
+                            "source_bound_render_save_current"]
+                        for i in (0, 1, 6, 7)],
+                        [False, True, False, True])
                 rejected = [event["missing_completion_evidence"] for event in events
                             if event["kind"] == "model_finish_rejected"]
                 kwargs = dict(host_tool_access=grants, expected_required_evidence=required,

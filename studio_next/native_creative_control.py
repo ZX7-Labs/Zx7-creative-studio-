@@ -1175,6 +1175,25 @@ class NativeCreativeControl:
                 0, verified_receipts - len(distinct_receipts)),
         }
 
+    def _source_bound_render_save_current(self):
+        """Host receipt fact, NOT a model command or proof of a good film.
+
+        The same native save preflight is shown before the model spends a turn
+        and enforced at export. A stale save after any non-render content write
+        cannot establish immutable render-source custody.
+        """
+        if self._capture_render_project is None:
+            return None
+        last_write = next(
+            (event.get("tool") for event in reversed(self.events)
+             if event.get("kind") == "native_tool_result" and
+             event.get("host_application_write_acknowledged") is True and
+             event.get("tool") != RENDER_TOOL), None)
+        saved = self._explicit_render_save_identity
+        return (last_write == "save_project" and
+                type(saved) is tuple and len(saved) == 2 and
+                all(type(value) is str and value for value in saved))
+
     def _missing_completion_evidence(self):
         """Require still-current export receipts, not superseded or failed reads."""
         state = self._current_export_evidence()
@@ -1791,6 +1810,8 @@ class NativeCreativeControl:
                     # NOT a completed film. IDs remain model-observed only.
                     "host_verified_execution_progress": {
                         "project_presence": self._project_presence,
+                        "source_bound_render_save_current":
+                            self._source_bound_render_save_current(),
                         "project_asset_count_from_native_read":
                             self._trusted_project_asset_count(),
                         "active_timeline_clip_count_from_native_read":
@@ -2341,15 +2362,7 @@ class NativeCreativeControl:
                 if (native_name == RENDER_TOOL and
                         self._capture_render_project is not None and
                         args["inputs"].get("previewOnly") is not True):
-                    last_non_render_write = next(
-                        (e.get("tool") for e in reversed(self.events)
-                         if e.get("kind") == "native_tool_result" and
-                         e.get("host_application_write_acknowledged") is True and
-                         e.get("tool") != RENDER_TOOL), None)
-                    saved = self._explicit_render_save_identity
-                    saved_valid = (type(saved) is tuple and len(saved) == 2 and
-                                   all(type(value) is str and value for value in saved))
-                    if last_non_render_write != "save_project" or not saved_valid:
+                    if self._source_bound_render_save_current() is not True:
                         self._last_preflight_feedback = {
                             "tool": native_name,
                             "validation_keyword": "native_export_needs_acknowledged_save",
