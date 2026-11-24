@@ -6,9 +6,11 @@
 
 **Exact latest inspected runtime head:** `af1af5e8717d96674cc538b5dd3a7dcf520341df`. Installed release [#45343123103](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45343123103) and dependent artifact verification passed; 1631 tests, 1601 passed, 30 skipped, zero failures. Artifact #14897063599, GitHub digest `f4444241f156296e1a06c79ca58fcf4592766162b4f3e1ac305cb45205a5045e`; not independently downloaded locally in this session. All five recovered #189 execution-lane tests passed. Source/native-project gate #45343123088 and host gateway job #138271227726 passed. Actual model jobs skipped. Observed workflow snapshot: {"success":17,"in_progress":10,"failure":1}; remaining native and installer results must be checked. No professional/A–L acceptance.
 
+**Actual SDK handoff RED:** `5f5053da` [#45345730359](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45345730359) failed before creative edits: MCP parsed `ToolAnnotations.read_only_hint` differs from JSON wire alias `readOnlyHint`. Correct two real read/write checks; full physical retest pending. Previously `af1af5e8` installed 1631 tests/1601 PASS/30 skipped, published artifact independently verified.
+
 **Current correction:** #45343123415 failed `too_large: STATE.md` (14,301 bytes vs 14,000 cap); preserve [complete previous state](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/af1af5e8717d96674cc538b5dd3a7dcf520341df/project-brain/STATE.md) and shorten this mutable snapshot. Prior ledger size repair and stable installer timeout change retained; no checker limit or test relaxed. Exact new documentation head must pass its own CI.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=8f5ee393a758f0874f598e42a204b508ed078381` (Git content ID, not security attestation). Update STATE and ledger atomically after meaningful changes.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=48b0b55b0822e0a6937c76ab33a052b0b239fc87` (Git content ID, not security attestation). Update STATE and ledger atomically after meaningful changes.
 
 ## Authority and scope
 

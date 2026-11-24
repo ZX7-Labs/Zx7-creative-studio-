@@ -613,10 +613,10 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                     advertised = {t.name: t for t in (await attached.list_tools()).tools}
                     tools = set(advertised)
                     for name in ("get_project", "body.timecode_format", "body.visual_document"):
-                        assert advertised[name].annotations.readOnlyHint is True
+                        assert advertised[name].annotations.read_only_hint is True
                         assert "Host access: read." in advertised[name].description
                     for name in ("open_project", "body.visual_author", "extract_range"):
-                        assert advertised[name].annotations.readOnlyHint is False
+                        assert advertised[name].annotations.read_only_hint is False
                         assert "Host access: write." in advertised[name].description
                     assert {"body.visual_author", "body.visual_document", "body.timecode_format",
                             "body.motion_project", "get_project", "get_timeline",
