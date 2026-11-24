@@ -17,6 +17,7 @@ import re
 import stat
 from .body_editor_client import HOST_REJECTION_FEEDBACK
 from .providers import MODEL_OUTPUT_REJECTION_CODES
+from .body_picture_observation import TOOL as BODY_PICTURE_TOOL
 from .native_render_evidence import (
     AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
@@ -733,8 +734,17 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         event.get("audio_sha256") is not None):
                     raise NativeJournalError(
                         "Native timeline JPEG cannot masquerade as verified export")
+                body_picture_sha = event.get("body_picture_source_sha256")
+                if ((tool == BODY_PICTURE_TOOL) != (body_picture_sha is not None) or
+                        (body_picture_sha is not None and (
+                            not _sha(body_picture_sha) or access != "read" or
+                            seen_sha is not None or new_sha is not None or
+                            len(event.get("image_sha256", [])) != 1 or
+                            event.get("audio_sha256") is not None))):
+                    raise NativeJournalError("BODY picture cannot masquerade as verified video export")
                 if bool(event.get("image_sha256")) != (
-                        tool in _FRAME_OBSERVERS or timeline_preview is True):
+                        tool in _FRAME_OBSERVERS or timeline_preview is True or
+                        body_picture_sha is not None):
                     raise NativeJournalError("Native visual evidence mismatches sensor identity")
                 audio_sha = event.get("audio_sha256")
                 if audio_sha is not None:

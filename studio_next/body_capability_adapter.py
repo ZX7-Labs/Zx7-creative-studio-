@@ -6,11 +6,14 @@ implementations. The legacy trusted ToolCatalog remains the execution owner.
 from __future__ import annotations
 
 import asyncio
+import base64
+import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
 from .body_integration import body_catalog
+from .body_picture_observation import TOOL as PICTURE_TOOL, SCHEMA as PICTURE_SCHEMA, observe_picture
 from .native_editor_asset_reader import observed_editor_asset_ids
 
 
@@ -106,6 +109,16 @@ class InstalledBodyAdapter:
         enabled = catalog.executable_ids(self._allowed_access)
         descriptors = {item["id"]: item for item in catalog.discover()
                        if item["id"] in enabled}
+        # The source-bound picture sensor belongs to this local media transport,
+        # not a second renderer or a model-authored catalog entry.
+        if PICTURE_TOOL in {item["id"] for item in catalog.discover()}:
+            raise ValueError("Installed BODY cannot shadow the host picture sensor")
+        if "read" in self._allowed_access and importlib.util.find_spec("PIL") is not None:
+            descriptors[PICTURE_TOOL] = {
+                "access": "read", "capability": "observe actual creative picture",
+                "description": "Decode a bounded PNG in the authorized creative workspace, using its exact source SHA256; return real preview pixels, not an exported video or artistic verdict",
+                "schema": PICTURE_SCHEMA,
+            }
         return catalog, descriptors
 
     async def list_tools(self):
@@ -157,11 +170,17 @@ class InstalledBodyAdapter:
         return {"reader":observe_actual_native_assets,"rules":rules}
 
     async def call_tool(self, name, inputs):
-        catalog, permitted = self._installed()
+        catalog, permitted = self._installed(initialize_vault=name != PICTURE_TOOL)
         if name not in permitted:
             raise PermissionError("BODY operation no longer installed or granted")
         if permitted[name]["access"] not in self._allowed_access:
             raise PermissionError("BODY operation forbidden by host")
+        if name == PICTURE_TOOL:
+            picture, receipt = await asyncio.to_thread(observe_picture, self._workspace, inputs)
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text", text=json.dumps(receipt, allow_nan=False)),
+                SimpleNamespace(type="image", mime_type="image/png",
+                                data=base64.b64encode(picture).decode("ascii"))])
         # This is the SAME original trusted runner (including media rights,
         # output custody, durable publication and input validation).
         if name in _DURABLE_NATIVE_PRODUCERS:

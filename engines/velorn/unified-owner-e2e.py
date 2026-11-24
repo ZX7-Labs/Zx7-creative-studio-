@@ -626,6 +626,25 @@ async def exercise(source: Path, xvfb: str, display: str, *, with_blender=False,
                         "document": first_document, "out": "creative-graphs/attached-art.json"})
                     assert authored["editable_source_file_committed"] is True
                     assert digest(root / "creative-graphs/attached-art.json") == authored["sha256"]
+                    import base64
+                    import io
+                    from PIL import Image
+                    assert "body.observe_picture" in tools
+                    observed = await attached.call_tool("body.observe_picture", {
+                        "source": "staging/original-art.png", "source_sha256": image_sha})
+                    assert not observed.is_error and len(observed.content) == 2
+                    receipt, image = observed.content
+                    assert receipt.type == "text" and image.type == "image"
+                    assert image.mime_type == "image/png"
+                    preview_bytes = base64.b64decode(image.data, validate=True)
+                    picture_receipt = json.loads(receipt.text)
+                    assert picture_receipt["source_sha256"] == image_sha
+                    assert picture_receipt["png_sha256"] == hashlib.sha256(preview_bytes).hexdigest()
+                    assert picture_receipt["physical_video_export_verified"] is False
+                    with Image.open(io.BytesIO(preview_bytes)) as preview, Image.open(original) as source_image:
+                        assert preview.size == source_image.size
+                        assert preview.convert("RGBA").tobytes() == source_image.convert("RGBA").tobytes()
+                    print("ACTUAL_STANDARD_MCP_SOURCE_PICTURE_OBSERVATION_PASS", flush=True)
                     await invoke(attached, "open_project", {
                         "projectPath": str(project), "previewOnly": False})
                     await read_until(attached, lambda state:

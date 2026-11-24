@@ -22,6 +22,7 @@ import time
 from typing import Any
 
 from .providers import LocalModelOutputError
+from .body_picture_observation import TOOL as BODY_PICTURE_TOOL, validate_picture_receipt
 from .body_editor_client import (
     host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK,
     host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK,
@@ -716,6 +717,7 @@ def _model_event_window(events):
             for field in ("observed_export_sha256", "independently_verified_export_sha256",
                           "image_sha256", "audio_sha256",
                           "native_timeline_preview_unverified_export",
+                          "body_picture_source_sha256",
                           "must_reconcile_native_state",
                           "host_attested_read_only", "no_successful_native_observation",
                           "host_source_attested_preview_only", "no_automatic_retry",
@@ -2598,8 +2600,22 @@ class NativeCreativeControl:
                         self.host_tool_access is not None and
                         self.host_tool_access.get(native_name) == "read" and
                         args["inputs"].get("includeImage") is not False)
+                    body_picture = native_name == BODY_PICTURE_TOOL
+                    body_picture_sha = None
+                    if body_picture:
+                        if (self.host_tool_access is None or
+                                self.host_tool_access.get(native_name) != "read" or
+                                len(images) != 1 or images[0][0] != "image/png" or audio):
+                            raise NativeCreativeControlError("BODY picture lacks trusted read-only PNG evidence")
+                        body_receipt = _strict_receipt(texts, "BODY source picture")
+                        try:
+                            picture_hash = validate_picture_receipt(
+                                body_receipt, images[0][1], args["inputs"].get("source_sha256"))
+                        except ValueError as exc:
+                            raise NativeCreativeControlError(str(exc)) from exc
+                        body_picture_sha = body_receipt["source_sha256"]
                     if (images and native_name not in _VERIFIED_FRAME_TOOLS
-                            and not live_timeline_image):
+                            and not live_timeline_image and not body_picture):
                         raise NativeCreativeControlError("Untrusted tool supplied image evidence")
                     if audio and native_name not in _VERIFIED_AUDIO_TOOLS:
                         raise NativeCreativeControlError("Untrusted tool supplied audio evidence")
@@ -2819,7 +2835,7 @@ class NativeCreativeControl:
                     hashes = (
                         _source_bound_live_timeline_preview(
                             texts, images, self._trusted_project_active_timeline_id())
-                        if live_timeline_image else
+                        if live_timeline_image else [picture_hash] if body_picture else
                         _source_bound_images(texts, images))
                     audio_evidence = _source_bound_audio(texts, audio)
                     av_values = None
@@ -2854,7 +2870,7 @@ class NativeCreativeControl:
                                 p.get("native_export_sha256")):
                             raise NativeCreativeControlError("Native export has no independent physical decoder proof")
                         new_export_sha = p["native_export_sha256"]
-                    elif images and not live_timeline_image:
+                    elif images and not live_timeline_image and not body_picture:
                         p = _strict_receipt(texts, "verified native video")
                         if not _digest(p.get("export_sha256")):
                             raise NativeCreativeControlError("Native frame lacks source identity")
@@ -2904,6 +2920,7 @@ class NativeCreativeControl:
                 self._last_image_provenance = (
                     "live_editable_timeline_preview_not_verified_export"
                     if live_timeline_image else (
+                        "body_source_picture_not_verified_video_export" if body_picture else
                         "independently_verified_export_frame" if images else None))
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
                 # Capture only a genuinely observed pre-write native count.
@@ -2990,6 +3007,7 @@ class NativeCreativeControl:
                               "image_sha256": hashes,
                               "native_timeline_preview_unverified_export": (
                                   True if live_timeline_image else None),
+                              "body_picture_source_sha256": body_picture_sha,
                               "audio_sha256": audio_evidence["wav_sha256"] if audio_evidence else None,
                               "independently_verified_export_sha256": new_export_sha,
                               "observed_export_sha256": observed_export_sha,

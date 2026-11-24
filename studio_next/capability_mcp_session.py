@@ -8,8 +8,11 @@ The wrapper cannot attest actual native state or artistic quality.
 from __future__ import annotations
 
 import copy
+import base64
+import json
 from types import SimpleNamespace
 
+from .body_picture_observation import TOOL as BODY_PICTURE_TOOL, validate_picture_receipt
 from .capability_fabric import (
     discover_all_live_tools, CapabilityContractError, CapabilityFabric)
 from .capability_gateway import (CapabilityExecutionError, CapabilityGateway,
@@ -275,6 +278,20 @@ def create_combined_mcp_server(view: CombinedCapabilityMcpSession):
         # success or silently drop a sensor/metadata block.
         blocks = getattr(result, "content", None)
         status = getattr(result, "is_error", None)
+        if params.name == BODY_PICTURE_TOOL and status is False:
+            try:
+                if (not isinstance(blocks, (list, tuple)) or len(blocks) != 2 or
+                        blocks[0].type != "text" or blocks[1].type != "image" or
+                        blocks[1].mime_type != "image/png" or len(blocks[1].data) > 6_000_000):
+                    raise ValueError("Invalid BODY picture blocks")
+                validate_picture_receipt(json.loads(blocks[0].text),
+                    base64.b64decode(blocks[1].data, validate=True),
+                    (params.arguments or {}).get("source_sha256"))
+                return types.CallToolResult(is_error=False, content=[
+                    types.TextContent(type="text", text=blocks[0].text),
+                    types.ImageContent(type="image", data=blocks[1].data, mimeType="image/png")])
+            except (ValueError, AttributeError, TypeError):
+                return failure("BODY picture did not match its source-bound receipt.")
         if (type(status) is not bool or not isinstance(blocks, (list, tuple)) or
                 not all(getattr(block, "type", None) == "text" and
                         isinstance(getattr(block, "text", None), str) for block in blocks)):
