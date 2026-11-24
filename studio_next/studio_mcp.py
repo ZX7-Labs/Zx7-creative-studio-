@@ -22,6 +22,19 @@ from .capability_mcp_session import CombinedCapabilityMcpSession, create_combine
 from .capability_session_budget import CapabilitySessionBudget
 
 
+def resolve_attachment_paths(workspace, source, config_path, state):
+    """Use the canonical private workspace when no manual paths are supplied."""
+    if source is not None and config_path is not None and state is not None:
+        return workspace, source, config_path, state
+    from .studio_cli import load_workspace
+    root, settings, _ = load_workspace(workspace)
+    if settings["provider"] == "nvidia":
+        raise ValueError("External MCP defaults require a local or external Brain workspace")
+    return (root, source if source is not None else Path(settings["editor_source"]),
+            config_path if config_path is not None else root / "editor-grants.json",
+            state if state is not None else root / "state")
+
+
 def prepare_attachment(workspace, config_path, state, *, max_calls, max_writes):
     """Check the owner boundary without model/provider or native execution."""
     from .native_editor_session import attest_owner_body_source
@@ -121,9 +134,9 @@ async def run_attachment(args, prepared=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True, type=Path)
-    parser.add_argument("--source", required=True, type=Path)
-    parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--state", required=True, type=Path)
+    parser.add_argument("--source", type=Path)
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--state", type=Path)
     parser.add_argument("--max-calls", type=int, default=4096)
     parser.add_argument("--max-writes", type=int, default=1024)
     parser.add_argument("--xvfb-binary")
@@ -134,6 +147,8 @@ def main(argv=None):
     # existing OS lock as zx7-studio run, not a second scheduler.
     import fcntl
     try:
+        args.workspace, args.source, args.config, args.state = resolve_attachment_paths(
+            args.workspace, args.source, args.config, args.state)
         prepared = prepare_attachment(args.workspace, args.config, args.state,
                                       max_calls=args.max_calls, max_writes=args.max_writes)
         lock_path = args.workspace / ".run.lock"

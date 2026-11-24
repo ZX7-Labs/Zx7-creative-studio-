@@ -26,6 +26,8 @@ jobs:
           bash scripts/install-zx7-linux.sh "$target"
           test -L "$target"
           test -x "$target/bin/zx7-studio"
+          test -x "$target/bin/zx7-studio-mcp"
+          "$target/bin/zx7-studio-mcp" --help
           test "$("$target/node/bin/node" --version)" = "v24.22.2"
           editor=$(realpath -- "$target/venv/share/zx7-studio/velorn")
           test ! -e "$editor/.git/objects/info/alternates"
@@ -165,3 +167,51 @@ jobs:
           if [[ -n "${ZX7_OWNER_LA_EDITOR:-}" ]]; then
             git -C "$ZX7_OWNER_LA_EDITOR" diff --quiet HEAD --
           fi
+
+  native-combined-mcp-source-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install cumulative native editor and independent Brain entry point
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/zx7-external-brain-install"
+          bash scripts/install-zx7-linux.sh --loss-aware-range "$target"
+          test -x "$target/bin/zx7-studio-mcp"
+          "$target/bin/zx7-studio-mcp" --help
+          echo "ZX7_EXTERNAL_PREFIX=$target" >> "$GITHUB_ENV"
+      - name: Actual installed stdio attachment without inference provider
+        run: |
+          set -euo pipefail
+          export PATH="$ZX7_EXTERNAL_PREFIX/bin:$PATH"
+          workspace="$RUNNER_TEMP/zx7-external-brain-workspace"
+          zx7-studio init "$workspace" --provider external
+          cd "$RUNNER_TEMP"
+          "$ZX7_EXTERNAL_PREFIX/venv/bin/python" - "$workspace" <<'PY'
+          import asyncio, json, os, sys
+          from pathlib import Path
+          from mcp import ClientSession, StdioServerParameters
+          from mcp.client.stdio import stdio_client
+          root = Path(sys.argv[1])
+          config = json.loads((root / "studio.json").read_text())
+          assert config["provider"] == "external" and config["model_id"] is None
+          assert config["base_url"] is None
+          async def exercise():
+              params = StdioServerParameters(command=os.environ["ZX7_EXTERNAL_PREFIX"] + "/bin/zx7-studio-mcp",
+                  args=["--workspace", str(root), "--xvfb-binary", "/usr/bin/Xvfb", "--display", "127.0.0.1:97"])
+              async with stdio_client(params) as (read, write):
+                  async with ClientSession(read, write, read_timeout_seconds=120) as session:
+                      await session.initialize()
+                      tools = {t.name for t in (await session.list_tools()).tools}
+                      assert {"get_project", "body.timecode_format", "body.observe_picture"}.issubset(tools)
+                      assert "body.render_edit" not in tools
+                      result = await session.call_tool("body.timecode_format", {"frame_index":48, "numerator":24, "denominator":1, "drop_frame":False})
+                      assert not result.is_error and "00:00:02:00" in result.content[0].text
+          asyncio.run(exercise())
+          assert not (root / "vault").exists()
+          print("ACTUAL_INSTALLED_EXTERNAL_BRAIN_ATTACH_WITHOUT_MODEL_PASS")
+          PY

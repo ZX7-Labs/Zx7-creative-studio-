@@ -46,6 +46,41 @@ class StudioOwnerWorkflowTests(unittest.TestCase):
             self.init(model_id="changed")
         self.assertEqual((root / "studio.json").read_bytes(), original)
 
+    def test_external_brain_workspace_needs_no_model_and_reports_exact_grants(self):
+        from studio_next.studio_mcp import resolve_attachment_paths, prepare_attachment
+        from studio_next.body_capability_adapter import InstalledBodyAdapter
+        with patch.object(studio, "_local_model_ids", side_effect=AssertionError("model probe")):
+            self.init(provider="external", model_id=None)
+            root, settings, _ = studio.load_workspace(self.root)
+            self.assertEqual(settings["provider"], "external")
+            self.assertIsNone(settings["model_id"])
+            self.assertIsNone(settings["base_url"])
+            config_path = root / "editor-grants.json"
+            config = json.loads(config_path.read_text())
+            config["allowed_access"] = ["read"]
+            config_path.write_text(json.dumps(config))
+            paths = resolve_attachment_paths(root, None, None, None)
+            self.assertEqual(paths, (root, self.source, config_path, root / "state"))
+            _, adapter, _ = prepare_attachment(root, config_path, root / "state",
+                                              max_calls=8, max_writes=0)
+            report = studio.doctor(root, inspect_installed_body=True)
+            actual = adapter.trusted_grants()
+            self.assertEqual(report["installed_body"]["operations"], sorted(actual))
+            self.assertTrue(all(mode == "read" for mode in actual.values()))
+            self.assertIn("body.observe_picture", actual)
+            self.assertNotIn("body.visual_author", actual)
+            self.assertFalse(report["model_connection_checked"])
+            with self.assertRaisesRegex(ValueError, "external MCP"):
+                studio.run_workspace(root, brief="fixture")
+            self.assertEqual(list((root / "sessions").iterdir()), [])
+            self.assertFalse((root / "vault").exists())
+
+    def test_external_workspace_refuses_internal_model_configuration(self):
+        for options in ({"model_id": "unexpected"}, {"model_id": None, "base_url": "http://127.0.0.1:9000"}):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                self.init(provider="external", **options)
+            self.assertFalse(self.root.exists())
+
     def test_staging_refuses_original_mutation_with_restored_mtime(self):
         """Changing bytes and restoring mtime must not forge stable source custody."""
         original = self.base / "owned-source.bin"

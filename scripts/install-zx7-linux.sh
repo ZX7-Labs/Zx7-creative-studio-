@@ -126,15 +126,19 @@ sudo chown root:root -- "$helper"
 sudo chmod 4755 -- "$helper"
 test "$(stat -c '%u:%a' "$helper")" = 0:4755
 
-cat > "$candidate/bin/zx7-studio" <<'LAUNCHER'
+for command in zx7-studio zx7-studio-mcp; do
+cat > "$candidate/bin/$command" <<'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
 installed=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")/..
 export PATH="$installed/node/bin:$PATH"
-exec "$installed/venv/bin/zx7-studio" "$@"
+command=$(basename -- "${BASH_SOURCE[0]}")
+exec "$installed/venv/bin/$command" "$@"
 LAUNCHER
-chmod 755 "$candidate/bin/zx7-studio"
-"$candidate/bin/zx7-studio" --help >/dev/null
+chmod 755 "$candidate/bin/$command"
+"$candidate/bin/$command" --help >/dev/null
+done
 ln -sT -- "$candidate" "$target"
 printf 'Installed Studio command: %s\n' "$target/bin/zx7-studio"
+printf 'Installed local Brain attachment: %s\n' "$target/bin/zx7-studio-mcp"
 printf 'Native editor profile: %s\n' "$profile"

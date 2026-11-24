@@ -118,12 +118,17 @@ def load_workspace(path):
     required = {"schema", "editor_source", "provider", "model_id", "base_url"}
     if (type(config) is not dict or set(config) != required or
             type(config["schema"]) is not int or config["schema"] != 1 or
-            config["provider"] not in ("local", "nvidia") or
+            config["provider"] not in ("local", "nvidia", "external") or
             not isinstance(config["editor_source"], str) or
-            not Path(config["editor_source"]).is_absolute() or
-            not isinstance(config["model_id"], str) or not config["model_id"].strip()):
+            not Path(config["editor_source"]).is_absolute()):
         raise ValueError("Invalid studio configuration")
-    LocalModelSettings(base_url=config["base_url"], model_id=config["model_id"])
+    if config["provider"] == "external":
+        if config["model_id"] is not None or config["base_url"] is not None:
+            raise ValueError("External Brain workspace cannot configure an inference endpoint")
+    else:
+        if not isinstance(config["model_id"], str) or not config["model_id"].strip():
+            raise ValueError("Invalid studio model configuration")
+        LocalModelSettings(base_url=config["base_url"], model_id=config["model_id"])
     if config["provider"] == "nvidia" and config["base_url"] != "http://127.0.0.1:8080":
         raise ValueError("NVIDIA endpoint is fixed; omit --base-url")
     _read_private(root / "editor-grants.json")
@@ -167,7 +172,7 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
                          base_url="http://127.0.0.1:8080"):
     from .native_editor_session import editor_runtime_path
 
-    if provider not in ("local", "nvidia"):
+    if provider not in ("local", "nvidia", "external"):
         raise ValueError("Unknown creative model provider")
     if provider == "nvidia" and base_url != "http://127.0.0.1:8080":
         raise ValueError("NVIDIA endpoint is fixed; omit --base-url")
@@ -179,7 +184,11 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
     if not source.is_dir():
         raise ValueError("Editor source must be a directory")
     # Validate the local endpoint before attempting an inventory request.
-    if model_id is None:
+    if provider == "external":
+        if model_id is not None or base_url != "http://127.0.0.1:8080":
+            raise ValueError("External Brain workspace cannot configure an inference endpoint")
+        base_url = None
+    elif model_id is None:
         if provider == "nvidia":
             from .nvidia_model import NvidiaModelSettings
 
@@ -192,7 +201,8 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
             if len(models) > 1:
                 raise ValueError("The local server lists multiple models. Select one with --model-id.")
             model_id, = models
-    LocalModelSettings(base_url=base_url, model_id=model_id)
+    if provider != "external":
+        LocalModelSettings(base_url=base_url, model_id=model_id)
     # Refuse to replace a workspace created while discovery was in progress.
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     root = root.resolve()
@@ -211,7 +221,7 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
 def doctor(path, *, check_model=True, inspect_installed_body=False):
     """Inspect setup; never install engines, download weights or call cloud AI."""
     from .native_editor_session import editor_runtime_path, native_editor_child_environment
-    root, config, _ = load_workspace(path)
+    root, config, grants = load_workspace(path)
     checks = []
     def add(name, ok, detail):
         checks.append({"name": name, "ready": bool(ok), "detail": detail})
@@ -282,13 +292,13 @@ def doctor(path, *, check_model=True, inspect_installed_body=False):
               "model_connection_checked": check_model and config["provider"] == "local",
               "checks": checks}
     if inspect_installed_body:
-        if config["provider"] != "local":
+        if config["provider"] not in ("local", "external"):
             raise ValueError("Installed BODY inventory is local-only until separate hosted egress review")
-        # The installed model uses the same ToolCatalog with host access
-        # constraints. Inventory only: do not initialize MediaVault/SQLite.
-        from .body_integration import body_catalog
-        operations = sorted(body_catalog(
-            root, initialize_vault=False).executable_ids(("read", "write")))
+        # Report the identical permission-filtered model-facing adapter, not
+        # the raw migration catalog. This is a read-only inventory.
+        from .body_capability_adapter import InstalledBodyAdapter
+        operations = sorted(InstalledBodyAdapter(
+            root, allowed_access=grants.allowed_access).trusted_grants())
         result["installed_body"] = {
             "scope": "installed_host_granted_operations_only",
             "operation_count": len(operations), "operations": operations,
@@ -343,6 +353,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                   enable_installed_body=False, delivery_target=None):
     from .native_editor_session import build_parser, run_native_session
     root, config, grants = load_workspace(path)
+    if config["provider"] == "external":
+        raise ValueError("Attach the external MCP client using zx7-studio-mcp; this workspace has no internal model")
     if not isinstance(brief, str) or not 1 <= len(brief.strip()) <= 24000:
         raise ValueError("Provide a nonempty creative brief up to 24000 characters")
     if assets and (not isinstance(rights, str) or not rights.strip() or len(rights) > 4096):
@@ -547,7 +559,7 @@ def main(argv=None):
     init.add_argument("workspace", type=Path)
     init.add_argument("--source", type=Path, help="Override the installed editor path")
     init.add_argument("--model-id", help="Select a local model or override the provider default")
-    init.add_argument("--provider", choices=("local", "nvidia"), default="local")
+    init.add_argument("--provider", choices=("local", "nvidia", "external"), default="local")
     init.add_argument("--base-url", default="http://127.0.0.1:8080")
     for name in ("doctor", "status"):
         command = commands.add_parser(name)

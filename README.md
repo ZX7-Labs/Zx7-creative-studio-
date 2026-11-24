@@ -89,17 +89,21 @@ the pinned editor and downloads its public build dependencies.
 
 ## Attach an external local Brain through one standard MCP connection
 
-For an already prepared owner workspace and the installed **cumulative
-source-pinned** editor, a trusted local MCP client can use the installed
-`zx7-studio-mcp` command (stdio), without a separate model server or a
-Studio-authored system prompt:
+For the **cumulative source-pinned** editor, install a fresh prefix and
+initialize a private workspace without any inference endpoint or model ID:
 
 ```sh
-zx7-studio-mcp --workspace /absolute/my-studio \
-  --source /absolute/installed/velorn \
-  --config /absolute/my-studio/editor-grants.json \
-  --state /absolute/my-studio/state
+bash scripts/install-zx7-linux.sh --loss-aware-range "$HOME/.local/opt/zx7-combined"
+export PATH="$HOME/.local/opt/zx7-combined/bin:$PATH"
+zx7-studio init ./my-studio --provider external
+zx7-studio doctor ./my-studio --installed-body-tools
+zx7-studio-mcp --workspace ./my-studio
 ```
+
+The stdio attachment reads the workspace's canonical editor source, private
+grants and state directory by default; explicit `--source`, `--config` and
+`--state` remain available to trusted host callers. External mode does not
+run Studio's internal inference command.
 
 Configure the executable and arguments in the local client's MCP settings.
 The command starts the existing native editor and exposes one live, host-granted
