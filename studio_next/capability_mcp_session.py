@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import base64
+import inspect
 import json
 from types import SimpleNamespace
 
@@ -18,7 +19,7 @@ from .capability_fabric import (
 from .capability_gateway import (CapabilityExecutionError, CapabilityGateway,
                                  NativeReferencePreDispatchError, CapabilityPreDispatchError,
                                  _source_native_commit_intent)
-from .native_editor_identity import _project_state, _read_json_result
+from .native_editor_identity import _project_state, _read_json_result, _ids
 from .body_editor_client import (
     HOST_PRE_DISPATCH_META, HOST_REJECTION_FEEDBACK,
     HOST_NATIVE_REVISION_META, HOST_NATIVE_REVISION_FEEDBACK,
@@ -61,6 +62,8 @@ class CapabilityGatewayMcpSession:
                 "Model-observed native revisions need a source-pinned writer and project read")
         self._require_model_native_observation = require_model_native_observation
         self._model_observed_native_revision = None
+        self._model_has_observed_project = False
+        self._model_observed_timeline_id = None
         if gateway._attempt_store is not None and host_request_id_allocator is None:
             raise CapabilityExecutionError(
                 "Durable BODY writes require a host request-ID allocator")
@@ -121,6 +124,22 @@ class CapabilityGatewayMcpSession:
                     may_enable=list(current["may_enable"])))
         return SimpleNamespace(tools=allowed, nextCursor=None)
 
+
+    async def _observed_source_inventory(self):
+        """Optional read-only source witness; failure never mints model authority."""
+        identity = self._gateway._bindings[self._namespace][5]
+        if not identity or not identity.get("fence"):
+            return None
+        try:
+            observation = identity["reader"]()
+            if inspect.isawaitable(observation):
+                observation = await observation
+            return observation if type(observation) is dict else None
+        except Exception:
+            # A source not currently readable must never substitute a guessed
+            # version or break an otherwise valid model-selected native READ.
+            return None
+
     async def call_tool(self, name, arguments):
         """Route the exact native call through the existing source lock/policy.
 
@@ -141,6 +160,21 @@ class CapabilityGatewayMcpSession:
         # this exact model-visible session can establish model observation.
         # A host-only preflight read must never silently promote stale intent.
         if self._require_model_native_observation and name == "get_project":
+            self._model_observed_native_revision = None
+            self._model_has_observed_project = False
+            self._model_observed_timeline_id = None
+        # A Brain may inspect the *complete* active timeline immediately after
+        # an acknowledged native edit. The older session required another
+        # get_project turn solely to renew the source revision, even though the
+        # model just chose a real timeline read. Bracket that model-visible
+        # read with host-only complete source observations. Neither host READ
+        # is a creative decision, permission, preview apply or hidden write.
+        full_timeline_read = (self._require_model_native_observation and
+            self._model_has_observed_project and name == "get_timeline" and
+            type(arguments) is dict and arguments.get("includeClips") is True)
+        before_timeline = None
+        if full_timeline_read:
+            before_timeline = await self._observed_source_inventory()
             self._model_observed_native_revision = None
         observed = {}
         if self._require_model_native_observation and record["access"] == "write":
@@ -190,12 +224,34 @@ class CapabilityGatewayMcpSession:
             # session without write authority until a complete new read.
             try:
                 native = _read_json_result(result["native_result"])
-                _project_state(native)
+                source = _project_state(native)
                 live = native.get("zx7NativeRevision")
                 if (type(live) is str and 38 <= len(live) <= 80 and
                         all(33 <= ord(char) <= 126 for char in live)):
                     self._model_observed_native_revision = live
+                    self._model_has_observed_project = True
+                    self._model_observed_timeline_id = source[1]
             except (TypeError, ValueError):
+                pass
+        if (full_timeline_read and before_timeline is not None and
+                result["state"] == "host_reported_success_unverified"):
+            after_timeline = await self._observed_source_inventory()
+            try:
+                actual = _read_json_result(result["native_result"])
+                source_version = before_timeline["__zx7_live_revision"]
+                if (before_timeline == after_timeline and
+                        type(source_version) is str and
+                        38 <= len(source_version) <= 80 and
+                        actual.get("id") == self._model_observed_timeline_id and
+                        actual.get("clipLimitApplied") is False and
+                        _ids(actual.get("tracks")) == before_timeline["tracks"]["ids"] and
+                        _ids(actual.get("clips")) == before_timeline["clips"]["ids"]):
+                    # This fresh project/timeline view reached the Brain; a
+                    # later human edit still changes the source CAS at dispatch.
+                    self._model_observed_native_revision = source_version
+            except (TypeError, KeyError, ValueError):
+                # Malformed, incomplete, conflicting or stale read: retain
+                # the original no-dispatch gate until a new get_project.
                 pass
         return result["native_result"]
 
