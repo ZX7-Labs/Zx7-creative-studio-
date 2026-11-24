@@ -192,7 +192,7 @@ def native_decision_model(args):
         raw_wav = getattr(args, "allow_cloud_original_wav_upload", False)
         from studio_next.nvidia_native_tool_model import (
             NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
-            NVIDIA_OMNI_AUDIO_MODEL_ID, NVIDIA_QWEN_VL_MODEL_ID, NATIVE_DIRECT_TOOL_SYSTEM,
+            NVIDIA_OMNI_AUDIO_MODEL_ID, NATIVE_DIRECT_TOOL_SYSTEM,
         )
         omni = args.structured_actions and args.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
         if raw_wav and not omni:
@@ -215,13 +215,6 @@ def native_decision_model(args):
                 sampling=({"temperature": 0.2,
                            "chat_template_kwargs": {"enable_thinking": False}}
                           if omni else {
-                           # NVIDIA's Qwen3.5-122B-A10B hosted API documents
-                           # non-thinking chat_template_kwargs and recommends
-                           # temperature 0.7/top_p 0.8. Do not send Nemotron's
-                           # different provider reasoning_effort here.
-                           "temperature": 0.7, "top_p": 0.8,
-                           "chat_template_kwargs": {"enable_thinking": False}}
-                          if args.model_id == NVIDIA_QWEN_VL_MODEL_ID else {
                            "temperature": 1.0, "top_p": 0.95,
                            "reasoning_effort": "low",
                           }))
