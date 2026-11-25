@@ -1,0 +1,114 @@
+name: ZX7 one-use genuine synthetic sound order discrimination
+on:
+  push:
+    branches: [trial/g1-omni-audio-discrimination-ffmpeg-20261125]
+    paths: ['.github/workflows/zx7-oneuse-omni-audio-discrimination-ffmpeg-20261125.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zx7-omni-audio-discrimination-ffmpeg-20261125
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-omni-audio-discrimination-ffmpeg-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify reviewed exact synthetic-only scope
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "c8239db4543441585ee3d3524979a733ac8c6fff"
+          test "$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)" = "$(printf '%s\n' '.github/workflows/zx7-oneuse-omni-audio-discrimination-ffmpeg-20261125.yml' 'research/nvidia-omni-audio-discrimination-ffmpeg-20261125.json' | LC_ALL=C sort)"
+          git diff --check HEAD^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare bounded original sound evidence without provider credentials
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          command -v ffmpeg
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+          python - <<'PY'
+          import math, wave, struct, hashlib, json, os, subprocess
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'zx7-audio-probe'
+          root.mkdir(mode=0o700)
+          assert not os.environ.get('NVIDIA_API_KEY')
+          records=[]
+          for index, frequencies in enumerate(((220,880),(880,220))):
+              raw=root/f'original-{index}.wav'
+              export=root/f'export-{index}.mp4'
+              decoded=root/f'decoded-{index}.wav'
+              # Same duration, sample rate, amplitude, timing and envelope;
+              # only the first/second note's pitch is reversed.
+              with wave.open(str(raw),'wb') as f:
+                  f.setnchannels(1);f.setsampwidth(2);f.setframerate(48000)
+                  samples=[]
+                  for n in range(96000):
+                      local=n%48000;freq=frequencies[n//48000]
+                      fade=min(1,local/240,(47999-local)/240)
+                      samples.append(round(10000*fade*math.sin(2*math.pi*freq*local/48000)))
+                  f.writeframes(struct.pack('<'+'h'*len(samples),*samples))
+              subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=c=black:s=320x180:r=24:d=2','-i',str(raw),'-c:v','libx264','-c:a','aac','-shortest',str(export)],check=True,timeout=30)
+              subprocess.run(['ffmpeg','-v','error','-i',str(export),'-map','0:a:0','-t','2','-ar','16000','-ac','1','-c:a','pcm_s16le',str(decoded)],check=True,timeout=30)
+              with wave.open(str(decoded),'rb') as f:
+                  assert f.getnchannels()==1 and f.getframerate()==16000 and f.getsampwidth()==2
+                  duration=f.getnframes()/f.getframerate()
+              assert 1.95 <= duration <= 2.05
+              payload=decoded.read_bytes()
+              assert len(payload)<=128*1024
+              records.append({'id':index,'expected':'low_then_high' if index==0 else 'high_then_low','wav':decoded.name,'export':export.name,'evidence':{'wav_sha256':hashlib.sha256(payload).hexdigest(),'export_sha256':hashlib.sha256(export.read_bytes()).hexdigest(),'requested_start_seconds':0.0,'requested_duration_seconds':2.0,'observed_audio_duration_seconds':duration,'preview_downmixed_and_resampled':True,'exact_original_audio_pts_proven':False}})
+          (root/'input-receipts.json').write_text(json.dumps(records,indent=2))
+          PY
+      - name: Two real Omni audio calls with strict classification; no editor
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os, hashlib, time, re
+          from pathlib import Path
+          from studio_next.nvidia_model import NvidiaModelSettings,NvidiaConfigurationError,NvidiaTransportError
+          from studio_next.nvidia_native_tool_model import NvidiaUniformWrappedOmniNativeToolCreativeModel
+          from studio_next.providers import LocalModelOutputError
+          req=json.loads(Path('research/nvidia-omni-audio-discrimination-ffmpeg-20261125.json').read_text())
+          assert req == {"schema":1,"kind":"synthetic-source-bound-audio-discrimination","request_id":"ZX7_OMNI_SOUND_ORDER_FFMPEG_20261125","source":"c8239db4543441585ee3d3524979a733ac8c6fff","model":"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning","max_total_calls":2,"max_tokens_per_call":512,"synthetic_only":True,"cloud_synthetic_wav_allowed":True,"private_media_allowed":False,"native_dispatch_allowed":False,"run_authorized":True}
+          root=Path(os.environ['RUNNER_TEMP'])/'zx7-audio-probe'
+          records=json.loads((root/'input-receipts.json').read_text())
+          assert len(records)==req['max_total_calls']==2
+          model=NvidiaUniformWrappedOmniNativeToolCreativeModel(NvidiaModelSettings(model_id=req['model'],max_tokens=512,timeout_seconds=90,sampling={'temperature':0.2,'chat_template_kwargs':{'enable_thinking':False}}),system_prompt='Listen to the actual two-second original sound excerpt. Decide whether the first note is lower or higher in pitch than the second. Call only the offered observation report function, with an inputs object containing the order enum, and a brief reason. Do not infer from hashes or metadata. If unclear choose unclear. This is a synthetic perception test, no editor operation is executed.',allow_original_audio_upload=True)
+          schema={'type':'object','properties':{'order':{'type':'string','enum':['low_then_high','high_then_low','unclear']}},'required':['order'],'additionalProperties':False}
+          results=[]
+          for row in records:
+              raw=(root/row['wav']).read_bytes()
+              evidence=row['evidence']
+              assert hashlib.sha256(raw).hexdigest()==evidence['wav_sha256']
+              assert hashlib.sha256((root/row['export']).read_bytes()).hexdigest()==evidence['export_sha256']
+              context={'available_actions':['invoke'],'compact_tool_catalog':True,'selectable_native_tools':['report_synthetic_audio_observation'],'inspectable_native_tools':[],'host_native_tool_contracts':[{'name':'report_synthetic_audio_observation','description':'Report a synthetic test observation only; no native operation or edit is executed','input_schema':schema}],'audio_evidence':evidence,'synthetic_fixture_not_live_editor':True}
+              started=time.monotonic()
+              try:
+                  decision=model.decide_with_audio(context,[('audio/wav',raw)])
+                  args=decision.get('arguments',{})
+                  answer=args.get('inputs',{}).get('order')
+                  ok=(decision.get('action')=='invoke' and args.get('tool')=='report_synthetic_audio_observation' and set(args.get('inputs',{}))=={'order'} and answer==row['expected'])
+                  result={'status':'PASS' if ok else 'WRONG_OR_UNCLEAR','answer':answer if answer in schema['properties']['order']['enum'] else None}
+              except (NvidiaConfigurationError,NvidiaTransportError,LocalModelOutputError) as exc:
+                  http=re.search(r'HTTP (\d{3})',str(exc))
+                  result={'status':'ERROR','type':type(exc).__name__,'code':getattr(exc,'code',None),'http':int(http.group(1)) if http else None}
+              result.update(case=row['id'],expected=row['expected'],elapsed_s=round(time.monotonic()-started,3),usage=model.last_call_usage,wav_sha256=evidence['wav_sha256'],export_sha256=evidence['export_sha256'])
+              results.append(result);print('ZX7_ACTUAL_AUDIO_ORDER',json.dumps(result),flush=True)
+          (root/'audio-probe-result.json').write_text(json.dumps({'results':results,'native_dispatches':0,'creative_semantic_audio_review_verified':False,'synthetic_only':True},indent=2))
+          if not all(x['status']=='PASS' for x in results): raise SystemExit(1)
+          PY
+      - name: Retain synthetic original and decoded sound evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-omni-audio-discrimination-${{ github.sha }}
+          path: ${{ runner.temp }}/zx7-audio-probe/
+          retention-days: 7
+          if-no-files-found: warn
