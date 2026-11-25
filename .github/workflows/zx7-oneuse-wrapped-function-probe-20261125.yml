@@ -18,17 +18,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: false
       - name: Source and one-use consent pinned to exact corrected BODY
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "1f95e2f61c80188099cbabfd7a7a8525fb518ecd"
-          actual="$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)"
+          test "$(git rev-parse HEAD^)" = "9e0eb028a7f0916cfefcd396ef0211efe65893c8"
+          test "$(git rev-parse HEAD^^)" = "1f95e2f61c80188099cbabfd7a7a8525fb518ecd"
+          actual="$(git diff --name-only 1f95e2f61c80188099cbabfd7a7a8525fb518ecd HEAD | LC_ALL=C sort)"
           expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-wrapped-function-probe-20261125.yml' 'research/nvidia-oneuse-wrapped-function-probe-20261125.json' | LC_ALL=C sort)"
           test "$actual" = "$expected"
-          git diff --check HEAD^ HEAD
+          git diff --check 1f95e2f61c80188099cbabfd7a7a8525fb518ecd HEAD
           test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
           grep -Fq "name: 'add_track'" third_party/velorn/electron/mcpServer.js
           python - <<'PY'
@@ -45,6 +46,8 @@ jobs:
               'model_native_write_dispatches':0,'media_uploads':0,'owner_media_allowed':False}
           print('ONEUSE_MODEL_AND_EXACT_SOURCE_ADMITTED')
           PY
+      - name: Install existing optional editor test dependencies, no cloud key
+        run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
       - name: Original provider adapter offline tests (no credentials)
         run: python -m unittest -v studio_next.test_nvidia_model studio_next.test_nvidia_native_tool_model
       - name: Two source-pinned bounded NVIDIA function-format calls without native tool dispatch
