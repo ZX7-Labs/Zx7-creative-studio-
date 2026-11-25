@@ -1,0 +1,46 @@
+name: ZX7 isolated G2 complete-rank-prefix regression
+on:
+  push:
+    branches: [trial/g2-capability-rank-prefix-contract-20261125]
+    paths: ['.github/workflows/zx7-oneuse-g2-capability-rank-prefix-contract-20261125.yml']
+permissions:
+  contents: read
+jobs:
+  contract:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g2-capability-rank-prefix-contract-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 4
+          submodules: recursive
+      - name: Confirm exact source ancestry and test-only RED change
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "3c71b2606d5943629b546bcac2b6f2c953f5806f"
+          test "$(git rev-parse HEAD^^)" = "857624cbc1ab49507d555f73fd609dac569256ef"
+          test "$(git rev-parse HEAD^^^)" = "9fe69de3713b47c25367e6e5c2f9ffced33bf9c6"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "studio_next/test_capability_fabric.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = "studio_next/capability_fabric.py"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g2-capability-rank-prefix-contract-20261125.yml"
+          git diff --check HEAD^^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: Reproduce original cutoff failure without editing the test
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/zx7-red" "857624cbc1ab49507d555f73fd609dac569256ef"
+          cd "$RUNNER_TEMP/zx7-red"
+          if python -m unittest studio_next.test_capability_fabric.CapabilityFabricTests.test_lower_rank_cutoff_tie_does_not_hide_complete_stronger_groups -v > "$RUNNER_TEMP/red.log" 2>&1; then
+            cat "$RUNNER_TEMP/red.log"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/red.log"
+          grep -F "FAILED (failures=3)" "$RUNNER_TEMP/red.log"
+      - name: Verify discovery, model-facing selection, live source catalog and host grants
+        run: |
+          python -m unittest studio_next.test_capability_fabric studio_next.test_native_creative_control studio_next.test_body_capabilities studio_next.test_capability_gateway -v
