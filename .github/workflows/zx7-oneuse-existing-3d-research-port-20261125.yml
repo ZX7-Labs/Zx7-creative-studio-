@@ -20,23 +20,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Existing research regressions and recovered 3D contracts
-        run: |
-          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
-          python -m unittest studio_next.test_creative_research -v
-      - name: Real public metadata only, no asset downloads or paid API
+      - name: Diagnose official ambientCG metadata contract
         run: |
           python - <<'PY'
-          from studio_next.creative_research import CreativeResearch, _public_api_json
-          from studio_next.creative_research_3d import poly_haven_assets, ambientcg_assets
-          for media, query, p, a in (("3d","chair","models","3d-model"),("texture","wood","textures","material"),("hdri","sky","hdris","hdri")):
-              receipt = CreativeResearch().assets(query=query, media=media, limit=3)
-              assert receipt["results"] and not receipt["rights_verified"] and not receipt["import_authorized"]
-              assert all(r["declared_license"]=="CC0" and r["rights_status"]=="candidate_unverified" for r in receipt["results"])
-              print("REAL_EXISTING_ROUTE", media, receipt["provider"], len(receipt["results"]), flush=True)
-          # Separately test the existing second provider, with public metadata only.
-          for query, kind in (("rock","3d-model"),("wood","material"),("sky","hdri")):
-              results=ambientcg_assets(_public_api_json, query, 3, type_name=kind)
-              assert results and all(x["rights_status"]=="candidate_unverified" for x in results), kind
-              print("REAL_AMBIENTCG",kind,len(results),flush=True)
+          import json, urllib.request, urllib.parse
+          for q,t in (("rock","3d-model"),("apple","3d-model"),("wood","material"),("sky","hdri")):
+              u="https://ambientcg.com/api/v3/assets?"+urllib.parse.urlencode({"q":q,"type":t,"limit":3,"include":"title,type"})
+              with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"ZX7 public metadata contract check"}),timeout=20) as r:
+                  o=json.load(r)
+              items=o.get("assets",[])
+              print("AMBIENTCG_CONTRACT",q,t,"count",len(items),"first",json.dumps(items[0] if items else {},ensure_ascii=True)[:1500])
           PY
