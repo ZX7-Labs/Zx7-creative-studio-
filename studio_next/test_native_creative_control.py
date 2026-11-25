@@ -1611,25 +1611,43 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             host_content_revision_tools=("update_text_clip",),
             host_capture_render_project=lambda *_: ("a" * 64, "b" * 64, "c" * 64))
         self.assertIs(control._source_bound_render_save_current(), False)
+        # Genuine Omni run #45553253460 burned 42 identical successful
+        # native saves after one genuine visual import/placement. The host must
+        # fence only a CURRENT confirmed save; a new content edit reopens save.
+        self.assertFalse(control._host_write_already_acknowledged("save_project"))
         control._explicit_render_save_identity = ("/verified/saved-project", "saved-revision")
         control._append({"kind": "native_tool_result", "tool": "save_project",
                          "host_application_write_acknowledged": True})
         self.assertIs(control._source_bound_render_save_current(), True)
+        self.assertTrue(control._host_write_already_acknowledged("save_project"))
+        self.assertFalse(control._host_write_already_acknowledged("update_text_clip"))
         control._append({"kind": "native_tool_result", "tool": "export_timeline",
                          "host_application_write_acknowledged": True})
         self.assertIs(control._source_bound_render_save_current(), True)
+        self.assertTrue(control._host_write_already_acknowledged("save_project"))
         control._append({"kind": "native_tool_result", "tool": "update_text_clip",
                          "host_application_write_acknowledged": True})
         self.assertIs(control._source_bound_render_save_current(), False)
+        self.assertFalse(control._host_write_already_acknowledged("save_project"))
         # A failed or read-only call never invents a new edit or resets the
         # last confirmed content write; only a fresh acknowledged save can.
         control._append({"kind": "native_read_tool_reported_error", "tool": "get_timeline"})
         self.assertIs(control._source_bound_render_save_current(), False)
+        self.assertFalse(control._host_write_already_acknowledged("save_project"))
         control._append({"kind": "native_tool_result", "tool": "save_project",
                          "host_application_write_acknowledged": True})
         self.assertIs(control._source_bound_render_save_current(), True)
+        self.assertTrue(control._host_write_already_acknowledged("save_project"))
         control._explicit_render_save_identity = ("/verified/saved-project", None)
         self.assertIs(control._source_bound_render_save_current(), False)
+        self.assertFalse(control._host_write_already_acknowledged("save_project"))
+        # Ordinary native sessions can intentionally save more than once:
+        # no synthetic G1 policy is silently imposed on general workspaces.
+        ordinary = NativeCreativeControl(session, ScriptedModel([]), max_turns=2,
+                                         host_tool_access=grants)
+        ordinary._append({"kind": "native_tool_result", "tool": "save_project",
+                          "host_application_write_acknowledged": True})
+        self.assertFalse(ordinary._host_write_already_acknowledged("save_project"))
 
     async def test_audiovisual_finish_requires_complete_observation_of_both_renders(self):
         from studio_next.native_creative_audit import NativeJournalError, audit_native_journal

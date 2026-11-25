@@ -1,0 +1,45 @@
+name: "ZX7 one-use G1 source-current native save no-repeat RED/GREEN (offline)"
+on:
+  push:
+    branches: [trial/g1-native-current-save-no-replay-20261125]
+    paths:
+      - ".github/workflows/zx7-oneuse-native-current-save-offline-20261125.yml"
+      - "studio_next/native_creative_control.py"
+      - "studio_next/test_native_creative_control.py"
+permissions:
+  contents: read
+concurrency:
+  group: zx7-g1-current-native-save-once-offline-20261125
+  cancel-in-progress: false
+jobs:
+  native-source-current-save-fence:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-native-current-save-no-replay-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 4
+          submodules: recursive
+      - name: Pin exact integrated source; no unrelated changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="120e042f9a4241bca215aac6768654acb43ad1a3"
+          test "$(git merge-base "$base" HEAD)" = "$base"
+          git diff --check "$base" HEAD
+          actual="$(git diff --name-only "$base" HEAD)"
+          test -n "$actual"
+          while IFS= read -r file; do
+            case "$file" in
+              .github/workflows/zx7-oneuse-native-current-save-offline-20261125.yml|studio_next/native_creative_control.py|studio_next/test_native_creative_control.py) ;;
+              *) echo "Unexpected mutation: $file"; exit 2;;
+            esac
+          done <<< "$actual"
+      - name: Install original editor test dependencies; no hosted inference
+        run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+      - name: Reproduce and then protect native source-current save behavior
+        run: python -m unittest -v studio_next.test_native_creative_control.NativeCreativeControlTests.test_confirmed_creative_write_invalidates_native_saved_render_readiness
+      - name: Run original comprehensive controller/provider trial contracts
+        run: python -m unittest -v studio_next.test_native_creative_control studio_next.test_nvidia_native_tool_model scripts.test_run_nvidia_native_trial
