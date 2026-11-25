@@ -3640,6 +3640,46 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(audit_native_journal(imported_result["events"],
             host_tool_access=import_grants)["journal_chain_structurally_valid"])
 
+        # Real runner run_nvidia_native_trial.py passes --indexed-catalog for
+        # Omni with synthetic WAV. The earlier full-only regression could not
+        # catch this real-entry-path gap. With the same host-authorized import
+        # ACK and a confirmed asset count, the indexed provider MUST receive
+        # the current project-owned native asset ID, never an invented ID.
+        indexed_session = ImportedNativeSource()
+        indexed_model = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path",
+                     inputs={"path": "/original-synthetic.mov",
+                             "previewOnly": False}),
+            decision("finish", summary="Source imported; no film claimed"),
+        ])
+        indexed_model.requires_native_function_contracts = True
+        indexed_result = await NativeCreativeControl(
+            indexed_session, indexed_model, max_turns=2,
+            catalog_mode="indexed", host_tool_access=import_grants,
+            host_possible_effects={
+                "import_asset_from_path": ["project_assets_available"],
+                "add_asset_to_timeline": ["timeline_clips_available"]},
+            host_preconditions={
+                "import_asset_from_path": ["project_open"],
+                "add_asset_to_timeline": ["project_open",
+                                          "project_assets_available"]},
+        ).run("Choose which real synthetic source to import")
+        self.assertEqual(indexed_result["status"], "model_finished_unverified")
+        self.assertNotIn("native_placement_assets", indexed_model.observed[0])
+        self.assertEqual(indexed_model.observed[1]["native_placement_assets"]["assets"],
+                         [{"id": "asset-native-source-1",
+                           "name": "synthetic-original.mov", "type": "video"}])
+        self.assertIn("add_asset_to_timeline",
+                      indexed_model.observed[1]["selectable_native_tools"])
+        self.assertEqual(sum(name == "import_asset_from_path"
+                             for name, _ in indexed_session.calls), 1)
+        self.assertEqual(sum(name == "get_assets"
+                             for name, _ in indexed_session.calls), 1)
+        self.assertFalse(any(name == "add_asset_to_timeline"
+                             for name, _ in indexed_session.calls))
+        self.assertTrue(audit_native_journal(indexed_result["events"],
+            host_tool_access=import_grants)["journal_chain_structurally_valid"])
+
     async def test_empty_native_project_exposes_import_as_host_option_without_autonomous_execution(self):
         """Actual failure #42420526258: an empty project must expose the
         installed *possible* source import, not pretend the staged media
