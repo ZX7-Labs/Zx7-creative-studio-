@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "kind": "nvidia-no-media-function-call-probe",
+  "model_id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "request_id": "ZX7_OMNI30_FUNCTION_ABI_20261125_ONEUSE",
+  "synthetic_only": true,
+  "private_or_owner_media_allowed": false,
+  "max_remote_requests": 1,
+  "max_completion_tokens": 320,
+  "run_authorized": true
+}
