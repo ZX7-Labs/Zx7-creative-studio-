@@ -20,14 +20,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Diagnose official ambientCG metadata contract
+      - name: Check real secondary provider adapter against known public catalog matches
         run: |
           python - <<'PY'
-          import json, urllib.request, urllib.parse
-          for q,t in (("rock","3d-model"),("apple","3d-model"),("wood","material"),("sky","hdri")):
-              u="https://ambientcg.com/api/v3/assets?"+urllib.parse.urlencode({"q":q,"type":t,"limit":3,"include":"title,type"})
-              with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"ZX7 public metadata contract check"}),timeout=20) as r:
-                  o=json.load(r)
-              items=o.get("assets",[])
-              print("AMBIENTCG_CONTRACT",q,t,"count",len(items),"first",json.dumps(items[0] if items else {},ensure_ascii=True)[:1500])
+          from studio_next.creative_research import _public_api_json
+          from studio_next.creative_research_3d import ambientcg_assets
+          # The prior rock query genuinely returned zero matches; absence
+          # is valid and must not be manufactured into a candidate.
+          for query, kind in (("apple","3d-model"),("wood","material"),("sky","hdri")):
+              results=ambientcg_assets(_public_api_json, query, 3, type_name=kind)
+              assert results and all(x["rights_status"]=="candidate_unverified" and x["asset_kind"]==kind for x in results), kind
+              print("REAL_AMBIENTCG",kind,len(results),flush=True)
           PY
