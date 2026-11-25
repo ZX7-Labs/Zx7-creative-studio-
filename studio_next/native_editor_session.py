@@ -203,13 +203,16 @@ def native_decision_model(args):
         from studio_next.nvidia_native_tool_model import (
             NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
             NVIDIA_OMNI_AUDIO_MODEL_ID, NATIVE_DIRECT_TOOL_SYSTEM,
+            NvidiaUniformWrappedOmniNativeToolCreativeModel,
+            NATIVE_UNIFORM_WRAPPED_TOOL_SYSTEM,
         )
         omni = args.structured_actions and args.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
         if raw_wav and not omni:
             raise ValueError("Original cloud WAV requires the exact NVIDIA Omni structured-tool model")
+        uniform_trial = bool(omni and raw_wav and getattr(args, "fresh_trial_project", False))
         if args.structured_actions:
-            model_type = (NvidiaOmniNativeToolCreativeModel
-                          if omni else NvidiaNativeToolCreativeModel)
+            model_type = (NvidiaUniformWrappedOmniNativeToolCreativeModel if uniform_trial else
+                          NvidiaOmniNativeToolCreativeModel if omni else NvidiaNativeToolCreativeModel)
         # Provider transport policy, NOT a second BODY/agent path.
         # NVIDIA's pinned Nemotron 3.5 VL is a REASONING tool model. The
         # initial live editor trials unintentionally DISABLED its reasoning,
@@ -233,8 +236,9 @@ def native_decision_model(args):
                                 timeout_seconds=args.model_timeout))
         model = model_type(
             nvidia_settings,
-            system_prompt=(NATIVE_DIRECT_TOOL_SYSTEM if args.structured_actions
-                           else NATIVE_CREATIVE_SYSTEM) + prompt_suffix,
+            system_prompt=(NATIVE_UNIFORM_WRAPPED_TOOL_SYSTEM if uniform_trial else
+                           NATIVE_DIRECT_TOOL_SYSTEM if args.structured_actions else
+                           NATIVE_CREATIVE_SYSTEM) + prompt_suffix,
             allow_image_upload=args.allow_cloud_image_upload,
             **({"allow_original_audio_upload": raw_wav} if omni else {}))
         model.verify_host_credentials()
