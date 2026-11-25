@@ -710,6 +710,52 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 verify_saved_native_trial(workspace)
 
 
+    def test_recovered_original_footage_verifier_binds_live_native_source_without_claiming_pixels(self):
+        """Recovered #179 source witness checks exact real project-owned source,
+        not the movie's artistic quality or actual exported picture pixels.
+        """
+        from scripts import run_nvidia_native_trial as trial
+        import hashlib
+        import shutil
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Path(temp)
+            staging = workspace / "staging"
+            staging.mkdir()
+            source = staging / "original-neutral-gradient.mp4"
+            source.write_bytes(b"synthetic source identity fixture, not a decoded movie")
+            sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            (workspace / "source-ledger.json").write_text(json.dumps([
+                {"path": str(source), "sha256": sha, "media_kind": "video"}]))
+            root = workspace / "projects" / "real-native"
+            asset_path = root / "assets" / "video" / source.name
+            asset_path.parent.mkdir(parents=True)
+            shutil.copyfile(source, asset_path)
+            native_path = root / "project.comfystudio"
+            original_clip = {"id": "clip-source", "assetId": "asset-original",
+                             "type": "video", "trackId": "video-1",
+                             "startTime": 0.0, "duration": 6.0}
+            native = {"currentTimelineId": "timeline-native",
+                      "assets": [{"id": "asset-original", "type": "video",
+                                  "path": "assets/video/" + source.name,
+                                  "settings": {"sourcePath": str(source),
+                                               "importedViaMcp": True}}],
+                      "timelines": [{"id": "timeline-native", "duration": 6.0,
+                                     "tracks": [{"id": "video-1", "type": "video",
+                                                 "visible": True}],
+                                     "clips": [original_clip]}]}
+            native_path.write_text(json.dumps(native))
+            witness = getattr(trial, "verify_native_original_picture_visibility", None)
+            self.assertTrue(callable(witness), "Existing historical original-source verifier is not wired")
+            valid = witness(workspace)
+            self.assertTrue(valid["source_original_visible_in_native_timeline"])
+            self.assertFalse(valid["source_original_rendered_pixels_verified"])
+            self.assertEqual(valid["original_visible_video_clip_count"], 1)
+            native["timelines"][0]["clips"][0] = {**original_clip, "enabled": False}
+            native_path.write_text(json.dumps(native))
+            hidden = witness(workspace)
+            self.assertFalse(hidden["source_original_visible_in_native_timeline"])
+            self.assertFalse(hidden["source_original_rendered_pixels_verified"])
+
     def test_native_export_revision_requires_changed_decoded_picture_not_new_container(self):
         """Actual FFmpeg decoder, not a mocked model or a filename assertion."""
         import hashlib
