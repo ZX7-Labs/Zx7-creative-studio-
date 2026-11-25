@@ -3506,6 +3506,88 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
         self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_full_native_provider_gets_attested_imported_asset_ids_without_dispatch(self):
+        """Real Omni G1 #45545590934: one imported asset, bad guessed ID.
+
+        Reuse installed get_assets as bounded READ evidence after a model-
+        selected real get_project, not a host-selected creative operation.
+        Never invent an ID or lift missing/read-only tool permissions.
+        """
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class NativeInventorySession(FakeSession):
+            def __init__(self, *, count=1, asset_granted=True):
+                super().__init__()
+                self.asset_count = count
+                self.tools = [
+                    SimpleNamespace(name="get_project", description="Read native state",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_assets", description="Read actual project assets",
+                        input_schema={"type": "object", "properties": {
+                            "limit": {"type": "integer"}}}),
+                    SimpleNamespace(name="add_asset_to_timeline",
+                        description="Place an observed asset into the editable timeline",
+                        input_schema={"type": "object", "properties": {
+                            "assetId": {"type": "string"},
+                            "previewOnly": {"type": "boolean"}}}),
+                ]
+
+            async def call_tool(self, name, args):
+                self.calls.append((name, args))
+                if name == "get_project":
+                    result = {"mcp": {"hasProject": True},
+                        "project": {"currentTimelineId": "timeline-source",
+                                    "assetCount": self.asset_count},
+                        "currentTimeline": {"id": "timeline-source", "clipCount": 0},
+                        "assetCount": self.asset_count}
+                elif name == "get_assets":
+                    assert args == {"limit": 16}
+                    result = {"count": self.asset_count,
+                        "limitApplied": False,
+                        "assets": ([{"id": "asset-native-source-1",
+                            "name": "synthetic-original.mov", "type": "video"}]
+                                  if self.asset_count else [])}
+                else:
+                    raise AssertionError("Host inventory may never dispatch an edit")
+                return SimpleNamespace(is_error=False,
+                    content=[SimpleNamespace(type="text", text=json.dumps(result))])
+
+        for asset_count, can_read, expected in ((1, True, True),
+                                                 (0, True, False),
+                                                 (1, False, False)):
+            with self.subTest(count=asset_count, read=can_read):
+                session = NativeInventorySession(count=asset_count)
+                grants = {"get_project": "read",
+                          "get_assets": "read" if can_read else "write",
+                          "add_asset_to_timeline": "write"}
+                model = ScriptedModel([
+                    decision("invoke", tool="get_project", inputs={}),
+                    decision("finish", summary="Read only; no edit claimed"),
+                ])
+                model.requires_native_function_contracts = True
+                result = await NativeCreativeControl(
+                    session, model, max_turns=2, catalog_mode="full",
+                    host_tool_access=grants).run("Inspect imported native assets")
+                self.assertEqual(result["status"], "model_finished_unverified")
+                self.assertNotIn("native_placement_assets", model.observed[0])
+                self.assertEqual("native_placement_assets" in model.observed[1], expected)
+                if expected:
+                    self.assertEqual(model.observed[1]["native_placement_assets"],
+                        {"assets": [{"id": "asset-native-source-1",
+                                     "name": "synthetic-original.mov",
+                                     "type": "video"}], "count": 1,
+                         "complete": True, "staged_files_require_import": True})
+                    self.assertEqual([name for name, _ in session.calls],
+                                     ["get_project", "get_assets"])
+                    self.assertEqual(sum(x["kind"] == "host_placement_asset_observation"
+                                         and x.get("host_attested_read_only") is True
+                                         for x in result["events"]), 1)
+                else:
+                    self.assertEqual(session.calls, [("get_project", {})])
+                self.assertTrue(audit_native_journal(result["events"],
+                    host_tool_access=grants)["journal_chain_structurally_valid"])
+                self.assertFalse(result["native_editing_capability_complete"])
+
     async def test_empty_native_project_exposes_import_as_host_option_without_autonomous_execution(self):
         """Actual failure #42420526258: an empty project must expose the
         installed *possible* source import, not pretend the staged media

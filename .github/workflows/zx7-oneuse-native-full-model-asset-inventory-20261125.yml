@@ -1,0 +1,38 @@
+name: "ZX7 one-use NVIDIA full-model live native asset inventory regression (offline)"
+on:
+  push:
+    branches: [trial/g1-omni-live-asset-inventory-20261125]
+    paths:
+      - ".github/workflows/zx7-oneuse-native-full-model-asset-inventory-20261125.yml"
+      - "studio_next/test_native_creative_control.py"
+      - "studio_next/native_creative_control.py"
+permissions:
+  contents: read
+concurrency:
+  group: zx7-oneuse-native-full-model-asset-inventory-20261125
+  cancel-in-progress: false
+jobs:
+  focused-actual-source-contract:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-omni-live-asset-inventory-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - name: Admit only actual source pin, regression, approved existing implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 1f95e2f61c80188099cbabfd7a7a8525fb518ecd HEAD
+          actual="$(git diff --name-only 1f95e2f61c80188099cbabfd7a7a8525fb518ecd HEAD | LC_ALL=C sort)"
+          two="$(printf '%s\n' '.github/workflows/zx7-oneuse-native-full-model-asset-inventory-20261125.yml' 'studio_next/test_native_creative_control.py' | LC_ALL=C sort)"
+          three="$(printf '%s\n' '.github/workflows/zx7-oneuse-native-full-model-asset-inventory-20261125.yml' 'studio_next/native_creative_control.py' 'studio_next/test_native_creative_control.py' | LC_ALL=C sort)"
+          test "$actual" = "$two" || test "$actual" = "$three"
+          git diff --check 1f95e2f61c80188099cbabfd7a7a8525fb518ecd HEAD
+      - name: Install exactly repository-declared editor dependencies
+        run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+      - name: Execute failing-first actual controller/model native inventory regression
+        run: |
+          python -m unittest -v studio_next.test_native_creative_control.NativeCreativeControlTests.test_full_native_provider_gets_attested_imported_asset_ids_without_dispatch
