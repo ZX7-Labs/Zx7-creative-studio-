@@ -1873,8 +1873,19 @@ class NativeCreativeControl:
                 model_observed_project = any(
                     e.get("kind") == "native_tool_result" and
                     e.get("tool") == "get_project" for e in self.events)
+                # A genuine model-selected source import, explicitly ACKed by
+                # the host, is also enough to justify a fresh bounded assets
+                # READ. The prior host project reconciliation must separately
+                # attest a positive asset count; the model still chooses any
+                # ensuing clip placement, and live ID/commit fencing is intact.
+                model_import_acknowledged = any(
+                    e.get("kind") == "native_tool_result" and
+                    e.get("tool") == "import_asset_from_path" and
+                    e.get("host_application_write_acknowledged") is True
+                    for e in self.events)
                 if ((asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable) or
-                        (full_native_asset_sensing and model_observed_project and
+                        (full_native_asset_sensing and
+                         (model_observed_project or model_import_acknowledged) and
                          (self._trusted_project_asset_count() or 0) > 0)):
                     placement_assets = await self._observe_placement_inventory(
                         "get_assets", {"limit": _MAX_PLACEMENT_ASSETS}, validators["get_assets"])
