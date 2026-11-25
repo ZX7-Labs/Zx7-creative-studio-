@@ -35,4 +35,4 @@ jobs:
         run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
       - name: Execute failing-first actual controller/model native inventory regression
         run: |
-          python -m unittest -v studio_next.test_native_creative_control.NativeCreativeControlTests.test_full_native_provider_gets_attested_imported_asset_ids_without_dispatch
+          python -m unittest -v studio_next.test_native_creative_control studio_next.test_nvidia_native_tool_model scripts.test_run_nvidia_native_trial
