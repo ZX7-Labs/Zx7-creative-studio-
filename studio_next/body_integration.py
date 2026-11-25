@@ -21,7 +21,7 @@ import zipfile
 from pathlib import Path
 
 from .contracts import ToolSpec
-from .creative_research import CreativeResearch
+from .creative_research import CreativeResearch, ASSET_RESEARCH_MEDIA
 from .registry import ToolCatalog
 from .edit_timeline import render_edit,_path_within
 from .editorial_interchange import export_editable_timeline
@@ -424,11 +424,12 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     researcher = research_client if research_client is not None else CreativeResearch()
     for operation_id, description, required, properties, runner in (
         ("body.research_assets",
-         "Search CC0 candidate image/audio/video metadata. No download, "
+         "Search CC0 candidate image/audio/video/3D model/texture/HDRI metadata. No download, "
          "no verified license, no automatic source import; original rights review required.",
          ["query", "media"],
-         {"query": {"type": "string"}, "media": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1}},
+         {"query": {"type": "string", "minLength": 1, "maxLength": 240},
+          "media": {"type": "string", "enum": list(ASSET_RESEARCH_MEDIA)},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 12}},
          lambda args: researcher.assets(query=args["query"],media=args["media"],
                                        limit=args.get("limit", 8))),
         ("body.research_studies",

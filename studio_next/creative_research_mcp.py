@@ -10,7 +10,8 @@ import argparse
 import asyncio
 import json
 
-from .creative_research import CreativeResearch, CreativeResearchError, REFERENCE_LANGUAGE_PATTERN
+from .creative_research import (CreativeResearch, CreativeResearchError,
+                                REFERENCE_LANGUAGE_PATTERN, ASSET_RESEARCH_MEDIA)
 
 
 MAX_PUBLIC_RESEARCH_CALLS = 8
@@ -18,11 +19,11 @@ MAX_PUBLIC_RESEARCH_CALLS = 8
 
 _TOOL_DEFINITIONS = (
     ("research_assets",
-     "Research CC0/public-domain footage, visual and audio *candidate* metadata. "
+     "Research CC0/public-domain footage, visual, audio, 3D models, textures and HDRI *candidate* metadata. "
      "Rights are NOT independently verified, assets are NOT downloaded.",
      {"type": "object", "properties": {
          "query": {"type": "string", "minLength": 1, "maxLength": 240},
-         "media": {"type": "string", "enum": ["image", "audio", "video"]},
+         "media": {"type": "string", "enum": list(ASSET_RESEARCH_MEDIA)},
          "limit": {"type": "integer", "minimum": 1, "maximum": 12}},
       "required": ["query", "media"], "additionalProperties": False}),
     ("research_studies",

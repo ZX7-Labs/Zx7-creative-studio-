@@ -20,6 +20,7 @@ from threading import Lock
 
 
 REFERENCE_LANGUAGE_PATTERN = r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}"
+ASSET_RESEARCH_MEDIA = ("image", "audio", "video", "3d", "texture", "hdri")
 _WIKIPEDIA_HOST = re.compile(r"([a-z]{2,8}(?:-[a-z0-9]{1,8}){0,3})\.wikipedia\.org")
 _WIKIMEDIA_SITE_MATRIX = "https://meta.wikimedia.org/w/api.php"
 
@@ -107,8 +108,14 @@ def _public_api_json(url):
     host = parsed.hostname
     wikimedia_api = parsed.path == "/w/api.php" and (
         host == "meta.wikimedia.org" or bool(_WIKIPEDIA_HOST.fullmatch(host or "")))
+    # Recover previously implemented #189 3D metadata adapters, not an
+    # arbitrary provider or download route. Only their documented GET paths.
+    specialist_api = (host, parsed.path) in {
+        ("api.polyhaven.com", "/search"),
+        ("ambientcg.com", "/api/v3/assets"),
+    }
     if (parsed.scheme != "https" or parsed.netloc != host or parsed.fragment or
-            (host not in hosts and not wikimedia_api)):
+            (host not in hosts and not wikimedia_api and not specialist_api)):
         raise CreativeResearchError("Research request is not an approved free API")
     return _bounded_json_get(url)
 
@@ -284,10 +291,26 @@ class CreativeResearch:
 
     def assets(self, *, query, media, limit=8):
         query = _check(query, limit)
-        if media not in ("image", "audio", "video"):
-            raise CreativeResearchError("Supported asset types: image, audio, video")
+        if media not in ASSET_RESEARCH_MEDIA:
+            raise CreativeResearchError("Unsupported creative asset media type")
         failures = []
-        if media == "video":
+        specialist_types = {"3d": ("models", "3d-model"),
+                            "texture": ("textures", "material"),
+                            "hdri": ("hdris", "hdri")}
+        if media in specialist_types:
+            # Reuse the original source adapters from #189, sharing this
+            # existing bounded transport and owner network grant. No fanout,
+            # new download permission, model credentials or separate hub.
+            from .creative_research_3d import poly_haven_assets, ambientcg_assets
+            primary, fallback = specialist_types[media]
+            try:
+                items = poly_haven_assets(self._fetch, query, limit, type_name=primary)
+                provider = "poly_haven"
+            except CreativeResearchError:
+                failures.append("poly_haven_unavailable_or_invalid")
+                items = ambientcg_assets(self._fetch, query, limit, type_name=fallback)
+                provider = "ambientcg"
+        elif media == "video":
             items, provider = self._commons_media(query, media, limit), "wikimedia_commons"
         else:
             try:
@@ -310,6 +333,7 @@ class CreativeResearch:
             "kind": "research_asset_candidates",
             "provider": provider,
             "provider_failures": failures,
+            **({"provider_credit": "Powered by Poly Haven"} if provider == "poly_haven" else {}),
             "fallback_used": bool(failures),
             "media": media,
             "query": query,
