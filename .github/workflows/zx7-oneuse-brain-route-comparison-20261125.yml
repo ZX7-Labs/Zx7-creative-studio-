@@ -1,0 +1,96 @@
+name: "ZX7 one-use Brain route comparison — current function frontier"
+on:
+  push:
+    branches: [trial/g1-brain-route-comparison-20261125]
+    paths:
+      - ".github/workflows/zx7-oneuse-brain-route-comparison-20261125.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zx7-brain-route-comparison-20261125
+  cancel-in-progress: false
+jobs:
+  route:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-brain-route-comparison-20261125'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: nvidia/nemotron-3-ultra-550b-a55b
+            label: ultra
+          - model: nvidia/nemotron-3.5-super-vl-120b-a12b
+            label: super-vl
+          - model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+            label: omni
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify exact source and one-use synthetic scope
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "d80c7a364da9649ad5e4cc0c8ebd39c42d649b0a"
+          test "$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)" = "$(printf '%s\n' '.github/workflows/zx7-oneuse-brain-route-comparison-20261125.yml' 'research/nvidia-brain-route-comparison-20261125.json' | LC_ALL=C sort)"
+          git diff --check HEAD^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing adapter dependencies and verify its offline contract
+        run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+          python -m unittest studio_next.test_nvidia_native_tool_model
+      - name: Real two-decision provider comparison, no editor or private media
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          ZX7_ROUTE_MODEL: ${{ matrix.model }}
+        run: |
+          python - <<'PY'
+          import json, os, time, re
+          from pathlib import Path
+          from studio_next.nvidia_model import NvidiaModelSettings, NvidiaTransportError, NvidiaConfigurationError
+          from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel, NATIVE_DIRECT_TOOL_SYSTEM
+          from studio_next.providers import LocalModelOutputError
+          from jsonschema import Draft202012Validator
+          req = json.loads(Path('research/nvidia-brain-route-comparison-20261125.json').read_text())
+          assert req == {"schema":1,"kind":"synthetic-native-function-route-comparison","request_id":"ZX7_ROUTE_COMPARE_20261125_D80","source":"d80c7a364da9649ad5e4cc0c8ebd39c42d649b0a","models":["nvidia/nemotron-3-ultra-550b-a55b","nvidia/nemotron-3.5-super-vl-120b-a12b","nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"],"max_calls_per_model":2,"max_total_calls":6,"max_tokens_per_call":1024,"synthetic_only":True,"private_media_allowed":False,"native_dispatch_allowed":False,"run_authorized":True}
+          model_id = os.environ["ZX7_ROUTE_MODEL"]
+          assert model_id in req["models"]
+          model = NvidiaNativeToolCreativeModel(NvidiaModelSettings(model_id=model_id, max_tokens=1024, timeout_seconds=90, sampling={}), system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+          empty = {"type":"object","properties":{},"additionalProperties":False}
+          place = {"type":"object","properties":{"assetId":{"type":"string"},"previewOnly":{"type":"boolean"}},"required":["assetId","previewOnly"],"additionalProperties":False}
+          specs = {"get_project":{"name":"get_project","description":"Read actual project inventory","input_schema":empty},
+                   "save_project":{"name":"save_project","description":"Save project once current revision changed","input_schema":empty},
+                   "add_asset_to_timeline":{"name":"add_asset_to_timeline","description":"Place the selected imported asset in timeline","input_schema":place}}
+          cases = [
+             ("read_inventory", ["get_project","save_project"], "Inspect the project inventory before any edit. Do not save.", "get_project", {}),
+             ("changed_frontier", ["get_project","add_asset_to_timeline"], "The project was saved, with no intervening edit. Place the synthetic imported source with asset ID synthetic-video-17 now. Save is no longer offered. Use previewOnly false.", "add_asset_to_timeline", {"assetId":"synthetic-video-17","previewOnly":False}),
+          ]
+          results=[]
+          for label, offered, brief, want, expected in cases:
+              context={"available_actions":["invoke","search"],"compact_tool_catalog":True,
+                       "actual_granted_native_tools":offered, "selectable_native_tools":offered,
+                       "host_native_tool_contracts":[specs[n] for n in offered],
+                       "inspectable_native_tools":[],"brief":brief,
+                       "native_placement_assets":{"assets":[{"id":"synthetic-video-17","name":"synthetic-original","type":"video"}]},
+                       "synthetic_fixture_not_live_editor":True}
+              start=time.monotonic()
+              try:
+                  d=model.decide(context)
+                  ok=d.get("action")=="invoke" and d.get("arguments",{}).get("tool")==want
+                  args=d.get("arguments",{}).get("inputs")
+                  ok=bool(ok and Draft202012Validator(specs[want]["input_schema"]).is_valid(args) and args==expected)
+                  record={"case":label,"status":"PASS" if ok else "WRONG_DECISION","usage":model.last_call_usage}
+              except (NvidiaTransportError, NvidiaConfigurationError, LocalModelOutputError) as e:
+                  msg=str(e)
+                  http=re.search(r"HTTP (\d{3})",msg)
+                  record={"case":label,"status":"ERROR","error_type":type(e).__name__,"http_status":int(http.group(1)) if http else None,
+                          "unknown_function":msg=="unknown_or_ungranted_native_function","usage":model.last_call_usage}
+              record["elapsed_s"]=round(time.monotonic()-start,3)
+              results.append(record)
+              print(json.dumps(record),flush=True)
+          print("ZX7_ROUTE_RESULT",json.dumps({"model":model_id,"cases":results,"passed":all(x["status"]=="PASS" for x in results),"native_dispatches":0,"private_media":False,"hosted_calls_at_most":2}))
+          if not all(x["status"]=="PASS" for x in results): raise SystemExit(1)
+          PY

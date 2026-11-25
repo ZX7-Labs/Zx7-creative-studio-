@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "kind": "synthetic-native-function-route-comparison",
+  "request_id": "ZX7_ROUTE_COMPARE_20261125_D80",
+  "source": "d80c7a364da9649ad5e4cc0c8ebd39c42d649b0a",
+  "models": [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+  ],
+  "max_calls_per_model": 2,
+  "max_total_calls": 6,
+  "max_tokens_per_call": 1024,
+  "synthetic_only": true,
+  "private_media_allowed": false,
+  "native_dispatch_allowed": false,
+  "run_authorized": true
+}
