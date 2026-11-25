@@ -1,0 +1,49 @@
+name: ZX7 one-use actual G1 unrevised second A/V export fence
+on:
+  push:
+    branches: [trial/g1-no-unrevised-second-export-20261125]
+    paths: ['.github/workflows/zx7-oneuse-g1-no-unrevised-second-export-20261125.yml']
+permissions:
+  contents: read
+jobs:
+  regression:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-no-unrevised-second-export-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 4
+          submodules: recursive
+      - name: Verify source-pinned test-first reproduction and no code overlap
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "61cce9a78b44986e282102260c421d0df6204685"
+          test "$(git rev-parse HEAD^^)" = "2998ddd22388d9882aa7b4e46d55754188cd20d6"
+          test "$(git rev-parse HEAD^^^)" = "fd63857bdc0d9892b90b8537c72e97c480eaccbc"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "studio_next/test_native_creative_control.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = "studio_next/native_creative_control.py"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g1-no-unrevised-second-export-20261125.yml"
+          git diff --check HEAD^^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the current project native model controller dependencies
+        run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: Prove the retained neural failure is reproduced by a failing test first
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/g1-red" "2998ddd22388d9882aa7b4e46d55754188cd20d6"
+          cd "$RUNNER_TEMP/g1-red"
+          if python -m unittest studio_next.test_native_creative_control.NativeCreativeControlTests.test_reviewed_av_second_export_cannot_skip_model_chosen_content_revision -v > "$RUNNER_TEMP/g1-red.log" 2>&1; then
+            cat "$RUNNER_TEMP/g1-red.log"
+            echo 'Expected RED did not fail'
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/g1-red.log"
+          grep -F 'test_reviewed_av_second_export_cannot_skip_model_chosen_content_revision' "$RUNNER_TEMP/g1-red.log"
+          grep -E '^FAILED \((failures|errors)=' "$RUNNER_TEMP/g1-red.log"
+      - name: Verify actual controller, journal, source custody and reviewed AV pairing
+        run: |
+          python -m unittest studio_next.test_native_creative_control studio_next.test_native_render_evidence studio_next.test_native_creative_audit studio_next.test_native_editor_project -v
