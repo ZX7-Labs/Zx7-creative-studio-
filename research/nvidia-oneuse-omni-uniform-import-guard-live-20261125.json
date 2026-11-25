@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "kind": "nvidia-synthetic-native-audiovisual-revision",
+  "model_id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "synthetic_only": true,
+  "cloud_synthetic_frames_allowed": true,
+  "cloud_numerical_audio_diagnostics_allowed": true,
+  "cloud_synthetic_wav_allowed": true,
+  "owner_media_allowed": false,
+  "max_turns": 48,
+  "request_id": "ZX7_OMNI_G1_UNIFORM_IMPORT_GUARD_20261125",
+  "run_authorized": true
+}
