@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "kind": "nvidia-no-media-function-call-probe",
+  "model_id": "qwen/qwen3.5-397b-a17b",
+  "request_id": "ZX7_QWEN397_MODEL_ABI_SMOKE_20261125_ONEUSE",
+  "synthetic_only": true,
+  "private_or_owner_media_allowed": false,
+  "max_remote_requests": 1,
+  "max_completion_tokens": 192,
+  "run_authorized": true
+}

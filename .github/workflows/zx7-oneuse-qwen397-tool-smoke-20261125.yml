@@ -1,0 +1,96 @@
+name: ZX7 one-use NVIDIA Qwen397 tool ABI smoke, no media
+on:
+  push:
+    branches: ['trial/g1-qwen397-hosted-tool-smoke-20261125']
+    paths: ['research/nvidia-oneuse-qwen397-tool-smoke-20261125.json']
+permissions:
+  contents: read
+concurrency:
+  group: zx7-oneuse-nvidia-model-compatibility
+  cancel-in-progress: false
+jobs:
+  transport-one-request:
+    if: >-
+      github.run_attempt == 1 && github.event.before == 'eb0509e697ba7088fd9418e87d6a0479579e8551' && github.event.head_commit.message == 'One-use bounded Qwen397 no-media function-call compatibility probe'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify one-use source and consent without secrets or network
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 'eb0509e697ba7088fd9418e87d6a0479579e8551'
+          actual="$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)"
+          expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-qwen397-tool-smoke-20261125.yml' 'research/nvidia-oneuse-qwen397-tool-smoke-20261125.json' | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('research/nvidia-oneuse-qwen397-tool-smoke-20261125.json')
+          def unique(pairs):
+              d={}
+              for k,v in pairs:
+                  if k in d: raise ValueError('duplicate consent field')
+                  d[k]=v
+              return d
+          data=json.loads(p.read_text(),object_pairs_hook=unique)
+          assert data == {'schema':1,'kind':'nvidia-no-media-function-call-probe',
+              'model_id':'qwen/qwen3.5-397b-a17b',
+              'request_id':'ZX7_QWEN397_MODEL_ABI_SMOKE_20261125_ONEUSE',
+              'synthetic_only':True,'private_or_owner_media_allowed':False,
+              'max_remote_requests':1,'max_completion_tokens':192,'run_authorized':True}
+          print('PASS exact one-use no-media model ABI consent')
+          PY
+      - name: One bounded genuine model tool-call request without native dispatch
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os,re,ssl,sys
+          from urllib.error import HTTPError,URLError
+          from urllib.request import Request,build_opener,ProxyHandler,HTTPRedirectHandler
+          token=os.environ.get('NVIDIA_API_KEY','')
+          if not re.fullmatch(r'nvapi-[A-Za-z0-9_-]{20,512}',token):
+              raise SystemExit('No permitted NVIDIA credential; no remote request')
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args): raise ValueError('Provider redirect refused')
+          payload={'model':'qwen/qwen3.5-397b-a17b',
+              'messages':[{'role':'system','content':'Protocol test only. Call zx7_probe once with accepted true. No creative operations.'},
+                          {'role':'user','content':'Call the single offered protocol function.'}],
+              'tools':[{'type':'function','function':{'name':'zx7_probe','description':'Return a protocol boolean',
+                        'parameters':{'type':'object','properties':{'accepted':{'type':'boolean'}},
+                                      'required':['accepted'],'additionalProperties':False}}}],
+              'tool_choice':'required','max_tokens':192,'stream':False}
+          req=Request('https://integrate.api.nvidia.com/v1/chat/completions',
+              data=json.dumps(payload,sort_keys=True).encode(),method='POST',
+              headers={'Authorization':'Bearer '+token,'Content-Type':'application/json','Accept':'application/json'})
+          try:
+              with build_opener(ProxyHandler({}),NoRedirect()).open(req,timeout=75) as resp:
+                  body=resp.read(131073)
+                  code=resp.status
+          except HTTPError as exc:
+              print('MODEL_TRANSPORT_HTTP_STATUS',exc.code,'(provider response body suppressed)')
+              raise SystemExit(1)
+          except (URLError,OSError,ValueError,ssl.SSLError):
+              raise SystemExit('MODEL_TRANSPORT_ERROR (details suppressed)')
+          if len(body)>131072: raise SystemExit('Provider response too large')
+          try:
+              parsed=json.loads(body)
+              choices=parsed.get('choices',[])
+              calls=choices[0].get('message',{}).get('tool_calls',[]) if len(choices)==1 else []
+              call=calls[0]['function'] if len(calls)==1 else {}
+              args=json.loads(call.get('arguments','{}'))
+              good=call.get('name')=='zx7_probe' and args=={'accepted':True}
+          except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+              good=False
+          print('MODEL_TRANSPORT_HTTP_STATUS',code,'TOOL_ABI_ACCEPTED',good,
+                'MODEL','qwen/qwen3.5-397b-a17b','NATIVE_MUTATIONS',0,'MEDIA_UPLOADS',0)
+          if not good: raise SystemExit('Tool-call ABI not accepted (contents suppressed)')
+          PY
