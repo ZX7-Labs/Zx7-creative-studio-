@@ -308,6 +308,99 @@ class CreativeResearchTests(unittest.TestCase):
         self.assertEqual(uri.hostname, "sfxmint.com")
         self.assertEqual(uri.path, "/api/v1/search")
 
+    def test_polyhaven_and_ambientcg_only_surface_cc0_candidate_3d(self):
+        from studio_next.creative_research_3d import (
+            poly_haven_assets, ambientcg_assets)
+        calls = []
+        def provider(url):
+            calls.append(url)
+            if urlsplit(url).hostname == "api.polyhaven.com":
+                return {"results": [
+                    {"slug": "ornate_chair", "score": 0.8},
+                    {"slug": "../../unsafe", "score": 0.9}]}
+            return {"assets": [
+                {"id": "Rock001", "title": "Cliff Rock"},
+                {"id": "bad/path", "title": "Invalid"}]}
+        one = poly_haven_assets(provider,"stylized chair",3,type_name="models")
+        two = ambientcg_assets(provider,"stone",3,type_name="3d-model")
+        self.assertEqual(len(one), 1)
+        self.assertEqual(len(two), 1)
+        self.assertEqual(one[0]["provider_credit"],"Powered by Poly Haven")
+        self.assertEqual(one[0]["rights_status"],"candidate_unverified")
+        self.assertEqual(two[0]["media_type"],"3d")
+        self.assertTrue(all(x["declared_license"]=="CC0" for x in one+two))
+        self.assertEqual([urlsplit(x).hostname for x in calls],
+                         ["api.polyhaven.com","ambientcg.com"])
+        self.assertEqual(parse_qs(urlsplit(calls[0]).query)["t"],["models"])
+        self.assertEqual(parse_qs(urlsplit(calls[1]).query)["type"],["3d-model"])
+
+    def test_existing_3d_research_adapters_are_reachable_without_new_network_grant(self):
+        calls = []
+        def fetch(url):
+            calls.append(url)
+            if urlsplit(url).hostname == "api.polyhaven.com":
+                raise CreativeResearchError("Synthetic unavailable primary")
+            return {"assets": [{"id": "Source001", "title": "Original source"},
+                               {"id": "../invalid", "title": "Unsafe path"}]}
+        research = CreativeResearch(fetch)
+        expected = {"3d": ("models", "3d-model"), "texture": ("textures", "material"),
+                    "hdri": ("hdris", "hdri")}
+        for media, (primary, fallback) in expected.items():
+            with self.subTest(media=media):
+                calls.clear()
+                receipt = research.assets(query="public source", media=media, limit=2)
+                self.assertEqual(receipt["media"], media)
+                self.assertEqual(receipt["provider"], "ambientcg")
+                self.assertTrue(receipt["fallback_used"])
+                self.assertFalse(receipt["rights_verified"])
+                self.assertFalse(receipt["import_authorized"])
+                self.assertEqual(len(receipt["results"]), 1)
+                self.assertEqual(receipt["results"][0]["asset_kind"], fallback)
+                self.assertEqual(receipt["results"][0]["rights_status"], "candidate_unverified")
+                self.assertEqual(len(calls), 2)
+                self.assertEqual(parse_qs(urlsplit(calls[0]).query)["t"], [primary])
+                self.assertEqual(parse_qs(urlsplit(calls[1]).query)["type"], [fallback])
+        calls.clear()
+        with tempfile.TemporaryDirectory() as root:
+            catalog = body_catalog(root, research_client=research)
+            spec = next(s for s in catalog.discover() if s["id"] == "body.research_assets")
+            self.assertEqual(set(spec["schema"]["properties"]["media"]["enum"]),
+                             {"image", "audio", "video", "3d", "texture", "hdri"})
+            self.assertEqual(spec["access"], "network")
+            with self.assertRaises(PermissionError):
+                catalog.invoke("body.research_assets", {"query": "public", "media": "3d"})
+            self.assertFalse(calls)
+            result = catalog.invoke("body.research_assets", {"query": "public", "media": "3d"},
+                                    allowed_access=frozenset({"network"}))
+            self.assertEqual(len(result["results"]), 1)
+            self.assertEqual(len(calls), 2)
+
+    def test_3d_provider_transport_admits_only_exact_metadata_paths(self):
+        valid = ("https://api.polyhaven.com/search?q=chair&t=models&limit=2",
+                 "https://ambientcg.com/api/v3/assets?q=rock&type=3d-model&limit=2")
+        invalid = ("https://api.polyhaven.com/files/chair",
+                   "https://ambientcg.com/api/v3/downloads",
+                   "https://api.polyhaven.com:443/search",
+                   "https://user@ambientcg.com/api/v3/assets",
+                   "https://api.polyhaven.com.evil.example/search")
+        with patch("studio_next.creative_research._bounded_json_get", return_value={}) as network:
+            for url in valid:
+                self.assertEqual(_public_api_json(url), {})
+            for url in invalid:
+                with self.assertRaises(CreativeResearchError):
+                    _public_api_json(url)
+            self.assertEqual([call.args[0] for call in network.call_args_list], list(valid))
+
+    def test_polyhaven_live_api_source_credit_remains_in_actual_asset_result(self):
+        def fetch(url):
+            return {"results": [{"slug": "public_chair"}, {"slug": "../invalid"}]}
+        result = CreativeResearch(fetch).assets(query="chair", media="3d", limit=2)
+        self.assertEqual(result["provider"], "poly_haven")
+        self.assertEqual(result["provider_credit"], "Powered by Poly Haven")
+        self.assertEqual(result["results"][0]["provider_credit"], "Powered by Poly Haven")
+        self.assertEqual(len(result["results"]), 1)
+        self.assertFalse(result["import_authorized"])
+
     def test_query_budget_and_media_rejection_do_not_contact_provider(self):
         provider = FakePublicAPIs()
         research=CreativeResearch(provider)
@@ -427,6 +520,27 @@ class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
         for count in (None, 0, 9, True, -1):
             with self.subTest(count=count), self.assertRaises(ValueError):
                 CreativeResearchMcpSession(allow_public_research=True, max_calls=count)
+
+    async def test_existing_research_mcp_exposes_same_3d_metadata_contract(self):
+        from studio_next.creative_research_mcp import CreativeResearchMcpSession
+        calls = []
+        def provider(url):
+            calls.append(url)
+            return {"results": [{"slug": "public_chair"}]}
+        session = CreativeResearchMcpSession(
+            allow_public_research=True, research_client=CreativeResearch(provider), max_calls=1)
+        tools = (await session.list_tools()).tools
+        spec = next(t for t in tools if t.name == "research_assets")
+        self.assertEqual(set(spec.input_schema["properties"]["media"]["enum"]),
+                         {"image", "audio", "video", "3d", "texture", "hdri"})
+        result = await session.call_tool("research_assets", {"query": "chair", "media": "3d"})
+        self.assertFalse(result.is_error)
+        receipt = json.loads(result.content[0].text)
+        self.assertEqual(receipt["provider"], "poly_haven")
+        self.assertFalse(receipt["import_authorized"])
+        blocked = await session.call_tool("research_assets", {"query": "chair", "media": "hdri"})
+        self.assertEqual(json.loads(blocked.content[0].text)["status"], "call_budget_exhausted")
+        self.assertEqual(len(calls), 1)
 
     async def test_real_mcp_protocol_exposes_only_bounded_readonly_research(self):
         import anyio

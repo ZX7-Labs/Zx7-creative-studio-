@@ -37,6 +37,7 @@ MODEL_OUTPUT_REJECTION_CODES = frozenset({
     "missing_native_tool_message",
     "missing_or_multiple_native_tool_calls",
     "unknown_or_ungranted_native_function",
+    "native_function_not_currently_offered",
     "invalid_native_function_json",
     "native_function_missing_reason",
     "native_function_inputs_shape",

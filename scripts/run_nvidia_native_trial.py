@@ -578,10 +578,13 @@ def exports_with_wav_decisions(events):
 
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
               audiovisual=False, allow_cloud_audio_diagnostics=False,
-              allow_cloud_synthetic_wav=False, integrated_editor_source=None):
+              allow_cloud_synthetic_wav=False, integrated_editor_source=None,
+              indexed_catalog=False):
     # Runtime API and CLI enforce the same explicit paid/provider disclosure.
     # An old reviewed visual-only request is not authority to send synthetic
     # sound statistics to a hosted model or to launch a new cloud evaluation.
+    if type(indexed_catalog) is not bool or (indexed_catalog and not audiovisual):
+        raise ValueError("Explicit indexed catalog requires a synthetic audiovisual trial")
     if audiovisual and allow_cloud_audio_diagnostics is not True:
         raise ValueError("Audiovisual cloud trial needs explicit audio diagnostics consent")
     if allow_cloud_audio_diagnostics and not audiovisual:
@@ -614,9 +617,10 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         # There is NO host-authored creative edit or automatic invocation.
         "--structured-actions",
         # Omni full-catalog trial 44998186099 made 25 identical project reads.
-        # Reuse the existing trusted capability frontier for this model only;
-        # the Brain still chooses all actions and the host retains all checks.
-        *(["--indexed-catalog"] if allow_cloud_synthetic_wav else []),
+        # Reuse the existing trusted frontier for Omni, or an explicitly
+        # selected synthetic A/V comparison. No new grants or native actions.
+        # Full historical 120B route remains unchanged unless opted in.
+        *(["--indexed-catalog"] if allow_cloud_synthetic_wav or indexed_catalog else []),
         "--fresh-trial-project",
         "--evaluation-evidence", (
             "reviewed-av-revision" if audiovisual else "reviewed-revision"),
@@ -790,6 +794,8 @@ def main(argv=None):
                         help="Separate consent for sending synthetic audio statistics to NVIDIA")
     parser.add_argument("--allow-cloud-synthetic-wav", action="store_true",
                         help="Permit source-bound generated WAV excerpts on the audited Omni trial")
+    parser.add_argument("--indexed-catalog", action="store_true",
+                        help="Explicit synthetic A/V comparison using the existing host indexed catalog")
     parser.add_argument("--integrated-editor-source", type=Path,
                         help="Use only the rebuilt, exact source-pinned cumulative ZX7 editor")
     args = parser.parse_args(argv)
@@ -808,7 +814,8 @@ def main(argv=None):
               audiovisual=args.audiovisual_trial,
               allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics,
               allow_cloud_synthetic_wav=args.allow_cloud_synthetic_wav,
-              integrated_editor_source=args.integrated_editor_source)
+              integrated_editor_source=args.integrated_editor_source,
+              indexed_catalog=args.indexed_catalog)
 
 
 if __name__ == "__main__":
