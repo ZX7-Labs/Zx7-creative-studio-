@@ -1,5 +1,7 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
+**2026-11-25 latest integrated fix:** [source `23a9c1e`](https://github.com/ZX7-Labs/Zx7-creative-studio-/commit/23a9c1e14d12aef75e7f000af6c8898acfb0121c) fast-forwarded to existing draft [PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), without changing `main`. Genuine indexed Omni [run #45547749209](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45547749209) still **FAILED**: after real model operation the native timeline had no editable clips and no accepted exports. Source-level RED [#45548628548](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45548628548) confirmed indexed model did not see host-verified imported asset IDs; 196 tests GREEN [#45548757586](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45548757586) after reusing existing bounded `get_assets` with positive import/read witness. **Full exact-head PR CI is separately pending verification, no comparable post-fix real-model pass and no independent artistic/A–L acceptance.** Original one-use branch retains offline test-workflow receipts; do not ship its branch-only workflow in the product integration tree.
+
 ## Current workstream — 2026-11-25
 
 [Draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), BODY-first, model-independent integration and full verification. Main at inspection: `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. Refresh live heads, CI, artifacts and consent before acting; dated counts are not live status.
@@ -20,7 +22,7 @@
 
 **2026-11-25 original-source delta candidate:** Real pinned Velorn `get_project` has project `path` + `created` (NOT an invented project ID). One model-selected full native `get_timeline` read before an edit and a later model-selected full read now yield a bounded, nonsecret comparison of original-video and audio clip identities and surviving source assets. Both must have an identical privately hashed saved-project source, timeline ID, complete native clip list and unique valid clip/track/asset IDs. Model may independently react to a disappeared original. Intentional split/replacement and concurrent GUI changes are expressly NOT misclassified as accidents; incomplete, unsaved or switched projects mint no false lost-source claim. No hidden read, forced rollback, extra grant, provider request or automatic creative action. TDD: exact baseline RED, then 6 new source-change cases plus **150 locally available controller tests PASS** (2 additional legacy tests require repository-only scripts absent in the installed wheel, covered by official CI). **New-head CI PENDING; no neural/A–L acceptance.**
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=524b2e296d474fab68e76ebb8ce75840970073ca` (Git content ID, not security attestation). Historical obsolete narratives archived at previous immutable Git source and evidence index; dated older PASS/RED statuses are historical.
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=a39b666e36e07341ae8685d7ac66991e08597c57` (Git content ID, not security attestation). Historical obsolete narratives archived at previous immutable Git source and evidence index; dated older PASS/RED statuses are historical.
 
 ## Authority and scope
 
