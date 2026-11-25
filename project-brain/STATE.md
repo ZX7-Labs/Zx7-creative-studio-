@@ -1,6 +1,6 @@
 # ZX7 — current engineering STATE (compact; mutable)
 
-**2026-11-25 batch integration:** [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), main unchanged at `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. Prior exact runtime `d80c7a3` **28/28 technical workflows PASS**. Installed proof [#45555142414](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142414): 1617 PASS / 30 skipped; all 30 exact skipped test identities reconciled: 29 passed in full MLT [#45555142362](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142362), final actual browser passed [#45555142298](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142298). Unified installed [#45555142299](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142299) proves scripted real 2D graph/Blender/native A/V, revision, decoded exports and relocated source reopen. No independent professional acceptance. **New combined source exact-head CI is pending.** Earlier narrative preserved at [immutable preceding checkpoint](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/db970c1a03a4ec9c3a8ab1217f0cc8db9c5144df/project-brain/STATE.md), and typed evidence below.
+**2026-11-25 batch integration:** [draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), main unchanged at `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. Prior exact runtime `d80c7a3` **28/28 technical workflows PASS**. Installed proof [#45555142414](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142414): 1617 PASS / 30 skipped; all 30 exact skipped test identities reconciled: 29 passed in full MLT [#45555142362](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142362), final actual browser passed [#45555142298](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142298). Unified installed [#45555142299](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45555142299) proves scripted real 2D graph/Blender/native A/V, revision, decoded exports and relocated source reopen. No independent professional acceptance. **Combined source `8036b16` verified: 29/29 workflows SUCCESS**; exact-head installed BODY 1,624/1,654 passed (30 skipped), full MLT 1,653/1,654 passed (1 skipped), real Chromium SUCCESS. Actual hosted NVIDIA and local-model execution jobs both SKIPPED; green request/manifest gates do not prove model acceptance. Earlier narrative preserved at [immutable preceding checkpoint](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/db970c1a03a4ec9c3a8ab1217f0cc8db9c5144df/project-brain/STATE.md), and typed evidence below.
 
 ## Integrated batch, not duplicated implementation
 
@@ -17,19 +17,23 @@
 ## Integrated foundations — scoped technical evidence only
 
 - Native pinned Velorn editor; real source-aware A/V import/edit/save/export; rational clocks, native conflict fence, loss-aware ripple and original picture/audio custody; Blender, editable visual graphs, MLT and other installed engines share trusted gateway. Portable native source closure, fresh reopen and physical export comparison proved on prior scripted fixtures.
-- Model-independent external stdio MCP attachment, source-bound PNG sensor, official read/write metadata, bounded schema/budget refusals and no fabricated no-dispatch after a source call. Prior physical unified run #45337861346 passed. Current exact runtime handoff pending.
+- Model-independent external stdio MCP attachment, source-bound PNG sensor, official read/write metadata, bounded schema/budget refusals and no fabricated no-dispatch after a source call. Prior physical unified run #45337861346 passed. Combined exact-head handoff workflow SUCCESS; genuine model acceptance remains open.
 - Historical #189 durable execution readiness restored: actual installed runner, committed revision, trusted material witness and host grants required for graph admission. Direct session-native MCP retains its existing lane; no unsupported network/paid durable dispatch. Latest installed suite passed these regressions.
 - Earlier full exact-head technical and artifact audits, source custody and recovery tests remain in evidence; older PASS cannot substitute for new exact-head verification.
 
 
 ## Remaining acceptance — prioritize outcome
 
-1. Verify new exact combined runtime SHA once. Do not repeat unchanged baseline suites or duplicate implemented functions. Keep main untouched and PR draft.
+1. Exact combined runtime technical checkpoint verified (29/29). Do not repeat unchanged baseline suites or duplicate implemented functions. Keep main untouched and PR draft under the existing acceptance contract.
 2. G1 genuine original picture and sound creation, editable first conformant save/export, actual model perception of timed visuals and audible semantics, meaningful model-authored revision, second distinct conformant source-bound render and reopen. Provider reliability and mixed-envelope model competence remain separate blockers. No blind repeat of unchanged failed cloud routes; no host-synthesized creative choices or guessed argument repair.
 3. G1-HUMAN actual manual co-edit, stale proposal refusal and saved/reopened preserved source. G2 held-out comparative adaptive fabric experiment. G3 full A–L independent professional acceptance, G4 legal/security/usability/performance/cold-install release acceptance. All remain OPEN; no whole field certified.
 4. Current BRIEF consent covers bounded synthetic-only hosted trials, not owner-media egress or ordinary CI inference. Full owner BODY attachment remains local-only. Preserve all negative evidence.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=6bddc079947080a5e37d229e330bd08ef7ff85c6` (Git content ID, not security attestation).
+## Critical-path execution correction
+
+Technical breadth is not the current limiting evidence. Separate provider availability, exact function-schema competence, live native state grounding, semantic audiovisual judgment and completed editable delivery as measured prerequisites. Use the existing synthetic trial harness and held-out task choices; first qualify the actual mixed read/write schema, live IDs and observation/revision decisions in bounded comparable trials, then run a full brief only on a qualified route. A text-only two-call probe is insufficient. Retain exact failures; do not guess arguments, script creative decisions, weaken host validation or treat a skipped real-model job as a pass. Run non-model human/release/fixture work in parallel where independent; do not create new engines or completion frameworks. G1, G2, A–L and release gates remain unchanged. No new inference or independent professional review performed in this checkpoint.
+
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=7712f40d04908fa6d934aa9fa66cb4271c50d176` (Git content ID, not security attestation).
 
 ## Update requirements
 

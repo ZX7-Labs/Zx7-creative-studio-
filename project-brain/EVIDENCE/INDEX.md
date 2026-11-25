@@ -1,5 +1,9 @@
 # ZX7 — durable evidence index (positive and negative)
 
+## 2026-11-25 — live exact-head combined technical checkpoint
+
+Source [`8036b16df1e3d3e0e08af458d6da324858e040e4`](https://github.com/ZX7-Labs/Zx7-creative-studio-/commit/8036b16df1e3d3e0e08af458d6da324858e040e4) and synthetic merge `535ff3791c3f279d3b0dec9ac73b03785089210a` share tree `2f8d5def42393e71e744a1179cdebf7dde7e35e8`; PR #356 open/draft, main `716c226a` unchanged. All 29 observed exact-head PR workflows SUCCESS. Installed [#45562162399](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45562162399) actual job log: Ran 1654 tests, OK (skipped=30), 1624 passed; published artifact #14999475307 SHA256 `ee763d949a0ba04b27e5cc69795085115307aea2175b452f0186955252af49db`, independent CI artifact verifier job 139033673954 SUCCESS. Full MLT [#45562162276](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45562162276) log: Ran 1654 tests, OK (skipped=1), 1653 passed. Real Chromium [#45562162132](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45562162132) SUCCESS. Hosted [#45562162460](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45562162460) real-model job 139028218234 SKIPPED; local [#45562162320](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45562162320) actual model job 139028399809 SKIPPED. Admission and manifest contracts passed, not neural artistry. This checkpoint verified GitHub metadata/logs, not a fresh local archive decode or independent human evaluation. No model gate promoted; earlier failures retained. Product NOT COMPLETE.
+
 Evidence statements are source-sha/PR/run scoped; hyperlinks to GitHub Actions artifacts may expire independently of this repository.
 
 ## 2026-11-25 — exact verified BODY baseline and bounded Brain comparison
