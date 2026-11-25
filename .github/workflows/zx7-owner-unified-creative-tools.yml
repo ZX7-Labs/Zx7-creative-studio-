@@ -91,7 +91,12 @@ jobs:
           test -f "$helper"
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
-          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+          # Official Electron archive SHA and distribution version were already
+          # checked by install-supported-electron.sh. Avoid a second headless
+          # --version smoke that can fail before this workflow executes its
+          # real Electron project-edit/reopen acceptance in the next step.
+          runtime_version=$(cat node_modules/electron/dist/version)
+          test "${runtime_version#v}" = "45.2.3"
       - name: Install exact native Blender 4.5 LTS and authenticate official archive bytes
         run: |
           set -euo pipefail

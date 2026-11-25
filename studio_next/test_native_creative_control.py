@@ -1589,6 +1589,92 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e.get("host_application_write_acknowledged")
                              for e in result["events"]))
 
+    async def test_reviewed_av_second_export_cannot_skip_model_chosen_content_revision(self):
+        """Real Super VL G1 #45632856001: the first export was genuinely
+        verified and both actual frame and full sound were observed. The model
+        then chose a second export with no native content edit. Do not dispatch
+        another export with the same source and claim a reviewed revision.
+        Scripted fixture verifies the boundary, NOT independent creativity.
+        """
+        from studio_next.native_render_evidence import (
+            REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR, TIMED_FRAMES, AUDIO_ENVELOPE,
+            DESTINATION_FIELD, AV_REVIEW_FIELD, AV_PCM_FIELD,
+        )
+        session = FakeSession()
+        for name, schema in (
+            ("save_project", {"type": "object", "properties": {
+                "previewOnly": {"type": "boolean"}}}),
+            ("export_timeline", {"type": "object", "properties": {
+                "outputPath": {"type": "string"}}, "required": ["outputPath"]}),
+            (TIMED_FRAMES, {"type": "object", "properties": {}}),
+            (AUDIO_ENVELOPE, {"type": "object", "properties": {}}),
+        ):
+            session.tools.append(SimpleNamespace(
+                name=name, description="Actually host-granted native operation",
+                input_schema=schema))
+        grants = {
+            tool.name: ("write" if tool.name in (
+                "save_project", "export_timeline", "update_text_clip") else "read")
+            for tool in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="export_timeline",
+                     inputs={"outputPath": "/synthetic/second.mp4"}),
+            decision("finish", summary="Cannot finish without an actual revision"),
+        ])
+        controller = NativeCreativeControl(
+            session, model, max_turns=2, host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",),
+            host_capture_render_project=lambda *_: ("1"*64, "2"*64, "3"*64))
+        controller._explicit_render_save_identity = ("/synthetic/project", "saved-revision")
+        destination = "f"*64
+        observed = "a"*64
+        controller._verified_exports.add(observed)
+        controller._append({"kind": "native_tool_result", "tool": "save_project",
+                            "host_application_write_acknowledged": True})
+        controller._append({"kind": "native_tool_result", "tool": "export_timeline",
+                            "host_application_write_acknowledged": True,
+                            DESTINATION_FIELD: destination,
+                            "native_export_timeline_sha256": "e"*64,
+                            "native_render_saved_project_sha256": "1"*64})
+        controller._append({"kind": "native_tool_result",
+                            "tool": "zx7_verify_native_export",
+                            DESTINATION_FIELD: destination,
+                            "independently_verified_export_sha256": observed,
+                            AV_REVIEW_FIELD: [6.0]})
+        controller._append({"kind": "native_tool_result", "tool": TIMED_FRAMES,
+                            DESTINATION_FIELD: destination,
+                            "observed_export_sha256": observed,
+                            "image_sha256": ["b"*64],
+                            AV_REVIEW_FIELD: [0.0, 2.0, 4.0]})
+        controller._append({"kind": "native_tool_result", "tool": AUDIO_ENVELOPE,
+                            DESTINATION_FIELD: destination,
+                            "observed_export_sha256": observed,
+                            AV_REVIEW_FIELD: [0.0, 6.0],
+                            AV_PCM_FIELD: "c"*64})
+        observed_evidence = controller._current_export_evidence()
+        self.assertEqual(observed_evidence["current_verified"], {observed})
+        self.assertEqual(observed_evidence["current_frames"], {observed})
+        self.assertEqual(observed_evidence["current_full_audio"], {observed})
+        self.assertFalse(observed_evidence["post_review_write_acknowledged"])
+        self.assertTrue(controller._source_bound_render_save_current())
+        result = await controller.run(
+            "Produce an original revision only after genuine observation")
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+        self.assertFalse(session.calls)
+        refusal = next(e for e in result["events"]
+                       if e["kind"] == "model_action_rejected")
+        self.assertEqual(refusal["validation_keyword"],
+                         "native_second_export_needs_content_revision")
+        self.assertTrue(refusal["no_native_dispatch"])
+        # Next model decision sees factual refusal; no host-synthesized edit.
+        self.assertEqual(model.observed[1]["last_rejected_native_action_feedback"][
+            "validation_keyword"], "native_second_export_needs_content_revision")
+        self.assertTrue(model.observed[1]["last_rejected_native_action_feedback"][
+            "no_automatic_edit"])
+        self.assertTrue(any(e["kind"] == "model_finish_rejected"
+                            for e in result["events"]))
+
     async def test_confirmed_creative_write_invalidates_native_saved_render_readiness(self):
         """The host never mistakes a previously saved revision for a newer edit.
 

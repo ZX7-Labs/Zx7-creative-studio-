@@ -1,5 +1,10 @@
 # ZX7 — durable evidence index (positive and negative)
 
+## 2026-11-25 — source-bound G1 second-export without revision and exact native smoke diagnosis
+
+- [Physical failed Super VL #45632856001](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45632856001), artifact #15033430161, strict journal: first conforming native H.264/AAC physically verified, model selected 3 timed frames and full numeric sound observation, then attempted second native export with **no acknowledged content change**. Host source snapshot refused capture, correctly withheld revised-pair proof. [Test-first controller safety candidate #45666106360](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45666106360) RED 1 expected, GREEN 193 nearby contracts, zero model-selected edit substitution. Real neural creative proof still negative.
+- [Initial integrated exact-head workflow #45665385302](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45665385302): native Velorn install/source checks, patched save-order tests, checksum-pinned Electron archive and Vite build passed, then last shell command failed without logging its process stdout. Initial investigation identifies the redundant headless `electron --version` equality smoke as the failing command; the full actual Chromium native creative handoff had not started. Candidate substitutes independent official distro `dist/version` exact check, retains SHA verification by `install-supported-electron.sh`, and **does not skip** the actual live creative E2E. No claim until fresh exact-head full workflow.
+
 ## 2026-11-25 — 459 branch refs / 81 open PR source-tree overlap and G1 trial hard evidence
 
 - [459-tip live source index](branch-review-20261125.tsv), [bounded overlap decisions](branch-audit-20261125.md). Historic 407-tip relations are labelled historical against their original source baseline; only 53 new/changed tips freshly compared against PR #356 HEAD. Do not equate code tree overlap with accepted creative functionality or bulk merge the older #189 stack.
