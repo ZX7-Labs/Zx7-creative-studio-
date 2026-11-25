@@ -1,0 +1,146 @@
+name: ZX7 one-use G1 actual native artistic edit selection, no native mutation
+on:
+  push:
+    branches: [trial/g1-real-model-artistic-edit-selection-20261125]
+    paths: ['.github/workflows/zx7-oneuse-g1-real-model-artistic-edit-selection-20261125.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zx7-g1-actual-native-artistic-selection-20261125
+  cancel-in-progress: false
+jobs:
+  compare:
+    if: github.ref == 'refs/heads/trial/g1-real-model-artistic-edit-selection-20261125' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ['nvidia/nemotron-3-ultra-550b-a55b', 'nvidia/nemotron-3.5-super-vl-120b-a12b']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          submodules: recursive
+      - name: Verify source and exact synthetic-only one-use boundary
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "0c7bc0a059317b9c72bba8d024927840f056a92b"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          test "$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)" = "$(printf '%s\n' '.github/workflows/zx7-oneuse-g1-real-model-artistic-edit-selection-20261125.yml' 'research/nvidia-g1-real-model-artistic-edit-selection-20261125.json' | LC_ALL=C sort)"
+          git diff --check HEAD^ HEAD
+      - name: Extract real source-pinned native creative tool input schemas (read only)
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import vm from 'node:vm';
+          const src=fs.readFileSync('third_party/velorn/electron/mcpServer.js','utf8');
+          function schema(name){
+            const mark="name: '"+name+"',";
+            let at=src.indexOf(mark);
+            if(at<0||src.indexOf(mark,at+1)>=0)throw Error('Nonunique actual native function '+name);
+            const open=src.indexOf('inputSchema: {',at);
+            const next=src.indexOf("\n      name: '",at+mark.length);
+            if(open<0||(next>0&&open>next))throw Error('Missing immediate schema '+name);
+            const start=open+'inputSchema: '.length;
+            let level=0,quote=null,escape=false,lineComment=false,blockComment=false,end=-1;
+            for(let k=start;k<src.length;k++){
+              const c=src[k],n=src[k+1];
+              if(lineComment){if(c==='\n')lineComment=false;continue}
+              if(blockComment){if(c==='*'&&n==='/'){blockComment=false;k++}continue}
+              if(quote){if(escape){escape=false;continue}if(c==='\\'){escape=true;continue}if(c===quote)quote=null;continue}
+              if(c==='/'&&n==='/'){lineComment=true;k++;continue}
+              if(c==='/'&&n==='*'){blockComment=true;k++;continue}
+              if(c==="'"||c==='"'||c==='`'){quote=c;continue}
+              if(c==='{')level++;
+              if(c==='}'&&--level===0){end=k+1;break}
+              if(level<0)throw Error('Broken native schema '+name)
+            }
+            if(end<=start||end-start>30_000)throw Error('Unbounded native schema '+name);
+            const object=vm.runInNewContext('('+src.slice(start,end)+')',Object.create(null),{timeout:200});
+            if(object?.type!=='object'||typeof object.properties!=='object')throw Error('Invalid native source schema '+name);
+            return JSON.parse(JSON.stringify(object));
+          }
+          const names=['get_project','add_text_clip','add_shape_clip'];
+          const specs=Object.fromEntries(names.map(name=>[name,{name,description:
+            name==='get_project'?'Read the saved native project':name==='add_text_clip'?'Create editable original typography': 'Create editable original visual geometry',input_schema:schema(name)}]));
+          if(!('text' in specs.add_text_clip.input_schema.properties)||!('shapeType' in specs.add_shape_clip.input_schema.properties))throw Error('Pinned source has changed');
+          fs.writeFileSync('/tmp/zx7-actual-creative-schemas.json',JSON.stringify(specs));
+          console.log('ZX7_PINNED_ORIGINAL_CREATIVE_FUNCTIONS',names.join(','));
+          JS
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+      - name: Two actual native creative decisions without editor dispatch or media transport
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          ZX7_G1_DECISION_MODEL: ${{ matrix.model }}
+        run: |
+          python - <<'PY'
+          import copy,json,os,re,time
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+          from studio_next.nvidia_model import NvidiaModelSettings,NvidiaTransportError,NvidiaConfigurationError
+          from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel,NATIVE_DIRECT_TOOL_SYSTEM
+          from studio_next.providers import LocalModelOutputError
+          req=json.loads(Path('research/nvidia-g1-real-model-artistic-edit-selection-20261125.json').read_text())
+          assert req==json.loads('{"schema":1,"kind":"synthetic-actual-native-artistic-edit-decision-qualification","request_id":"ZX7_REAL_CREATIVE_EDIT_SELECTION_20261125","source":"0c7bc0a059317b9c72bba8d024927840f056a92b","editor_source":"b3c02adbd5c0779feb8abf34978299e9502cc0e7","models":["nvidia/nemotron-3-ultra-550b-a55b","nvidia/nemotron-3.5-super-vl-120b-a12b"],"max_calls_per_model":2,"max_total_calls":4,"max_tokens_per_call":1024,"synthetic_only":true,"private_media_allowed":false,"model_does_not_see_private_brief":true,"native_dispatch_allowed":false,"run_authorized":true}')
+          model_id=os.environ['ZX7_G1_DECISION_MODEL']
+          assert model_id in req['models']
+          model=NvidiaNativeToolCreativeModel(NvidiaModelSettings(model_id=model_id,max_tokens=1024,timeout_seconds=90,sampling={}),system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+          specs=json.loads(Path('/tmp/zx7-actual-creative-schemas.json').read_text())
+          possible=['get_project','add_text_clip','add_shape_clip']
+          cases=[
+            ('first_original_art','The 6-second source movie is a plain uninterrupted neutral gradient with one continuous sound cue. The user wants an original visual story about moving from hesitation to momentum. A project, original video and sound are already present and saved. Design an original visible editorial element now. You may select a native creative operation. Use your own art choices, not a predefined storyboard.'),
+            ('after_genuine_review','An actual first exported 6-second movie was fully decoded. Frames at 0, 3 and 5 seconds show only an unchanged neutral gradient; numeric audio coverage is complete and continuous. The user requested a meaningful intentional creative revision rather than a second identical export. Choose one original visible graphic or typography edit now, preserving the existing original video and sound. The project is open, current and already read.'),
+          ]
+          results=[]
+          for i,(case,brief) in enumerate(cases):
+            ctx={'available_actions':['invoke','search'],'compact_tool_catalog':True,
+                 'selectable_native_tools':possible,'inspectable_native_tools':[],
+                 'host_native_tool_contracts':[copy.deepcopy(specs[n]) for n in possible],
+                 'creative_brief':brief,'brief':brief,
+                 'synthetic_fixture_not_live_editor':True,
+                 'native_project_presence_from_last_inspection':'present',
+                 'host_verified_execution_progress':{'project_presence':'present','acknowledged_native_writes':4,
+                    'project_asset_count_from_native_read':2,'active_timeline_clip_count_from_native_read':2,
+                    'verified_export_receipts':1 if i else 0},
+                 'native_placement_assets':{'assets':[{'id':'asset-original-visual','type':'video','name':'source'},
+                    {'id':'asset-original-audio','type':'audio','name':'music'}],'count':2,'complete':True},
+                 'current_actual_native_timeline':{'id':'timeline-1','clips':[{'id':'original-video-1','type':'video'},
+                    {'id':'original-audio-1','type':'audio'}]},
+                 'synthetic_frame_and_audio_review_confirmed': bool(i),'turn':12+i}
+            started=time.monotonic()
+            try:
+              d=model.decide(ctx)
+              args=d.get('arguments',{}).get('inputs',{})
+              name=d.get('arguments',{}).get('tool')
+              schema=specs.get(name,{}).get('input_schema',{})
+              valid=isinstance(args,dict) and name in ('add_text_clip','add_shape_clip') and Draft202012Validator(schema).is_valid(args)
+              if valid and 'previewOnly' in schema.get('properties',{}):valid= args.get('previewOnly') is False
+              if valid and name=='add_text_clip':valid=isinstance(args.get('text'),str) and 2<=len(args['text'].strip())<=160
+              if valid and name=='add_shape_clip':
+                valid=(args.get('shapeType') in ('rectangle','roundedRectangle','ellipse','polygon','line')
+                     and type(args.get('width')) in (int,float) and type(args.get('height')) in (int,float)
+                     and 0<args['width']<=2000 and 0<args['height']<=2000
+                     and (isinstance(args.get('fillColor'),str) or isinstance(args.get('style'),dict)))
+              if valid and 'startSeconds' in args:valid=type(args['startSeconds']) in (int,float) and 0<=args['startSeconds']<6
+              if valid and 'durationSeconds' in args:valid=type(args['durationSeconds']) in (int,float) and 0<args['durationSeconds']<=6
+              record={'case':case,'status':'CREATIVE_ACTION_SCHEMA_PASS' if valid else 'NONARTISTIC_OR_INVALID_DECISION',
+                      'chosen_tool':name if name in possible else None,
+                      'native_action_selected':name in ('add_text_clip','add_shape_clip'),'usage':model.last_call_usage}
+            except (NvidiaTransportError,NvidiaConfigurationError,LocalModelOutputError) as e:
+              http=re.search(r'HTTP (\d{3})',str(e))
+              record={'case':case,'status':'PROVIDER_OR_FUNCTION_ERROR','type':type(e).__name__,
+                      'code':getattr(e,'code',None),'http':int(http.group(1)) if http else None}
+            record['elapsed_seconds']=round(time.monotonic()-started,3)
+            results.append(record)
+            print('ZX7_G1_REAL_ART_DECISION',json.dumps(record),flush=True)
+          success=all(x['status']=='CREATIVE_ACTION_SCHEMA_PASS' for x in results)
+          print('ZX7_G1_ACTUAL_ART_SELECTION',json.dumps({'model':model_id,'passed':success,
+            'cases':results,'native_dispatches':0,'private_media':False,'actual_art_quality_accepted':False,
+            'max_model_calls':2}),flush=True)
+          if not success:raise SystemExit(1)
+          PY
