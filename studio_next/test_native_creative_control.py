@@ -3578,12 +3578,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                      "type": "video"}], "count": 1,
                          "complete": True, "staged_files_require_import": True})
                     self.assertEqual([name for name, _ in session.calls],
-                                     ["get_project", "get_assets"])
+                                     ["get_project", "get_project", "get_assets"])
                     self.assertEqual(sum(x["kind"] == "host_placement_asset_observation"
                                          and x.get("host_attested_read_only") is True
                                          for x in result["events"]), 1)
                 else:
-                    self.assertEqual(session.calls, [("get_project", {})])
+                    self.assertEqual(session.calls,
+                                     [("get_project", {}), ("get_project", {})])
                 self.assertTrue(audit_native_journal(result["events"],
                     host_tool_access=grants)["journal_chain_structurally_valid"])
                 self.assertFalse(result["native_editing_capability_complete"])

@@ -1563,6 +1563,21 @@ class NativeCreativeControl:
         asset_sensing = (local_indexed_contracts and
             _BATCH_ASSET_PLACEMENT in self._host_verified_top_level_previews and
             self.host_tool_access.get("get_assets") == "read")
+        # The full native-function provider sees installed tool schemas but
+        # previously missed the ALREADY-EXISTING, bounded get_assets read.
+        # Only expose IDs after the Brain itself selected a real get_project
+        # observation; the host-only bootstrap cannot mint model authority.
+        # This is a read-only factual inventory, not a chosen creative step
+        # or write permission (real Omni G1 #45545590934).
+        full_native_asset_sensing = (
+            self.catalog_mode == "full" and
+            getattr(self.model, "requires_native_function_contracts", False) is True and
+            self.host_tool_access is not None and
+            self.host_tool_access.get("get_assets") == "read" and
+            "get_assets" in validators and
+            validators["get_assets"].is_valid({"limit": _MAX_PLACEMENT_ASSETS}) and
+            any(self.host_tool_access.get(name) == "write"
+                for name in (_SINGLE_ASSET_PLACEMENT, _BATCH_ASSET_PLACEMENT)))
         # Restrict any special preview parser to an exact host-installed
         # native tool with an actual boolean previewOnly field.
         for name in self._host_verified_top_level_previews:
@@ -1855,7 +1870,12 @@ class NativeCreativeControl:
                             "source": "host_authorized_current_timeline_read",
                             "read_only": True,
                         }
-                if asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable:
+                model_observed_project = any(
+                    e.get("kind") == "native_tool_result" and
+                    e.get("tool") == "get_project" for e in self.events)
+                if ((asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable) or
+                        (full_native_asset_sensing and model_observed_project and
+                         (self._trusted_project_asset_count() or 0) > 0)):
                     placement_assets = await self._observe_placement_inventory(
                         "get_assets", {"limit": _MAX_PLACEMENT_ASSETS}, validators["get_assets"])
                 if track_sensing and _SINGLE_ASSET_PLACEMENT in visible_selectable:
