@@ -1,0 +1,82 @@
+name: ZX7 one-use read-only authenticated NVIDIA model inventory
+on:
+  push:
+    branches: ['trial/g1-nvidia-live-model-catalog-20261125']
+    paths: ['research/nvidia-oneuse-live-catalog-20261125.json']
+permissions:
+  contents: read
+jobs:
+  real-provider-get-models:
+    if: >-
+      github.run_attempt == 1 && github.event.before == 'eb0509e697ba7088fd9418e87d6a0479579e8551' && github.event.head_commit.message == 'One-use read-only NVIDIA live model catalog without inference'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify exact one-use source and no-inference consent
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 'eb0509e697ba7088fd9418e87d6a0479579e8551'
+          actual="$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)"
+          expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-nvidia-model-catalog-20261125.yml' 'research/nvidia-oneuse-live-catalog-20261125.json' | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          c=json.loads(Path('research/nvidia-oneuse-live-catalog-20261125.json').read_text())
+          assert c=={'schema':1,'kind':'nvidia-oneuse-readonly-model-inventory',
+            'request_id':'ZX7_AUTHENTICATED_MODELS_GET_20261125',
+            'allow_only':'GET /v1/models','no_inference':True,'no_media':True,
+            'max_requests':1,'authorized':True}
+          print('PASS read-only one-use scope; no inference payload')
+          PY
+      - name: One authenticated catalogue GET, no creative input and no inference
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,re,ssl
+          from urllib.request import Request,ProxyHandler,build_opener,HTTPRedirectHandler
+          from urllib.error import HTTPError,URLError
+          key=os.getenv('NVIDIA_API_KEY','')
+          if not re.fullmatch(r'nvapi-[A-Za-z0-9_-]{20,512}',key):
+              raise SystemExit('No valid NVIDIA credential; no request')
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args): raise ValueError('Unexpected provider redirect')
+          req=Request('https://integrate.api.nvidia.com/v1/models',method='GET',
+               headers={'Authorization':'Bearer '+key,'Accept':'application/json'})
+          try:
+              with build_opener(ProxyHandler({}),NoRedirect()).open(req,timeout=30) as r:
+                  response=r.read(1048577)
+                  code=r.status
+          except HTTPError as ex:
+              print('CATALOG_HTTP_STATUS',ex.code,'(body suppressed)')
+              raise SystemExit(1)
+          except (URLError,OSError,ValueError,ssl.SSLError):
+              raise SystemExit('Catalog transport failed (details suppressed)')
+          if len(response)>1048576: raise SystemExit('Catalog too large')
+          obj=json.loads(response)
+          rows=obj.get('data',[]) if type(obj) is dict else []
+          if type(rows) is not list or not rows or len(rows)>5000:
+              raise SystemExit('Malformed model catalogue')
+          ids=sorted({x['id'] for x in rows if type(x) is dict and type(x.get('id')) is str})
+          if len(ids)!=len(rows): raise SystemExit('Ambiguous model catalogue')
+          candidates=('nvidia/nemotron-3.5-super-vl-120b-a12b',
+             'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+             'nvidia/nemotron-3-super-120b-a12b',
+             'nvidia/nemotron-3-ultra-550b-a55b',
+             'qwen/qwen3.5-397b-a17b','qwen/qwen3.5-122b-a10b',
+             'stepfun-ai/step-3.7-flash','meta/llama-3.2-90b-vision-instruct')
+          print('CATALOG_HTTP_STATUS',code,'MODELS',len(ids),'GET_ONLY',True,'INFERENCE_CALLS',0,'MEDIA_UPLOADS',0)
+          for name in candidates:
+              print('CATALOG_ID_PRESENT',name,name in ids)
+          print('OTHER_MULTIMODAL_ID_CANDIDATES',
+              json.dumps([x for x in ids if any(k in x.lower() for k in ('vision','-vl','omni','gemma-4'))][:25]))
+          PY

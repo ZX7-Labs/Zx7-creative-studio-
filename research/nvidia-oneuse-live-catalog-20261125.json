@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "kind": "nvidia-oneuse-readonly-model-inventory",
+  "request_id": "ZX7_AUTHENTICATED_MODELS_GET_20261125",
+  "allow_only": "GET /v1/models",
+  "no_inference": true,
+  "no_media": true,
+  "max_requests": 1,
+  "authorized": true
+}
