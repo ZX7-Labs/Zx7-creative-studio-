@@ -549,6 +549,47 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 native_call.call_args.kwargs["timeout"], 35 * 60 - 5 * 60)
 
 
+    def test_explicit_indexed_av_trial_reuses_existing_native_frontier(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            workspace = Path(scratch)
+            roots = {"state": workspace / "state", "outputs": workspace / "out"}
+            failed = subprocess.CompletedProcess([], 1, "", "fixture")
+            with patch("scripts.run_nvidia_native_trial.prepare_trial",
+                       return_value=(roots, workspace / "host.json")) as stage, patch(
+                    "scripts.run_nvidia_native_trial.subprocess.run",
+                    return_value=failed) as native_call:
+                with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                    run_trial(workspace, model_id=_ALLOWED_MODEL,
+                              xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                              audiovisual=True, allow_cloud_audio_diagnostics=True,
+                              indexed_catalog=True)
+                command = native_call.call_args.args[0]
+                self.assertEqual(command.count("--indexed-catalog"), 1)
+                self.assertIn("--structured-actions", command)
+                self.assertEqual(command[command.index("--max-turns") + 1], "48")
+                self.assertIn("--allow-cloud-audio-diagnostics", command)
+                self.assertNotIn("--allow-cloud-original-wav-upload", command)
+                self.assertEqual(native_call.call_count, 1)
+                stage.reset_mock()
+                native_call.reset_mock()
+                for invalid, av in (("yes", True), (True, False)):
+                    with self.assertRaises(ValueError):
+                        run_trial(workspace, model_id=_ALLOWED_MODEL,
+                                  xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                                  audiovisual=av, allow_cloud_audio_diagnostics=av,
+                                  indexed_catalog=invalid)
+                stage.assert_not_called()
+                native_call.assert_not_called()
+
+    def test_cli_indexed_av_trial_forwards_explicit_opt_in(self):
+        from scripts.run_nvidia_native_trial import main
+        with tempfile.TemporaryDirectory() as scratch:
+            with patch("scripts.run_nvidia_native_trial.run_trial") as launch:
+                main(["--workspace", scratch, "--audiovisual-trial",
+                      "--allow-cloud-audio-diagnostics", "--indexed-catalog"])
+                self.assertIs(launch.call_args.kwargs["indexed_catalog"], True)
+                self.assertIs(launch.call_args.kwargs["allow_cloud_synthetic_wav"], False)
+
     def test_saved_native_trial_requires_active_real_source_clip(self):
         """Only a structural acceptance fixture, not model or video proof."""
         import hashlib

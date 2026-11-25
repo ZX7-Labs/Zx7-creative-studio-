@@ -1,0 +1,24 @@
+name: ZX7 isolated indexed-frontier launcher regression (offline)
+on:
+  push:
+    branches: [trial/g1-super-vl-indexed-frontier-20261125]
+    paths:
+      - 'scripts/test_run_nvidia_native_trial.py'
+      - 'scripts/run_nvidia_native_trial.py'
+      - '.github/workflows/zx7-oneuse-indexed-frontier-regression-20261125.yml'
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+          python -m unittest scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_explicit_indexed_av_trial_reuses_existing_native_frontier scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_cli_indexed_av_trial_forwards_explicit_opt_in scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_native_trial_actually_requests_structured_actions scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_omni_synthetic_wav_flag_reaches_only_the_exact_authorized_native_session -v
