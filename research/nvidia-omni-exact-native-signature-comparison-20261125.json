@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "kind": "synthetic-exact-native-signature-comparison",
+  "request_id": "ZX7_OMNI_EXACT_NATIVE_SIGNATURE_20261125",
+  "source": "8036b16df1e3d3e0e08af458d6da324858e040e4",
+  "upstream_source": "b3c02adbd5c0779feb8abf34978299e9502cc0e7",
+  "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "max_total_calls": 4,
+  "max_tokens_per_call": 1024,
+  "synthetic_only": true,
+  "private_media_allowed": false,
+  "native_dispatch_allowed": false,
+  "run_authorized": true
+}

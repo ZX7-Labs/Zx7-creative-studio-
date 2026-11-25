@@ -1,0 +1,113 @@
+name: ZX7 one-use Omni exact native signature comparison
+on:
+  push:
+    branches: [trial/g1-omni-exact-native-signature-comparison-20261125]
+    paths: ['.github/workflows/zx7-oneuse-omni-exact-native-signature-comparison-20261125.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zx7-omni-exact-native-signature-comparison-20261125
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-omni-exact-native-signature-comparison-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          submodules: recursive
+      - name: Verify exact source, synthetic scope and unchanged native declarations
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "8036b16df1e3d3e0e08af458d6da324858e040e4"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          test "$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)" = "$(printf '%s\n' '.github/workflows/zx7-oneuse-omni-exact-native-signature-comparison-20261125.yml' 'research/nvidia-omni-exact-native-signature-comparison-20261125.json' | LC_ALL=C sort)"
+          git diff --check HEAD^ HEAD
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import vm from 'node:vm';
+          const source = fs.readFileSync('third_party/velorn/electron/mcpServer.js','utf8');
+          const expected = {"get_project":"{\n        type: 'object',\n        properties: {},\n      }","import_asset_from_path":"{\n        type: 'object',\n        properties: {\n          path: { type: 'string', description: 'Absolute local file path to import — or a directory / any numbered frame of an image sequence.' },\n          filePath: { type: 'string', description: 'Alias for path.' },\n          sourcePath: { type: 'string', description: 'Alias for path.' },\n          asSequence: { type: 'boolean', description: 'true forces sequence import (errors if no run is found); false disables detection and imports the single file. Omit for auto-detect.' },\n          fps: { type: 'number', description: 'Sequence frame rate. Defaults to the project rate; recorded in the asset\\'s sequenceSource tag for later re-interpretation.' },\n          category: { type: 'string', enum: ['video', 'audio', 'images', 'image'], description: 'Optional category for single-file imports. If omitted, inferred from extension.' },\n          folderId: { type: 'string', description: 'Optional existing asset folder ID for the imported asset.' },\n          folderPath: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }], description: 'Optional folder path to create/reuse before assigning the imported asset.' },\n          folderName: { type: 'string', description: 'Single folder name alias for folderPath.' },\n          previewOnly: { type: 'boolean', description: 'When true, returns the import plan without copying the file. Defaults to true.' },\n        },\n      }","add_asset_to_timeline":"{\n        type: 'object',\n        properties: {\n          assetId: {\n            type: 'string',\n            description: 'Project asset ID to place. If omitted, assetName or the latest placeable asset is used.',\n          },\n          assetName: {\n            type: 'string',\n            description: 'Exact or partial asset name to place.',\n          },\n          latestGenerated: {\n            type: 'boolean',\n            description: 'When true, place the most recent matching generated/placeable asset.',\n          },\n          latest: {\n            type: 'boolean',\n            description: 'Alias for latestGenerated.',\n          },\n          type: {\n            type: 'string',\n            enum: ['video', 'image', 'audio'],\n            description: 'Optional asset type filter when resolving by name/latest.',\n          },\n          assetType: {\n            type: 'string',\n            enum: ['video', 'image', 'audio'],\n            description: 'Alias for type.',\n          },\n          workflowId: {\n            type: 'string',\n            description: 'Optional workflow id filter when resolving the latest generated asset, for example ltx23-i2v.',\n          },\n          trackId: {\n            type: 'string',\n            description: 'Optional compatible target track ID. Video/image assets require a video track; audio assets require an audio track.',\n          },\n          createTrack: {\n            type: 'boolean',\n            description: 'When true, create a new compatible track before placing the asset. Video tracks are created at the top.',\n          },\n          newTrack: {\n            type: 'boolean',\n            description: 'Alias for createTrack.',\n          },\n          trackName: {\n            type: 'string',\n            description: 'Optional name for the new track when createTrack/newTrack is true.',\n          },\n          trackStrategy: {\n            type: 'string',\n            enum: ['existing', 'new', 'newTopTrack'],\n            description: 'Optional track strategy. Use newTopTrack to compare generated variations on separate upper video layers.',\n          },\n          startSeconds: {\n            type: 'number',\n            description: 'Absolute timeline start time in seconds. Defaults to the playhead.',\n          },\n          startTime: {\n            type: 'number',\n            description: 'Alias for startSeconds.',\n          },\n          at: {\n            type: 'string',\n            enum: ['playhead', 'selected_clip_start', 'selected_clip_end', 'timeline_end', 'track_end'],\n            description: 'Placement shortcut when startSeconds is omitted.',\n          },\n          placement: {\n            type: 'string',\n            description: 'Alias for at.',\n          },\n          durationSeconds: {\n            type: 'number',\n            description: 'Optional timeline duration. Defaults to 5 seconds for images, or source duration for video/audio when known.',\n          },\n          duration: {\n            type: 'number',\n            description: 'Alias for durationSeconds.',\n          },\n          sourceInSeconds: {\n            type: 'number',\n            description: 'Source-media in point in seconds (video/audio). The clip is born pre-trimmed from here — timeline trim handles can still reveal the rest of the source later.',\n          },\n          sourceOutSeconds: {\n            type: 'number',\n            description: 'Source-media out point in seconds. With sourceInSeconds it defines the inserted range; when durationSeconds is omitted, the clip duration derives from the range.',\n          },\n          resolveOverlaps: {\n            type: 'boolean',\n            description: 'When true, use normal timeline overwrite behavior on the target track. Defaults to true.',\n          },\n          selectAfterAdd: {\n            type: 'boolean',\n            description: 'When true, select the newly added clip. Defaults to true.',\n          },\n          transform: {\n            type: 'object',\n            description: 'Optional initial transform values such as positionX, positionY, scaleX, scaleY, rotation, opacity, blur, motion blur settings, or crop fields.',\n          },\n          includeAudio: {\n            type: 'boolean',\n            description: 'For video assets with embedded audio, also create a linked audio clip on an audio track. Defaults to true.',\n          },\n          includeEmbeddedAudio: {\n            type: 'boolean',\n            description: 'Alias for includeAudio.',\n          },\n          previewOnly: {\n            type: 'boolean',\n            description: 'When true, returns the placement plan without changing the timeline. Defaults to true.',\n          },\n        },\n      }"};
+          const specs = {};
+          for (const [name, literal] of Object.entries(expected)) {
+            const at = source.indexOf("name: '" + name + "',");
+            if (at < 0) throw Error('Missing exact native tool: ' + name);
+            const end = source.indexOf('\n    },\n    {',at);
+            const start = source.indexOf('inputSchema: {',at) + 'inputSchema: '.length;
+            const actual = source.slice(start,end).trim().replace(/,$/,'');
+            if (actual !== literal) throw Error('Source declaration mismatch: ' + name);
+            const schema = vm.runInNewContext('(' + actual + ')', Object.create(null), {timeout:100});
+            // Same indexed admission closure and explicit preview choice as BODY
+            // for these pinned preview-default writes.
+            if (schema.properties && !('additionalProperties' in schema) && !('patternProperties' in schema)) schema.additionalProperties = false;
+            if (name !== 'get_project') schema.required = [...new Set([...(schema.required || []),'previewOnly'])];
+            specs[name] = {name, description: name === 'get_project' ? 'Read actual project' : name === 'import_asset_from_path' ? 'Import an authorized local media file' : 'Place imported asset on timeline', input_schema:schema};
+          }
+          fs.writeFileSync('/tmp/zx7-exact-probe-schemas.json',JSON.stringify(specs));
+          JS
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+      - name: Four actual model decisions with strict validation and no native dispatch
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          python - <<'PY'
+          import json, copy, time, re
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+          from studio_next.nvidia_model import NvidiaModelSettings, NvidiaTransportError, NvidiaConfigurationError
+          from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel, NATIVE_DIRECT_TOOL_SYSTEM
+          from studio_next.providers import LocalModelOutputError
+          req=json.loads(Path('research/nvidia-omni-exact-native-signature-comparison-20261125.json').read_text())
+          assert req == {"schema":1,"kind":"synthetic-exact-native-signature-comparison","request_id":"ZX7_OMNI_EXACT_NATIVE_SIGNATURE_20261125","source":"8036b16df1e3d3e0e08af458d6da324858e040e4","upstream_source":"b3c02adbd5c0779feb8abf34978299e9502cc0e7","model":"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning","max_total_calls":4,"max_tokens_per_call":1024,"synthetic_only":True,"private_media_allowed":False,"native_dispatch_allowed":False,"run_authorized":True}
+          specs=json.loads(Path('/tmp/zx7-exact-probe-schemas.json').read_text())
+          class UniformWrappedProbe(NvidiaNativeToolCreativeModel):
+              # Probe only; use existing wrapped schema branch and existing
+              # strict decoder. No change to production adapter or grants.
+              @staticmethod
+              def _tool_surface(context, *, omit_empty_inputs=False):
+                  return NvidiaNativeToolCreativeModel._tool_surface(context, omit_empty_inputs=False)
+          settings=NvidiaModelSettings(model_id=req['model'],max_tokens=1024,timeout_seconds=90,sampling={})
+          cases=[
+              ('import_source','import_asset_from_path',
+               'Import the already authorized synthetic file /synthetic/original.mp4 into this open project. Apply the import now, not a preview.',
+               lambda x: x.get('previewOnly') is False and any(x.get(k)=='/synthetic/original.mp4' for k in ('path','filePath','sourcePath')) and all(x.get(k,'/synthetic/original.mp4')=='/synthetic/original.mp4' for k in ('path','filePath','sourcePath'))),
+              ('place_source','add_asset_to_timeline',
+               'Place the already imported synthetic video with asset ID synthetic-video-17 on the active timeline. Apply it now, not a preview.',
+               lambda x: x.get('previewOnly') is False and x.get('assetId')=='synthetic-video-17')
+          ]
+          results=[]
+          for mode in ('current','uniform_wrapped'):
+              for label,want,brief,semantic in cases:
+                  offered=['get_project',want]
+                  context={'available_actions':['invoke','search'],'compact_tool_catalog':True,
+                           'selectable_native_tools':offered,'inspectable_native_tools':[],
+                           'host_native_tool_contracts':[copy.deepcopy(specs[n]) for n in offered],
+                           'brief':brief,'native_placement_assets':{'assets':[{'id':'synthetic-video-17','type':'video','name':'original'}]},
+                           'synthetic_fixture_not_live_editor':True}
+                  prompt=NATIVE_DIRECT_TOOL_SYSTEM if mode=='current' else (
+                      'Choose exactly one currently offered named function. Every native function uses an inputs OBJECT and a nonempty reason string. Put all native arguments INSIDE inputs, never beside it. No-input operations use an empty object. Use only the exact host schema, no invented paths, tools, data or results. Do not execute anything.')
+                  model=(NvidiaNativeToolCreativeModel if mode=='current' else UniformWrappedProbe)(settings,system_prompt=prompt)
+                  started=time.monotonic()
+                  try:
+                      d=model.decide(context)
+                      args=d.get('arguments',{}).get('inputs',{})
+                      valid=(d.get('action')=='invoke' and d['arguments'].get('tool')==want and
+                             Draft202012Validator(specs[want]['input_schema']).is_valid(args) and semantic(args))
+                      receipt={'status':'PASS' if valid else 'WRONG_DECISION'}
+                  except (NvidiaTransportError,NvidiaConfigurationError,LocalModelOutputError) as e:
+                      http=re.search(r'HTTP (\d{3})',str(e))
+                      receipt={'status':'ERROR','type':type(e).__name__,'code':getattr(e,'code',None),'http':int(http.group(1)) if http else None}
+                  receipt.update(mode=mode,case=label,usage=model.last_call_usage,elapsed_s=round(time.monotonic()-started,3))
+                  results.append(receipt)
+                  print('ZX7_EXACT_SIGNATURE',json.dumps(receipt),flush=True)
+          print('ZX7_EXACT_SIGNATURE_SUMMARY',json.dumps({'results':results,'native_dispatches':0,'synthetic_only':True,'max_calls':4}))
+          # Report a comparison, not a certification. A route is eligible
+          # for further experiments only if both exact-schema cases pass.
+          if not any(all(x['status']=='PASS' for x in results if x['mode']==mode) for mode in ('current','uniform_wrapped')): raise SystemExit(1)
+          PY
