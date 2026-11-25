@@ -26,9 +26,9 @@ jobs:
       - name: Verify source and exact synthetic-only one-use boundary
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "0c7bc0a059317b9c72bba8d024927840f056a92b"
+          test "$(git rev-parse HEAD^)" = "e5899fe9d6395e59315a7533b02a50ca91b56a7a"
           test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
-          test "$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)" = "$(printf '%s\n' '.github/workflows/zx7-oneuse-g1-pinned-native-artistic-choice-qualified-20261125.yml' 'research/nvidia-g1-pinned-native-artistic-choice-qualified-20261125.json' | LC_ALL=C sort)"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g1-pinned-native-artistic-choice-qualified-20261125.yml"
           git diff --check HEAD^ HEAD
       - name: Extract real source-pinned native creative tool input schemas (read only)
         run: |
@@ -97,7 +97,7 @@ jobs:
           from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel,NATIVE_DIRECT_TOOL_SYSTEM
           from studio_next.providers import LocalModelOutputError
           req=json.loads(Path('research/nvidia-g1-pinned-native-artistic-choice-qualified-20261125.json').read_text())
-          assert req==json.loads('{"schema":1,"kind":"synthetic-actual-native-artistic-edit-decision-qualification","request_id":"ZX7_REAL_CREATIVE_EDIT_SELECTION_20261125","source":"0c7bc0a059317b9c72bba8d024927840f056a92b","editor_source":"b3c02adbd5c0779feb8abf34978299e9502cc0e7","models":["nvidia/nemotron-3-ultra-550b-a55b","nvidia/nemotron-3.5-super-vl-120b-a12b"],"max_calls_per_model":2,"max_total_calls":4,"max_tokens_per_call":1024,"synthetic_only":true,"private_media_allowed":false,"model_does_not_see_private_brief":true,"native_dispatch_allowed":false,"run_authorized":true}')
+          assert req==json.loads('{"schema":1,"kind":"synthetic-actual-native-artistic-edit-decision-qualification","request_id":"ZX7_PINNED_NATIVE_ARTISTIC_CHOICE_20261125","source":"0c7bc0a059317b9c72bba8d024927840f056a92b","editor_source":"b3c02adbd5c0779feb8abf34978299e9502cc0e7","models":["nvidia/nemotron-3-ultra-550b-a55b","nvidia/nemotron-3.5-super-vl-120b-a12b"],"max_calls_per_model":2,"max_total_calls":4,"max_tokens_per_call":1024,"synthetic_only":true,"private_media_allowed":false,"model_does_not_see_private_brief":true,"native_dispatch_allowed":false,"run_authorized":true}')
           model_id=os.environ['ZX7_G1_DECISION_MODEL']
           assert model_id in req['models']
           model=NvidiaNativeToolCreativeModel(NvidiaModelSettings(model_id=model_id,max_tokens=1024,timeout_seconds=90,sampling={}),system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
