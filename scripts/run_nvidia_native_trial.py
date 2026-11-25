@@ -370,6 +370,52 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
         result["verified_source_backed_audio_clips"] = real_original_audio_clips
     return result
 
+def verify_native_original_picture_visibility(workspace: Path):
+    """Recover the existing #179 actual-native original-source visibility proof.
+
+    This read-only checkpoint certifies a project-owned byte-exact video source
+    on an eligible *current editable timeline*, not pixels in a specific render.
+    It cannot substitute for the separately captured 6-second export window,
+    a model-chosen edit or independent creative quality evaluation.
+    """
+    from studio_next.native_source_acceptance import verify_original_footage_on_native_timeline
+
+    workspace = Path(workspace).resolve(strict=True)
+    projects = workspace / "projects"
+    candidates = list(projects.glob("*/project.comfystudio"))
+    if len(candidates) != 1:
+        raise ValueError("Exactly one native saved source project is required")
+    entries = json.loads((workspace / "source-ledger.json").read_text(encoding="utf-8"))
+    if not isinstance(entries, list) or not 1 <= len(entries) <= 2:
+        raise ValueError("Host-generated source ledger is missing")
+    video = [entry for entry in entries if isinstance(entry, dict)
+             and entry.get("media_kind", "video" if len(entries) == 1 else None) == "video"]
+    if len(video) != 1:
+        raise ValueError("Exactly one original synthetic source video required")
+    record = video[0]
+    if type(record.get("path")) is not str or type(record.get("sha256")) is not str:
+        raise ValueError("Original source identity is incomplete")
+    original = Path(record["path"])
+    if (original.is_symlink() or original.parent != workspace / "staging" or
+            original.suffix.lower() != ".mp4"):
+        raise ValueError("Original video must be within generated trial staging")
+    # The synthetic-only runner generated and SHA-attested this video; the
+    # old owner-safe structural verifier checks the independent native copy.
+    observed = verify_original_footage_on_native_timeline(
+        projects, candidates, [{
+            "path": str(original), "sha256": record["sha256"],
+        }], host_verified_export_windows=None)
+    return {
+        "source_original_visible_in_native_timeline":
+            observed["actual_original_video_used_on_native_timeline"],
+        "original_visible_video_clip_count":
+            observed["physically_verified_native_source_clip_count"],
+        # Without trusted export origin+decoded sampling timestamps, the
+        # verifier *must not* claim that these pixels reached the movie.
+        "source_original_rendered_pixels_verified": False,
+    }
+
+
 def decoded_video_frames_sha256(path: Path, *, max_frames=240):
     """Hash exact-time presented decoded RGB frames, not container metadata.
 
@@ -708,6 +754,18 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
             "native_saved_project_verified": False,
             "native_project_rejection_type": type(exc).__name__,
         }
+    original_picture_visibility = {
+        "source_original_visible_in_native_timeline": False,
+        "original_visible_video_clip_count": 0,
+        "source_original_rendered_pixels_verified": False,
+    }
+    if saved_native["native_saved_project_verified"]:
+        try:
+            original_picture_visibility = verify_native_original_picture_visibility(workspace)
+        except (OSError, ValueError, TypeError):
+            # Preserve forensic outputs but never infer original content use.
+            # No filesystem/path contents in public negative evidence.
+            pass
     export_variants = len({entry["sha256"] for entry in media})
     independently_different_picture_exports = len({
         item.presentation for item in decoded_exports.values()})
@@ -742,6 +800,7 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
     evaluated = {
         "both_reviewed_exports_returned_wav_conditioned_decisions": wav_pair_verified,
         **saved_native,
+        **original_picture_visibility,
         "different_decoded_export_count": export_variants,
         "different_decoded_picture_sequence_count": independently_different_picture_exports,
         "status": summary.get("status"),
@@ -775,7 +834,8 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
                 not reviewed_pair_audio_acceptable or bool(audio_rejections))) or
             wav_pair_verified is False or
             not reviewed_pair_delivery_profile_compliant or
-            saved_native["native_saved_project_verified"] is not True):
+            saved_native["native_saved_project_verified"] is not True or
+            not original_picture_visibility["source_original_visible_in_native_timeline"]):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
     return evaluated
 
