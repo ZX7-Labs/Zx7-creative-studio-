@@ -3589,7 +3589,12 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result["status"], "model_finished_unverified")
                 self.assertNotIn("native_placement_assets", model.observed[0])
                 self.assertEqual("native_placement_assets" in model.observed[1], expected)
+                schema = next(x["input_schema"] for x in model.observed[1]["host_native_tool_contracts"]
+                              if x["name"] == "add_asset_to_timeline")
                 if expected:
+                    self.assertEqual(schema["properties"]["assetId"]["enum"],
+                                     ["", "asset-native-source-1"])
+                    self.assertNotIn("assetId", schema.get("required", []))
                     self.assertEqual(model.observed[1]["native_placement_assets"],
                         {"assets": [{"id": "asset-native-source-1",
                                      "name": "synthetic-original.mov",
@@ -3601,6 +3606,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                          and x.get("host_attested_read_only") is True
                                          for x in result["events"]), 1)
                 else:
+                    self.assertNotIn("enum", schema["properties"]["assetId"])
                     self.assertEqual(session.calls,
                                      [("get_project", {}), ("get_project", {})])
                 self.assertTrue(audit_native_journal(result["events"],
@@ -3689,6 +3695,14 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                            "name": "synthetic-original.mov", "type": "video"}])
         self.assertIn("add_asset_to_timeline",
                       indexed_model.observed[1]["selectable_native_tools"])
+        indexed_schema = next(x["input_schema"] for x in indexed_model.observed[1]["host_native_tool_contracts"]
+                              if x["name"] == "add_asset_to_timeline")
+        self.assertEqual(indexed_schema["properties"]["assetId"]["enum"],
+                         ["", "asset-native-source-1"])
+        self.assertNotIn("assetId", indexed_schema.get("required", []))
+        native_schema = next(t.input_schema for t in indexed_session.tools
+                             if t.name == "add_asset_to_timeline")
+        self.assertNotIn("enum", native_schema["properties"]["assetId"])
         self.assertEqual(sum(name == "import_asset_from_path"
                              for name, _ in indexed_session.calls), 1)
         self.assertEqual(sum(name == "get_assets"

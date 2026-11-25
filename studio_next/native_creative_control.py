@@ -2094,6 +2094,21 @@ class NativeCreativeControl:
                         if not isinstance(schema, dict) or schema.get("type") != "object":
                             raise NativeCreativeControlError(
                                 "Native function signature is not an object schema")
+                        # The complete, current host asset observation can
+                        # constrain an optional explicit ID in the provider's
+                        # schema, just as current track IDs constrain placement.
+                        # Preserve omission/name/latest alternatives and never
+                        # restrict a partial inventory or invent an identity.
+                        if (candidate == _SINGLE_ASSET_PLACEMENT and
+                                provider_native_asset_sensing and
+                                placement_assets is not None and
+                                placement_assets["complete"] and placement_assets["assets"]):
+                            field = schema.get("properties", {}).get("assetId")
+                            if (isinstance(field, dict) and field.get("type") == "string"
+                                    and "enum" not in field and "const" not in field):
+                                schema = copy.deepcopy(schema)
+                                schema["properties"]["assetId"]["enum"] = [
+                                    "", *[asset["id"] for asset in placement_assets["assets"]]]
                         description = _field(item, "description", "")
                         specs.append({
                             "name": candidate,

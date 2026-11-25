@@ -369,19 +369,25 @@ class CapabilityFabric:
                     score += 16
                 scored.append((-score, ident, record))
         scored.sort(key=lambda x: (x[0], x[1]))
-        # A tiny specialist must not treat arbitrary alphabetical tie-breaks
-        # as an informed choice between different creative write operations.
-        # Return bounded *non-invokable* examples until the brain refines intent.
-        if len(scored) > limit and scored[limit][0] == scored[limit - 1][0]:
-            examples = [{"id": ident, "description": rec["description"][:96],
-                         "access": rec["access"]}
-                        for _, ident, rec in scored[:6]]
-            return {"revision": self.revision, "matches": [],
-                    "has_more": True, "requires_refinement": True,
-                    "candidate_examples": examples,
-                    "candidates_examined": len(candidates)}
+        # Never select an arbitrary subset of an equal-score group. A tie
+        # below complete stronger groups must not erase those groups: return
+        # their entire prefix and withhold the split group. If the top group
+        # itself cannot fit, offer only bounded, non-invokable examples.
+        end = min(limit, len(scored))
+        if end < len(scored) and scored[end][0] == scored[end - 1][0]:
+            boundary_score = scored[end][0]
+            while end and scored[end - 1][0] == boundary_score:
+                end -= 1
+            if not end:
+                examples = [{"id": ident, "description": rec["description"][:96],
+                             "access": rec["access"]}
+                            for _, ident, rec in scored[:6]]
+                return {"revision": self.revision, "matches": [],
+                        "has_more": True, "requires_refinement": True,
+                        "candidate_examples": examples,
+                        "candidates_examined": len(candidates)}
         items = []
-        for _, ident, record in scored[:limit]:
+        for _, ident, record in scored[:end]:
             schema = record["input_schema"]
             props = schema.get("properties")
             param_names = list(props)[:6] if isinstance(props, dict) else []
@@ -391,7 +397,7 @@ class CapabilityFabric:
                           "requires": record["requires"],
                           "may_enable": record["may_enable"]})
         return {"revision": self.revision, "matches": items,
-                "has_more": len(scored) > limit,
+                "has_more": len(scored) > end,
                 "requires_refinement": False,
                 "candidates_examined": len(candidates)}
 
