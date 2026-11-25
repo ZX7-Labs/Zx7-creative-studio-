@@ -37,6 +37,11 @@ jobs:
               *) echo "Unexpected mutation: $file"; exit 2;;
             esac
           done <<< "$actual"
+      - name: Install actual original-source synthetic fixture codec; no model calls
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          command -v ffmpeg
       - name: Install original editor test dependencies; no hosted inference
         run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
       - name: Reproduce and then protect native source-current save behavior
