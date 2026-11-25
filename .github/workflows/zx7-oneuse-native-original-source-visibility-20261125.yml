@@ -1,0 +1,53 @@
+name: ZX7 G1 recovered source-visible native proof — one-use offline
+on:
+  push:
+    branches: [trial/g1-native-source-visibility-reuse-20261125]
+    paths: ['.github/workflows/zx7-oneuse-native-original-source-visibility-20261125.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-native-source-visibility-reuse-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 5
+          submodules: recursive
+      - name: Pin exact previously built source, TDD and current integration
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "62ba49f27873043cf4a274cda955baa13466903f"
+          test "$(git rev-parse HEAD^^)" = "9e0854eb56a9a0b974d1a040399bf6e4efce47c0"
+          test "$(git rev-parse HEAD^^^)" = "acab8c6a7456725b1642274837303f3bb46ac092"
+          test "$(git rev-parse HEAD^^^^)" = "0c7bc0a059317b9c72bba8d024927840f056a92b"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          test "$(git diff --name-only HEAD^^^^ HEAD^^^ | LC_ALL=C sort)" = "$(printf '%s\n' 'studio_next/native_source_acceptance.py' 'studio_next/test_native_source_acceptance.py' | LC_ALL=C sort)"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "scripts/test_run_nvidia_native_trial.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = "scripts/run_nvidia_native_trial.py"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-native-original-source-visibility-20261125.yml"
+          git diff --check HEAD^^^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install genuine physical decoder and actual project dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: Reproduce old missing source bridge under exact test-first source
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/zx7-red" "9e0854eb56a9a0b974d1a040399bf6e4efce47c0"
+          cd "$RUNNER_TEMP/zx7-red"
+          if python -m unittest scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_recovered_original_footage_verifier_binds_live_native_source_without_claiming_pixels -v > "$RUNNER_TEMP/zx7-red.log" 2>&1; then
+            cat "$RUNNER_TEMP/zx7-red.log"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/zx7-red.log"
+          grep -F 'Existing historical original-source verifier is not wired' "$RUNNER_TEMP/zx7-red.log"
+      - name: Verify the old original verifier, current native trial and owner physical delivery together
+        run: |
+          python -m unittest studio_next.test_native_source_acceptance scripts.test_run_nvidia_native_trial studio_next.test_studio_owner_delivery studio_next.test_native_render_evidence -v
