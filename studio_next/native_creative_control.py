@@ -2546,6 +2546,38 @@ class NativeCreativeControl:
                                       "schema_location": ",".join(failures)[:512],
                                       "no_native_dispatch": True})
                         continue
+                # A second creative G1 A/V export must follow an actual
+                # model-selected, host-acknowledged content revision, not
+                # another file with the same reviewed picture and sound.
+                # Preserve a legitimately unverified first render, and scope
+                # this refusal to strict source-bound AV review sessions.
+                if (native_name == RENDER_TOOL and
+                        self._capture_render_project is not None and
+                        self._requires_av_review and
+                        args["inputs"].get("previewOnly") is not True):
+                    reviewed = self._current_export_evidence()
+                    if (reviewed["current_verified"] and
+                            reviewed["current_frames"] and
+                            reviewed["current_full_audio"] and
+                            not reviewed["post_review_write_acknowledged"]):
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "native_second_export_needs_content_revision",
+                            "required_next_action": "model_choose_real_edit",
+                            "verified_first_picture_and_audio_reviewed": True,
+                            "source_content_revision_required": True,
+                            "no_automatic_edit": True,
+                            "no_native_dispatch": True,
+                        }
+                        self._append({"kind": "model_action_rejected", "turn": turn,
+                                      **timing, "tool": native_name,
+                                      "inputs_sha256": hashlib.sha256(
+                                          _wire(args["inputs"]).encode()).hexdigest(),
+                                      "validation_keyword":
+                                          "native_second_export_needs_content_revision",
+                                      "schema_location": "native/reviewed_av_edit_before_second_export",
+                                      "no_native_dispatch": True})
+                        continue
                 # A reviewed A/V export must capture the exact native project
                 # bytes and source closure at the LAST model-confirmed save.
                 # Actual 120B G1 exported three audible films without ever
