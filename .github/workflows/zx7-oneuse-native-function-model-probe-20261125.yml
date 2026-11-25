@@ -20,7 +20,7 @@ jobs:
       - name: Fetch only public source without persisted authentication
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: false
       - name: Refuse changed runtime, replay, foreign branch or unreviewed source
         shell: bash
@@ -28,11 +28,14 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/trial/g1-multimodel-readonly-function-probe-20261125"
           test "$GITHUB_RUN_ATTEMPT" = "1"
-          test "$(git rev-parse HEAD^)" = "abe09a4d8970c6d02b7dd637aaf8ba4dbe344f9f"
-          actual="$(git diff --name-only HEAD^ HEAD)"
+          test "$(git rev-parse HEAD^)" = "89bf9843cf2d5f2e9cd6cfd2406f07b9abd103bf"
+          test "$(git rev-parse HEAD^^)" = "abe09a4d8970c6d02b7dd637aaf8ba4dbe344f9f"
+          actual="$(git diff --name-only abe09a4d8970c6d02b7dd637aaf8ba4dbe344f9f HEAD)"
           test "$actual" = ".github/workflows/zx7-oneuse-native-function-model-probe-20261125.yml"
-          git diff --check HEAD^ HEAD
+          git diff --check abe09a4d8970c6d02b7dd637aaf8ba4dbe344f9f HEAD
           echo "SOURCE_PIN_AND_SINGLE_WORKFLOW_DELTA_VERIFIED"
+      - name: Install repository-declared optional editor test dependency (no provider key)
+        run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
       - name: Offline tests of actual provider-native argument and consent contracts
         run: |
           python -m unittest -v studio_next.test_nvidia_native_tool_model studio_next.test_nvidia_model
