@@ -182,6 +182,11 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
         feedback = compact.get("last_rejected_model_output_feedback")
         if isinstance(feedback, dict) and feedback.pop("return_one_unambiguous_json_object", False):
             feedback["choose_one_offered_function_call"] = True
+            if feedback.get("reason_code") in ("native_function_not_currently_offered",
+                                               "unknown_or_ungranted_native_function"):
+                feedback["native_function_scope"] = (
+                    "Choose one exact name from current_provider_function_names. "
+                    "Historical receipts and tool names are not callable functions.")
             if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID and feedback.get(
                     "reason_code") in ("native_function_inputs_shape",
                                       "native_function_missing_reason"):
@@ -297,14 +302,27 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
         self.last_call_usage = None
         omit_empty_inputs = self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
         functions, mapping = self._tool_surface(context, omit_empty_inputs=omit_empty_inputs)
+        # The actual provider function array is the decision-local authority.
+        # A real host grant or cached search candidate can be temporarily
+        # unavailable (e.g. an already-current save). Do not present stale
+        # names or duplicate input hints as other callable functions.
+        visible = dict(context)
+        visible.pop("actual_granted_native_tools", None)
+        visible.pop("host_selected_native_input_hints", None)
+        visible["available_actions"] = list(dict.fromkeys(action for action, _ in mapping.values()))
+        visible["selectable_native_tools"] = [name for action, name in mapping.values()
+                                              if action == "invoke"]
+        visible["current_provider_function_names"] = list(mapping)
+        if "describe" not in visible["available_actions"]:
+            visible["inspectable_native_tools"] = []
         payload = {
             "model": self.settings.model_id,
             "stream": False,
             # Validated locally and stripped by NvidiaCreativeModel._open_request,
             # NOT advertised as a provider-side JSON Schema guarantee.
             "response_format": {"type": "json_object"},
-            "messages": (self._messages_with_audio(context, images, audio)
-                         if audio else self._messages(context, images)),
+            "messages": (self._messages_with_audio(visible, images, audio)
+                         if audio else self._messages(visible, images)),
             "tools": functions,
             # Omni's required-mode grammar rejects native uniqueItems schemas.
             # Preserve the full schema; the host still requires exactly one typed call.
@@ -337,9 +355,18 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             if not isinstance(calls, list) or len(calls) != 1 or not isinstance(calls[0], dict):
                 raise LocalModelOutputError("missing_or_multiple_native_tool_calls")
             fn = calls[0].get("function")
-            if (not isinstance(fn, dict) or fn.get("name") not in mapping or
-                    type(fn.get("arguments")) is not str):
+            if not isinstance(fn, dict) or type(fn.get("name")) is not str:
+                raise LocalModelOutputError("invalid_native_tool_envelope")
+            if fn["name"] not in mapping:
+                # Distinguish a stale, known host candidate from a fabricated
+                # function without recording the model's arbitrary name.
+                grant_key = ("selectable_native_tools" if context["compact_tool_catalog"]
+                             else "actual_granted_native_tools")
+                if fn["name"] in {_provider_function(name) for name in context[grant_key]}:
+                    raise LocalModelOutputError("native_function_not_currently_offered")
                 raise LocalModelOutputError("unknown_or_ungranted_native_function")
+            if type(fn.get("arguments")) is not str:
+                raise LocalModelOutputError("invalid_native_function_arguments")
             try:
                 args = _model_json(fn["arguments"])
             except ValueError:
