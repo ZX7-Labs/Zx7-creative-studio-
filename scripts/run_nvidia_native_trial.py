@@ -58,7 +58,10 @@ _HOST_ALLOWED = frozenset({
     "save_project", "export_timeline", "move_clips",
 })
 AV_TRIAL_REVISION_TOOLS = frozenset({
-    "add_asset_to_timeline", "add_text_clip", "update_text_clip", "add_shape_clip",
+    # The pinned editor already supports independent title/video layers.
+    # A real 120B A/V trial replaced its last source clip with a title because
+    # this synthetic-only grant did not expose add_track. Do not grant removal.
+    "add_track", "add_asset_to_timeline", "add_text_clip", "update_text_clip", "add_shape_clip",
     "update_shape_clip", "set_clip_style", "move_clips", "set_clip_audio",
 })
 

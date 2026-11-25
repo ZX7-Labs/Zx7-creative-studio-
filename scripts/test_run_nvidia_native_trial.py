@@ -130,6 +130,18 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must not preexist"):
                 prepare_trial(workspace, source=_SOURCE_EDITOR)
 
+    def test_audiovisual_layer_writer_is_reachable_without_destructive_track_grants(self):
+        """Source picture and titles need distinct native lanes, not replacement."""
+        from scripts.run_nvidia_native_trial import AV_TRIAL_REVISION_TOOLS
+        catalog = json.loads((Path(__file__).resolve().parents[1] /
+                              "engines/velorn/editor.example.json").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["allowed_tools"]["add_track"], "write")
+        self.assertIn("add_track", AV_TRIAL_REVISION_TOOLS)
+        self.assertNotIn("add_track", _HOST_ALLOWED)
+        self.assertIn("add_text_clip", AV_TRIAL_REVISION_TOOLS)
+        for destructive in ("remove_track", "delete_clips", "restore_project_checkpoint"):
+            self.assertNotIn(destructive, _HOST_ALLOWED | AV_TRIAL_REVISION_TOOLS)
+
     def test_cloud_media_consent_is_exactly_synthetic_and_bounded(self):
         request_path = (Path(__file__).resolve().parents[1] /
                         "research" / "nvidia-native-trial-request.json")

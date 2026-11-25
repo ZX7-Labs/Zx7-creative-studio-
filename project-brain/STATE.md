@@ -10,7 +10,9 @@
 
 **Confirmed BODY friction RED:** `7639bb0b` [#45432054490](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45432054490) job 138580098913: 2 expected failures among 57 focused tests. After an acknowledged native edit, a full model-selected real timeline inspection still did not renew source revision; another `get_project` inference was required. Candidate preserves the exact installed source writer and last-mile CAS, but allows a matching complete model-chosen timeline READ bracketed by two unchanged trusted source inventories to renew the model-observed revision. No automatic edits/retries, and unknown/incomplete/human-modified state must remain denied. **New-head CI pending; genuine creative/A–L still NOT ACCEPTED.**
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=fbb7413600005603224c98d1d47e0543090beb55` (Git content ID, not security attestation). Historical obsolete narratives archived at previous immutable Git source and evidence index; dated older PASS/RED statuses are historical.
+**2026-11-25 verified grant-topology gap:** [120B continuation #45438344068](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45438344068) produced two physical A/V exports, but a later model-selected text insertion replaced the last source video clip in the final native timeline. Pinned Velorn already implements `add_track` and recommends distinct title tracks; its actual host catalog grants it, but the synthetic A/V trial omitted it. Scoped candidate exposes ONLY existing `add_track` in the synthetic audiovisual mode (no destructive track removal or changes to historical video-only grants), with regression. This makes the operation reachable; no automatic model creative choice or final source-preservation guarantee. **Exact-head CI and genuine retest pending**; not A–L/G1 acceptance.
+
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=db6dff83b74769e729617532db3b330314a19ee1` (Git content ID, not security attestation). Historical obsolete narratives archived at previous immutable Git source and evidence index; dated older PASS/RED statuses are historical.
 
 ## Authority and scope
 

@@ -2,6 +2,10 @@
 
 Evidence statements are source-sha/PR/run scoped; hyperlinks to GitHub Actions artifacts may expire independently of this repository.
 
+## 2026-11-25 — model-facing native overlay writer grant gap
+
+[120B continuation run #45438344068](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45438344068), artifact #14944826536: two physical source-bound exports, but final model-selected title insertion displaced original video on the sole video track. The pinned editor already provides `add_track`; the synthetic A/V host grant omitted this necessary layer operation. Source-grant inspection RED; candidate grants only the existing track creation action for audiovisual trials, not destructive `remove_track` or historical video-only access. This is tool reachability, not guaranteed neural creative behavior. Exact-head CI and real creative retest pending.
+
 ## 2026-11-24 — authentic NVIDIA saved first A/V cut and model-observation BODY friction
 
 - [Real run #45416619151](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45416619151), `0d66d6ae` parent `6e809245`, 48 neural decisions, 111 journal events. ZIP artifact #14933927694 independent SHA256 `d50ff73b458742706ae18db45c06a85ef86c3498761c7f7b52427f6e6ee909e1`, CRC clean. Model independently chose 9 acknowledged writes, explicit save, first physically decoded 640x360 24fps 144-frame H.264 and audible AAC; render-snapshot media sources intact, real export frame observations. **FAIL:** no model-selected post-review edit or distinct second saved export; three safe no-dispatch stale-read refusals at turns 13/23/31 and two truncated provider responses. No private owner media. [Full review comment](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356#issuecomment-7135838198).
