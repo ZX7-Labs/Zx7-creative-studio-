@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "kind": "synthetic-source-bound-audio-no-tools-discrimination",
+  "request_id": "ZX7_OMNI_AUDIO_OBSERVATION_NO_TOOLS_20261125",
+  "source": "19e0dabeec2ed609a5588d63b2e766b7364dc44f",
+  "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "max_total_calls": 4,
+  "max_tokens_per_call": 512,
+  "synthetic_only": true,
+  "cloud_synthetic_wav_allowed": true,
+  "private_media_allowed": false,
+  "native_dispatch_allowed": false,
+  "run_authorized": true,
+  "control_run": 45565428743
+}
