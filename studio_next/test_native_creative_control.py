@@ -3589,6 +3589,57 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     host_tool_access=grants)["journal_chain_structurally_valid"])
                 self.assertFalse(result["native_editing_capability_complete"])
 
+        # The genuine Omni trial imported a source without choosing a
+        # separate get_project read. A validated import ACK, followed by the
+        # existing host-only project reconciliation, must also expose real
+        # IDs. It is NOT an authorization to auto-place or retry clips.
+        class ImportedNativeSource(NativeInventorySession):
+            def __init__(self):
+                super().__init__(count=0)
+                self.tools.append(SimpleNamespace(
+                    name="import_asset_from_path", description="Import native source",
+                    input_schema={"type": "object", "properties": {
+                        "path": {"type": "string"},
+                        "previewOnly": {"type": "boolean"}}}))
+
+            async def call_tool(self, name, args):
+                if name == "import_asset_from_path":
+                    self.calls.append((name, args))
+                    self.asset_count = 1
+                    result = {"success": True, "result": {
+                        "previewOnly": False, "assetId": "asset-native-source-1"}}
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text=json.dumps(result))])
+                return await super().call_tool(name, args)
+
+        imported = ImportedNativeSource()
+        import_model = ScriptedModel([
+            decision("invoke", tool="import_asset_from_path",
+                     inputs={"path": "/original-synthetic.mov",
+                             "previewOnly": False}),
+            decision("finish", summary="Source imported but no film claimed"),
+        ])
+        import_model.requires_native_function_contracts = True
+        import_grants = {"get_project": "read", "get_assets": "read",
+                         "add_asset_to_timeline": "write",
+                         "import_asset_from_path": "write"}
+        imported_result = await NativeCreativeControl(
+            imported, import_model, max_turns=2, catalog_mode="full",
+            host_tool_access=import_grants).run("Choose source import")
+        self.assertEqual(imported_result["status"], "model_finished_unverified")
+        self.assertNotIn("native_placement_assets", import_model.observed[0])
+        self.assertEqual(import_model.observed[1]["native_placement_assets"]["assets"],
+                         [{"id": "asset-native-source-1",
+                           "name": "synthetic-original.mov", "type": "video"}])
+        self.assertEqual(sum(name == "import_asset_from_path"
+                             for name, _ in imported.calls), 1)
+        self.assertEqual(sum(name == "get_assets"
+                             for name, _ in imported.calls), 1)
+        self.assertFalse(any(name == "add_asset_to_timeline"
+                             for name, _ in imported.calls))
+        self.assertTrue(audit_native_journal(imported_result["events"],
+            host_tool_access=import_grants)["journal_chain_structurally_valid"])
+
     async def test_empty_native_project_exposes_import_as_host_option_without_autonomous_execution(self):
         """Actual failure #42420526258: an empty project must expose the
         installed *possible* source import, not pretend the staged media
