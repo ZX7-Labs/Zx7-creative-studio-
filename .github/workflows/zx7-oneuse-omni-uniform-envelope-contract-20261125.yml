@@ -1,0 +1,25 @@
+name: ZX7 isolated Omni uniform native envelope contract
+on:
+  push:
+    branches: [trial/g1-omni-uniform-envelope-contract-20261125]
+    paths:
+      - '.github/workflows/zx7-oneuse-omni-uniform-envelope-contract-20261125.yml'
+      - 'studio_next/test_nvidia_native_tool_model.py'
+      - 'studio_next/nvidia_native_tool_model.py'
+      - 'studio_next/native_editor_session.py'
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+          python -m unittest studio_next.test_nvidia_native_tool_model studio_next.test_nvidia_tool_model studio_next.test_nvidia_model -v
