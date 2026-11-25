@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "kind": "nvidia-synthetic-native-audiovisual-revision",
+  "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "synthetic_only": true,
+  "cloud_synthetic_frames_allowed": true,
+  "cloud_numerical_audio_diagnostics_allowed": true,
+  "owner_media_allowed": false,
+  "max_turns": 48,
+  "request_id": "ZX7_SUPER_VL_G1_REVISED_AFTER_AV_FIRST_20261125",
+  "run_authorized": true
+}
