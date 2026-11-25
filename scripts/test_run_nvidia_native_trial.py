@@ -309,11 +309,34 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         requires, effects = method(granted, fresh=True)
         self.assertEqual(
             set(requires), {"import_asset_from_path", "add_text_clip", "save_project"})
-        self.assertEqual(effects, {"create_project": ["project_open"]})
+        # RED in the previous NVIDIA entry point: the controller already
+        # handled these native machine effects, but the hosted session omitted
+        # the real import/placement frontier after project creation.
+        self.assertEqual(effects, {
+            "create_project": ["project_open"],
+            "import_asset_from_path": ["project_assets_available"],
+        })
         self.assertNotIn("add_asset_to_timeline", requires)
         with_asset = {**granted, "add_asset_to_timeline": "write",
+                      "add_assets_to_timeline": "write",
                       "replace_clip_with_asset": "write"}
-        source_rules, _ = method(with_asset, fresh=True)
+        source_rules, source_effects = method(with_asset, fresh=True)
+        self.assertEqual(source_effects, {
+            "create_project": ["project_open"],
+            "import_asset_from_path": ["project_assets_available"],
+            "add_asset_to_timeline": ["timeline_clips_available"],
+            "add_assets_to_timeline": ["timeline_clips_available"],
+        })
+        self.assertNotIn("replace_clip_with_asset", source_effects)
+        # Missing/read-only grants do not mint new executable possibilities.
+        reduced = {**with_asset, "import_asset_from_path": "read",
+                   "add_assets_to_timeline": "read"}
+        _, reduced_effects = method(reduced, fresh=True)
+        self.assertEqual(reduced_effects, {
+            "create_project": ["project_open"],
+            "add_asset_to_timeline": ["timeline_clips_available"],
+        })
+        self.assertEqual(method(with_asset, fresh=False), ({}, {}))
         self.assertEqual(source_rules["add_asset_to_timeline"],
                          ["project_open", "project_assets_available"])
         self.assertEqual(source_rules["replace_clip_with_asset"],

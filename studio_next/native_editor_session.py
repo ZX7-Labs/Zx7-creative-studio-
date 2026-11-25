@@ -167,9 +167,19 @@ def trial_machine_contracts(grants, *, fresh):
     }
     if grants.get("create_project") != "write":
         raise ValueError("Fresh trial requires the real authorized project creator")
+    # Existing installed machine effects, not a host-authored creative plan.
+    # Only a model-selected actual import can establish an asset; only a
+    # model-selected actual placement can establish an editable clip.
+    possible_effects = {
+        "create_project": ("project_open",),
+        "import_asset_from_path": ("project_assets_available",),
+        "add_asset_to_timeline": ("timeline_clips_available",),
+        "add_assets_to_timeline": ("timeline_clips_available",),
+    }
     return ({name: list(facts) for name, facts in prerequisites.items()
              if grants.get(name) == "write"},
-            {"create_project": ["project_open"]})
+            {name: list(facts) for name, facts in possible_effects.items()
+             if grants.get(name) == "write"})
 
 
 def native_decision_model(args):
