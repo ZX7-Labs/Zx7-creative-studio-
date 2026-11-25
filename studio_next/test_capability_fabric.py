@@ -55,6 +55,27 @@ class CapabilityFabricTests(unittest.TestCase):
         self.assertEqual(fabric.search("create project checkpoint", limit=1)
                          ["matches"][0]["id"], "native/create_project_checkpoint")
 
+    def test_lower_rank_cutoff_tie_does_not_hide_complete_stronger_groups(self):
+        # Broad real-catalog queries can have a decisive match and a large
+        # unrelated tail sharing a single score. Never choose from a split
+        # equal-score group, but do not discard the stronger complete group.
+        leading = [tool("planar_insert", "Project surface tracking"),
+                   tool("planar_mask", "Project surface tracking")]
+        tail = [tool(f"project_{i:02d}", "Project") for i in range(8)]
+        ops = leading + tail
+        fabric = CapabilityFabric({"native": (ops, {t.name: "write" for t in ops})})
+        for limit in (2, 3, 6, 8):
+            with self.subTest(limit=limit):
+                result = fabric.search("planar project", limit=limit)
+                self.assertEqual({x["id"] for x in result["matches"]},
+                                 {"native/planar_insert", "native/planar_mask"})
+                self.assertTrue(result["has_more"])
+                self.assertFalse(result["requires_refinement"])
+                self.assertNotIn("candidate_examples", result)
+        top_tie = fabric.search("planar project", limit=1)
+        self.assertTrue(top_tie["requires_refinement"])
+        self.assertEqual(top_tie["matches"], [])
+
     def test_optional_search_facets_are_actual_host_granted_not_a_tool_manual(self):
         granted = [tool("create_project"), tool("get_timeline"),
                    tool("import_asset_from_path"), tool("add_clip_to_timeline")]
