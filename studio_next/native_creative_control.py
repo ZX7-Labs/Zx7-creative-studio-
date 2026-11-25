@@ -753,6 +753,108 @@ def _native_project_presence_from_text(texts):
     return "unknown"
 
 
+def _model_observed_project_source_identity(texts):
+    """Private stable identity from the real pinned saved-project descriptor.
+
+    Velorn exposes a project path and created timestamp, not a project ID.
+    Never treat unsaved/malformed identifiers as a comparable project.
+    """
+    if _native_active_timeline_id_from_text(texts) is None:
+        return None
+    try:
+        receipt = _strict_receipt(texts, "native project source identity")
+        project = receipt.get("project")
+        if type(project) is not dict:
+            return None
+        location, created = project.get("path"), project.get("created")
+        if (type(location) is not str or not 1 <= len(location) <= 4096 or
+                type(created) is not str or not 1 <= len(created) <= 128):
+            return None
+        return hashlib.sha256(_wire({"path": location, "created": created}).encode()).hexdigest()
+    except NativeCreativeControlError:
+        return None
+
+
+def _model_read_native_source_clip_inventory(texts, *, project_id, active_timeline_id):
+    """Extract exact source-backed media IDs from a complete model-chosen READ.
+
+    Never infer media custody from text/shape clips, incomplete lists, names,
+    filesystem paths, or untrusted project IDs. A missing/malformed field
+    means UNKNOWN, not zero media or missing footage.
+    """
+    if (not isinstance(project_id, str) or not project_id or
+            not isinstance(active_timeline_id, str) or not active_timeline_id):
+        return None
+    try:
+        timeline = _strict_receipt(texts, "model observed native source clips")
+    except NativeCreativeControlError:
+        return None
+    tracks, clips = timeline.get("tracks"), timeline.get("clips")
+    if (timeline.get("id") != active_timeline_id or
+            timeline.get("clipLimitApplied") is not False or
+            type(tracks) is not list or len(tracks) > 256 or
+            type(clips) is not list or len(clips) > 1000):
+        return None
+    def identity(value):
+        return (type(value) is str and 1 <= len(value) <= 128 and
+                value == value.strip() and all(ord(c) >= 32 for c in value))
+    track_ids = set()
+    for track in tracks:
+        if (type(track) is not dict or not identity(track.get("id")) or
+                track["id"] in track_ids or track.get("type") not in ("video", "audio")):
+            return None
+        track_ids.add(track["id"])
+    source_video, source_audio, seen = {}, {}, set()
+    for clip in clips:
+        if type(clip) is not dict or not identity(clip.get("id")):
+            return None
+        cid, ctype, track_id = clip["id"], clip.get("type"), clip.get("trackId")
+        if (cid in seen or not identity(track_id) or track_id not in track_ids or
+                type(ctype) is not str):
+            return None
+        seen.add(cid)
+        if ctype in ("video", "image", "audio"):
+            asset_id = clip.get("assetId")
+            if not identity(asset_id):
+                return None
+            (source_audio if ctype == "audio" else source_video)[cid] = asset_id
+    return {"project_id": project_id, "timeline_id": active_timeline_id,
+            "video": source_video, "audio": source_audio}
+
+
+def _model_observed_native_source_change(before, after):
+    """Bounded facts between two *model-selected* complete native reads.
+
+    A disappeared clip does not prove accidental loss: splits, legitimate
+    replacements and concurrent GUI work can all change clip identities.
+    """
+    if (not isinstance(before, dict) or not isinstance(after, dict) or
+            before.get("project_id") != after.get("project_id") or
+            before.get("timeline_id") != after.get("timeline_id")):
+        return None
+    video_removed = sorted(set(before["video"]) - set(after["video"]))
+    audio_removed = sorted(set(before["audio"]) - set(after["audio"]))
+    video_assets_removed = sorted(set(before["video"].values()) - set(after["video"].values()))
+    return {
+        "status": "compared_model_selected_native_timelines",
+        "source_video_clips_before": len(before["video"]),
+        "source_video_clips_after": len(after["video"]),
+        "source_audio_clips_before": len(before["audio"]),
+        "source_audio_clips_after": len(after["audio"]),
+        "removed_source_video_clip_ids": video_removed[:16],
+        "removed_source_video_clip_count": len(video_removed),
+        "source_video_asset_ids_no_longer_on_timeline": video_assets_removed[:16],
+        "source_video_assets_no_longer_on_timeline_count": len(video_assets_removed),
+        "removed_source_audio_clip_ids": audio_removed[:16],
+        "removed_source_audio_clip_count": len(audio_removed),
+        "source_id_lists_truncated": any(len(a) > 16 for a in
+                                          (video_removed, video_assets_removed, audio_removed)),
+        "may_be_intentional_or_concurrent": True,
+        "no_automatic_repair": True,
+        "does_not_certify_original_media_custody_or_artistic_quality": True,
+    }
+
+
 def _native_timeline_clip_count_from_text(texts):
     """Count only actual active-timeline clips from a coherent host receipt.
 
@@ -959,6 +1061,10 @@ class NativeCreativeControl:
         self._native_read_snapshots: dict[str, dict] = {}
         self._placement_observations: dict[str, tuple[str, Any]] = {}
         self._last_acknowledged_native_write: dict | None = None
+        # Preserve only complete model-selected source IDs across native edits.
+        # A host reconciliation is not a model observation.
+        self._model_observed_native_source_inventory: dict | None = None
+        self._model_observed_native_source_change: dict | None = None
         # Ground project presence only in actual native get_project results,
         # never in model text, metadata discovery, or an earlier session.
         self._project_presence = "unknown"
@@ -990,6 +1096,34 @@ class NativeCreativeControl:
             return
         if origin not in ("model_selected", "bootstrap", "host_reconciliation"):
             raise NativeCreativeControlError("Unrecognized native read provenance")
+        if name == "get_timeline" and origin == "model_selected":
+            # No hidden timeline READ. Only the real Brain-selected,
+            # complete native observation may update these facts.
+            project_snapshot = self._native_read_snapshots.get("get_project")
+            project_id = timeline_id = None
+            if project_snapshot is not None:
+                project_texts = project_snapshot["result_texts"]
+                timeline_id = _native_active_timeline_id_from_text(project_texts)
+                if timeline_id is not None:
+                    project_id = _model_observed_project_source_identity(project_texts)
+            current = _model_read_native_source_clip_inventory(
+                texts, project_id=project_id, active_timeline_id=timeline_id)
+            self._model_observed_native_source_change = (
+                _model_observed_native_source_change(
+                    self._model_observed_native_source_inventory, current)
+                if current is not None else None)
+            self._model_observed_native_source_inventory = current
+        elif name == "get_project" and origin == "model_selected":
+            # A different project can recycle the same timeline ID.
+            # Preserve a baseline only if its project identity remains
+            # coherent and unchanged after this chosen observation.
+            old = self._model_observed_native_source_inventory
+            if old is not None:
+                timeline = _native_active_timeline_id_from_text(texts)
+                pid = _model_observed_project_source_identity(texts)
+                if pid != old["project_id"] or timeline != old["timeline_id"]:
+                    self._model_observed_native_source_inventory = None
+                    self._model_observed_native_source_change = None
         item = {"tool": name, "inputs": copy.deepcopy(inputs),
                 "source": origin, "result_texts": list(texts),
                 "native_read_only_by_host_grant": True,
@@ -1783,6 +1917,10 @@ class NativeCreativeControl:
                     # simultaneous source reads. Host-only get_project checks
                     # MUST NOT erase a native import receipt/asset identity.
                     "last_acknowledged_native_write": self._last_acknowledged_native_write,
+                    # Native original-source fate from two independently
+                    # model-selected complete reads, not a forced check.
+                    "native_source_clip_change_after_observation":
+                        self._model_observed_native_source_change,
                     "native_read_snapshot_cache": list(self._native_read_snapshots.values()),
                     "native_project_presence_from_last_inspection": self._project_presence,
                     # A successful write and a lagging native READ are a
