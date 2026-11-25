@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "kind": "synthetic-observed-asset-schema-route-comparison",
+  "request_id": "ZX7_OBSERVED_ASSET_CONTRACT_COMPARE_20261125",
+  "source": "19e0dabeec2ed609a5588d63b2e766b7364dc44f",
+  "upstream_source": "b3c02adbd5c0779feb8abf34978299e9502cc0e7",
+  "models": [
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b"
+  ],
+  "max_calls_per_model": 2,
+  "max_total_calls": 6,
+  "max_tokens_per_call": 1024,
+  "synthetic_only": true,
+  "private_media_allowed": false,
+  "native_dispatch_allowed": false,
+  "run_authorized": true,
+  "retained_synthetic_run": 45626734881,
+  "retained_artifact_sha256": "a9bfc95a7c3c8d032e6cd083f9583a48085afc918d2fb8d83551ee10384c87ac"
+}
