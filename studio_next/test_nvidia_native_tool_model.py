@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from studio_next.nvidia_native_tool_model import (
     NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
-    NVIDIA_OMNI_AUDIO_MODEL_ID, _provider_function,
+    NVIDIA_OMNI_AUDIO_MODEL_ID, NATIVE_DIRECT_TOOL_SYSTEM, _provider_function,
 )
 from studio_next.nvidia_model import NvidiaConfigurationError, NvidiaModelSettings
 from studio_next.providers import LocalModelOutputError
@@ -113,6 +113,64 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertEqual(sent["remaining_model_output_corrections"], 1)
         self.assertTrue(sent["no_native_dispatch"])
         self.assertTrue(feedback["return_one_unambiguous_json_object"])
+
+    def test_omni_shape_recovery_uses_only_actual_offered_function_fields(self):
+        """Real G1 failure: direct native fields plus extra inputs string.
+
+        Correct only model-visible instructions, NEVER accept ambiguous
+        provider parameters or dispatch an uncertain write.
+        """
+        model = NvidiaNativeToolCreativeModel(
+            NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID, sampling={}),
+            system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+        feedback = {"return_one_unambiguous_json_object": True,
+                    "reason_code": "native_function_inputs_shape",
+                    "no_native_dispatch": True,
+                    "remaining_model_output_corrections": 1}
+        context = dict(_context(), last_rejected_model_output_feedback=feedback)
+        reply = _reply(_provider_function("add_asset_to_timeline"),
+                       '{"assetId":"original","previewOnly":false,"reason":"Place source"}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            selected = model.decide(context)
+        self.assertEqual(selected["arguments"], {
+            "tool": "add_asset_to_timeline",
+            "inputs": {"assetId": "original", "previewOnly": False},
+        })
+        payload = remote.call_args.args[0]
+        native_function = next(
+            x["function"] for x in payload["tools"]
+            if x["function"]["name"] == _provider_function("add_asset_to_timeline"))
+        self.assertEqual(set(native_function["parameters"]["properties"]),
+                         {"assetId", "previewOnly", "reason"})
+        self.assertNotIn("inputs", native_function["parameters"]["properties"])
+        self.assertIn("Use an inputs property ONLY if", payload["messages"][0]["content"])
+        sent = json.loads(payload["messages"][1]["content"])[
+            "last_rejected_model_output_feedback"]
+        self.assertNotIn("required_native_function_arguments", sent)
+        self.assertIn("Do not add inputs unless that property is offered",
+                      sent["native_function_argument_format"])
+        self.assertEqual(sent["remaining_model_output_corrections"], 1)
+        self.assertTrue(sent["no_native_dispatch"])
+        self.assertTrue(feedback["return_one_unambiguous_json_object"])
+
+    def test_omni_missing_reason_recovery_requires_reason_without_inventing_inputs(self):
+        model = NvidiaNativeToolCreativeModel(
+            NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID, sampling={}),
+            system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+        context = dict(_context(), last_rejected_model_output_feedback={
+            "return_one_unambiguous_json_object": True,
+            "reason_code": "native_function_missing_reason",
+            "no_native_dispatch": True,
+            "remaining_model_output_corrections": 1,
+        })
+        reply = _reply(_provider_function("get_project"),
+                       '{"reason":"Inspect current project"}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            model.decide(context)
+        sent = json.loads(remote.call_args.args[0]["messages"][1]["content"])[
+            "last_rejected_model_output_feedback"]
+        self.assertIn("nonempty string reason", sent["native_function_argument_format"])
+        self.assertNotIn("required_native_function_arguments", sent)
 
     def test_selected_indexed_tools_are_the_only_native_functions_and_search_is_available(self):
         context = _context(compact=True)
