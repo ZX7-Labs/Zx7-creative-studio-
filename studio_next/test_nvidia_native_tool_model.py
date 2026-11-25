@@ -200,6 +200,68 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                     model.decide(context)
             opener.assert_not_called()
 
+    def test_wire_context_exposes_only_current_provider_function_surface(self):
+        # The controller may retain a real host grant/search candidate after
+        # a one-shot/current save becomes ineligible. The provider's tools
+        # array is authoritative for this decision, not historical names.
+        import copy
+        for compact in (False, True):
+            with self.subTest(compact=compact):
+                context = _context(compact)
+                context["host_native_tool_contracts"] = [
+                    spec for spec in context["host_native_tool_contracts"]
+                    if spec["name"] == "add_asset_to_timeline"]
+                grant_key = ("selectable_native_tools" if compact
+                             else "actual_granted_native_tools")
+                context[grant_key].append("save_project")
+                context["host_selected_native_input_hints"] = [
+                    {"tool": "save_project", "input_properties": []}]
+                context["last_native_result_texts"] = ["A previous save was acknowledged."]
+                before = copy.deepcopy(context)
+                model = NvidiaNativeToolCreativeModel(
+                    NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+                                        sampling={}),
+                    system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+                with patch.object(model, "_open_request", return_value=_reply(
+                        _provider_function("add_asset_to_timeline"),
+                        '{"assetId":"original","previewOnly":false,"reason":"Place source"}')) as remote:
+                    chosen = model.decide(context)
+                self.assertEqual(chosen["arguments"]["tool"], "add_asset_to_timeline")
+                payload = remote.call_args.args[0]
+                sent = json.loads(payload["messages"][1]["content"])
+                self.assertEqual(sent["current_provider_function_names"],
+                                 [t["function"]["name"] for t in payload["tools"]])
+                self.assertEqual(sent["selectable_native_tools"], ["add_asset_to_timeline"])
+                self.assertEqual(set(sent["available_actions"]),
+                                 {"invoke", "search"} if compact else {"invoke"})
+                self.assertNotIn("actual_granted_native_tools", sent)
+                self.assertNotIn("host_selected_native_input_hints", sent)
+                self.assertEqual(sent["last_native_result_texts"], before["last_native_result_texts"])
+                self.assertEqual(context, before)
+
+    def test_invalid_provider_function_envelopes_have_distinct_value_free_classification(self):
+        context = _context()
+        context["actual_granted_native_tools"].append("save_project")
+        for function, code in (
+            ({"name": _provider_function("save_project"), "arguments": "{}"},
+             "native_function_not_currently_offered"),
+            ({"name": "OWNER_PRIVATE_UNRECOGNIZED_NAME", "arguments": "{}"},
+             "unknown_or_ungranted_native_function"),
+            ({"name": _provider_function("get_project"), "arguments": {"private": "OWNER_PRIVATE"}},
+             "invalid_native_function_arguments"),
+            ({"name": ["OWNER_PRIVATE"], "arguments": "{}"}, "invalid_native_tool_envelope"),
+            ("OWNER_PRIVATE", "invalid_native_tool_envelope"),
+        ):
+            with self.subTest(code=code, shape=type(function).__name__):
+                reply = BytesIO(json.dumps({"choices": [{"finish_reason": "tool_calls",
+                    "message": {"tool_calls": [{"type": "function", "function": function}]}}]}).encode())
+                model = NvidiaNativeToolCreativeModel(system_prompt="Offline test")
+                with patch.object(model, "_open_request", return_value=reply):
+                    with self.assertRaises(LocalModelOutputError) as raised:
+                        model.decide(context)
+                self.assertEqual(raised.exception.code, code)
+                self.assertNotIn("OWNER_PRIVATE", str(raised.exception))
+
     def test_unknown_or_double_tool_call_never_creates_native_decision(self):
         for bad_name, extra in (
             ("unknown_tool", None),

@@ -1,0 +1,27 @@
+name: ZX7 provider current function surface — isolated offline regression
+on:
+  push:
+    branches: [trial/g1-provider-current-function-surface-20261125]
+    paths:
+      - 'studio_next/test_nvidia_native_tool_model.py'
+      - 'studio_next/nvidia_native_tool_model.py'
+      - 'studio_next/providers.py'
+      - '.github/workflows/zx7-oneuse-provider-current-function-surface-20261125.yml'
+permissions:
+  contents: read
+jobs:
+  provider-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+          python -m unittest studio_next.test_nvidia_native_tool_model studio_next.test_nvidia_model studio_next.test_nvidia_tool_model studio_next.test_native_creative_control scripts.test_run_nvidia_native_trial -v
