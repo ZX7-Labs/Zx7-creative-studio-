@@ -1359,7 +1359,17 @@ class NativeCreativeControl:
         self.events.append(event)
 
     def _host_write_already_acknowledged(self, tool: str) -> bool:
-        """Trusted session policy only; previews and model claims are excluded."""
+        """Host-only write frontier; reopen a current save after a genuine edit.
+
+        Real Omni G1 #45553253460 repeated the identical ACKed save_project 42
+        times without an intervening content write. The existing source-bound
+        save witness already distinguishes that no-op from a new native edit.
+        Suppress only a provably current save in a source-capture A/V session:
+        no implicit creative action, no general-workspace single-save policy.
+        """
+        if (tool == "save_project" and self._capture_render_project is not None
+                and self._source_bound_render_save_current() is True):
+            return True
         return (tool in self._host_once_after_ack and
                 any(e.get("kind") == "native_tool_result" and
                     e.get("tool") == tool for e in self.events))
