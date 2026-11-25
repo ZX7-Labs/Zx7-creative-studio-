@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "kind": "synthetic-actual-native-artistic-edit-decision-qualification",
+  "request_id": "ZX7_PINNED_NATIVE_ARTISTIC_CHOICE_20261125",
+  "source": "0c7bc0a059317b9c72bba8d024927840f056a92b",
+  "editor_source": "b3c02adbd5c0779feb8abf34978299e9502cc0e7",
+  "models": [
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b"
+  ],
+  "max_calls_per_model": 2,
+  "max_total_calls": 4,
+  "max_tokens_per_call": 1024,
+  "synthetic_only": true,
+  "private_media_allowed": false,
+  "model_does_not_see_private_brief": true,
+  "native_dispatch_allowed": false,
+  "run_authorized": true
+}
