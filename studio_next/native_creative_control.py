@@ -1563,14 +1563,14 @@ class NativeCreativeControl:
         asset_sensing = (local_indexed_contracts and
             _BATCH_ASSET_PLACEMENT in self._host_verified_top_level_previews and
             self.host_tool_access.get("get_assets") == "read")
-        # The full native-function provider sees installed tool schemas but
-        # previously missed the ALREADY-EXISTING, bounded get_assets read.
-        # Only expose IDs after the Brain itself selected a real get_project
-        # observation; the host-only bootstrap cannot mint model authority.
-        # This is a read-only factual inventory, not a chosen creative step
-        # or write permission (real Omni G1 #45545590934).
-        full_native_asset_sensing = (
-            self.catalog_mode == "full" and
+        # Actual Omni G1 uses --indexed-catalog for WAV; its provider-native
+        # function adapter needs the same already-installed bounded get_assets
+        # observation as full native tool mode. The host-only bootstrap alone
+        # cannot mint model authority: only an explicit model read or ACKed
+        # model-selected import, plus a positive real project asset count,
+        # allows this READ. No ID invention, host-selected edit or new grants.
+        provider_native_asset_sensing = (
+            self.catalog_mode in ("full", "indexed") and
             getattr(self.model, "requires_native_function_contracts", False) is True and
             self.host_tool_access is not None and
             self.host_tool_access.get("get_assets") == "read" and
@@ -1884,7 +1884,7 @@ class NativeCreativeControl:
                     e.get("host_application_write_acknowledged") is True
                     for e in self.events)
                 if ((asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable) or
-                        (full_native_asset_sensing and
+                        (provider_native_asset_sensing and
                          (model_observed_project or model_import_acknowledged) and
                          (self._trusted_project_asset_count() or 0) > 0)):
                     placement_assets = await self._observe_placement_inventory(
