@@ -29,11 +29,15 @@
 3. G1-HUMAN actual manual co-edit, stale proposal refusal and saved/reopened preserved source. G2 held-out comparative adaptive fabric experiment. G3 full A–L independent professional acceptance, G4 legal/security/usability/performance/cold-install release acceptance. All remain OPEN; no whole field certified.
 4. Current BRIEF consent covers bounded synthetic-only hosted trials, not owner-media egress or ordinary CI inference. Full owner BODY attachment remains local-only. Preserve all negative evidence.
 
+## Latest genuine trial and targeted correction
+
+Uniform-wrapped Omni [trial #45565200710](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45565200710) FAILED after two acknowledged writes; independently downloaded ZIP SHA/CRC, 20 journal events, one WAV registered as video, zero editable clips or exports. The exact pinned renderer accepts explicit category ahead of extension inference. Raw rejected placement details were redacted; do not assert an exact native error cause. Reproduced the contradiction on the exact installed host policy and added a pre-dispatch refusal with corrective feedback for existing conventional audio-only files, preserving valid categories, paths and sequence directories. Existing policy/client tests 49/49 PASS locally; new source-head official CI pending. No inferred arguments, new grant, cloud call, genuine success or product acceptance. Latest prior installed BODY ZIP independently verified: all 24 manifest digests and 3 real FFmpeg video decodes passed.
+
 ## Critical-path execution correction
 
 Technical breadth is not the current limiting evidence. Separate provider availability, exact function-schema competence, live native state grounding, semantic audiovisual judgment and completed editable delivery as measured prerequisites. Use the existing synthetic trial harness and held-out task choices; first qualify the actual mixed read/write schema, live IDs and observation/revision decisions in bounded comparable trials, then run a full brief only on a qualified route. A text-only two-call probe is insufficient. Retain exact failures; do not guess arguments, script creative decisions, weaken host validation or treat a skipped real-model job as a pass. Run non-model human/release/fixture work in parallel where independent; do not create new engines or completion frameworks. G1, G2, A–L and release gates remain unchanged. No new inference or independent professional review performed in this checkpoint.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=7712f40d04908fa6d934aa9fa66cb4271c50d176` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=98f785759095dd7f9724bc3253d3841b63a3b805` (Git content ID, not security attestation).
 
 ## Update requirements
 

@@ -128,6 +128,24 @@ class EditorPathPolicy:
                 continue  # Native asset-panel hierarchy, not a host file path.
             if key not in fields or not _scoped_path(arguments[key], fields[key]):
                 return False
+        if tool_name == "import_asset_from_path":
+            # Pinned Velorn prioritizes an explicit category over its extension
+            # inference. Its conventional audio-only extensions must not be
+            # mislabeled as visual assets. This is a format/ABI check, not
+            # proof of media contents, and never rewrites the Brain's input.
+            source = next(arguments[key] for key in ("path", "filePath", "sourcePath")
+                          if arguments.get(key))
+            requested = (arguments.get("category") or arguments.get("type") or
+                         arguments.get("assetType"))
+            if (isinstance(requested, str) and
+                    requested.strip().lower() in ("video", "image", "images") and
+                    Path(source).suffix.lower() in (".wav", ".mp3", ".flac", ".aac", ".aif", ".aiff")):
+                try:
+                    single_file = Path(source).is_file()
+                except OSError:
+                    return False
+                if single_file:
+                    raise EditorPreDispatchError("import_category_mismatch")
         if tool_name == "open_project":
             # The native loader appends one of these names, then follows it
             # through readFile. Checking only the folder misses document links.

@@ -147,6 +147,39 @@ class EditorPolicyTests(unittest.TestCase):
             self.assertFalse(policy(tool, {"path": str(self.media), "sourcePath": "/etc/passwd"}, "write"))
             self.assertFalse(policy(tool, {}, "write"))
 
+    def test_audio_only_import_cannot_be_explicitly_mislabeled_as_visual(self):
+        # Real synthetic PCM WAV, not a fake extension. The pinned editor
+        # otherwise honors category before inferring from the filename.
+        import wave
+        from studio_next.body_editor_client import EditorPreDispatchError
+        audio = self.staging / "recording.WAV"
+        with wave.open(str(audio), "wb") as stream:
+            stream.setnchannels(1)
+            stream.setsampwidth(2)
+            stream.setframerate(8000)
+            stream.writeframes(b"\0\0" * 80)
+        policy = self.policy()
+        for field in ("path", "filePath", "sourcePath"):
+            for category_field in ("category", "type", "assetType"):
+                for category in ("video", "image", "images"):
+                    for preview in (True, False):
+                        args = {field: str(audio), category_field: category,
+                                "previewOnly": preview}
+                        with self.subTest(args=args):
+                            with self.assertRaises(EditorPreDispatchError) as denied:
+                                policy("import_asset_from_path", args, "write")
+                            self.assertEqual(denied.exception.code, "import_category_mismatch")
+            self.assertTrue(policy("import_asset_from_path", {field: str(audio)}, "write"))
+            self.assertTrue(policy("import_asset_from_path", {field: str(audio),
+                            "category": "audio"}, "write"))
+        # Preserve valid source options and the existing sequence-directory route.
+        self.assertTrue(policy("import_asset_from_path", {"path": str(self.media),
+                        "category": "audio"}, "write"))
+        directory = self.staging / "frames.wav"
+        directory.mkdir()
+        self.assertTrue(policy("import_asset_from_path", {"path": str(directory),
+                        "category": "video", "asSequence": True}, "write"))
+
     def test_new_outputs_are_allowed_under_project_or_output_roots_only(self):
         policy = self.policy()
         for root in (self.projects, self.outputs):

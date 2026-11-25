@@ -61,6 +61,7 @@ HOST_REJECTION_FEEDBACK = MappingProxyType({
     "export_readiness_unconfirmed": "Native export was not started. Inspect check_export_readiness before requesting a new export",
     "export_delivery_mismatch": "Native export was not started. Source-computed delivery settings differ from the owner-authorized profile. Inspect check_export_readiness and choose a matching target, resolution, frame rate and range; do not guess from a filename",
     "placement_plan_unconfirmed": "No timeline edit was submitted. Inspect imported assets with get_assets, target tracks with get_timeline, or preview the placement for the editor error",
+    "import_category_mismatch": "No native import was dispatched. A conventional audio-only source file cannot be imported as visual media; omit category for native inference or choose audio.",
     "host_policy_denied": "Native tool rejected by host policy; choose authorized arguments",
     "native_reference_not_in_live_inventory": "No native edit was dispatched. Selected asset, clip or track ID does not exist in the current project; inspect get_timeline and get_assets before choosing.",
     "native_identity_inventory_incomplete": "No native edit was dispatched. Current object inventory was incomplete; inspect source state instead of guessing an ID.",
