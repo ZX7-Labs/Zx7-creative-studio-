@@ -32,6 +32,11 @@ jobs:
           three="$(printf '%s\n' '.github/workflows/zx7-oneuse-native-full-model-asset-inventory-20261125.yml' 'studio_next/native_creative_control.py' 'studio_next/test_native_creative_control.py' | LC_ALL=C sort)"
           test "$actual" = "$two" || test "$actual" = "$three"
           git diff --check 1f95e2f61c80188099cbabfd7a7a8525fb518ecd HEAD
+      - name: Install the existing physically required FFmpeg codec tool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          command -v ffmpeg
       - name: Install exactly repository-declared editor dependencies
         run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
       - name: Execute failing-first actual controller/model native inventory regression
