@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 import unittest
 
-from .native_creative_control import NativeCreativeControl
-from .test_native_creative_control import ScriptedModel, decision
+from studio_next.native_creative_control import NativeCreativeControl
+from studio_next.test_native_creative_control import ScriptedModel, decision
 
 
 class SourceClipFeedbackTests(unittest.IsolatedAsyncioTestCase):
@@ -99,7 +99,7 @@ class SourceClipFeedbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(change["may_be_intentional_or_concurrent"])
         self.assertTrue(change["no_automatic_repair"])
         self.assertEqual(sum(name == "add_text_clip" for name, _ in session.calls), 1)
-        from .native_creative_audit import audit_native_journal
+        from studio_next.native_creative_audit import audit_native_journal
         self.assertTrue(audit_native_journal(
             result["events"], host_tool_access={"get_project": "read",
             "get_timeline": "read", "add_text_clip": "write"},
