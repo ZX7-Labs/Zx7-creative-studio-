@@ -1,0 +1,133 @@
+name: "ZX7 one-use model-native function compatibility (zero media, zero tool dispatch)"
+# An isolated, owner-authorized source-pinned provider audition, NOT regular CI.
+# No model prompt/media from the owner; exactly one POST per model; no writes.
+on:
+  push:
+    branches: [trial/g1-multimodel-readonly-function-probe-20261125]
+    paths:
+      - ".github/workflows/zx7-oneuse-native-function-model-probe-20261125.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zx7-oneuse-model-native-functions-20261125
+  cancel-in-progress: false
+jobs:
+  bounded-readonly-model-audition:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-multimodel-readonly-function-probe-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: Fetch only public source without persisted authentication
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Refuse changed runtime, replay, foreign branch or unreviewed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/trial/g1-multimodel-readonly-function-probe-20261125"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD^)" = "abe09a4d8970c6d02b7dd637aaf8ba4dbe344f9f"
+          actual="$(git diff --name-only HEAD^ HEAD)"
+          test "$actual" = ".github/workflows/zx7-oneuse-native-function-model-probe-20261125.yml"
+          git diff --check HEAD^ HEAD
+          echo "SOURCE_PIN_AND_SINGLE_WORKFLOW_DELTA_VERIFIED"
+      - name: Offline tests of actual provider-native argument and consent contracts
+        run: |
+          python -m unittest -v studio_next.test_nvidia_native_tool_model studio_next.test_nvidia_model
+      - name: Exactly three bounded synthetic model POSTs, no media or actual native dispatch
+        shell: bash
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from studio_next.nvidia_model import NvidiaModelSettings, NvidiaConfigurationError, NvidiaTransportError
+          from studio_next.nvidia_native_tool_model import (
+              NvidiaNativeToolCreativeModel, NATIVE_DIRECT_TOOL_SYSTEM,
+          )
+          from studio_next.providers import LocalModelOutputError, MODEL_OUTPUT_REJECTION_CODES
+
+          # Exact IDs appeared in a credentialed, GET-only NVIDIA catalogue
+          # at GitHub Actions #45530672172 on 2026-11-25. This is NOT a claim
+          # about current serving health, artist skill, audio or image support.
+          models = [
+              "nvidia/nemotron-3.5-super-vl-120b-a12b",
+              "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+              "nvidia/nemotron-3-ultra-550b-a55b",
+          ]
+          context = {
+              "brief": (
+                  "Synthetic function-format probe only. Choose exactly the "
+                  "offered read-only get_project function with a concise reason. "
+                  "No real project, image, audio or editing action is available. "
+                  "Your chosen function will NOT be executed."
+              ),
+              "available_actions": ["invoke"],
+              "compact_tool_catalog": False,
+              "actual_granted_native_tools": ["get_project"],
+              "host_native_tool_contracts": [{
+                  "name": "get_project",
+                  "description": "Read-only inspection of editor project state; do not invent project details.",
+                  "input_schema": {"type": "object", "properties": {}},
+              }],
+          }
+          if not os.environ.get("NVIDIA_API_KEY", "").startswith("nvapi-"):
+              raise SystemExit("Missing operator NVIDIA_API_KEY; zero provider requests")
+          receipts = []
+          for model_id in models:
+              result = {"model_id": model_id, "purpose": "read_only_native_function_compatibility",
+                        "model_requests_maximum": 1, "media_uploads": 0,
+                        "native_dispatches": 0, "artistic_quality_approved": False}
+              try:
+                  # Each model is independent, single-request, 70s/768-token
+                  # bounded; no automatic retry/fallback within a write turn.
+                  options = ({"chat_template_kwargs": {"enable_thinking": False}}
+                             if model_id == models[0] else {})
+                  settings = NvidiaModelSettings(
+                      model_id=model_id, sampling=options,
+                      max_tokens=768, timeout_seconds=70,
+                      max_response_bytes=200000)
+                  model = NvidiaNativeToolCreativeModel(
+                      settings, system_prompt=NATIVE_DIRECT_TOOL_SYSTEM,
+                      allow_image_upload=False)
+                  selected = model.decide(context)
+                  valid = (
+                      selected.get("action") == "invoke"
+                      and isinstance(selected.get("arguments"), dict)
+                      and selected["arguments"].get("tool") == "get_project"
+                      and selected["arguments"].get("inputs") == {}
+                      and isinstance(selected.get("reason"), str)
+                      and bool(selected["reason"].strip()))
+                  result["status"] = "FUNCTION_FORMAT_PASS" if valid else "INVALID_READ_ONLY_SELECTION"
+                  usage = model.last_call_usage or {}
+                  result["usage_tokens"] = {
+                      k: usage[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens")
+                      if type(usage.get(k)) is int and 0 <= usage[k] <= 1000000}
+              except NvidiaTransportError as exc:
+                  # Only provider HTTP code, never response body or headers.
+                  code = re.search(r"HTTP ([0-9]{3})", str(exc))
+                  result["status"] = "PROVIDER_HTTP_" + code.group(1) if code else "PROVIDER_TRANSPORT_FAILURE"
+              except LocalModelOutputError as exc:
+                  code = str(exc)
+                  result["status"] = ("MODEL_PROTOCOL_" + code
+                                      if code in MODEL_OUTPUT_REJECTION_CODES
+                                      else "MODEL_PROTOCOL_REJECTED")
+              except NvidiaConfigurationError:
+                  result["status"] = "LOCAL_MODEL_CONFIGURATION_REFUSED"
+              except Exception:
+                  # No untrusted exception content can be printed publicly.
+                  result["status"] = "UNEXPECTED_PROVIDER_BOUNDARY_ERROR"
+              receipts.append(result)
+          print("ZX7_MODEL_NATIVE_FUNCTION_PROBE " +
+                json.dumps(receipts, sort_keys=True, separators=(",", ":")))
+          # A run can be diagnostically successful even if all models fail.
+          # It MUST NOT become a false green G1/creative claim.
+          if any(x["status"] == "UNEXPECTED_PROVIDER_BOUNDARY_ERROR" for x in receipts):
+              raise SystemExit("Probe suffered an unexpected boundary error")
+          PY
