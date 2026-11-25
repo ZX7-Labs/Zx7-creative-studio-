@@ -1,0 +1,34 @@
+name: ZX7 one-use verified historical footage visibility reuse
+on:
+  push:
+    branches: [trial/g3-existing-source-picture-visibility-proof-20261125]
+    paths: ['.github/workflows/zx7-oneuse-recovered-source-picture-visibility-proof-20261125.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.ref == 'refs/heads/trial/g3-existing-source-picture-visibility-proof-20261125' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 3
+          submodules: recursive
+      - name: Exact source-only old code reuse with no merge into production
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "acab8c6a7456725b1642274837303f3bb46ac092"
+          test "$(git rev-parse HEAD^^)" = "0c7bc0a059317b9c72bba8d024927840f056a92b"
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          test "$(git diff --name-only HEAD^^ HEAD^ | LC_ALL=C sort)" = "$(printf '%s\n' 'studio_next/native_source_acceptance.py' 'studio_next/test_native_source_acceptance.py' | LC_ALL=C sort)"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-recovered-source-picture-visibility-proof-20261125.yml"
+          git diff --check HEAD^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: Verify exact original native visibility logic and current delivery contracts
+        run: |
+          python -m unittest studio_next.test_native_source_acceptance studio_next.test_studio_owner_delivery studio_next.test_native_render_evidence -v
