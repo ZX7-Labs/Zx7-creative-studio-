@@ -162,6 +162,7 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
     """Provider-native function selection, native host grants never broadened."""
 
     requires_native_function_contracts = True
+    _flat_omni_signatures = True
 
     def __init__(self, settings=None, *, system_prompt=None,
                  allow_image_upload=False):
@@ -187,9 +188,10 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                 feedback["native_function_scope"] = (
                     "Choose one exact name from current_provider_function_names. "
                     "Historical receipts and tool names are not callable functions.")
-            if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID and feedback.get(
+            if (self._flat_omni_signatures and self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
+                    and feedback.get(
                     "reason_code") in ("native_function_inputs_shape",
-                                      "native_function_missing_reason"):
+                                      "native_function_missing_reason")):
                 # Omni's actual direct native functions omit an inputs property.
                 # The previous correction prompt falsely told Omni to add
                 # inputs alongside native fields (real failed G1 run
@@ -300,7 +302,8 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
 
     def _call_as_native_tool(self, context, *, images=(), audio=()):
         self.last_call_usage = None
-        omit_empty_inputs = self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
+        omit_empty_inputs = (self._flat_omni_signatures and
+                             self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID)
         functions, mapping = self._tool_surface(context, omit_empty_inputs=omit_empty_inputs)
         # The actual provider function array is the decision-local authority.
         # A real host grant or cached search candidate can be temporarily
@@ -510,3 +513,24 @@ class NvidiaOmniNativeToolCreativeModel(NvidiaNativeToolCreativeModel):
 
     def decide_with_audio(self, context, audio):
         return self._call_as_native_tool(context, audio=audio)
+
+
+class NvidiaUniformWrappedOmniNativeToolCreativeModel(NvidiaOmniNativeToolCreativeModel):
+    """Isolated experimental signature route; unchanged host grants and WAV custody.
+
+    All native function arguments use the existing strict object envelope.
+    Do not normalize flat or mixed arguments into an offered wrapped signature.
+    This trial is not a production default or a model competence claim.
+    """
+
+    _flat_omni_signatures = False
+
+
+NATIVE_UNIFORM_WRAPPED_TOOL_SYSTEM = NATIVE_DIRECT_TOOL_SYSTEM.replace(
+    "Use an inputs property ONLY if it exists in that function's parameter schema;\n"
+    "never mix direct native parameters with an inputs envelope or invent extra keys.\n"
+    "A function with only a reason parameter needs no native inputs.",
+    "Every zx7_native_* function uses an inputs object and a nonempty reason.\n"
+    "Put ALL native parameters inside inputs, never beside it. Use {} when no\n"
+    "native inputs are needed. For host search, describe and finish functions,\n"
+    "use their exact offered fields. Never invent extra keys.")

@@ -622,6 +622,59 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Original cloud WAV"):
                 native_decision_model(args)
 
+    def test_fresh_synthetic_omni_trial_offers_uniform_native_envelope_only(self):
+        from studio_next.native_editor_session import native_decision_model
+        args = SimpleNamespace(
+            provider="nvidia", base_url="http://127.0.0.1:8080",
+            structured_actions=True, model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+            model_timeout=180, allow_cloud_image_upload=True,
+            allow_cloud_original_wav_upload=True, allow_public_research=False,
+            fresh_trial_project=True)
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "nvapi-" + "Q" * 32}):
+            model = native_decision_model(args)
+            args.fresh_trial_project = False
+            ordinary = native_decision_model(args)
+        context = _context()
+        context["last_rejected_model_output_feedback"] = {
+            "reason_code": "native_function_inputs_shape",
+            "return_one_unambiguous_json_object": True,
+            "no_native_dispatch": True}
+        sample = self._wav()
+        digest = hashlib.sha256(sample).hexdigest()
+        context["audio_evidence"] = self._timed_evidence(sample)
+        with patch.object(model, "_open_request", return_value=_reply(
+                _provider_function("get_project"),
+                '{"inputs":{},"reason":"Inspect synthetic sound"}')) as call:
+            result = model.decide_with_audio(context, [("audio/wav", sample)])
+        self.assertEqual(result["arguments"], {"tool":"get_project","inputs":{}})
+        payload = call.call_args.args[0]
+        for tool in payload["tools"]:
+            self.assertEqual(set(tool["function"]["parameters"]["properties"]),
+                             {"inputs","reason"})
+            self.assertEqual(tool["function"]["parameters"]["required"],
+                             ["inputs","reason"])
+        self.assertTrue(model.allow_original_audio_upload)
+        parts = payload["messages"][1]["content"]
+        self.assertEqual(json.loads(parts[1]["text"])["original_wav_sha256"], digest)
+        feedback = json.loads(parts[0]["text"])["last_rejected_model_output_feedback"]
+        self.assertIn("required_native_function_arguments", feedback)
+        self.assertNotIn("native_function_argument_format", feedback)
+        self.assertIn("Every zx7_native_* function uses an inputs object", payload["messages"][0]["content"])
+        for invalid in (
+            '{"reason":"Read"}',
+            '{"assetId":"original","previewOnly":false,"reason":"Place"}',
+            '{"inputs":"{}","assetId":"original","reason":"Invalid"}',
+        ):
+            with self.subTest(invalid=invalid), patch.object(
+                    model, "_open_request", return_value=_reply(
+                        _provider_function("get_project"), invalid)):
+                with self.assertRaisesRegex(LocalModelOutputError, "native_function_inputs_shape"):
+                    model.decide(context)
+        with patch.object(ordinary, "_open_request", return_value=_reply(
+                _provider_function("get_project"), '{"reason":"Read"}')) as call:
+            self.assertEqual(ordinary.decide(context)["arguments"]["inputs"], {})
+        self.assertNotIn("inputs", call.call_args.args[0]["tools"][0]["function"]["parameters"]["properties"])
+
     def test_owner_and_native_parsers_keep_raw_wav_consent_disabled_by_default(self):
         from studio_next.native_editor_session import build_parser as native_parser
         from studio_next.studio_cli import main as owner_main
