@@ -1,0 +1,129 @@
+name: "ZX7 one-use actual NVIDIA optional-field function wrapper ABI (no dispatch)"
+on:
+  push:
+    branches: [trial/g1-omni-ultra-wrapped-function-probe-20261125]
+    paths:
+      - ".github/workflows/zx7-oneuse-wrapped-function-probe-20261125.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zx7-oneuse-omni-ultra-wrapped-20261125
+  cancel-in-progress: false
+jobs:
+  one-inference-per-provider-model:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-omni-ultra-wrapped-function-probe-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Source and one-use consent pinned to exact corrected BODY
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "1f95e2f61c80188099cbabfd7a7a8525fb518ecd"
+          actual="$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)"
+          expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-wrapped-function-probe-20261125.yml' 'research/nvidia-oneuse-wrapped-function-probe-20261125.json' | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          git diff --check HEAD^ HEAD
+          test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+          grep -Fq "name: 'add_track'" third_party/velorn/electron/mcpServer.js
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          j=json.loads(Path('research/nvidia-oneuse-wrapped-function-probe-20261125.json').read_text())
+          assert j=={
+              'schema':1,'kind':'nvidia-source-pinned-readonly-tool-abi-probe',
+              'source_sha':'1f95e2f61c80188099cbabfd7a7a8525fb518ecd',
+              'request_id':'ZX7_WRAPPED_NATIVE_FUNCTION_20261125_1F95',
+              'run_authorized':True,
+              'models':['nvidia/nemotron-3-nano-omni-30b-a3b-reasoning','nvidia/nemotron-3-ultra-550b-a55b'],
+              'max_turns_per_model':1,'synthetic_only':True,
+              'model_native_write_dispatches':0,'media_uploads':0,'owner_media_allowed':False}
+          print('ONEUSE_MODEL_AND_EXACT_SOURCE_ADMITTED')
+          PY
+      - name: Original provider adapter offline tests (no credentials)
+        run: python -m unittest -v studio_next.test_nvidia_model studio_next.test_nvidia_native_tool_model
+      - name: Two source-pinned bounded NVIDIA function-format calls without native tool dispatch
+        shell: bash
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          python - <<'PY'
+          import json, os, re
+          from studio_next.nvidia_model import NvidiaModelSettings, NvidiaTransportError, NvidiaConfigurationError
+          from studio_next.nvidia_native_tool_model import (
+              NvidiaNativeToolCreativeModel, NATIVE_DIRECT_TOOL_SYSTEM,
+              NVIDIA_OMNI_AUDIO_MODEL_ID, _provider_function)
+          from studio_next.providers import LocalModelOutputError
+          if not os.getenv("NVIDIA_API_KEY", "").startswith("nvapi-"):
+              raise SystemExit("No valid operator credential: no remote request")
+          # Mirrors *all four* optional pinned Velorn add_track fields (not
+          # a permission grant). On Omni this exact signature is WRAPPED:
+          # native schema has no required fields; the wrapper must be an
+          # inputs object, never a string or mixed native/direct arguments.
+          schema={"type":"object","properties":{
+              "type":{"type":"string","enum":["video","audio"]},
+              "name":{"type":"string"},
+              "channels":{"type":"string","enum":["mono","stereo"]},
+              "previewOnly":{"type":"boolean"}},
+              "additionalProperties":False}
+          context={
+              "creative_brief":"Pure synthetic ABI check. Do not edit or claim an editor exists. Select the offered add_track function with a reason and inputs specifying type video, name Synthetic Test Layer, and previewOnly true. The selected action will NOT be executed.",
+              "available_actions":["invoke"],
+              "compact_tool_catalog":False,
+              "actual_granted_native_tools":["add_track"],
+              "host_native_tool_contracts":[{
+                  "name":"add_track",
+                  "description":"This is ONLY a synthetic tool-call shape check; no editor is connected.",
+                  "input_schema":schema}],
+              "last_rejected_model_output_feedback":{
+                  "return_one_unambiguous_json_object":True,
+                  "reason_code":"native_function_inputs_shape",
+                  "no_native_dispatch":True,
+                  "remaining_model_output_corrections":1,
+              }
+          }
+          receipts=[]
+          for model_id in (NVIDIA_OMNI_AUDIO_MODEL_ID,"nvidia/nemotron-3-ultra-550b-a55b"):
+              result={"model":model_id,"max_model_requests":1,"native_dispatches":0,
+                      "media_uploads":0,"native_artistic_quality_approved":False}
+              try:
+                  settings=NvidiaModelSettings(model_id=model_id,
+                      sampling=({"chat_template_kwargs":{"enable_thinking":False}}
+                                if model_id==NVIDIA_OMNI_AUDIO_MODEL_ID else {}),
+                      max_tokens=768,timeout_seconds=70,max_response_bytes=250000)
+                  model=NvidiaNativeToolCreativeModel(settings,
+                      system_prompt=NATIVE_DIRECT_TOOL_SYSTEM,allow_image_upload=False)
+                  functions,mapping=model._tool_surface(context,
+                      omit_empty_inputs=model_id==NVIDIA_OMNI_AUDIO_MODEL_ID)
+                  assert len(functions)==1 and list(functions[0]['function']['parameters']['properties'])==['inputs','reason']
+                  chosen=model.decide(context)
+                  inp=chosen.get("arguments",{}).get("inputs")
+                  good=(chosen.get("action")=="invoke"
+                        and chosen.get("arguments",{}).get("tool")=="add_track"
+                        and type(inp) is dict
+                        and inp.get("type")=="video"
+                        and inp.get("name")=="Synthetic Test Layer"
+                        and inp.get("previewOnly") is True
+                        and set(inp)<=set(schema["properties"]))
+                  result["status"]="WRAPPED_FUNCTION_PASS" if good else "UNMATCHED_NATIVE_ARGUMENTS"
+                  result["tokens_reported"]=model.last_call_usage or None
+              except NvidiaTransportError as exc:
+                  code=re.search(r"HTTP ([0-9]{3})",str(exc))
+                  result["status"]="PROVIDER_HTTP_"+code.group(1) if code else "PROVIDER_TRANSPORT_FAILURE"
+              except LocalModelOutputError as exc:
+                  code=getattr(exc,"code",None)
+                  result["status"]="MODEL_PROTOCOL_"+code if isinstance(code,str) and re.fullmatch(r'[a-z0-9_]{1,60}',code) else "MODEL_PROTOCOL_REJECTED"
+              except NvidiaConfigurationError:
+                  result["status"]="LOCAL_MODEL_CONFIGURATION_REFUSED"
+              except Exception:
+                  result["status"]="UNEXPECTED_BOUNDARY_ERROR"
+              receipts.append(result)
+          print("ZX7_REAL_WRAPPED_FUNCTION_ABI "+json.dumps(receipts,separators=(",",":"),sort_keys=True))
+          if not any(x["status"]=="WRAPPED_FUNCTION_PASS" for x in receipts):
+              raise SystemExit("No verified model-compatible optional-native-input envelope; no actual editor action")
+          PY

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "kind": "nvidia-source-pinned-readonly-tool-abi-probe",
+  "source_sha": "1f95e2f61c80188099cbabfd7a7a8525fb518ecd",
+  "request_id": "ZX7_WRAPPED_NATIVE_FUNCTION_20261125_1F95",
+  "run_authorized": true,
+  "models": [
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "nvidia/nemotron-3-ultra-550b-a55b"
+  ],
+  "max_turns_per_model": 1,
+  "synthetic_only": true,
+  "model_native_write_dispatches": 0,
+  "media_uploads": 0,
+  "owner_media_allowed": false
+}
