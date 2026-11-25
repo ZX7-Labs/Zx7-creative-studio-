@@ -30,7 +30,9 @@ NATIVE_DIRECT_TOOL_SYSTEM = """You control a real native creative editor.
 Independently choose original artistic edits from the owner's brief and real
 observations. Use the ACTUAL named functions offered in this request. Each
 zx7_native_* function maps to exactly one installed host-authorized editor
-operation; its native parameters are typed directly or under the inputs field as offered.
+operation; use EXACTLY its offered function parameter names and types.
+Use an inputs property ONLY if it exists in that function's parameter schema;
+never mix direct native parameters with an inputs envelope or invent extra keys.
 A function with only a reason parameter needs no native inputs. Supply your own concise
 reason. You may choose any exposed creative operation; the
 host does not prescribe a shot list or author edits.
@@ -180,11 +182,22 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
         feedback = compact.get("last_rejected_model_output_feedback")
         if isinstance(feedback, dict) and feedback.pop("return_one_unambiguous_json_object", False):
             feedback["choose_one_offered_function_call"] = True
-            if feedback.get("reason_code") == "native_function_inputs_shape":
+            if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID and feedback.get(
+                    "reason_code") in ("native_function_inputs_shape",
+                                      "native_function_missing_reason"):
+                # Omni's actual direct native functions omit an inputs property.
+                # The previous correction prompt falsely told Omni to add
+                # inputs alongside native fields (real failed G1 run
+                # 45544449431). Never relax the strict host parser; tell
+                # the model only how to honor the offered schema.
+                feedback["native_function_argument_format"] = (
+                    "Use exactly the selected function's offered parameter "
+                    "property names. Include a nonempty string reason. "
+                    "Do not add inputs unless that property is offered; "
+                    "never mix direct native fields with an inputs envelope.")
+            elif feedback.get("reason_code") == "native_function_inputs_shape":
                 feedback["required_native_function_arguments"] = {
-                    "inputs": ("use the offered parameters directly or under inputs when offered"
-                               if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
-                               else "object (use {} for no inputs)"),
+                    "inputs": "object (use {} for no inputs)",
                     "reason": "nonempty string"}
         return super()._messages(compact, images)
 

@@ -1,0 +1,35 @@
+name: "ZX7 one-use Omni native-schema recovery (offline, zero inference)"
+on:
+  push:
+    branches: [trial/g1-omni-typed-function-hint-20261125]
+    paths:
+      - ".github/workflows/zx7-oneuse-omni-typed-hint-offline-20261125.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zx7-oneuse-omni-typed-hint-20261125
+  cancel-in-progress: false
+jobs:
+  check-actual-native-provider-contract:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-omni-typed-function-hint-20261125'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify exact production parent and only three targeted changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "e4a4e49db474fdf5081254322c4b169f1ef7c1ee"
+          expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-omni-typed-hint-offline-20261125.yml' 'studio_next/nvidia_native_tool_model.py' 'studio_next/test_nvidia_native_tool_model.py' | LC_ALL=C sort)"
+          actual="$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          git diff --check HEAD^ HEAD
+      - name: Install existing optional editor API boundary (no NVIDIA credentials)
+        run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor]'
+      - name: TDD green using genuine provider decoder and strict adversarial tests
+        run: |
+          python -m unittest -v studio_next.test_nvidia_native_tool_model studio_next.test_nvidia_model
