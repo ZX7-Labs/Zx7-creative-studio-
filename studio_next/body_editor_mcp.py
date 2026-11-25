@@ -59,6 +59,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     from .native_editor_diagnostics import (
         CONTENT_DIAGNOSTICS_TOOL, native_content_diagnostics_source_verified,
         describe_native_text_semantics, inspect_native_content,
+        native_overlay_warning,
     )
     semantic_source = native_source is not None
     if semantic_source and not native_content_diagnostics_source_verified(native_source):
@@ -137,6 +138,15 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 "creative brief supplies the actual permitted root.")
             schema["properties"]["outputPath"]["minLength"] = 1
         declared_description = native[name].get("description") or ""
+        if semantic_source:
+            # Source-pinned Velorn resolves same-track title/shape overlap by
+            # trimming/removing existing footage. The direct NVIDIA adapter
+            # sees only the FIRST 256 chars of this tool description; carry
+            # that factual risk before generic creator text, without changing
+            # native input grammar or authoring an editing decision.
+            declared_description = (native_overlay_warning(
+                name, add_track_granted=grants.get("add_track") == "write") +
+                declared_description)
         if required_export_delivery is not None and name in (
                 "export_timeline", "check_export_readiness"):
             # The direct NVIDIA tool adapter takes only the *first 256*

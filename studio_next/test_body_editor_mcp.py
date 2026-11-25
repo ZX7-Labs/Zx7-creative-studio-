@@ -148,6 +148,54 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 "name": "update_text_clip", "arguments": {"clipId": "native", "text": "Revised"}})
         await self.with_session(check)
 
+    async def test_source_attested_overlay_overwrite_warning_is_in_real_mcp_model_contract(self):
+        """A genuine 120B trial lost original footage after adding a title on its
+        only video lane. Exact source describes overwrite, not an auto-fix.
+        """
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        self.tools = [
+            {"name": "add_track", "description": "Native add track", "inputSchema": {
+                "type": "object", "properties": {"type": {"type": "string"}}}},
+            {"name": "add_text_clip", "description": "Native title", "inputSchema": {
+                "type": "object", "properties": {
+                    "text": {"type": "string"}, "trackId": {"type": "string"},
+                    "transform": {"type": "object", "properties": {
+                        "opacity": {"type": "number"}}},
+                    "animationPreset": {"type": "string", "enum": ["fade", "none"]}},
+                "required": ["text"]}},
+            {"name": "add_shape_clip", "description": "Native shape", "inputSchema": {
+                "type": "object", "properties": {"trackId": {"type": "string"}}}},
+        ]
+        from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel
+
+        async def check(session, *, expected_track_grant):
+            catalog = {t.name: t for t in (await session.list_tools()).tools}
+            for name in ("add_text_clip", "add_shape_clip"):
+                self.assertIn("SAME-TRACK OVERWRITE", catalog[name].description[:256])
+                self.assertIn("original footage", catalog[name].description[:256])
+                if expected_track_grant:
+                    self.assertIn("add_track", catalog[name].description[:256])
+                else:
+                    self.assertIn("not granted", catalog[name].description[:256])
+                    self.assertNotIn("add_track", catalog[name].description[:256])
+                specs, _ = NvidiaNativeToolCreativeModel._tool_surface({
+                    "available_actions": ["invoke"], "compact_tool_catalog": False,
+                    "actual_granted_native_tools": [name],
+                    "host_native_tool_contracts": [{
+                        "name": name, "description": catalog[name].description,
+                        "input_schema": catalog[name].input_schema}]})
+                self.assertIn("SAME-TRACK OVERWRITE", specs[0]["function"]["description"])
+            self.assertFalse(any(r["method"] == "tools/call" for r in self.requests))
+
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={
+            "add_track": "write", "add_text_clip": "write", "add_shape_clip": "write"})
+        await self.with_session(lambda session: check(session, expected_track_grant=True),
+                                native_source=source)
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={
+            "add_text_clip": "write", "add_shape_clip": "write"})
+        await self.with_session(lambda session: check(session, expected_track_grant=False),
+                                native_source=source)
+
     async def test_source_attested_content_diagnostics_reads_native_state_without_writes(self):
         source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
         self.tools = [{"name": "get_timeline", "inputSchema": {
