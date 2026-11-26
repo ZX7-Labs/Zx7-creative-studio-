@@ -17,7 +17,7 @@ from collections.abc import Mapping
 
 from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
-from .body_editor_mcp import _local_schema_references
+from .body_editor_mcp import native_admission_validator
 from .capability_attempts import CapabilityAttemptStore
 from .capability_reference_guard import (
     CapabilityReferenceError, compile_reference_rules, validate_live_references)
@@ -326,8 +326,6 @@ class CapabilityGateway:
                 raise CapabilityExecutionError("Native grant changed before operation")
             current = prior
             schema = copy.deepcopy(record["input_schema"])
-            _local_schema_references(schema)
-            import jsonschema
             if not isinstance(inputs, dict):
                 raise CapabilityPreDispatchError("invalid_input_object", "BODY inputs must be a structured object")
             try:
@@ -336,16 +334,7 @@ class CapabilityGateway:
                 raise CapabilityPreDispatchError("invalid_input_json", "Native model inputs must be finite JSON") from exc
             if len(encoded_inputs) > 262_144:
                 raise CapabilityPreDispatchError("input_budget_exceeded", "Native model inputs exceed bounded ABI budget")
-            # Host-named top-level fields are an ABI. Unspecified top-level
-            # fields invite model hallucinations; intentionally open nested
-            # artistic parameters remain unrestricted by this preflight.
-            if (isinstance(schema.get("properties"), dict) and
-                    "additionalProperties" not in schema and
-                    "patternProperties" not in schema):
-                schema["additionalProperties"] = False
-            validator_type = jsonschema.validators.validator_for(schema)
-            validator_type.check_schema(schema)
-            invalid = next(validator_type(schema).iter_errors(inputs), None)
+            invalid = next(native_admission_validator(schema).iter_errors(inputs), None)
             if invalid is not None:
                 raise CapabilityPreDispatchError("invalid_native_parameters",
                     "Invalid native parameters (" + str(invalid.validator)[:40] + ")")

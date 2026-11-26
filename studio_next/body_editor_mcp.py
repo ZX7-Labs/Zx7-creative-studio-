@@ -37,6 +37,30 @@ def _local_schema_references(schema):
             _local_schema_references(item)
 
 
+def native_admission_validator(schema):
+    """One strict, source-native JSON Schema boundary for every BODY path.
+
+    The advertised native schema remains byte-for-byte unchanged; only
+    model-authored TOP-LEVEL fields outside the declared interface are
+    refused where upstream omitted additionalProperties. Nested artistic
+    data keeps the source's intended extensibility and JSON Schema dialect.
+    This does not grant tools, execute an operation or fetch remote schemas.
+    """
+    import copy
+    import jsonschema
+    if not isinstance(schema, dict):
+        raise ValueError("Native editor schema must be a JSON object")
+    _local_schema_references(schema)
+    admission=copy.deepcopy(schema)
+    if (isinstance(admission.get("properties"),dict)
+            and "additionalProperties" not in admission
+            and "patternProperties" not in admission):
+        admission["additionalProperties"]=False
+    validator=jsonschema.validators.validator_for(admission)
+    validator.check_schema(admission)
+    return validator(admission)
+
+
 def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                          export_verifier=None, frame_observer=None,
                          audio_observer=None, audio_timeline_observer=None,
