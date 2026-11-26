@@ -19,11 +19,12 @@ from .body_editor_client import HOST_REJECTION_FEEDBACK
 from .providers import MODEL_OUTPUT_REJECTION_CODES
 from .body_picture_observation import TOOL as BODY_PICTURE_TOOL
 from .native_render_evidence import (
-    AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, AV_WINDOW_AUDIO_FIELD,
+    DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
     SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES,
     reviewed_render_pair,
-    valid_av_review_values,
+    valid_av_review_values, av_window_audio_values,
 )
 
 
@@ -637,8 +638,12 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if AV_REVIEW_FIELD in event and (not requires_av_review or path is None or
                         access != "read" or not valid_av_review_values(tool, event[AV_REVIEW_FIELD])):
                     raise NativeJournalError("Invalid native audiovisual review evidence")
+                if ((AV_WINDOW_AUDIO_FIELD in event) !=
+                        (tool == ACTIVE_AV_WINDOW and AV_REVIEW_FIELD in event) or
+                        (AV_WINDOW_AUDIO_FIELD in event and av_window_audio_values(event) is None)):
+                    raise NativeJournalError("Invalid combined audiovisual window evidence")
                 if ((AV_PCM_FIELD in event) !=
-                        (tool == AUDIO_ENVELOPE and AV_REVIEW_FIELD in event) or
+                        (tool in (AUDIO_ENVELOPE, ACTIVE_AV_WINDOW) and AV_REVIEW_FIELD in event) or
                         (AV_PCM_FIELD in event and not _sha(event[AV_PCM_FIELD]))):
                     raise NativeJournalError("Invalid decoded audio checksum")
                 if (SAVED_RENDER_FIELD in event) != (SAVED_RENDER_OPTIONS_FIELD in event):

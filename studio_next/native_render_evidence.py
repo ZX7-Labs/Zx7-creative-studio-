@@ -24,6 +24,7 @@ DESTINATION_FIELD = "native_export_destination_sha256"
 SCOPE_FIELD = "native_export_timeline_sha256"
 AV_REVIEW_FIELD = "native_av_review"
 AV_PCM_FIELD = "native_av_pcm_sha256"
+AV_WINDOW_AUDIO_FIELD = "native_av_window_audio"
 SAVED_RENDER_FIELD = "native_render_saved_project_sha256"
 SAVED_RENDER_OPTIONS_FIELD = "native_render_options_sha256"
 SAVED_RENDER_MEDIA_FIELD = "native_render_media_sha256"
@@ -37,7 +38,7 @@ def valid_av_review_values(tool, values):
         return False
     if tool == VERIFY_TOOL:
         return len(values) == 1 and 0 < values[0] <= 300
-    if tool == TIMED_FRAMES:
+    if tool in (TIMED_FRAMES, ACTIVE_AV_WINDOW):
         return 2 <= len(values) <= 4 and all(
             first < second for first, second in zip(values, values[1:]))
     if tool == AUDIO_ENVELOPE:
@@ -54,7 +55,7 @@ def av_review_values(tool, receipt):
                 observation.get("full_picture_and_sound_decoder_completed") is not True):
             return None
         values = [observation.get("duration_seconds")]
-    elif tool == TIMED_FRAMES:
+    elif tool in (TIMED_FRAMES, ACTIVE_AV_WINDOW):
         samples = receipt.get("samples")
         if not isinstance(samples, list) or not all(isinstance(item, dict) for item in samples):
             return None
@@ -77,6 +78,30 @@ def av_review_values(tool, receipt):
     else:
         return None
     return values if valid_av_review_values(tool, values) else None
+
+
+def av_window_audio_values(event):
+    """Both modalities must describe one actual bounded observation window.
+
+    No partial or mismatched receipt can mint full-film evidence. A valid
+    partial window may still be observed; the pair gate checks full coverage.
+    """
+    if event.get("tool") != ACTIVE_AV_WINDOW:
+        return None
+    frames = event.get(AV_REVIEW_FIELD)
+    audio = event.get(AV_WINDOW_AUDIO_FIELD)
+    hashes = event.get("image_sha256")
+    pcm = event.get(AV_PCM_FIELD)
+    if (not valid_av_review_values(ACTIVE_AV_WINDOW, frames) or
+            not valid_av_review_values(AUDIO_ENVELOPE, audio) or
+            not isinstance(hashes, list) or len(hashes) != len(frames) or
+            any(not isinstance(h, str) or not re.fullmatch(r"[a-f0-9]{64}", h)
+                for h in hashes) or
+            not isinstance(pcm, str) or not re.fullmatch(r"[a-f0-9]{64}", pcm) or
+            audio[1] - audio[0] > 30.02 or
+            frames[0] < audio[0] or frames[-1] >= audio[1]):
+        return None
+    return audio
 
 
 def destination_digest(path):
@@ -128,7 +153,7 @@ def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
     rendered, used_destinations, verified = {}, set(), {}
     first_verification = {}
     av_reviews = {}
-    review_tools = {TIMED_FRAMES, AUDIO_ENVELOPE} if audiovisual else FRAME_TOOLS
+    review_tools = {TIMED_FRAMES, AUDIO_ENVELOPE, ACTIVE_AV_WINDOW} if audiovisual else FRAME_TOOLS
     invalidating_reads = FRAME_TOOLS | {VERIFY_TOOL}
     if audiovisual:
         invalidating_reads |= {AUDIO_ENVELOPE}
@@ -199,7 +224,15 @@ def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
                 if not valid_av_review_values(tool, values):
                     continue
                 review = av_reviews.setdefault(path, {})
-                if tool == TIMED_FRAMES:
+                if tool == ACTIVE_AV_WINDOW:
+                    audio_values = av_window_audio_values(event)
+                    if audio_values is None:
+                        continue
+                    # The same model-selected read delivered both original
+                    # receipts. Keep the established two-modality comparator.
+                    review[TIMED_FRAMES] = dict(zip(values, event["image_sha256"]))
+                    review[AUDIO_ENVELOPE] = (*audio_values, event[AV_PCM_FIELD])
+                elif tool == TIMED_FRAMES:
                     hashes = event["image_sha256"]
                     if len(hashes) != len(values):
                         continue

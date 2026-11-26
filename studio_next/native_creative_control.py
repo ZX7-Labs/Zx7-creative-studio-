@@ -31,11 +31,12 @@ from .native_editor_source_pin import (
     source_verified_preview_intent, source_verified_plan_preview_receipt,
 )
 from .native_render_evidence import (
-    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, AV_WINDOW_AUDIO_FIELD,
+    DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
     SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
-    reviewed_av_reference_frame_times, valid_av_review_values,
+    reviewed_av_reference_frame_times, valid_av_review_values, av_window_audio_values,
 )
 
 
@@ -1290,12 +1291,14 @@ class NativeCreativeControl:
                             valid_av_review_values(_VERIFIED_EXPORT_TOOL, values)):
                         durations[destination] = values[0]
             observed = event.get("observed_export_sha256")
-            if (tool == AUDIO_ENVELOPE and destination in by_destination and
+            audio_values = (event.get(AV_REVIEW_FIELD) if tool == AUDIO_ENVELOPE
+                            else av_window_audio_values(event))
+            if (audio_values is not None and destination in by_destination and
                     by_destination[destination] == observed and
                     destination in durations and
-                    valid_av_review_values(AUDIO_ENVELOPE, event.get(AV_REVIEW_FIELD)) and
-                    event[AV_REVIEW_FIELD][0] == 0 and
-                    abs(event[AV_REVIEW_FIELD][1] - durations[destination]) <= 0.02 and
+                    valid_av_review_values(AUDIO_ENVELOPE, audio_values) and
+                    audio_values[0] == 0 and
+                    abs(audio_values[1] - durations[destination]) <= 0.02 and
                     isinstance(event.get(AV_PCM_FIELD), str) and
                     re.fullmatch(r"[a-f0-9]{64}", event[AV_PCM_FIELD])):
                 full_audio.add(observed)
@@ -1311,6 +1314,8 @@ class NativeCreativeControl:
             "current_verified": current_verified,
             "current_frames": frames,
             "current_full_audio": full_audio,
+            "current_short_av_exports": {by_destination[dest] for dest, duration in
+                                         durations.items() if duration <= 30 and dest in by_destination},
             "current_verified_output_count": len(by_destination) + len(unbound),
             "same_export_reverification_count": max(
                 0, verified_receipts - len(distinct_receipts)),
@@ -1859,6 +1864,15 @@ class NativeCreativeControl:
                     self._host_frontier_tools = (
                         [AUDIO_ENVELOPE] + [tool for tool in self._host_frontier_tools
                                              if tool != AUDIO_ENVELOPE])
+                combined_review_pending = (
+                    audio_review_pending and ACTIVE_AV_WINDOW in self.tools and
+                    self.host_tool_access.get(ACTIVE_AV_WINDOW) == "read" and
+                    bool(export_evidence["current_short_av_exports"] -
+                         export_evidence["current_full_audio"]))
+                if combined_review_pending:
+                    self._host_frontier_tools = (
+                        [ACTIVE_AV_WINDOW] + [tool for tool in self._host_frontier_tools
+                                              if tool != ACTIVE_AV_WINDOW])
                 if audio_excerpt_pending:
                     # Retain the existing full-film numeric envelope and real
                     # frame candidates. Offer only the real, permitted WAV
@@ -2057,6 +2071,10 @@ class NativeCreativeControl:
                         "current_audio_observation_read_selectable": (
                             [AUDIO_ENVELOPE] if audio_review_pending and
                             AUDIO_ENVELOPE in visible_selectable else []),
+                        "current_combined_av_review_read_selectable": (
+                            [ACTIVE_AV_WINDOW] if combined_review_pending and
+                            ACTIVE_AV_WINDOW in visible_selectable else []),
+                        "combined_av_review_requires_actual_full_duration_and_separated_frames": True,
                         "audio_observation_is_numeric_not_semantic_hearing": True,
                         "audio_observation_not_automatically_executed": True,
                         "current_source_audio_excerpt_read_selectable": (
@@ -3109,14 +3127,13 @@ class NativeCreativeControl:
                         _source_bound_images(texts, images))
                     audio_evidence = _source_bound_audio(texts, audio)
                     av_values = None
+                    combined_audio = None
                     new_export_sha = None
                     observed_export_sha = None
                     if native_name == ACTIVE_AV_WINDOW:
-                        # A chosen partial A/V window is *not* full-film sound
-                        # listening or a completed audiovisual review. The MCP
-                        # bridge binds both underlying decoder results to the
-                        # same verified video. Check that contract before
-                        # admitting its image evidence into the model context.
+                        # The existing window binds both decoder results to
+                        # one verified video. A partial read never certifies a
+                        # full-film review; numeric audio is not listening.
                         window = _strict_receipt(texts, "targeted A/V window")
                         envelope = window.get("audio_timeline")
                         if (window.get("kind") !=
@@ -3129,7 +3146,13 @@ class NativeCreativeControl:
                                 len(window["samples"]) != len(images) or
                                 not 2 <= len(images) <= 4 or
                                 window.get("numeric_audio_not_semantic_listening") is not True or
-                                window.get("human_or_artistic_quality_approved") is not False):
+                                window.get("human_or_artistic_quality_approved") is not False or
+                                window.get("requested_start_seconds") != args["inputs"].get("start_seconds") or
+                                window.get("requested_duration_seconds") != args["inputs"].get("duration_seconds") or
+                                envelope.get("requested_start_seconds") != window.get("requested_start_seconds") or
+                                envelope.get("requested_duration_seconds") != window.get("requested_duration_seconds") or
+                                [sample.get("sampled_video_seconds_requested")
+                                 for sample in window["samples"]] != args["inputs"].get("frame_seconds")):
                             raise NativeCreativeControlError(
                                 "Targeted window did not bind video and audio to one source")
                     if self._requires_av_review and native_name == TIMED_FRAMES and not images:
@@ -3159,6 +3182,21 @@ class NativeCreativeControl:
                     if self._requires_av_review and native_name in (
                             _VERIFIED_EXPORT_TOOL, TIMED_FRAMES, AUDIO_ENVELOPE):
                         av_values = av_review_values(native_name, p)
+                    elif self._requires_av_review and native_name == ACTIVE_AV_WINDOW:
+                        frames = av_review_values(ACTIVE_AV_WINDOW, p)
+                        envelope = p["audio_timeline"]
+                        audio_values = av_review_values(AUDIO_ENVELOPE, envelope)
+                        # Preserve the actual request, not merely a plausible
+                        # duration asserted by a malformed decoder response.
+                        if (audio_values is not None and
+                                abs((audio_values[1] - audio_values[0]) -
+                                    p["requested_duration_seconds"]) <= 0.02 and
+                                av_window_audio_values({"tool": native_name,
+                                    AV_REVIEW_FIELD: frames, AV_WINDOW_AUDIO_FIELD: audio_values,
+                                    AV_PCM_FIELD: envelope.get("preview_pcm_sha256"),
+                                    "image_sha256": hashes}) is not None):
+                            av_values = frames
+                            combined_audio = audio_values
                 except NativeCreativeControlError as exc:
                     self._append({"kind": "native_observation_rejected", "turn": turn,
                                   "tool": native_name, "error": str(exc),
@@ -3231,6 +3269,9 @@ class NativeCreativeControl:
                     render_binding[AV_REVIEW_FIELD] = av_values
                     if native_name == AUDIO_ENVELOPE:
                         render_binding[AV_PCM_FIELD] = p["preview_pcm_sha256"]
+                    elif native_name == ACTIVE_AV_WINDOW:
+                        render_binding[AV_WINDOW_AUDIO_FIELD] = combined_audio
+                        render_binding[AV_PCM_FIELD] = p["audio_timeline"]["preview_pcm_sha256"]
                 save_capture_failed = False
                 if self._capture_render_project is not None and native_name == "save_project":
                     save_result = host_response.get("result")

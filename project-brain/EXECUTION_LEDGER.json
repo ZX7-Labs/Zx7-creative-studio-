@@ -1355,5 +1355,40 @@
     "retirement": "NOT_READY_FOR_DELETE",
     "consent": "unchanged synthetic-only bounded policy",
     "proof": "no gate accepted by documentation"
+  },
+  "critical_path_coordination_20261127": {
+    "baseline": "c02c2d0b6989eed4b0a9e7232ba79c2e18012221",
+    "source_blobs": {
+      "studio_next/native_render_evidence.py": "bf734855f314bf0d992ed11ba86bab6012f1ccda",
+      "studio_next/native_creative_control.py": "aa6709dc61f8c83f904f747fa3050bce61ae4527",
+      "studio_next/native_creative_audit.py": "72c7be04bf3562ef96531cd0c70fe7f589732e28",
+      "studio_next/body_editor_mcp.py": "ecaaceea4883cde93724f68cd7812a6f7a9e0ee9",
+      "studio_next/test_body_editor_mcp.py": "42beba2ac3c0fd655c715487f3605e5a013564de",
+      "studio_next/test_native_creative_control.py": "56c1de9049586333b553bea8d867ede8622925c2"
+    },
+    "causal_gap": "Existing model-selected AV window delivered source-bound frames and numeric PCM but strict pair gate credited only separate frame/audio calls.",
+    "matched_control": {
+      "decision_turns": 10,
+      "native_calls": 9
+    },
+    "matched_candidate": {
+      "decision_turns": 8,
+      "native_calls": 7
+    },
+    "scope": "Scripted identical evidence fixture only; 20% fewer decision turns, not measured neural speed/cost or artistic quality.",
+    "red": "Combined full coverage exhausted budget on baseline; separate route passed.",
+    "green": "Both routes accepted technical pair, partial/overstated coverage rejected; altered receipt values refused by auditor.",
+    "local": {
+      "eligible_tests": 201,
+      "passed": 201,
+      "limitations": "Broader runs had missing MCP SDK (3) and repository-only scripts (2); not full suite. Added real decoder MCP comparison awaiting CI."
+    },
+    "acceptance": {
+      "professional": false,
+      "genuine_model": false,
+      "exact_source_ci": "PENDING"
+    },
+    "guard": "Existing grants, model-selected action, frame separation, verified duration, actual PCM and hash binding; no semantic listening or approval inferred. No new provider spend.",
+    "next": "Run exact candidate CI including physical MCP comparison, isolate any failure; then qualify provider/model and run comparable genuine synthetic trial only within current one-use consent. Preserve all A-L gates."
   }
 }

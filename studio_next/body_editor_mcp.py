@@ -365,8 +365,9 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 "motion, transition, cutout or sound question. Requires prior "
                 "zx7_verify_native_export on those exact bytes. Numerical "
                 "audio and sparse stills are NOT listening, continuous motion, "
-                "semantic video understanding or artistic approval. Do not "
-                "assume this replaces the full-film audiovisual review."),
+                "semantic video understanding or artistic approval. A window covering "
+                "the independently verified full duration with separated samples can supply "
+                "both technical picture and numeric-audio review receipts; partial windows cannot."),
             inputSchema=av_window_schema)
         validators[observed_av_window_name] = (
             jsonschema.Draft202012Validator(av_window_schema))

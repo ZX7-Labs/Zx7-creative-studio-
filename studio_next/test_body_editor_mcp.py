@@ -1178,6 +1178,36 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 self.assertGreater(max(x["sample_peak_normalized"] for x
                                        in receipt["audio_timeline"]["intervals"]), 0.02)
                 self.assertFalse(receipt["numeric_audio_not_semantic_listening"] is False)
+                from studio_next.native_render_evidence import (
+                    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_REVIEW_FIELD,
+                    AV_WINDOW_AUDIO_FIELD, AV_PCM_FIELD, av_review_values,
+                    av_window_audio_values,
+                )
+                # Full actual three-second source, with the same decoder
+                # evidence as the two existing separate read instruments.
+                full = {**query, "start_seconds": 0, "duration_seconds": 3,
+                        "frame_seconds": [0.5, 1.5, 2.5]}
+                physical = await session.call_tool(ACTIVE_AV_WINDOW, full)
+                self.assertFalse(physical.is_error, physical)
+                proof = json.loads(physical.content[0].text)
+                separate_frames = await session.call_tool(
+                    "zx7_observe_verified_export_samples",
+                    {"path": str(movie), "at_seconds": full["frame_seconds"]})
+                separate_audio = await session.call_tool(AUDIO_ENVELOPE,
+                    {k: full[k] for k in ("path", "start_seconds", "duration_seconds", "bins")})
+                self.assertFalse(separate_frames.is_error, separate_frames)
+                self.assertFalse(separate_audio.is_error, separate_audio)
+                self.assertEqual(proof["samples"], json.loads(separate_frames.content[0].text)["samples"])
+                self.assertEqual(proof["audio_timeline"], json.loads(separate_audio.content[0].text))
+                receipt_event = {
+                    "tool": ACTIVE_AV_WINDOW,
+                    AV_REVIEW_FIELD: av_review_values(ACTIVE_AV_WINDOW, proof),
+                    AV_WINDOW_AUDIO_FIELD: av_review_values(AUDIO_ENVELOPE, proof["audio_timeline"]),
+                    AV_PCM_FIELD: proof["audio_timeline"]["preview_pcm_sha256"],
+                    "image_sha256": [hashlib.sha256(base64.b64decode(block.data)).hexdigest()
+                                     for block in physical.content[1:]],
+                }
+                self.assertEqual(av_window_audio_values(receipt_event), [0, 3])
                 altered = movie.read_bytes() + b"post-verification mutation"
                 movie.write_bytes(altered)
                 failed = await session.call_tool(
