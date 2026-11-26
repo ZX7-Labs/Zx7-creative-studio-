@@ -55,6 +55,62 @@ def checkpoint_saved_project(project: Path, destination: Path, *, max_bytes=None
             "sha256": digest.hexdigest()}
 
 
+def _saved_creative_content_sha256(document):
+    """Fingerprint every saved native field except two editor autosave clocks.
+
+    A timer-only native autosave can bump project/timeline 'modified' with no
+    artistic change. Keep every other field (including inactive timelines,
+    effects and source identities) in the fingerprint; do NOT replace this
+    with a heuristic media/clip-count equality check.
+    """
+    if (not isinstance(document, dict) or
+            not isinstance(document.get("modified"), str) or
+            not isinstance(document.get("timelines"), list)):
+        raise ValueError("Native save lacks a complete project and timelines")
+    clone = json.loads(json.dumps(document, allow_nan=False))
+    clone.pop("modified")
+    for timeline in clone["timelines"]:
+        if not isinstance(timeline, dict):
+            raise ValueError("Native save contains an invalid timeline")
+        timeline.pop("modified", None)
+    canonical = json.dumps(clone, sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False, allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def capture_acknowledged_save_identity(projects_root, snapshots_root, saved,
+                                       *, expected_project=None):
+    """Anchor a model-ACKed native save *before* idle autosave can rewrite clocks.
+
+    One immutable save checkpoint is taken by the trusted host, not by the
+    Brain. Never auto-save, retry an uncertain native write, or reuse a
+    checkpoint for a different owner-selected project.
+    """
+    if not isinstance(saved, dict):
+        raise ValueError("Native model save lacks trusted acknowledgement")
+    raw_path, modified = saved.get("path"), saved.get("modified")
+    if (not isinstance(raw_path, str) or not raw_path or
+            not isinstance(modified, str) or not modified):
+        raise ValueError("Native model save lacks project identity")
+    project = Path(raw_path)
+    if not project.is_absolute() or not project.is_relative_to(projects_root):
+        raise ValueError("Model saved outside the host-owned project root")
+    if expected_project is not None and project != Path(expected_project):
+        raise ValueError("Native model save differs from the owner-selected project")
+    if snapshots_root.is_symlink() or not snapshots_root.is_dir():
+        raise ValueError("Native immutable save root is unavailable")
+    identity_hash = hashlib.sha256((raw_path + "\0" + modified).encode()).hexdigest()
+    snapshot = snapshots_root / ("save-" + identity_hash + ".comfystudio")
+    checkpoint_saved_project(project, snapshot, max_bytes=16 * 1024 * 1024)
+    document = _load_json(snapshot.read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or document.get("modified") != modified:
+        raise ValueError("Native save bytes differ from the acknowledged revision")
+    from .studio_owner_delivery import _verify_native_project_media_closure
+    media = _verify_native_project_media_closure(project, document)
+    return (raw_path, modified, _saved_creative_content_sha256(document),
+            media["native_media_observation_sha256"])
+
+
 def capture_render_project(projects_root, snapshots_root, response, binding, save_identity,
                            *, expected_project=None):
     """Preserve the acknowledged native document for this owner's render.
@@ -71,8 +127,21 @@ def capture_render_project(projects_root, snapshots_root, response, binding, sav
     saved = checkpoint_saved_project(project, destination, max_bytes=16 * 1024 * 1024)
     document = _load_json(destination.read_text(encoding="utf-8"))
     timeline = document.get("currentTimelineId") if isinstance(document, dict) else None
-    if (not isinstance(document, dict) or save_identity != (str(project), document.get("modified"))
-            or document.get("modified") is None):
+    if (not isinstance(document, dict) or
+            not isinstance(document.get("modified"), str)):
+        raise ValueError("Render snapshot differs from the last acknowledged save")
+    # Legacy two-field receipts remain strict. Only a trusted four-field,
+    # physically captured save witness can tolerate native autosave clock
+    # drift, and then ONLY when all creative fields remain identical.
+    bound_save = type(save_identity) is tuple and len(save_identity) == 4
+    if bound_save:
+        if (save_identity[0] != str(project) or
+                not isinstance(save_identity[1], str) or
+                not all(isinstance(item, str) and len(item) == 64
+                        for item in save_identity[2:]) or
+                _saved_creative_content_sha256(document) != save_identity[2]):
+            raise ValueError("Render content differs from the last acknowledged save")
+    elif save_identity != (str(project), document.get("modified")):
         raise ValueError("Render snapshot differs from the last acknowledged save")
     if timeline_scope_digest(str(project), timeline) != binding[SCOPE_FIELD]:
         raise ValueError("Saved active timeline differs from the render receipt")
@@ -88,6 +157,8 @@ def capture_render_project(projects_root, snapshots_root, response, binding, sav
     # Current media presence and size alone cannot detect post-export swaps.
     from .studio_owner_delivery import _verify_native_project_media_closure
     media = _verify_native_project_media_closure(project, document)
+    if bound_save and media["native_media_observation_sha256"] != save_identity[3]:
+        raise ValueError("Render media differs from the last acknowledged save")
     return (saved["sha256"], hashlib.sha256(settings).hexdigest(),
             media["native_media_observation_sha256"])
 
