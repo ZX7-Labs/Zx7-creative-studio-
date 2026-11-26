@@ -12,6 +12,8 @@ on:
       - 'studio_next/capability_gateway.py'
       - 'studio_next/capability_mcp_session.py'
       - 'engines/velorn/unified-owner-e2e.py'
+      - 'engines/velorn/install-ci-dependencies.sh'
+      - 'scripts/test_velorn_ci_media_mirror.py'
       - 'studio_next/body_motion_project.py'
       - 'studio_next/body_motion_worker.py'
       - 'studio_next/body_motion_proof.py'
@@ -44,7 +46,8 @@ jobs:
           python -m py_compile studio_next/native_editor_session.py \
             studio_next/studio_cli.py studio_next/test_owner_body_tools.py \
             studio_next/test_studio_cli.py
-          python -m unittest studio_next.test_owner_body_tools \
+          python -m unittest scripts.test_velorn_ci_media_mirror \
+            studio_next.test_owner_body_tools \
             studio_next.test_studio_cli \
             studio_next.test_body_capability_adapter \
             studio_next.test_capability_mcp_session -v
