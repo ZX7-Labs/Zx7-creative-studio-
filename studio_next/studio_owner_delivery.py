@@ -402,6 +402,7 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
     if type(snapshots_required) is not bool:
         raise ValueError("Malformed owner render snapshot requirement")
     snapshot_bound = False
+    raw_final_snapshot_match = False
     if snapshots_required:
         expected_snapshot_hashes = result.get("reviewed_native_snapshot_sha256")
         if (type(expected_snapshot_hashes) is not list or
@@ -448,7 +449,9 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
             raise ValueError("Native snapshots do not establish an editable revision")
         if content_revisions[0] == content_revisions[1]:
             raise ValueError("Native snapshots differ only by autosave metadata; no content revision")
-        if revisions[-1] != saved_sha:
+        raw_final_snapshot_match = revisions[-1] == saved_sha
+        if (not raw_final_snapshot_match and
+                _native_revision_content(native_doc) != content_revisions[-1]):
             raise ValueError("Final saved native source differs from the reviewed render")
         if (native_media_observation["native_media_observation_sha256"] !=
                 expected_media_hashes[-1]):
@@ -465,7 +468,11 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         "original_media_visible_in_exports_proven": False,
         "editable_native_project_relative_to_workspace": str(saved.relative_to(root)),
         "editable_native_project_sha256": saved_sha,
-        "saved_native_matches_last_render_snapshot": snapshot_bound,
+        "saved_native_matches_last_render_snapshot": (
+            snapshot_bound and raw_final_snapshot_match),
+        "saved_native_content_matches_last_render_snapshot": snapshot_bound,
+        "native_clock_only_drift_after_render": (
+            snapshot_bound and not raw_final_snapshot_match),
         "native_media_matches_final_render_capture": snapshot_bound,
         "render_snapshot_media_closure_verified": snapshot_bound,
         "native_render_snapshot_match_not_tested": not snapshots_required,
