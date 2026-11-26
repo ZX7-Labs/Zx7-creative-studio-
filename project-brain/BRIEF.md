@@ -20,6 +20,10 @@ Maintain one coherent native workspace and host-granted capability boundary; use
 
 First accepted native platform: Ubuntu 24.04 x86-64; mobile/remote and full A–L remain planned, not discarded. The immediate vertical is video/NLE (C) including A/B/F/G/I/J dependencies. Multilingual, worldwide, high-quality public creative research without required API keys remains a product requirement; current built-in Wikipedia reach alone does not satisfy global full-web research.
 
+## Owner priority — 26 November 2026
+
+Pause feature development until repository consolidation is verified. One canonical working branch, clear document ownership, existing useful source reused without duplication, exact branch recovery and behavior reconciliation before any branch deletion. This changes work sequencing only, not A–L, professional acceptance or consent. No model trial required for cleanup. Owner will decide deletion after verification; agents must not delete refs.
+
 ## Hard acceptance gates
 
 1. Genuine model independently chooses nontrivial original work from a natural-language brief without engineer-written creative action scripts; actual typed native tools and original-rights media are used.

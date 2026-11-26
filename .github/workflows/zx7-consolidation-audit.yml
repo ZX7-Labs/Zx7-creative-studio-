@@ -1,0 +1,133 @@
+name: ZX7 consolidation — exact branch variants and recovery
+on:
+  push:
+    branches: [workstream/g1-existing-owner-project-av-snapshot-20261115]
+    paths: [".github/workflows/zx7-consolidation-audit.yml"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+      - name: Fetch every live branch and pin snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
+          mkdir -p "${RUNNER_TEMP}/zx7-consolidation"
+          git ls-remote --heads origin | sort > "${RUNNER_TEMP}/zx7-consolidation/remote-before.tsv"
+      - name: Classify every branch-only changed path against canonical tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections, csv, hashlib, json, os, pathlib, subprocess
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'zx7-consolidation'
+          def git(*args):
+              return subprocess.check_output(['git', *args])
+          def tree(ref):
+              result = {}
+              for raw in git('ls-tree', '-rz', ref).split(b'\0'):
+                  if raw:
+                      meta, path = raw.split(b'\t', 1)
+                      result[os.fsdecode(path)] = tuple(meta.decode('ascii').split())
+              return result
+          baseline = git('rev-parse', 'HEAD').decode().strip()
+          current = tree(baseline)
+          expected = {r.removeprefix('refs/heads/'):s for s,r in
+                      (l.split('\t') for l in (out/'remote-before.tsv').read_text().splitlines())}
+          refs = {}
+          for line in git('for-each-ref', '--format=%(refname)%09%(objectname)%09%(symref)', 'refs/remotes/origin').decode().splitlines():
+              ref, sha, symref = line.split('\t')
+              if not symref:
+                  refs[ref.removeprefix('refs/remotes/origin/')] = sha
+          assert refs == expected and len(refs) >= 478, 'Ref drift or missing refs'
+          cache = {baseline:current}
+          def gettree(ref):
+              if ref not in cache:
+                  cache[ref] = tree(ref)
+              return cache[ref]
+          rows, variants = [], {}
+          md = collections.defaultdict(set)
+          for i,(name,tip) in enumerate(sorted(refs.items())):
+              bases = git('merge-base', '--all', baseline, tip).decode().splitlines()
+              assert bases, 'Unrelated branch requires explicit review'
+              prev, other = gettree(bases[0]), gettree(tip)
+              ids, counts = [], collections.Counter()
+              for path,obj in other.items():
+                  if path.lower().endswith('.md'):
+                      md[path].add(obj[2])
+              for path in sorted(prev.keys() | other.keys()):
+                  a,b,c = prev.get(path),other.get(path),current.get(path)
+                  if a == b:
+                      continue
+                  d = ('exact_current' if b == c else 'branch_only_candidate' if a == c
+                       else 'different_on_both_review_required')
+                  if len(bases) > 1 and b != c:
+                      d = 'multiple_merge_bases_review_required'
+                  counts[d] += 1
+                  vid = hashlib.sha256(json.dumps([path,a,b,c],ensure_ascii=True,separators=(',',':')).encode()).hexdigest()
+                  v = variants.setdefault(vid,dict(path=path,merge_base_object=a,branch_object=b,
+                      canonical_object=c,dispositions=[],branches=[],example_tip=tip))
+                  if d not in v['dispositions']:
+                      v['dispositions'].append(d)
+                  v['branches'].append(name)
+                  ids.append(vid)
+              left,right = map(int,git('rev-list','--left-right','--count',baseline+'...'+tip).split())
+              rows.append(dict(branch=name,tip=tip,merge_bases=bases,ahead=right,behind=left,
+                               changes=dict(counts),variant_ids=ids))
+              if (i+1)%50 == 0:
+                  print('Exact object triples reviewed:',i+1,flush=True)
+          assert {r['branch']:r['tip'] for r in rows} == refs
+          for path,obj in current.items():
+              if path.lower().endswith('.md'):
+                  md[path].add(obj[2])
+          unresolved = {k:v for k,v in variants.items() if any(d!='exact_current' for d in v['dispositions'])}
+          for filename,data in [('all-branches.json',rows),('all-variants.json',variants),
+                                ('markdown-variants.json',{k:sorted(v) for k,v in sorted(md.items())})]:
+              (out/filename).write_text(json.dumps(data,ensure_ascii=True,separators=(',',':')))
+          with (out/'review-candidates.tsv').open('w',newline='') as f:
+              w=csv.writer(f,delimiter='\t')
+              w.writerow(['variant','path','branch_count','tip','base','branch','canonical','classification'])
+              for k,v in sorted(unresolved.items(),key=lambda kv:(kv[1]['path'],kv[0])):
+                  w.writerow([k,v['path'],len(v['branches']),v['example_tip'],v['merge_base_object'],
+                              v['branch_object'],v['canonical_object'],','.join(v['dispositions'])])
+          summary=dict(source=baseline,branches=len(refs),distinct_tips=len(set(refs.values())),
+                       branch_path_variants=len(variants),review_candidates=len(unresolved),
+                       canonical_markdown=sum(k.lower().endswith('.md') for k in current),
+                       historical_markdown_paths=len(md),historical_markdown_path_blob_variants=sum(map(len,md.values())),
+                       exact_tip_and_path_inventory_only=True,deletion_approved=False)
+          (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print(json.dumps(summary,sort_keys=True))
+          PY
+      - name: Recover all exact branch tips in independent bare repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/zx7-consolidation"
+          mapfile -t refs < <(git for-each-ref --format='%(refname) %(symref)' refs/remotes/origin | awk 'NF==1 {print $1}')
+          test "${#refs[@]}" -ge 478
+          git bundle create "$out/branch-history.bundle" "${refs[@]}"
+          git bundle verify "$out/branch-history.bundle"
+          git init --bare "${RUNNER_TEMP}/zx7-restore.git"
+          git -C "${RUNNER_TEMP}/zx7-restore.git" fetch "$out/branch-history.bundle" '+refs/remotes/origin/*:refs/heads/*'
+          git -C "${RUNNER_TEMP}/zx7-restore.git" fsck --full --no-reflogs
+          git -C "${RUNNER_TEMP}/zx7-restore.git" for-each-ref --format='%(objectname)%09%(refname)' refs/heads | sort > "$out/restored.tsv"
+          diff -u "$out/remote-before.tsv" "$out/restored.tsv"
+          git ls-remote --heads origin | sort > "$out/remote-after.tsv"
+          diff -u "$out/remote-before.tsv" "$out/remote-after.tsv"
+          sha256sum "$out/branch-history.bundle" > "$out/bundle.sha256"
+          printf 'Every exact remote head restored; no ref deleted. Semantic review still required.\n' > "$out/RESTORE-RESULT.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zx7-consolidation-exact-tip-audit
+          path: ${{ runner.temp }}/zx7-consolidation/
+          retention-days: 30
+          if-no-files-found: error

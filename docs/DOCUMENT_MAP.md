@@ -1,84 +1,55 @@
-# ZX7 documentation and source-of-truth map
+# ZX7 document map — one owner per responsibility
 
-> This is a **navigation and conflict-prevention index**, NOT a status ledger or additional scope authority. Original requirements, creative-fabric concepts, accepted source and Git/PR history remain intact. Historic documents and rejected options are **retained as evidence, not reread as active work orders**. Do not choose one interpretation silently if two original owner requirements genuinely conflict.
+Read [AGENTS](../AGENTS.md), [BRIEF](../project-brain/BRIEF.md), [STATE](../project-brain/STATE.md), relevant ledger/blueprint sections first. Original owner requirements are authoritative; dated evidence and research do not create current work orders.
 
-## Resolution order — no new version of the product
+## Fixed scope and method
 
-1. **Owner's original fixed intent:** [CAPABILITIES.md](../CAPABILITIES.md) and [ENGINEERING_STANDARD.md](../ENGINEERING_STANDARD.md), plus original full [Master Plan](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md), contain the underlying requirements; [BRIEF](../project-brain/BRIEF.md) holds an explicit current owner delta. Use the owner's latest *specific* change on that issue, not an assistant-authored paraphrase that changes the goal.
-2. **One implementation crosswalk:** [BUILD_BLUEPRINT.md](BUILD_BLUEPRINT.md) organizes that same fixed product for coding. It **must not add scope, supersede an original requirement, or declare an unproven CSF architecture mandatory**. Repair an actual crosswalk conflict against source before coding.
-3. **Mutable engineering facts:** [STATE](../project-brain/STATE.md), [EXECUTION_LEDGER](../project-brain/EXECUTION_LEDGER.json), [EVIDENCE](../project-brain/EVIDENCE/INDEX.md), [FAILURES](../project-brain/EVIDENCE/FAILURE_REGISTER.md) and live GitHub. A dated snapshot is **never** proof of current source or a passed model/artistic acceptance.
-4. **Archive:** older `STATUS.md`, early research plans, historical PR and old code-head test statements remain retrievable but cannot override 1–3. If the owner's actual requirements genuinely contradict, present the precise conflicting lines rather than inventing a choice.
+| File | Role |
+|---|---|
+| [AGENTS](../AGENTS.md) | Engineering entry and work rules |
+| [CAPABILITIES](../CAPABILITIES.md) | Original A–L owner contract; owner delta only |
+| [ENGINEERING_STANDARD](../ENGINEERING_STANDARD.md) | Original quality mandate |
+| [BUILD_BLUEPRINT](BUILD_BLUEPRINT.md) | Implementation crosswalk, not new scope |
+| [Master Plan](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) | Original rationale, G0–G4/T01–T24; G2 hypothesis |
+| [BRIEF](../project-brain/BRIEF.md) | Owner deltas, consent and sequence |
+| [Working agreement](continuity/WORKING_AGREEMENT.md) | Stable collaboration method |
 
-**Token and time rule:** a new coding session normally needs only AGENTS + the relevant blueprint section + current BRIEF/STATE/LEDGER + affected source. Read full original documents, decisions or 30 Markdown files **when tracing a specific conflict**, not on every turn. Updating a test or adding a PR is not a reason to rewrite the goal.
+## Current engineering memory
 
-## The two lanes (read in this order)
+| File | Responsibility |
+|---|---|
+| [Project Brain README](../project-brain/README.md) | Read/update protocol only |
+| [STATE](../project-brain/STATE.md) | **Sole compact human status**, working branch, next outcome |
+| [EXECUTION_LEDGER](../project-brain/EXECUTION_LEDGER.json) | Typed same-revision status; exact Git blob bound to STATE |
+| [PROJECT_MAP](../project-brain/PROJECT_MAP.md) | Source responsibilities/architecture |
+| [DECISIONS](../project-brain/DECISIONS.md) | Append-only decisions/supersession |
+| [RISKS](../project-brain/RISKS.md) | Active risk, falsifiable exit |
+| [EVIDENCE INDEX](../project-brain/EVIDENCE/INDEX.md) | Exact positive/negative receipt retrieval |
+| [FAILURE_REGISTER](../project-brain/EVIDENCE/FAILURE_REGISTER.md) | Causal failures and comparable retests |
 
-**LOCKED / NORMS / BUILD:** [BUILD_BLUEPRINT](BUILD_BLUEPRINT.md) is the single implementation-facing fixed build plan. Underlying owner authority remains [CAPABILITIES](../CAPABILITIES.md), [ENGINEERING_STANDARD](../ENGINEERING_STANDARD.md), [AGENTS](../AGENTS.md), [BRIEF](../project-brain/BRIEF.md) and [Master Plan](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md). Only an explicit owner delta or carefully recorded evidence-backed supersession changes normative scope. Creative fabric as outcome is locked; the CSF implementation hypothesis is not.
+## Usage and historical references
 
-**CHANGING / EVIDENCE:** [current STATE](../project-brain/STATE.md) + [typed execution ledger](../project-brain/EXECUTION_LEDGER.json) identify active priority, scope of proven foundations, the failed trials and the next acceptance gate. [RISKS](../project-brain/RISKS.md), [failure forensic register](../project-brain/EVIDENCE/FAILURE_REGISTER.md), [EVIDENCE INDEX](../project-brain/EVIDENCE/INDEX.md) and real Git/Actions runs hold causal and historical proof; [DECISIONS](../project-brain/DECISIONS.md) is append-only rationale. Refresh current main/PRs/CI before acting on a snapshot.
+| File | Role |
+|---|---|
+| [README](../README.md) | Public install/use |
+| [Native Velorn README](../engines/velorn/README.md) | Pinned editor setup/source variants |
+| [NVIDIA BYOK](nvidia-byok.md) | Optional provider setup; BRIEF owns consent |
+| [Browser research README](../research/browser-engine/README.md) | Bounded optional probe |
+| [Architecture](architecture.md) | Historical source-grounded design |
+| [Reuse research](reuse-research.md) | Engine/source comparisons |
+| [Video research plan](video-research-plan.md) | Historical route; do not restart |
+| [Universal execution architecture](zx7-universal-execution-architecture.md) | Historical ADR |
+| [HANDOFF](HANDOFF.md) | Retired pointer; original in Git |
+| [Continuity STATUS](continuity/STATUS.md) | Retired pointer; original in Git |
+| [Resume prompt](continuity/RESUME_PROMPT.md) | Minimal entry |
+| [15 Nov STATE archive](../project-brain/STATE-2026-11-15-ARCHIVE.md) | Frozen checkpoint |
+| [10 Nov inherit](../project-brain/EVIDENCE/2026-11-10-INHERIT.md) | Original inspection |
+| [10 Nov NVIDIA](../project-brain/EVIDENCE/2026-11-10-NVIDIA-ONE-SHOT.md) | Negative trial |
+| [12 Nov G0](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md) | Fixture definitions |
+| [13 Nov perception](../project-brain/EVIDENCE/2026-11-13-AI-NATIVE-PERCEPTION-RESEARCH.md) | Hypothesis |
+| [25 Nov branch audit](../project-brain/EVIDENCE/branch-audit-20261125.md) | Historical overlap |
+| [26 Nov ancestry/save custody](../project-brain/EVIDENCE/2026-11-26-BRANCH-ANCESTRY-AND-NATIVE-SAVE-CUSTODY.md) | Exact branch/source receipts |
+| [26 Nov FFmpeg](../project-brain/EVIDENCE/2026-11-26-NATIVE-FFMPEG-GITHUB-403.md) | Installation failure |
+| [26 Nov truncation](../project-brain/EVIDENCE/2026-11-26-SUPER-VL-TRUNCATION-RECOVERY.md) | Provider failure |
 
-**Never maintain a third 'latest status' document.** `STATE.md` is the sole human current pointer. JSON is the structured status index of the *same* reality, not a conflicting source of truth. If either is stale, inspect actual Git/source, reconcile both in the same reviewable change, retain contradictions as pending until resolved. Raw events remain original tool logs/artifacts or access-controlled archives, not rephrased in JSON as if exact transcripts.
-
-## Authoritative / enduring product and engineering source
-
-| File | Responsible information | Change rule |
-|---|---|---|
-| [CAPABILITIES.md](../CAPABILITIES.md) | Original complete A–L professional scope, hard acceptance and owner creative freedoms | Founder requirement delta only |
-| [ENGINEERING_STANDARD.md](../ENGINEERING_STANDARD.md) | Quality, delegated engineering method, one active field and owner showcase | Normative engineering decision |
-| [AGENTS.md](../AGENTS.md) | Agent entry and constraints | Keep aligned with latest BRIEF and documentation navigation |
-| [project-brain/BRIEF.md](../project-brain/BRIEF.md) | Founder objectives, latest paid/private model-use boundary | Owner delta; preserve superseded original in Git/DECISIONS |
-| [docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) | Chronological reasoning, 6-part fabric goals, G0–G4, full T01–T24 and research atlas | Design rationale; preserve historical baseline and hypothesis labels |
-| [docs/BUILD_BLUEPRINT.md](BUILD_BLUEPRINT.md) | **Consolidated implementation-ready fixed scope** and source ownership, safe architecture, A–L exit and G1 creative loop | Edit only when product contract or accepted architecture changes |
-| [docs/continuity/WORKING_AGREEMENT.md](continuity/WORKING_AGREEMENT.md) | Engineering collaboration discipline | Normative, stable |
-| [docs/zx7-universal-execution-architecture.md](zx7-universal-execution-architecture.md) | Source-neutral execution ADR and host budgets | Historical design decision; supersede explicitly |
-
-## Engineering architecture, usage and research (NOT current acceptance)
-
-| File | Purpose | Caution |
-|---|---|---|
-| [README.md](../README.md) | Build, install and public owner/developer usage | A command passing does not mean field certification |
-| [docs/architecture.md](architecture.md) | Native authority, data planes, project state and technical tradeoffs | Review against current source before coding |
-| [docs/reuse-research.md](reuse-research.md) | Engine selection, source research and comparative measurements | Research is scoped to the original tests/dates |
-| [docs/video-research-plan.md](video-research-plan.md) | Early R1–R4 / P1–P5 work rationale | Not the live task board |
-| [docs/nvidia-byok.md](nvidia-byok.md) | Optional hosted provider setup and consent | Latest BRIEF forbids default paid runs |
-| [engines/velorn/README.md](../engines/velorn/README.md) | Exact pinned installed native editor, integration, opt-in source variants | Source/version-specific contract, not full product status |
-| [research/browser-engine/README.md](../research/browser-engine/README.md) | Bounded browser-motion research probe | No mandatory runtime browser-engine proof |
-
-## Changing engineering state / historical evidence
-
-| File | Purpose | Update rule |
-|---|---|---|
-| [project-brain/README.md](../project-brain/README.md) | Entry/navigation protocol | Keep small, no second progress diary |
-| [project-brain/STATE.md](../project-brain/STATE.md) | **Only current compact human checkpoint** and single next blocker | Replace stale snapshot; refresh GitHub; ≤14 KB |
-| [project-brain/EXECUTION_LEDGER.json](../project-brain/EXECUTION_LEDGER.json) | Typed A–L, implementation, acceptance, failures, PR overlap and open gates | Refresh with exact source references; validate schema and no unsupported PASS |
-| [project-brain/RISKS.md](../project-brain/RISKS.md) | Active failure risks with exit criteria | Link evidence; do not close by assertion |
-| [project-brain/DECISIONS.md](../project-brain/DECISIONS.md) | D001+ append-only reason and supersession | Append only on substantive decisions, never rewrite history |
-| [project-brain/PROJECT_MAP.md](../project-brain/PROJECT_MAP.md) | Native/source responsibility map | Refresh stale implemented-vs-draft status |
-| [project-brain/EVIDENCE/INDEX.md](../project-brain/EVIDENCE/INDEX.md) | Positive and negative exact source/PR/workflow index | Append relevant evidence, retain historical negative |
-| [project-brain/EVIDENCE/FAILURE_REGISTER.md](../project-brain/EVIDENCE/FAILURE_REGISTER.md) | Verified failed model/physical experiments, actual root layer, fix status and retest state | Do not label a source fix as successful real-model retest |
-| [project-brain/STATE-2026-11-15-ARCHIVE.md](../project-brain/STATE-2026-11-15-ARCHIVE.md) | Exact prior long STATE content when current snapshot was compacted | Frozen archive only |
-| [project-brain/EVIDENCE/2026-11-10-INHERIT.md](../project-brain/EVIDENCE/2026-11-10-INHERIT.md) | First repository handoff audit and historical source limits | Frozen evidence |
-| [project-brain/EVIDENCE/2026-11-10-NVIDIA-ONE-SHOT.md](../project-brain/EVIDENCE/2026-11-10-NVIDIA-ONE-SHOT.md) | Detailed verified NVIDIA real-model failure report | Frozen report + later fix references |
-| [project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md) | Original G0 A–L trace and proposed F01–F14 fixture definitions | Fixture *spec*, not PASS ledger |
-| [project-brain/EVIDENCE/2026-11-13-AI-NATIVE-PERCEPTION-RESEARCH.md](../project-brain/EVIDENCE/2026-11-13-AI-NATIVE-PERCEPTION-RESEARCH.md) | Perception comparison H-PERCEPTION-01 and untested P0–P3 | Research hypothesis not current behavior |
-| [docs/continuity/STATUS.md](continuity/STATUS.md) | Historic large continuity checkpoints | **Archive only**, never live source |
-| [docs/continuity/RESUME_PROMPT.md](continuity/RESUME_PROMPT.md) | Optional minimal agent re-entry | No hardcoded stale active provider/run |
-
-## Operational update and no-duplication protocol
-
-- For a new behavior requirement: check fixed product authority → make an explicit design/owner decision only if needed → update blueprint. **Do not rederive a 90 KB master plan per chat.**
-- For a completed code/test result: attach real source SHA, changed project/source revision, exact PR/run/job and physical outcome; update JSON ledger + STATE (including exact `LEDGER_GIT_BLOB` stamp) and relevant EVIDENCE/RISKS. A merged PR is *implementation*, not professional acceptance.
-- For a failure: preserve original logs/artifact digest and source URL, exact observed symptom/stack, root cause confidence, proposed fix, whether fix merged, and whether a comparable *real neural* retest passed. Keep source-level regressions separate from model proficiency.
-- For a status change: define what tier passed: `source_present`, `offline_tested`, `physical_native_tested`, `real_model_trial`, `independently_accepted`; never infer one from another. An acceptance gate is NOT complete while a required tier is missing.
-- Before starting: query exact live main, open PR overlap, latest relevant positive AND negative records. Resume the smallest blocked end-to-end owner outcome; no speculative “make CI green” work.
-- When saving exact model/tool traces: use machine-readable run events (`event_id`, model/settings, source SHA, time, session/turn, tool intent, result/ack, effect classification, native revision, export digest, error), but keep private payload and tokens out of public Git. A linked summary is not raw evidence and an expired artifact is not retrievable.
-
-## External practice research used for the structure
-
-- [Anthropic long-running agent harness](https://www.anthropic.com/research/effective-harnesses-for-long-running-agents): explicit progress and source-verified continuation, rather than context compaction alone.
-- [Google Cloud ADRs](https://docs.cloud.google.com/architecture/architecture-decision-records): append decisions with rationale and supersession near code.
-- [OpenAI agent tracing](https://openai.github.io/openai-agents-python/tracing/): structured actual model/tool action spans distinct from a prose recap.
-- [Diátaxis](https://diataxis.fr/): keep reference, explanation, guides and evidence separate.
-- [GitHub artifact retention](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository): no infinite evidence retention promise.
-
-**Format decision:** English Markdown for the fixed human/agent engineering contract, JSON for validated changing project-state indexes, original Git/Actions logs for raw provenance, and future JSONL only for events actually captured by the runtime. XML adds schema/verbosity without a current requirement. Hindi/Hinglish is fine for owner conversation; identifiers, code and contracts remain English.
+This map itself is navigation only. Update STATE + ledger together; index each new receipt once; append decisions only when changed; preserve old failures. Use canonical branch during consolidation. Verify exact tip recoverability and distinct source behavior before retiring a branch. [Prior detailed map](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/766dd9d0076c442f364124b23d1c04412581d184/docs/DOCUMENT_MAP.md).

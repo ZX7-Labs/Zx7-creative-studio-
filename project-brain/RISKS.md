@@ -1,5 +1,7 @@
 # ZX7 — active engineering risk register
 
+**26 November consolidation:** branch deletion blocked until exact tip recoverability and distinct behavior reconciliation. Prior CI `766dd9d0076c` has five failed workflows from one test auditor policy omission ([error](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45839052586/job/139975532239)); verify test-only correction. Current facts and next action: [STATE](STATE.md).
+
 Each risk has a falsifiable exit gate. [VERIFIED] applies to a specific recorded fact, **not** a blanket product success.
 
 **2026-11-24:** Genuine 120B produced playable source-backed A/V but no immutable project save/reviewed pair. Exact parent feda678b completed 27/27 workflows, external stdio unified native physical attachment and installed artifact integrity. Internal BODY source-ACK mismatch reproduced and corrected locally; new exact-head hosted acceptance pending; independent professional quality and all A–L field gates remain open. See [failure register](EVIDENCE/FAILURE_REGISTER.md).

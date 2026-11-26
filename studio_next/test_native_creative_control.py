@@ -2326,7 +2326,8 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e.get("independently_verified_export_sha256")
                              for e in recovered["events"]))
         self.assertTrue(audit_native_journal(
-            recovered["events"], host_tool_access=grants(stale))[
+            recovered["events"], host_tool_access=grants(stale),
+            host_pre_dispatch_rejections=True)[
                 "journal_chain_structurally_valid"])
 
         bad = FrameSession()

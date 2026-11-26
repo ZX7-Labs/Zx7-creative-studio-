@@ -1,5 +1,7 @@
 # ZX7 BODY
 
+> Developer entry: [AGENTS](AGENTS.md) → [current STATE](project-brain/STATE.md) → [document map](docs/DOCUMENT_MAP.md). This README is installation and usage reference, not current project status.
+
 An open-source creative execution system operated by AI. The goal is one
 workspace for design, editing, animation, CGI, VFX and sound, with detailed
 control over the creative project and its output.
