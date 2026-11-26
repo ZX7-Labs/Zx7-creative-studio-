@@ -1,0 +1,29 @@
+{
+  "source": "b124d560e0920c76b3cc0d9c4d6cc1543d8ba28f",
+  "branches": 478,
+  "distinct_tips": 476,
+  "branch_path_variants": 1096,
+  "review_candidates": 971,
+  "canonical_markdown": 35,
+  "historical_markdown_paths": 39,
+  "historical_markdown_path_blob_variants": 389,
+  "exact_tip_and_path_inventory_only": true,
+  "deletion_approved": false,
+  "object_triage": {
+    "other_configuration_review": 85,
+    "distinct_source_review": 221,
+    "distinct_regression_test_review": 142,
+    "historical_trial_workflow_do_not_activate": 63,
+    "reachable_historical_object": 386,
+    "exact_active_object": 125,
+    "historical_document_review": 29,
+    "historical_model_request_do_not_activate": 45
+  },
+  "merge_simulation": {
+    "conflict": 226,
+    "ancestor": 150,
+    "clean_changed_tree": 70,
+    "clean_same_tree": 32
+  },
+  "semantic_integration_completed": false
+}
