@@ -1,0 +1,52 @@
+name: ZX7 exact native owner autosave-only metadata cannot prove creative revision
+on:
+  push:
+    branches: [trial/g4-owner-native-autosave-semantic-revision-20261126]
+    paths: ['.github/workflows/zx7-oneuse-g4-owner-autosave-semantic-revision-20261126.yml']
+permissions:
+  contents: read
+jobs:
+  physical-owner-red-green:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g4-owner-native-autosave-semantic-revision-20261126'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 4
+          submodules: recursive
+      - name: Source pin and only requested three-file TDD ancestry
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "be4a99c9890c997f5af3c746c6bdabc7535a137a"
+          test "$(git rev-parse HEAD^^)" = "e1c4cb61b676008e9b0f184fd7a3619ceeead923"
+          test "$(git rev-parse HEAD^^^)" = "2b626445ecabd3a2837ac549a98ba9dcda94b96d"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "studio_next/test_studio_owner_delivery.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = "studio_next/studio_owner_delivery.py"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g4-owner-autosave-semantic-revision-20261126.yml"
+          git diff --check HEAD^^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reuse real installed FFmpeg and BODY dependencies
+        run: |
+          if ! command -v ffmpeg || ! command -v ffprobe; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: Real-film fixture must fail on unchanged native verifier
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/zx7-red" "e1c4cb61b676008e9b0f184fd7a3619ceeead923"
+          cd "$RUNNER_TEMP/zx7-red"
+          if python -m unittest studio_next.test_studio_owner_delivery.OwnerAudiovisualDeliveryTests.test_autosave_only_timestamps_cannot_certify_an_editable_revision -v > "$RUNNER_TEMP/red.log" 2>&1; then
+            cat "$RUNNER_TEMP/red.log"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/red.log"
+          grep -F 'AssertionError: ValueError not raised' "$RUNNER_TEMP/red.log"
+      - name: Recheck actual decoded physical videos, native source snapshots and custody
+        run: |
+          python -m unittest studio_next.test_studio_owner_delivery studio_next.test_native_editor_project studio_next.test_native_render_evidence -v
