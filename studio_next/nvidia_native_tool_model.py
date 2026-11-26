@@ -330,6 +330,22 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             "parallel_tool_calls": False,
         }
         payload.update(self.settings.sampling)
+        # NVIDIA's Super VL shares the completion budget between internal
+        # reasoning and the actual function call. Genuine one-use G1 #45731089541
+        # exhausted the host's two recovery decisions on truncated reasoning.
+        # Only when the trusted controller reports a no-dispatch truncation,
+        # preserve the SAME one-decision/tool/grant budget but use the provider's
+        # documented direct-response mode for that correction turn. Ordinary
+        # creative turns remain on the selected low-reasoning configuration.
+        feedback = context.get("last_rejected_model_output_feedback")
+        if (self.settings.model_id == "nvidia/nemotron-3.5-super-vl-120b-a12b"
+                and payload.get("reasoning_effort") in ("low", "high")
+                and isinstance(feedback, dict)
+                and feedback.get("reason_code") == "truncated_tool_decision"
+                and feedback.get("no_native_dispatch") is True
+                and type(feedback.get("remaining_model_output_corrections")) is int
+                and feedback["remaining_model_output_corrections"] in (0, 1)):
+            payload["reasoning_effort"] = "none"
         try:
             with self._open_request(payload) as response:
                 raw = response.read(self.settings.max_response_bytes + 1)

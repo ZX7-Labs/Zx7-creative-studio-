@@ -92,6 +92,54 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertNotIn("response_format", body)
         self.assertEqual(len(context["host_native_tool_contracts"]), 2)
 
+    def test_super_vl_truncation_uses_bounded_direct_recovery_only_for_host_rejection(self):
+        # Genuine Super VL #45731089541 spent two bounded recovery turns
+        # generating truncated reasoning instead of one native tool call.
+        # The provider documents a no-reasoning setting for this model.
+        # Recover ONLY a host-recorded truncation; do not change ordinary
+        # creative thinking, other providers, consent, or native grants.
+        settings = NvidiaModelSettings(
+            model_id="nvidia/nemotron-3.5-super-vl-120b-a12b",
+            max_tokens=8192, sampling={"temperature": 1.0,
+                                        "reasoning_effort": "low"})
+        model = NvidiaNativeToolCreativeModel(settings, system_prompt="Native proof")
+        base = _context()
+        rejected = {"previous_model_json_rejected": True,
+                    "reason_code": "truncated_tool_decision",
+                    "no_native_dispatch": True,
+                    "remaining_model_output_corrections": 1,
+                    "return_one_unambiguous_json_object": True}
+        cases = [
+            (base, "low"),
+            (dict(base, last_rejected_model_output_feedback=rejected), "none"),
+            (dict(base, last_rejected_model_output_feedback={
+                **rejected, "remaining_model_output_corrections": 0}), "none"),
+            (dict(base, last_rejected_model_output_feedback={
+                **rejected, "no_native_dispatch": False}), "low"),
+            (dict(base, last_rejected_model_output_feedback={
+                **rejected, "reason_code": "native_function_inputs_shape"}), "low"),
+        ]
+        for context, expected in cases:
+            with self.subTest(expected=expected, feedback=context.get(
+                    "last_rejected_model_output_feedback")), patch.object(
+                    model, "_open_request", return_value=_reply(
+                        _provider_function("get_project"),
+                        '{"inputs":{},"reason":"Observe the real project"}')) as transport:
+                result = model.decide(context)
+                self.assertEqual(result["arguments"]["tool"], "get_project")
+                self.assertEqual(transport.call_args.args[0]["reasoning_effort"], expected)
+        self.assertEqual(model.settings.sampling["reasoning_effort"], "low")
+
+        other = NvidiaNativeToolCreativeModel(
+            NvidiaModelSettings(model_id="nvidia/nemotron-3-ultra-550b-a55b",
+                                sampling={"reasoning_effort": "low"}),
+            system_prompt="Independent provider")
+        with patch.object(other, "_open_request", return_value=_reply(
+                _provider_function("get_project"),
+                '{"inputs":{},"reason":"Inspect current state"}')) as transport:
+            other.decide(dict(base, last_rejected_model_output_feedback=rejected))
+        self.assertEqual(transport.call_args.args[0]["reasoning_effort"], "low")
+
     def test_native_recovery_requests_one_function_call_instead_of_plain_json(self):
         model = NvidiaNativeToolCreativeModel(system_prompt="Native test")
         feedback = {"return_one_unambiguous_json_object": True,
