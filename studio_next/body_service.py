@@ -432,7 +432,9 @@ class LocalBodyCoordinator:
                 FROM jobs ORDER BY modified DESC,id DESC LIMIT ?""",(limit,)).fetchall()
         return {"jobs":[{"job_id":a,"workspace_id":b,"status":c,
                          "attempts":d,"updated_at":e} for a,b,c,d,e in rows],
-                "status_is_physical_execution_evidence":True,
+                # Durable scheduler state is not a native execution or media receipt.
+                "status_is_observed_durable_job_state":True,
+                "status_is_physical_execution_evidence":False,
                 "successful_jobs_do_not_automatically_prove_a_movie_exists":True}
 
     def _requested_control(self,identity):
