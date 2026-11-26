@@ -2556,9 +2556,9 @@ class NativeCreativeControl:
                         self._requires_av_review and
                         args["inputs"].get("previewOnly") is not True):
                     reviewed = self._current_export_evidence()
-                    if (reviewed["current_verified"] and
-                            reviewed["current_frames"] and
-                            reviewed["current_full_audio"] and
+                    if ((reviewed["current_verified"] &
+                             reviewed["current_frames"] &
+                             reviewed["current_full_audio"]) and
                             not reviewed["post_review_write_acknowledged"]):
                         self._last_preflight_feedback = {
                             "tool": native_name,
