@@ -1,0 +1,54 @@
+name: ZX7 isolated Super VL truncated native decision recovery — no model inference
+on:
+  push:
+    branches: [trial/g1-super-vl-truncation-safe-direct-tool-fallback-20261126]
+    paths:
+      - '.github/workflows/zx7-oneuse-g1-super-vl-truncation-direct-tool-contract-20261126.yml'
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-super-vl-truncation-safe-direct-tool-fallback-20261126'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+          submodules: recursive
+          persist-credentials: false
+      - name: Verify isolated exact source, test-first ancestry, unchanged grants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "ca1fde6e8d50fa6f9df357c9cac0596b2201b963"
+          test "$(git rev-parse HEAD^^)" = "abe8ef7a56e3919cbec9d55ccfca417dbd74b8ea"
+          test "$(git rev-parse HEAD^^^)" = "68e222f0402aa1acf75242d2fd4ffd1460729755"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "studio_next/test_nvidia_native_tool_model.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = "studio_next/nvidia_native_tool_model.py"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g1-super-vl-truncation-direct-tool-contract-20261126.yml"
+          git diff --check HEAD^^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install existing Python dependencies without hosted inference
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: RED — verify observed omitted fallback is reproducible before fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/zx7-red" "abe8ef7a56e3919cbec9d55ccfca417dbd74b8ea"
+          cd "$RUNNER_TEMP/zx7-red"
+          if python -m unittest studio_next.test_nvidia_native_tool_model.NativeTypedNvidiaTransportTests.test_super_vl_truncation_uses_bounded_direct_recovery_only_for_host_rejection -v > "$RUNNER_TEMP/red.log" 2>&1; then
+            cat "$RUNNER_TEMP/red.log"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/red.log"
+          grep -F "'low' != 'none'" "$RUNNER_TEMP/red.log"
+      - name: GREEN — exact native tool, transport, controller and owner trial tests
+        run: |
+          set -euo pipefail
+          python -m unittest studio_next.test_nvidia_native_tool_model studio_next.test_nvidia_model studio_next.test_native_creative_control scripts.test_run_nvidia_native_trial -v
