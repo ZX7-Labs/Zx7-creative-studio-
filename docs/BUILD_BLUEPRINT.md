@@ -140,15 +140,17 @@ L **Independent release-quality proof.** Cohesive source, packaging/notices, rig
 
 No entire A–L field is currently certified merely because its candidate modules exist. **F01–F14** in [G0 coverage](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md) are proposed representative fixtures; **T01–T24** in the [Master Plan](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) are verification scenarios. Mark individual outcomes only after independently attached real evidence.
 
-## 7. The staged execution route and no-premature-upgrade rule
+## 7. Acceptance workstreams and no-premature-upgrade rule
+
+G1–G3 are outcome gates, not a mandatory serial task order. Independent shared and domain-specific work progresses by measured dependencies; G4 requires whole-product acceptance.
 
 **G0 — Reconcile first, only once per relevant baseline.** Use [file ownership map](DOCUMENT_MAP.md), [live execution ledger](../project-brain/EXECUTION_LEDGER.json), main SHA, installed engines/availability, open PR overlap and negative runs. Existing full product planning is settled; do not generate another spec every session. Correct one source-grounded gap; avoid wholesale older-PR merges. G0 is complete only when current authority/ownership, all source links and next actual blocker can be resolved without founder rebrief.
 
-**G1 — Finish authentic professional native creative video.** Follow §5; prefer reaching the missing model/artistic result over recycling previously passed native script fixtures. Complete source code, real semantics, independent grade and honest handoff together.
+**G1 — Authentic professional native creative video acceptance.** Follow §5; prefer reaching the missing model/artistic result over recycling previously passed native script fixtures. Complete source code, real semantics, independent grade and honest handoff together.
 
 **G2 — Prove or reject the fabric representation and routing advantage.** On comparable video, motion, 3D and audio tasks, test **A** existing native tool baseline, **B** safe procedural/editable code route, **C** minimal adaptive creative fabric. Match model/settings, rights-cleared media, resource budgets, held-out briefs; measure task expressivity, actual quality, native fidelity, correctness, latency, cost, failure rate and security. *Kill C* if it adds cost/complexity without meaningful advantage; retain the fixed creative outcome using A/B. Do not begin with a giant unmeasured universal JSON.
 
-**G3 — Complete integrated A–L.** Finish D/E/F/G/H and shared A/B/I/J/K with native interoperable creative projects rather than disconnected toys. Use real domain creative tasks; adaptive order follows dependencies, not arbitrary marketing phases.
+**G3 — Complete integrated A–L.** Resolve all domain and shared dependencies, including C/D/E/F/G/H and A/B/I/J/K with native interoperable creative projects rather than disconnected toys. Use real domain creative tasks; adaptive order follows dependencies, not arbitrary marketing phases.
 
 **G4 — Ship safely after external acceptance.** Reproducible install, exact third-party licenses and notices, optional weight/media rights, owner UX, privacy/remote/mobile hardening, durable recovery, performance/cost, field-by-field independent technical/artistic confirmation and owner authorization for public launch.
 
