@@ -1,6 +1,6 @@
 # ZX7 — active engineering risk register
 
-**26 November consolidation:** branch deletion blocked until exact tip recoverability and distinct behavior reconciliation. Prior CI `766dd9d0076c` has five failed workflows from one test auditor policy omission ([error](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45839052586/job/139975532239)); verify test-only correction. Current facts and next action: [STATE](STATE.md).
+**27 November:** exact recoverability verified, semantic reconciliation open; branch deletion remains blocked. Noncritical historical review is not a prerequisite to measured product-critical work on verified baseline. See [assessment](EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md) and [STATE](STATE.md); prior CI failures remain historical evidence.
 
 Each risk has a falsifiable exit gate. [VERIFIED] applies to a specific recorded fact, **not** a blanket product success.
 

@@ -28,6 +28,10 @@ Pause feature development until repository consolidation is verified. One canoni
 
 The complete creative studio is the target, not a video editor. Connect a compatible API or local Brain to one coherent BODY through code-defined capability discovery, native typed action contracts, current state and perceptual/verification feedback. No runtime Markdown instructions or engineer-written creative prompt packs should be needed. The natural-language user brief remains the task input. Preserve replaceability and host-owned permissions; do not promise that an arbitrary model gains native expertise simply by connecting. Measure tool competence, response latency, creative quality and failure behavior across domains. Resolve independent work by evidence and dependencies, reusing completed behavior rather than repeating it. Existing consent and acceptance limits remain unchanged.
 
+## Owner clarification — 27 November 2026: outcome-first engineering
+
+Owner accepts the independent [engineering assessment](EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md) and directs canonical documentation alignment first, then execution to actual completion. Preserve full A–L, original quality and consent. Supersede the 26 November exhaustive consolidation-before-any-product-critical-work sequencing only: preserve exact archive and targeted behavior reconciliation, but once a safe reproducible canonical technical baseline exists, do not block measured critical-path work on unrelated historical variants. Branch retirement remains blocked pending separate review and owner decision. Scope preservation does not require simultaneous work on every domain. Continuous activity is not progress; use the existing blueprint's outcome gates and evidence-driven method. No additional spend, private egress or launch authorization.
+
 ## Hard acceptance gates
 
 1. Genuine model independently chooses nontrivial original work from a natural-language brief without engineer-written creative action scripts; actual typed native tools and original-rights media are used.

@@ -609,75 +609,69 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify exact integrated marker candidate in native/installed CI; reconcile remaining distinct archive behavior, especially removed diagnostics/research surfaces. Do not rebuild already retained behavior or delete refs; no inference during consolidation."
+    "next_action": "Use exact technical-green baseline. Inspect existing unified gateway/controller/verifier for a bounded source-linked G1/shared control bottleneck; predeclare matched control/candidate, negative evidence, success/failure, consent and stop boundary. Distinguish actual model-selected semantic observation from deterministic verifier samples. Recover relevant source regressions and evidence-critical defects only; no duplicate runner, arbitrary spend or branch deletion. Continue through genuine G1/G2/G3/G4 acceptance."
   },
   "latest_ci_checkpoint": {
-    "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
-    "observed_date": "2026-11-26",
+    "source": "5b9efc497717f81e63c26c14ff621af58201bc57",
+    "observed_date": "2026-11-27",
     "checks_observed": 29,
     "counts": {
       "success": 29
     },
-    "context": "Exact source and tested PR merge trees match; all 29 workflows passed including targeted mobile retry. Actual local and hosted inference skipped. Raw CI logs and artifact metadata inspected; no independent local re-decode of these new ZIPs.",
+    "context": "All exact-head workflows success; tested merge tree equals source tree. Actual local/hosted jobs skipped. Independent installed CI download integrity verified; latest ZIPs not locally re-decoded in this review.",
     "creativity_release_accepted": false,
-    "merge_test_commit": "e00afafc2a450329771fbc452280ccbbc4f06913",
-    "exact_equal_tree": "0fe910ad409916ed5190b0ffd8f363cc3f69c954",
+    "merge_test_commit": "cc11df9ea3e070d7d64cf4c7dc9e9c0ab4565d8d",
+    "exact_equal_tree": "fadccded3cd51b8641bd074159e0d0127fb8741a",
     "previous_source_final_counts": {
-      "source": "13482c55b7f084910beca6c8413953d6d60f4b70",
+      "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
       "success": 29
     },
     "actual_model_jobs_skipped": [
-      140116242499,
-      140116316432
+      140149407365,
+      140149059289
     ],
     "installed": {
-      "run": 45879882526,
-      "job": 140116240531,
-      "tests_run": 1753,
-      "pass": 1723,
+      "run": 45889714441,
+      "job": 140149056589,
+      "tests_run": 1755,
+      "pass": 1725,
       "skip": 30,
       "failed": 0,
-      "independent_ci_job": 140124474029,
-      "artifact": 15147372439,
-      "published_and_ci_download_sha256": "6d20464e408caec7773288de1a5fafb2d97ae252b3263e9b300e941b39d7617a",
+      "independent_ci_job": 140156764253,
+      "artifact": 15152416041,
+      "published_and_ci_download_sha256": "9a955efceda8c5c949d1b86354a96e464434db632ad5730a82a0c8ffd2d3d946",
       "independent_ci_manifest_files": 24,
       "independent_ci_publication_receipts": 5,
       "local_redownload_verified": false
     },
     "mlt": {
-      "run": 45879882833,
-      "job": 140116348153,
-      "tests_run": 1753,
-      "pass": 1752,
+      "run": 45889714235,
+      "job": 140149056186,
+      "tests_run": 1755,
+      "pass": 1754,
       "skip": 1,
       "failed": 0
     },
     "source_gate": {
-      "run": 45879882839,
-      "job": 140116243037,
-      "sdk_tests_run": 336,
-      "universal_job": 140116242464,
+      "run": 45889714101,
+      "job": 140149056088,
+      "sdk_tests_run": 258,
+      "node_tests": 42,
+      "universal_job": 140149056131,
       "universal_tests": {
-        "run": 230,
-        "pass": 226,
+        "run": 232,
+        "pass": 228,
         "skip": 4,
         "failed": 0
       }
     },
     "unified": {
-      "run": 45879882902,
-      "job": 140116923995,
-      "artifact": 15147335161,
-      "published_sha256": "513d15459a1e612ba7ea086d458f38cff703d479146f78bd737b1f8592ea0d53",
+      "run": 45889714245,
+      "job": 140149517011,
+      "artifact": 15151735553,
+      "published_sha256": "604b5d78b39631b069a26ed541927e9c187dd6432ff27de5263e393efa3dd19f",
       "scripted": true,
       "local_redownload_verified": false
-    },
-    "mobile_retry": {
-      "run": 45879882820,
-      "first_job": 140116241413,
-      "first_failure": "Microsoft apt repository HTTP 403 during setup, before product test",
-      "attempt": 2,
-      "conclusion": "success"
     }
   },
   "latest_artifact_audit_20261126": {
@@ -1165,12 +1159,19 @@
         "upstream_snapshot_blob": "f0a182947efda52f7f017ab78303c06708a1e196",
         "upstream_electron_blob": "22693419834cd1f24515e1ce5a6ff5c1b7f45311",
         "upstream_renderer_blob": "cf2d61167dd6a83e5e6266c065ecad0945b66fc1",
-        "status": "integrated_pending_runtime",
+        "status": "exact_source_CI_passed_scoped_host_admission",
         "scope": "Complete bounded marker inventory and existing-ID admission for removal and property updates; malformed marker receipt does not invalidate unrelated source reads. No native commit CAS or renderer race proof; native partial-target behavior separately characterized.",
         "tests": [
           "test_marker_inventory_requires_complete_counted_native_receipt",
           "test_marker_edits_refuse_partial_targets_before_write",
           "Pinned marker source exposes counted IDs and can otherwise dispatch a partial explicit batch"
+        ],
+        "verified_source": "5b9efc497717f81e63c26c14ff621af58201bc57",
+        "verified_jobs": [
+          140149056131,
+          140149056088,
+          140149056589,
+          140149056186
         ]
       },
       "ordered_source_comparisons": {
@@ -1261,6 +1262,12 @@
           140116243037
         ],
         "unresolved": "Legacy diagnostics/aptitude and research hub API were removed; not equivalent to current public research and local editor status without further review."
+      },
+      "unintegrated_candidates": {
+        "research": "cea19dadc38cccb212e9d37331ca1869d200b724",
+        "scheduler_evidence": "633348babde51ba037bf1917fe1f051bd2515aae",
+        "receipt": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356#issuecomment-7202611663",
+        "status": "unreferenced candidates, not canonical or exact-head verified; prioritize if relevant to chosen workload; preserve original archive"
       }
     }
   },
@@ -1338,5 +1345,15 @@
       140083534559
     ],
     "independent_professional_acceptance": false
+  },
+  "owner_delta_20261127": {
+    "assessment_source": "5b9efc497717f81e63c26c14ff621af58201bc57",
+    "assessment_path": "project-brain/EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md",
+    "assessment_blob": "e2247fe926a01ff3a44343d873f94653aa360528",
+    "scope": "owner approved engineering approach; documentation first then execution; full A-L",
+    "strategy": "outcome-first, isolate critical uncertainties, deterministic host coordination without artistic substitutions, staged verification, targeted archival reconciliation on verified baseline",
+    "retirement": "NOT_READY_FOR_DELETE",
+    "consent": "unchanged synthetic-only bounded policy",
+    "proof": "no gate accepted by documentation"
   }
 }

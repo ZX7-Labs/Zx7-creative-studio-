@@ -50,6 +50,7 @@ Read [AGENTS](../AGENTS.md), [BRIEF](../project-brain/BRIEF.md), [STATE](../proj
 | [25 Nov branch audit](../project-brain/EVIDENCE/branch-audit-20261125.md) | Historical overlap |
 | [26 Nov ancestry/save custody](../project-brain/EVIDENCE/2026-11-26-BRANCH-ANCESTRY-AND-NATIVE-SAVE-CUSTODY.md) | Exact branch/source receipts |
 | [26 Nov FFmpeg](../project-brain/EVIDENCE/2026-11-26-NATIVE-FFMPEG-GITHUB-403.md) | Installation failure |
+| [27 Nov engineering assessment](../project-brain/EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md) | Dated root causes and design judgment; operative method in blueprint §8 |
 | [26 Nov truncation](../project-brain/EVIDENCE/2026-11-26-SUPER-VL-TRUNCATION-RECOVERY.md) | Provider failure |
 
 This map itself is navigation only. Update STATE + ledger together; index each new receipt once; append decisions only when changed; preserve old failures. Use canonical branch during consolidation. Verify exact tip recoverability and distinct source behavior before retiring a branch. [Prior detailed map](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/766dd9d0076c442f364124b23d1c04412581d184/docs/DOCUMENT_MAP.md).

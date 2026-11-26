@@ -166,6 +166,22 @@ G1–G3 are outcome gates, not a mandatory serial task order. Independent shared
 6. Real semantic/model or craft claims require separately authorized *actual* inference and held-out professional evaluation, with objective artifacts and failure history. Offline CI is a different tier of evidence.
 7. Update **only mutable** [execution ledger](../project-brain/EXECUTION_LEDGER.json), [STATE](../project-brain/STATE.md), [RISKS](../project-brain/RISKS.md), [EVIDENCE](../project-brain/EVIDENCE/INDEX.md) and append a new decision **only if a decision actually changes**. Keep errors and tentative diagnoses distinct. Leave next executable task with exact preconditions.
 
+### Outcome-first execution refinement (27 November)
+
+Primary progress is a reproducible capability that closes an actual acceptance dependency, or a causally resolved uncertainty, not files, tools, activity, CI or historical variant counts. The [dated assessment](../project-brain/EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md) records evidence, not a competing plan.
+
+| Frontier | Entry / exit condition |
+|---|---|
+| Baseline and relevant consolidation | Refresh exact source/PR/CI, preserve archive; resolve integrity, security, data-loss and chosen workload blockers. Unrelated variants stay open; no ref deletion. Integrate small coherent increments. |
+| Isolate critical uncertainty | Match source, grants, input, model/settings and budget for paired controls where possible. Separate provider/ABI, tool choice, native execution, physical verification, semantic perception and professional assessment. If trusted control fails, fix that layer; if transport unavailable, record and stop, no blind retry. |
+| Authentic loop | Choose highest-information feasible workload by dependency, not fixed domain order. Preserve audiovisual G1 obligations. Actual model intent, editable native execution, meaningful semantic observation and intentional revision. Host may mechanically acquire/align verifier evidence under existing grants, never fabricate model perception or select art. |
+| Efficiency and G2 | Measure success, model turns, tokens, round trips, latency, cost, native fidelity and independent quality on matched workloads; reject changes that do not earn complexity. G2 A/B/C remains an experiment, not a universal runtime mandate. |
+| Domain and release closure | Reuse shared foundations for all A–L. Actual human, rights/security, recovery, install and independently assessed professional gates remain mandatory. |
+
+**Before implementation:** name concrete acceptance blocker, source owner, negative/missing evidence, smallest falsifiable change, matched control, success/failure condition, consent/resources and stop rule. Otherwise maintenance backlog, unless needed for security/correctness/release. Do not reopen accepted work without changed dependency or contrary evidence. The host may verify and align evidence and perform explicitly authorized deterministic substeps of a selected action; not silently choose edits, save on behalf of a model when a gate requires its save, replay uncertain writes, waive model observation or widen grants. Benchmark changes need comparable evidence and retained negative history.
+
+**Verification:** focused failing regression then passing candidate; affected integration and adversarial checks; full native/physical and release-required matrix on coherent stable candidate. Reuse exact unaffected receipts only with explicit source/dependency equivalence. No skipped/failed evidence as pass. Preflight live model tests offline; use existing bounded consent only; never substitute scripted success for genuine comparable retest. Independent professional review remains separate. Avoid new planning documents; update STATE/ledger/evidence at meaningful outcomes.
+
 For any accepted claim, record: source commit+pin, model/settings (if any), original rights/media hash, grants, native project/revision/source IDs, chosen tool decision, full event/acknowledgement refs, physical export hashes/stream facts, timed observation coverage, comparison verdict, independent assessor, cost/performance and artifact retention. **Raw traces belong in access-controlled evidence storage, not secrets/private media in public Git.** Markdown may link a trace but never impersonate its full event list.
 
 ## 9. Definition of done, anti-goals and source genealogy
