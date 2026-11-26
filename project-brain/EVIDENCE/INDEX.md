@@ -1,5 +1,11 @@
 # ZX7 — durable evidence index (positive and negative)
 
+## 2026-11-26 — reuse the actual prior #189 reference instrument in existing BODY
+
+- Historical #189 source `d6fffb40bb218f93dab9b3f5191666e82f1f0e0d`: copied **exact** unchanged blobs for `reference_observatory.py` (`03d0d40f18b36641b41755869ac076be7dc3494c`), `reference_evidence_tools.py` (`5983d2e40ba944620fa663a55fe26c83e762c8e3`) and `reference_comparison.py` (`bc1118cdfeffa1ef47a0d967adff3be0afb7b803`), plus their retained real decoded media tests. No new research hub, video renderer, agent, or shadow project store.
+- Existing `body_catalog` now exposes source-relative, read-only `body.reference_graph` through the live capabilities fabric, physically fingerprinting original bytes and attesting codecs + exact code dependencies; 90-second, 128 MiB and 8–64 sample-bin local budgets. No internet, inferred copyright clearance, stylistic preset or creative-quality score.
+- [Exact isolated RED/GREEN #45731818098](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45731818098): original RED missing tool; first candidate exposed missing version attestation and was REFUSED globally; corrected candidate 57/57 cross-domain physical/authority tests succeeded, including **actual FFmpeg decoded cuts and sound** and two-source comparison. Earlier failure logs retained. This validates an existing research capability's safe attachment; full creative A/B/C and independent owner review are STILL OPEN.
+
 ## 2026-11-25 — source-bound G1 second-export without revision and exact native smoke diagnosis
 
 - [Physical failed Super VL #45632856001](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45632856001), artifact #15033430161, strict journal: first conforming native H.264/AAC physically verified, model selected 3 timed frames and full numeric sound observation, then attempted second native export with **no acknowledged content change**. Host source snapshot refused capture, correctly withheld revised-pair proof. [Test-first controller safety candidate #45666106360](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45666106360) RED 1 expected, GREEN 193 nearby contracts, zero model-selected edit substitution. Real neural creative proof still negative.

@@ -7,7 +7,7 @@ sound, timing and editorial structures in its own project.
 from __future__ import annotations
 
 _ARG_TYPES={
-    "source":"string","source_svg":"string","source_film":"string",
+    "source":"string","source_svg":"string","bins":"integer","source_film":"string",
     "asset_id":"string","attestation_id":"string",
     "scene_json":"string","original_film_ir":"string","voice_assets":"string",
     "assets_root":"string","edit":"string","plan":"string","operation":"string","video_job":"string","out":"string",
@@ -35,7 +35,9 @@ def real_operation_schema(tool_id,required):
         kind=_ARG_TYPES[name]
         meta={"type":kind}
         if kind=="integer":
-            meta["minimum"]=0 if name=="frame_index" else 1
+            meta["minimum"]=8 if name=="bins" else (0 if name=="frame_index" else 1)
+            if name=="bins":
+                meta["maximum"]=64
         if kind=="number":
             meta["minimum"]=0
         props[name]=meta
@@ -45,6 +47,7 @@ def real_operation_schema(tool_id,required):
         "body.blender3d":("assets_root",),
         "body.exr_passes":("assets_root",),
         "body.full_decode":("expected",),
+        "body.reference_graph":("bins",),
         "body.mlt_owned_render":("gap_color",),
         "body.mlt_owned_compare":("focus",),
     }.get(tool_id,())

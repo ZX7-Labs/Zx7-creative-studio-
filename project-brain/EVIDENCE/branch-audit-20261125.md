@@ -18,3 +18,7 @@ Current native project/Blender/MLT/FFmpeg/visual graph/audio/release implementat
 **Only source-grounded next steps:** reconcile exact source ownership, integrate proven small interface fixes without duplicating editors; examine genuine render-save failure and semantic model limitations using preserved receipts; run actual human/model coedit, held-out architecture A/B/C, field-by-field A–L independent craft/licensing/rights/security and cold install. No accepted field is inferred from source presence, a green offline suite or unrelated model probe.
 
 **Safe decision:** preserve every historical branch, no destructive PR cleanup, no private media transfer and no automatic hosted inference. The new index records precise live branch identity; the old TSV preserves historic forensic branch status. Review full source/test content before any cherry-pick.
+
+## Proven historical reuse after the branch inventory
+
+Historic #189's measured local reference submodules were found **absent by path but still useful**, unlike its older duplicate Brain/AI service wrappers. Exact original three source blobs and two physical media test files were selectively brought into the existing `body_catalog` and `CapabilityFabric`, not wholesale merged. Isolated [real-codec test #45731818098](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45731818098) passed 57 tests after the source-revision/material-fingerprint admission gap was corrected. This is a factual reference observation tool; not a model creative or independent G2 score.

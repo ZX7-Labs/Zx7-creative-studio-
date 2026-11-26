@@ -63,6 +63,7 @@ from .body_temporal_evidence import (
     observe_every_original_frame,verify_full_temporal_evidence)
 from .body_review_access import read_verified_review,extract_verified_review_frame
 from .body_review_compare import compare_verified_revisions
+from .reference_evidence_tools import inspect_authorized_reference
 from .body_plugins import discover_enabled_body_plugins
 from .body_tool_contracts import real_operation_schema
 from .body_materials import fingerprint_physical_inputs
@@ -254,6 +255,7 @@ def _trusted_body_revision(tool_id, *, revision_inputs=None):
         "body.motion_export":["body_motion_project.py","production_qc.py"],
         "body.film_finish":["film_finishing.py","media_vault.py","composite_mix.py","production_qc.py"],
         "body.color_lut":["body_color_pipeline.py","media_vault.py","delivery_audit.py","composite_mix.py","production_qc.py"],
+        "body.reference_graph":["reference_observatory.py","reference_evidence_tools.py"],
         "body.full_decode":["production_qc.py","delivery_audit.py"],
         "body.loudness":["body_loudness.py","media_vault.py","composite_mix.py"],
         "body.review":["body_observation.py","production_qc.py","media_vault.py"],
@@ -305,6 +307,7 @@ def _trusted_body_revision(tool_id, *, revision_inputs=None):
         "body.motion_export":["ffmpeg","ffprobe"],
         "body.film_finish":["ffmpeg","ffprobe"],
         "body.color_lut":["ffmpeg","ffprobe"],
+        "body.reference_graph":["ffmpeg","ffprobe"],
         "body.full_decode":["ffmpeg","ffprobe"],
         "body.loudness":["ffmpeg","ffprobe"],
         "body.review":["ffmpeg","ffprobe"],
@@ -744,6 +747,21 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         original=_path_within(root,inputs["plan"],exists=True)
         return inspect_original_loudness(original,root,vault.root)
 
+    def reference_graph(inputs):
+        """Physically measure an owner-authorized short local reference; never import it."""
+        source=_path_within(root,inputs["source"],exists=True)
+        if source.suffix.lower() not in (".mp4",".mov",".mkv",".webm"):
+            raise ValueError("Reference study requires an authorized local video")
+        if source.stat().st_size>128*1024*1024:
+            raise ValueError("Reference media exceeds this bounded comparison tool")
+        bins=inputs.get("bins",32)
+        if type(bins) is not int or not 8<=bins<=64:
+            raise ValueError("Reference graph requires 8-64 physical bins")
+        from .reference_observatory import _probe
+        if _probe(source)[0]>90:
+            raise ValueError("Reference exceeds 90-second local comparison budget")
+        return inspect_authorized_reference(root,inputs["source"],bins=bins)
+
     def deep_media_qc(inputs):
         """Decode every actual video/audio stream, not just inspect metadata."""
         source=_path_within(root,inputs["source"],exists=True)
@@ -979,6 +997,9 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Read-only native FFmpeg EBU R128 measurement of original rights-cleared movie, no forced mastering targets",
         "read",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
         ["plan"],physical_audio_loudness)
+    add("body.reference_graph","physically study owner-authorized picture and sound reference rhythm",
+        "Reused source-bound FFmpeg editing grammar: actual frame differences, color, timed PCM energy and candidate cuts; never a quality score or licensed import",
+        "read",video_io,["source"],reference_graph)
     add("body.full_decode","physical full-movie delivery quality assurance",
         "Actually decode entire picture/sound; preserve deliberate creative style",
         "read",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
