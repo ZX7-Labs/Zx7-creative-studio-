@@ -570,6 +570,30 @@ class RealGatewayIdentityAdmissionTests(unittest.IsolatedAsyncioTestCase):
             "native_reference_not_in_live_inventory")
         self.assertEqual(self.native.write_attempts, 0)
 
+    async def test_ambiguous_native_json_never_authorizes_a_write(self):
+        original = self.native.call_tool
+        for payload in (
+            '{"count":2,"count":1,"assets":[{"id":"asset-1"}],"limitApplied":false}',
+            '{"count":1,"assets":[{"id":"missing","id":"asset-1"}],"limitApplied":false}',
+            '{"count":1,"assets":[{"id":"asset-1","duration":1e999}],"limitApplied":false}',
+        ):
+            with self.subTest(payload=payload):
+                async def malformed(name, args):
+                    result = await original(name, args)
+                    if name == "get_assets":
+                        result.content[0].text = payload
+                    return result
+                self.native.call_tool = malformed
+                inputs = {"assetId": "asset-1", "trackId": "video-1",
+                          "previewOnly": False}
+                rejected = await self.model_tools.call_tool("add_asset_to_timeline", inputs)
+                self.assertEqual(host_pre_dispatch_rejection(
+                    rejected, "add_asset_to_timeline", inputs),
+                    "native_identity_read_malformed")
+                self.assertEqual(self.native.write_attempts, 0)
+                self.assertEqual(self.gateway.evidence(), [])
+                self.assertEqual(self.gateway.host_budget_evidence()["reserved_writes"], 0)
+
     async def test_valid_asset_wrong_track_fails_without_emitting_write(self):
         inputs = {"assetId": "asset-1", "trackId": "fabricated-track",
                   "previewOnly": False}

@@ -13,6 +13,8 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
+from .body_editor_client import _load_json
+
 from .native_editor_source_pin import (
     _source_matches_pinned_electron_mcp,
     _source_matches_pinned_native_collaboration,
@@ -129,9 +131,9 @@ def _read_json_result(result):
     if not isinstance(payload, str) or not 1 <= len(payload) <= _MAX_TEXT:
         raise ValueError("native_identity_read_oversize")
     try:
-        obj = json.loads(payload, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-    except (ValueError, TypeError, RecursionError) as exc:
-        raise ValueError("native_identity_read_malformed") from exc
+        obj = _load_json(payload)
+    except (ValueError, TypeError, RecursionError):
+        raise ValueError("native_identity_read_malformed") from None
     if not isinstance(obj, dict):
         raise ValueError("native_identity_read_malformed")
     return obj
