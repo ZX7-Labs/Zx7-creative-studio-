@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "engines/velorn/install-ci-dependencies.sh"
-_CONTENT = b"ZX7-exact-upstream-digest-test-only\\n"
+_CONTENT = b"ZX7-exact-upstream-digest-test-only\n"
 _SHA = hashlib.sha256(_CONTENT).hexdigest()
 _FAKE_CURL = """#!/usr/bin/env python3
 import os
