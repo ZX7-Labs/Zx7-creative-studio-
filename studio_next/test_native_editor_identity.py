@@ -40,6 +40,8 @@ class NativeReadSession:
         self.fail_before_source = False
         self.limit_assets = False
         self.limit_clips = False
+        self.markers = None  # Older/non-marker fixtures omit marker receipts.
+        self.marker_count_override = None
         self.write_attempts = 0
         self.tools = [
             SimpleNamespace(name=name, description="Pinned read " + name,
@@ -108,6 +110,10 @@ class NativeReadSession:
                 "id": self.current_timeline, "tracks": self.tracks,
                 "clips": self.clips,
                 "clipLimitApplied": self.limit_clips}
+            if self.markers is not None:
+                data["markers"] = self.markers
+                data["markerCount"] = (len(self.markers) if self.marker_count_override is None
+                                       else self.marker_count_override)
         elif name == "get_assets":
             data = {
                 "count": len(self.assets), "assets": self.assets,
@@ -262,6 +268,39 @@ class PinnedReaderUnitTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("create_project", policy["rules"])
             self.assertNotIn("get_assets", policy["rules"])
 
+
+    async def test_marker_inventory_requires_complete_counted_native_receipt(self):
+        from studio_next.capability_reference_guard import (
+            CapabilityReferenceError, compile_reference_rules, validate_live_references,
+        )
+        rules = compile_reference_rules({"/markerIds/*": "markers"})
+        self.assertNotIn("markers", await self.reader())
+        for rows, count in (([], 0), ([{"id": "marker-1"}], 1)):
+            self.native.markers = rows
+            self.native.marker_count_override = count
+            inventory = await self.reader()
+            self.assertEqual(inventory["markers"], {
+                "ids": [row["id"] for row in rows], "complete": True})
+        self.assertEqual(validate_live_references({"markerIds": ["marker-1"]},
+            rules, inventory)["host_reference_checks_passed"], 1)
+        for rows, count in (
+            ([{"id": "marker-1"}], 2),
+            ([{"id": "marker-1"}], True),
+            ([{"id": "marker-1"}, {"id": "marker-1"}], 2),
+            ([{"id": 123}], 1),
+            ([{"id": "marker-1"}], "1"),
+        ):
+            with self.subTest(rows=rows, count=count):
+                self.native.markers = rows
+                self.native.marker_count_override = count
+                inventory = await self.reader()
+                self.assertNotIn("markers", inventory)
+                self.assertEqual(inventory["clips"]["ids"], ["clip-1"])
+                with self.assertRaisesRegex(CapabilityReferenceError,
+                                            "native_identity_inventory_unavailable"):
+                    validate_live_references({"markerIds": ["marker-1"]},
+                                             rules, inventory)
+
     async def test_source_attested_explicit_clip_track_reference_coverage(self):
         """Pinned Electron and renderer accept these explicit existing IDs.
 
@@ -408,6 +447,73 @@ class ArchivedLabelReferenceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             "filter": "enabled", "color": "#00ff00", "previewOnly": False})
         self.assertIs(filtered.is_error, False)
         self.assertEqual(native.write_attempts, 2)
+
+
+
+class MarkerReferenceAdmissionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_marker_edits_refuse_partial_targets_before_write(self):
+        class MarkerSession(NativeReadSession):
+            def __init__(self, operation):
+                super().__init__()
+                self.operation = operation
+                self.markers = [{"id": "marker-1"}]
+                self.tools.append(SimpleNamespace(
+                    name=operation, description="Native marker edit",
+                    input_schema={"type": "object", "properties": {
+                        "markerIds": {"type": "array", "items": {"type": "string"}},
+                        "all": {"type": "boolean"},
+                        "label": {"type": "string"},
+                        "previewOnly": {"type": "boolean"}}}))
+
+            async def call_tool(self, name, args):
+                if name == self.operation:
+                    self.calls.append((name, args))
+                    self.write_attempts += 1
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text='{"applied":true}')])
+                return await super().call_tool(name, args)
+
+        for operation in ("remove_timeline_markers", "set_timeline_marker_properties"):
+            with self.subTest(operation=operation):
+                native = MarkerSession(operation)
+                grants = {"get_project": "read", "get_timeline": "read",
+                          "get_assets": "read", operation: "write"}
+                with patch("studio_next.native_editor_identity._source_matches_pinned_electron_mcp",
+                           return_value=True):
+                    policy = pinned_native_editor_identity_policy(
+                        Path("/not-a-valid-source"), grants, native)
+                binding = ((native, grants, {}, None, {}, policy)
+                           if policy is not None else (native, grants))
+                gateway = CapabilityGateway({"editor": binding})
+                await gateway.refresh()
+                session = CapabilityGatewayMcpSession(gateway, "editor")
+                edit = ({"label": "New cue"} if operation ==
+                        "set_timeline_marker_properties" else {})
+                mixed = {**edit, "markerIds": ["marker-1", "missing-marker"],
+                         "previewOnly": False}
+                denied = await session.call_tool(operation, mixed)
+                self.assertEqual(host_pre_dispatch_rejection(
+                    denied, operation, mixed),
+                    "native_reference_not_in_live_inventory")
+                self.assertEqual(native.write_attempts, 0)
+                self.assertEqual(gateway.evidence(), [])
+                good = {**edit, "markerIds": ["marker-1"], "previewOnly": False}
+                native.marker_count_override = 2
+                denied = await session.call_tool(operation, good)
+                self.assertEqual(host_pre_dispatch_rejection(
+                    denied, operation, good),
+                    "native_identity_inventory_unavailable")
+                self.assertEqual(native.write_attempts, 0)
+                self.assertEqual(gateway.evidence(), [])
+                native.marker_count_override = None
+                accepted = await session.call_tool(operation, good)
+                self.assertIs(accepted.is_error, False)
+                self.assertEqual(native.write_attempts, 1)
+                # Legitimate native all/filter semantics need no invented ID.
+                accepted = await session.call_tool(operation, {
+                    **edit, "all": True, "previewOnly": False})
+                self.assertIs(accepted.is_error, False)
+                self.assertEqual(native.write_attempts, 2)
 
 
 class RealGatewayIdentityAdmissionTests(unittest.IsolatedAsyncioTestCase):

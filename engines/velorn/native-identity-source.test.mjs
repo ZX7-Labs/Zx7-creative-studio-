@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const { createComfyStudioMcpServer } =
   require('../../third_party/velorn/electron/mcpServer.js')
 
-const snapshot = ({clipId='clip-A', assetId='asset-A', generation='fixture-1'}={}) => ({
+const snapshot = ({clipId='clip-A', assetId='asset-A', generation='fixture-1', markers=[]}={}) => ({
   app: { name: 'Velorn' },
   project: { name: 'native-project-1', currentTimelineId: 'timeline-1' },
   currentTimeline: {
@@ -15,7 +15,8 @@ const snapshot = ({clipId='clip-A', assetId='asset-A', generation='fixture-1'}={
     playheadPosition: 0, generatedAt: generation,
     tracks: [{ id: 'video-1', type: 'video', name: 'Video' }],
     clips: [{ id: clipId, trackId: 'video-1', assetId }],
-    markers: [],
+    markers,
+    markerCount: markers.length,
   },
   assets: [{ id: assetId, name: 'source-original.mp4', type: 'video' }],
   timelines: [],
@@ -75,4 +76,31 @@ test('Real upstream reflects human project changes instead of preserving stale I
   assert.deepEqual(updated.clips.map(x => x.id), ['human-replacement'])
   assert.deepEqual(assets.assets.map(x => x.id), ['asset-human'])
   assert.notEqual(project.generatedAt, 'fixture-1')
+})
+
+test('Pinned marker source exposes counted IDs and can otherwise dispatch a partial explicit batch', async () => {
+  // Characterize the upstream Electron resolver. The callback is a test
+  // transport, not a real renderer mutation or host acceptance claim.
+  const actions = []
+  const server = createComfyStudioMcpServer({
+    performAction: async action => { actions.push(action); return {applied:true} },
+  })
+  server.updateSnapshot(snapshot({markers:[
+    {id:'marker-A', name:'Original cue', time:1, color:'#ff0000'},
+  ]}))
+  const timeline = await observed(server, 'get_timeline', {includeClips:true,limit:1000})
+  assert.equal(timeline.markerCount, 1)
+  assert.deepEqual(timeline.markers.map(x => x.id), ['marker-A'])
+  assert.deepEqual(actions, [])
+  const requested = ['marker-A', 'missing-marker']
+  const removed = await observed(server, 'remove_timeline_markers', {
+    markerIds:requested, previewOnly:false,
+  })
+  assert.deepEqual(removed.missingMarkerIds, ['missing-marker'])
+  assert.deepEqual(actions[0].payload.markerIds, ['marker-A'])
+  const revised = await observed(server, 'set_timeline_marker_properties', {
+    markerIds:requested, label:'Revised cue', previewOnly:false,
+  })
+  assert.deepEqual(revised.missingMarkerIds, ['missing-marker'])
+  assert.deepEqual(actions[1].payload.updates.map(x => x.id), ['marker-A'])
 })

@@ -60,6 +60,8 @@ _NATIVE_REFERENCES = {
         "/clipId": "clips", "/clipIds/*": "clips",
         "/trackId": "tracks", "/maskAssetId": "assets"},
     "set_clips_enabled": {"/clipIds/*": "clips"},
+    "remove_timeline_markers": {"/markerIds/*": "markers"},
+    "set_timeline_marker_properties": {"/markerIds/*": "markers"},
     "set_clip_keyframes": {"/clipId": "clips"},
     "set_clip_style": {
         "/clipId": "clips", "/clipIds/*": "clips", "/trackId": "tracks"},
@@ -267,6 +269,19 @@ class NativeEditorIdentityReader:
             "clips": {"ids": clips, "complete": True},
             "assets": {"ids": asset_ids, "complete": True},
         }
+        # The pinned timeline snapshot publishes the full marker array and
+        # its count, unlike the summarized get_project response. A missing,
+        # oversized or contradictory marker receipt must not mint IDs or
+        # invalidate otherwise sound clip/track/asset-only observations.
+        marker_count = timeline.get("markerCount")
+        if type(marker_count) is int and 0 <= marker_count <= _MAX_ITEMS:
+            try:
+                marker_ids = _ids(timeline.get("markers"))
+            except ValueError:
+                pass  # A marker-specific policy will reject absent inventory.
+            else:
+                if len(marker_ids) == marker_count:
+                    inventory["markers"] = {"ids": marker_ids, "complete": True}
         if live_revision is not None:
             inventory["__zx7_live_revision"] = live_revision
         return inventory
