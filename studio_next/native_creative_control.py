@@ -2412,6 +2412,29 @@ class NativeCreativeControl:
                                       list(invalid.schema_path)[:16])[:512],
                                   "no_native_dispatch": True})
                     continue
+                # A stale identity refusal clears the trusted project snapshot.
+                # A later model-chosen JPEG preview cannot be source-bound until
+                # the model obtains a fresh project observation. Refuse BEFORE
+                # dispatch instead of terminating on the missing identity after
+                # a real read (Super VL journal #45740294453, turns 20-23).
+                if (native_name in self._host_verified_timeline_previews and
+                        args["inputs"].get("includeImage") is not False and
+                        self._trusted_project_active_timeline_id() is None):
+                    self._last_preflight_feedback = {
+                        "tool": native_name,
+                        "validation_keyword": "native_preview_needs_project_observation",
+                        "required_prior_native_tool": "get_project",
+                        "model_must_choose_project_observation": True,
+                        "no_native_dispatch": True}
+                    self._append({"kind": "model_action_rejected", "turn": turn,
+                                  **timing, "tool": native_name,
+                                  "inputs_sha256": hashlib.sha256(
+                                      _wire(args["inputs"]).encode()).hexdigest(),
+                                  "validation_keyword":
+                                      "native_preview_needs_project_observation",
+                                  "schema_location": "native/live_timeline_identity",
+                                  "no_native_dispatch": True})
+                    continue
                 # A model may propose a timeline ID as trackId, even after
                 # genuine visual review. For pinned content clip tools an
                 # explicitly supplied existing track MUST be one of the

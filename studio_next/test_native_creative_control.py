@@ -2271,6 +2271,64 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len([n for n, _ in bad.calls
                                       if n == "inspect_timeline_frame"]), 1)
 
+        # Actual Super VL #45740294453: a stale host write refusal clears
+        # get_project; a subsequently selected preview must not dispatch
+        # until the model independently refreshes that observation.
+        from studio_next.body_editor_client import (
+            HOST_PRE_DISPATCH_META, native_input_digest)
+
+        class StaleFrameSession(FrameSession):
+            async def call_tool(self, name, inputs):
+                if name == "update_text_clip":
+                    self.calls.append((name, inputs))
+                    return SimpleNamespace(is_error=True, meta={
+                        HOST_PRE_DISPATCH_META: {
+                            "version": 1, "tool": name,
+                            "inputs_sha256": native_input_digest(inputs),
+                            "code": "native_identity_model_observation_stale",
+                        }}, content=[SimpleNamespace(
+                            type="text", text="Host rejected stale identity")])
+                return await super().call_tool(name, inputs)
+
+        stale = StaleFrameSession()
+        recovery = ScriptedModel([
+            decision("invoke", tool="update_text_clip",
+                     inputs={"clipId": "one", "text": "Revised"}),
+            decision("invoke", tool="inspect_timeline_frame",
+                     inputs={"includeImage": True}),
+            decision("invoke", tool="get_project", inputs={}),
+            decision("invoke", tool="inspect_timeline_frame",
+                     inputs={"includeImage": True}),
+            decision("finish", summary="Fresh preview is not export proof"),
+        ])
+        recovered = await NativeCreativeControl(
+            stale, recovery, max_turns=5, host_tool_access=grants(stale),
+            host_pre_dispatch_rejections=True,
+            host_verified_timeline_preview_tools=("inspect_timeline_frame",),
+            required_evidence=("physical_export_verified",)).run(
+                "Recover a source-bound preview after stale native identity")
+        self.assertEqual([name for name, _ in stale.calls],
+                         ["get_project", "update_text_clip", "get_project",
+                          "inspect_timeline_frame"])
+        self.assertEqual(len(recovery.images_observed), 1)
+        self.assertEqual(recovery.images_observed[0][1], [("image/jpeg", jpeg)])
+        self.assertTrue(any(e["kind"] == "host_tool_rejected_before_dispatch"
+                            and e["rejection_code"] ==
+                            "native_identity_model_observation_stale"
+                            for e in recovered["events"]))
+        refused = [e for e in recovered["events"]
+                   if e["kind"] == "model_action_rejected" and
+                   e["tool"] == "inspect_timeline_frame"]
+        self.assertEqual(len(refused), 1)
+        self.assertEqual(refused[0]["validation_keyword"],
+                         "native_preview_needs_project_observation")
+        self.assertTrue(refused[0]["no_native_dispatch"])
+        self.assertFalse(any(e.get("independently_verified_export_sha256")
+                             for e in recovered["events"]))
+        self.assertTrue(audit_native_journal(
+            recovered["events"], host_tool_access=grants(stale))[
+                "journal_chain_structurally_valid"])
+
         bad = FrameSession()
         with self.assertRaises(NativeCreativeControlError):
             NativeCreativeControl(
