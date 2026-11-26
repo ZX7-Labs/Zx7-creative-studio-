@@ -106,6 +106,78 @@ jobs:
           (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
           print(json.dumps(summary,sort_keys=True))
           PY
+      - name: Reconcile exact historical objects and simulate all merges without changing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections, concurrent.futures, csv, json, os, pathlib, subprocess
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'zx7-consolidation'
+          rows = json.loads((out/'all-branches.json').read_text())
+          variants = json.loads((out/'all-variants.json').read_text())
+          def git(*args):
+              return subprocess.check_output(['git',*args],text=True)
+          objects = {l.split()[0] for l in git('rev-list','--objects','HEAD').splitlines()}
+          base = git('rev-parse','HEAD^{tree}').strip()
+          counts = collections.Counter()
+          per = collections.defaultdict(collections.Counter)
+          for vid,v in variants.items():
+              p,b = v['path'],v['branch_object']
+              if v['dispositions'] == ['exact_current']:
+                  k = 'exact_active_object'
+              elif b and b[2] in objects:
+                  k = 'reachable_historical_object'
+              elif p.startswith('.github/workflows/') and any(x in p for x in ('oneuse-','trial','evaluation')):
+                  k = 'historical_trial_workflow_do_not_activate'
+              elif p.startswith('research/') and p.endswith('.json') and any(x in p for x in ('request','trial','nvidia-')):
+                  k = 'historical_model_request_do_not_activate'
+              elif p.lower().endswith('.md') or p.startswith('project-brain/'):
+                  k = 'historical_document_review'
+              elif '/test_' in p or '.test.' in p or p.endswith('_test.py'):
+                  k = 'distinct_regression_test_review'
+              elif p.startswith(('studio_next/','engines/','scripts/')) and p.endswith(('.py','.mjs','.sh','.json','.patch','.js','.ts')):
+                  k = 'distinct_source_review'
+              else:
+                  k = 'other_configuration_review'
+              v['triage'] = k
+              counts[k] += 1
+              for name in v['branches']:
+                  per[name][k] += 1
+          def sim(r):
+              n,t = r['branch'],r['tip']
+              if r['ahead'] == 0:
+                  return dict(branch=n,tip=t,status='ancestor',changed_paths=[])
+              p = subprocess.run(['git','merge-tree','--write-tree','--messages','HEAD',t],
+                                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+              lines=p.stdout.splitlines()
+              if p.returncode == 0:
+                  m=lines[0]
+                  paths=git('diff','--name-only','-z',base,m).split('\0')[:-1]
+                  return dict(branch=n,tip=t,status='clean_same_tree' if m==base else 'clean_changed_tree',changed_paths=paths)
+              if p.returncode == 1:
+                  return dict(branch=n,tip=t,status='conflict',conflicts=[l for l in lines if 'CONFLICT' in l])
+              raise RuntimeError('merge-tree simulation failed: '+n)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+              sims=list(ex.map(sim,rows))
+          for r,m in zip(rows,sims,strict=True):
+              assert (r['branch'],r['tip']) == (m['branch'],m['tip'])
+              r['triage_counts']=dict(per[r['branch']])
+              r['merge_simulation']=m
+          (out/'all-branches.json').write_text(json.dumps(rows,ensure_ascii=True,separators=(',',':')))
+          (out/'all-variants.json').write_text(json.dumps(variants,ensure_ascii=True,separators=(',',':')))
+          with (out/'branch-retirement-review.tsv').open('w',newline='') as f:
+              w=csv.writer(f,delimiter='\t')
+              w.writerow(['branch','tip','merge_simulation','exact_source_triage','semantic_retirement'])
+              for r in rows:
+                  w.writerow([r['branch'],r['tip'],r['merge_simulation']['status'],
+                              json.dumps(r['triage_counts'],sort_keys=True),'NOT_APPROVED'])
+          summary=json.loads((out/'summary.json').read_text())
+          summary['object_triage']=dict(counts)
+          summary['merge_simulation']=dict(collections.Counter(m['status'] for m in sims))
+          summary['semantic_integration_completed']=False
+          (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print(json.dumps(summary,sort_keys=True))
+          PY
       - name: Recover all exact branch tips in independent bare repository
         shell: bash
         run: |
@@ -131,3 +203,103 @@ jobs:
           path: ${{ runner.temp }}/zx7-consolidation/
           retention-days: 30
           if-no-files-found: error
+  archive-history:
+    needs: audit
+    if: github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zx7-consolidation-exact-tip-audit
+          path: ${{ runner.temp }}/zx7-consolidation
+      - name: Create one permanent history-only archive tag, never modify branches
+        shell: bash
+        env:
+          ARCHIVE_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/zx7-consolidation"
+          remote="https://github.com/${GITHUB_REPOSITORY}.git"
+          tag="archive/zx7-all-branches-20261126"
+          git ls-remote --heads "$remote" | sort > "${RUNNER_TEMP}/live.tsv"
+          diff -u "$out/remote-before.tsv" "${RUNNER_TEMP}/live.tsv"
+          test -z "$(git ls-remote --tags "$remote" "refs/tags/$tag")"
+          db="${RUNNER_TEMP}/archive.git"
+          git init --bare "$db"
+          git -C "$db" fetch "$out/branch-history.bundle" '+refs/remotes/origin/*:refs/heads/*'
+          git -C "$db" for-each-ref --format='%(objectname)%09%(refname)' refs/heads | sort > "${RUNNER_TEMP}/restore.tsv"
+          diff -u "$out/remote-before.tsv" "${RUNNER_TEMP}/restore.tsv"
+          git -C "$db" fsck --full --no-reflogs
+          cd "$db"
+          export GIT_AUTHOR_NAME="ZX7 archive"
+          export GIT_AUTHOR_EMAIL="zx7-archive@users.noreply.github.com"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          printf '%s\n' '# ZX7 branch-history archive — not a working tree or merged PR' '' 'Every branch name and exact tip is in remote-before.tsv. All original source history is reachable through the parents of this archive commit. This tag is history retention only; do not treat it as a product merge or release. Semantic retirement remains unapproved. Restore an original branch from its exact listed SHA.' > "$out/README.md"
+          for file in README.md remote-before.tsv all-branches.json all-variants.json markdown-variants.json review-candidates.tsv branch-retirement-review.tsv summary.json; do
+            obj="$(git hash-object -w "$out/$file")"
+            printf '100644 blob %s\t%s\n' "$obj" "$file"
+          done > "${RUNNER_TEMP}/tree.txt"
+          tree="$(git mktree < "${RUNNER_TEMP}/tree.txt")"
+          mapfile -t tips < <(cut -f1 "$out/remote-before.tsv" | sort -u)
+          mapfile -t frontier < <(git merge-base --independent "${tips[@]}")
+          test "${#frontier[@]}" -gt 0
+          parents=()
+          group=()
+          for tip in "${frontier[@]}"; do
+            group+=(-p "$tip")
+            if [[ "${#group[@]}" -ge 64 ]]; then
+              part="$(printf '%s\n' 'History retention only: original branch tips, no integration claim' | git commit-tree "$tree" "${group[@]}")"
+              parents+=(-p "$part")
+              group=()
+            fi
+          done
+          if [[ "${#group[@]}" -gt 0 ]]; then
+            part="$(printf '%s\n' 'History retention only: original branch tips, no integration claim' | git commit-tree "$tree" "${group[@]}")"
+            parents+=(-p "$part")
+          fi
+          archive="$(printf '%s\n' 'Archive every verified ZX7 branch tip; no working-tree merge, release or semantic acceptance' | git commit-tree "$tree" "${parents[@]}")"
+          for tip in "${tips[@]}"; do git merge-base --is-ancestor "$tip" "$archive"; done
+          git tag "$tag" "$archive"
+          git fsck --full --no-reflogs
+          git ls-remote --heads "$remote" | sort > "${RUNNER_TEMP}/live-final.tsv"
+          diff -u "$out/remote-before.tsv" "${RUNNER_TEMP}/live-final.tsv"
+          auth="$(printf 'x-access-token:%s' "$ARCHIVE_TOKEN" | base64 -w0)"
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" git push "$remote" "refs/tags/$tag:refs/tags/$tag"
+          unset auth ARCHIVE_TOKEN
+          test "$(git ls-remote --tags "$remote" "refs/tags/$tag" | cut -f1)" = "$archive"
+          printf 'Archived tag %s at %s, retained %s distinct tips. No branches modified.\n' "$tag" "$archive" "${#tips[@]}"
+  verify-remote-archive:
+    needs: archive-history
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Independently restore every original tip from remote tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://github.com/${GITHUB_REPOSITORY}.git"
+          tag="archive/zx7-all-branches-20261126"
+          git init --bare "${RUNNER_TEMP}/verify.git"
+          cd "${RUNNER_TEMP}/verify.git"
+          git fetch --no-tags "$remote" "refs/tags/$tag:refs/tags/$tag"
+          archive="$(git rev-parse "refs/tags/$tag")"
+          git show "$archive:remote-before.tsv" > "${RUNNER_TEMP}/archived-tips.tsv"
+          git fsck --full --no-reflogs
+          count=0
+          while IFS=$'\t' read -r sha ref; do
+            git cat-file -e "$sha^{commit}"
+            git merge-base --is-ancestor "$sha" "$archive"
+            git update-ref "$ref" "$sha"
+            count=$((count+1))
+          done < "${RUNNER_TEMP}/archived-tips.tsv"
+          git for-each-ref --format='%(objectname)%09%(refname)' refs/heads | sort > "${RUNNER_TEMP}/actual-restored.tsv"
+          diff -u "${RUNNER_TEMP}/archived-tips.tsv" "${RUNNER_TEMP}/actual-restored.tsv"
+          test "$count" -ge 478
+          printf 'Verified remote archive %s, independently reconstructed %s exact branch refs. No semantic integration claim.\n' "$archive" "$count"

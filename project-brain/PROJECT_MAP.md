@@ -1,34 +1,20 @@
-# ZX7 — current architecture and original inheritance map
+# ZX7 source ownership map
 
-**Current navigation:** [fixed build blueprint](../docs/BUILD_BLUEPRINT.md), [typed execution ledger](EXECUTION_LEDGER.json), [document owners](../docs/DOCUMENT_MAP.md). Earlier sections preserve their historic source references; never infer current merge state from a frozen paragraph.
+This is stable architecture navigation, not current merge status. Read [STATE](STATE.md) and [ledger](EXECUTION_LEDGER.json) for verified runtime facts.
 
-## Current architecture (source-grounded)
+| Responsibility | Existing source owner |
+|---|---|
+| Owner project, source/rights, publication | `studio_next/media_vault.py`, `body_project_heads.py`, `body_publication.py`, `body_archive.py` |
+| Replaceable Brain and model transport | `studio_next/providers.py`, `local_native_structured_model.py`, `nvidia_model.py`, `nvidia_native_tool_model.py` |
+| Host-granted execution and durable work | `studio_next/capability_gateway.py`, `capability_attempts.py`, `durable_graph.py`, `body_capability_adapter.py` |
+| Native creative control and save/render authority | `studio_next/native_creative_control.py`, `native_editor_session.py`, `native_editor_project.py`, `body_editor_client.py`, `engines/velorn/`, pinned `third_party/velorn` |
+| Real editable media and rendering | `studio_next/body_mlt_editor.py`, `body_mlt_render.py`, `body_visual_graph.py`, `body_visual_render.py`, `blender_scene.py`, `composite_mix.py` |
+| Observation and independent evidence | `studio_next/native_source_acceptance.py`, `native_render_evidence.py`, `native_creative_audit.py`, `body_editor_frame.py`, `body_picture_observation.py`, `reference_observatory.py` |
+| Public research | `studio_next/creative_research.py`, `creative_research_3d.py`, `creative_research_mcp.py` |
+| Owner interface and delivery | `studio_next/studio_cli.py`, `body_service.py`, `body_mobile.py`, `body_desktop.py`, `studio_owner_delivery.py` |
+| Fixed source-to-acceptance contract | [Build blueprint](../docs/BUILD_BLUEPRINT.md), [A–L](../CAPABILITIES.md) |
+| Historical architecture and candidate fabric | [Master Plan](../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md), [architecture](../docs/architecture.md) |
 
-Founder brief + owner-authorized original assets/rights → model-neutral `studio_next` BODY session → **replaceable decision Brain** (NVIDIA optional for future separately authorized evaluation; no paid inference now) → `NativeCreativeControl` → host-owned `CapabilityGateway` grants, source/ABI validation and finite call budgets → pinned native Velorn editor and complementary MLT/FFmpeg, OTIO, Blender/creative engines → persistent editable source assets, project/timeline, real export → independently verified physical picture/audio and model-selected revision → final owner delivery with audit evidence.
+Brain chooses creative actions; BODY owns permissions, native state, actual physical execution and evidence. Numeric sound sensing is not semantic hearing; a native preview is not a verified export. Consent lives only in [BRIEF](BRIEF.md). Do not revive historical architecture or provider strategies from their earlier source snapshots.
 
-- NVIDIA branch: `studio_next/nvidia_model.py`, `studio_next/nvidia_native_tool_model.py` use fixed credentialed HTTPS and provider-native typed function calls. Secret is not passed into the child editor.
-- Local branch (future deployment qualification): `studio_next/providers.py`, `studio_next/local_native_structured_model.py` use a loopback local OpenAI-compatible model with host-current constrained JSON choices.
-- Shared native authority and model-independent evidence: `studio_next/native_editor_session.py`, `studio_next/native_creative_control.py`, `studio_next/capability_gateway.py`, bridge in `engines/velorn/`. No provider has native action authority.
-- Synthetic NVIDIA trial: `scripts/run_nvidia_native_trial.py`, strict request `research/nvidia-native-trial-request.json`, Github workflow `.github/workflows/zx7-nvidia-native-editor-trial.yml`. Trial-only 640×360/24 FPS limits are **benchmark limits, not product artistic restrictions**.
-
-## G1 native creative revision + Brain observation — merged
-
-[PR #313](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/313) introduces `studio_next/native_creative_revision.py`, owner `studio_cli.py` compare-native/review-native and actual saved/render-bound Velorn scene change evidence; original document remains native, read-only review is not a merge. [PR #315](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/315) introduces `studio_next/native_revision_observation.py` and source integration in `native_editor_session.py`: three host-registered READ-only native revision tools visible to the replaceable Brain through existing `CapabilityGateway`. Fresh saved-render-submission snapshots are source-SHA bound; model cannot choose files or bypass native write CAS. `engines/velorn/mcp-e2e.py` tests installed source-pinned two-save scene changes and a **scripted** rejected candidate, physical A/V and fresh reopen. No new universal medium, media store, secondary scheduler, independent artistic acceptance or real human pointer/AI co-edit proof. G2 CSF remains hypothesis.
-
-## G1 model-selected native A/V sensing — merged technical source
-
-[PR #317](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/317), exact tested source `b50583a1`, merged `5a360fd9`. `studio_next/body_editor_mcp.py` adds one **read-only** `zx7_observe_verified_export_av_window`, using existing host-approved `zx7_verify_native_export`, `body_editor_frame.py` and `body_editor_audio_timeline.py`; actual model chooses bounded picture timestamps and numerical sound bins. `native_editor_session.py` registers this via current native grant boundary, `native_creative_control.py` verifies the source-bound media receipt, `native_creative_audit.py` records source proof and differentiates partial sensing from full audiovisual acceptance; `native_render_evidence.py` preserves complete two-export review conditions. Original editor, exact native document, physical encoded media and source vault still own truth. [10/10 exact-head CI and limitations](EVIDENCE/INDEX.md). No new creative document format, renderer, model service or objective aesthetic grade. [PR #319](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/319) has **MERGED** as scoped source/consent-validated raw-WAV transport (offline/mocked tests only), requiring separate explicit raw-sound upload permission; there has been NO verified genuine neural auditory understanding. The combined #317 sensor carries numerical time-based audio, not itself semantic listening. Current exact status is [STATE](STATE.md)/[EXECUTION_LEDGER](EXECUTION_LEDGER.json).
-
-## 2026-11-10 INHERIT baseline
-
-The original read-only inspection of repository main at `0e5aaba42a952d87596f9feb5a086a98d4a36e1a` established: source-backed BODY, pinned Velorn `b3c02adbd5c0779feb8abf34978299e9502cc0e7`, host permissioned native editor and a separate optional NVIDIA transport. Scripted installed editor proof was narrower than neural creativity; A–L had zero independently accepted completed domains. Its initial document called #285/#286 unmerged and #275 closed — **historical then, not today**. Original audit basis and inaccessible sources are in [EVIDENCE/2026-11-10-INHERIT.md](EVIDENCE/2026-11-10-INHERIT.md).
-
-## G0 creative-medium proposal — explicitly not yet implemented
-
-The [source-checked master](../docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) is a reviewable synthesis of prior research and original owner intent. Its Creative State Fabric is only a **candidate minimal coordination contract**, not a new universal renderer/scene format or a replacement for existing BODY authority. Preserve one native document owner, one host-granted execution boundary, existing source/rights and durable attempt stores; let the model choose among actual native tools, structured graphs, isolated programs, compatible specialist models and GUI fallback. Human edits must advance the native revision and invalidate stale model writes. [G0 trace/F01–F14](EVIDENCE/2026-11-12-G0-COVERAGE.md) distinguishes installed/source-present, scripted proof, real model decisions, physical A/V and professional acceptance.
-
-## Sources and limits
-
-Repository source, PRs, workflow logs and retained GitHub artifacts were read through the connected GitHub integration; selected synthetic artifact bytes and old founder standards PDF were inspectable in a temporary sandbox. Local `git clone` failed DNS in the original audit. No claim of having read every repository file, reviewed every third-party dependency or independently compared finished work to a professional NLE. The uploaded founder PDF is not copied to public Git. GitHub Actions artifacts may expire and only current source/commits/metadata persist.
-
-**Fresh session must refresh** main, CI and [STATE.md](STATE.md); this map is a structural guide, not real-time telemetry.
+[Original full map and inherited source evidence](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/56b55a6b44bdabd1311b69514a3f5311497339c6/project-brain/PROJECT_MAP.md). [All evidence](EVIDENCE/INDEX.md).

@@ -1,24 +1,24 @@
 # ZX7 — canonical working checkpoint
 
-**Owner priority, 26 November 2026: repository consolidation before feature work.** Canonical working branch: `workstream/g1-existing-owner-project-av-snapshot-20261115` ([draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356)). Main at audit: `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. This checkpoint reconciles `766dd9d0076c442f364124b23d1c04412581d184`; refresh live refs and CI. No model trials or new features during cleanup. No agent-authorized deletion.
+**Owner priority: repository consolidation before feature work.** Work in `workstream/g1-existing-owner-project-av-snapshot-20261115` ([draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356)); main at audit `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. This checkpoint records `56b55a6b44bdabd1311b69514a3f5311497339c6`; refresh live refs/CI. No paid/model trial or new feature work during cleanup. Never delete refs until archive and useful source integration are independently reconciled.
 
-## Current product truth
+## Verified product foundation, not complete product
 
-- One local-first free/open-source BODY, replaceable Brain. Full A–L and professional acceptance unchanged; G2 fabric is a comparative hypothesis. See [BRIEF](BRIEF.md), [CAPABILITIES](../CAPABILITIES.md), [blueprint](../docs/BUILD_BLUEPRINT.md).
-- Installed native Velorn, MLT/FFmpeg, Blender/2D authoring, source-aware editing, portable projects, source custody, exact clocks, host-granted tools, process recovery and mobile UI have scoped technical proof. Do not rebuild.
-- Last full technical checkpoint `642565f125`: 29/29 workflows; installed 1,706/1,736 PASS (30 skipped), MLT 1,735/1,736 PASS (1 skipped), Electron and Chromium PASS. Actual model jobs skipped. [Exact receipts](EVIDENCE/INDEX.md).
-- Prior source `766dd9d0076c`: 24/29 workflows PASS, five failed on one regression fixture (auditor missing independent host-pre-dispatch policy). [Exact failure](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45839052586/job/139975532239). Test invocation corrected; new CI pending.
-- Real Super VL #45738534918 and #45740294453 failed genuine G1, zero verified exports. Earlier first film was not an intentional creative revision. Semantic hearing, genuine creative revision and independent quality remain unaccepted. [Evidence](EVIDENCE/2026-11-26-BRANCH-ANCESTRY-AND-NATIVE-SAVE-CUSTODY.md).
+- Full A–L scope, local-first free/open-source BODY, replaceable Brain and professional acceptance unchanged. [BRIEF](BRIEF.md), [CAPABILITIES](../CAPABILITIES.md), [blueprint](../docs/BUILD_BLUEPRINT.md).
+- Existing installed native Velorn, MLT/FFmpeg, Blender/2D, source-aware editing, portable projects, host-granted tools, exact clocks, recovery and mobile UI have scoped real technical evidence. Do not rebuild.
+- Previous exact `642565f125` 29/29 CI, installed 1,706/1,736 PASS, MLT 1,735/1,736 PASS, real Electron/Chromium PASS. Actual model jobs skipped. Following `766dd9d0` failed five workflows due to one auditor test policy omission; fixed in `56b55a6b`. Exact local controller 150/150 and Project Brain 16/16 PASS; latest observed 26/30 workflows successful, four running, zero failures at observation. [Live checks](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356/checks).
+- Real Super VL #45738534918 and #45740294453 failed, no verified exports. G1 model semantic A/V and artistic revision, G1-HUMAN, G2 comparison, G3 A–L and G4 release remain open. [Evidence](EVIDENCE/INDEX.md). No field independently accepted.
 
-## Consolidation
+## Consolidation result and next action
 
-- 478 named refs / 476 distinct tips enumerated; 35 current Markdown files inventoried. Earlier 472-ref audit and six later comparisons preserved. Path-name differences/ancestry alone do not establish semantic overlap.
-- One human STATE and typed ledger; fixed scope, usage, decisions, risks, historical receipts separated. Old handoff/status and long evidence index retained at immutable Git revision. [Document map](../docs/DOCUMENT_MAP.md).
-- Next: read-only audit of all current branch-only changed path/object variants, Markdown variants, recoverable full Git bundle and restore proof. Evaluate distinct useful behaviors before marking old refs safe to retire. **Deletion not yet approved**. Do not bulk-merge experimental stacks. Restore existing technical verification.
-- After verified consolidation resume owner-facing work. G1, G1-HUMAN, G2, G3 A–L and G4 remain open; no professional domain certified.
+- All 35 current Markdown files inventoried and roles assigned. 282 relative links checked, zero broken. Old handoff/status/evidence index are immutable references. Ledger is compact; full prior machine history retained at its exact Git commit. [Document map](../docs/DOCUMENT_MAP.md).
+- All 478 live refs (476 distinct tips) captured, full Git bundle restored in independent bare repo in CI and again locally. [Audit #45862198310](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45862198310), artifact #15138861698. 39 historical Markdown paths, 388 distinct path/blob versions.
+- 1,096 branch-only path/object variants: 126 exact current, 385 reachable historical objects, 585 distinct unmatched objects. Local three-way simulation: 150 ancestors, 32 clean same-tree, 70 clean changed-tree, 226 conflicts. These counts are not missing-feature counts.
+- New permanent archive tag workflow uses the same canonical workstream, writes only an archival tag and verifies remote restore. **Pending** exact tag creation and verification. Source/test variants still need behavior review: 221 distinct source and 142 distinct regression-test variants in the prior audit, with remaining historical workflows, requests, docs/config. Keep trial requests inactive; do not bulk merge.
+- **Branch deletion not ready.** Next: verify permanent history archive, resolve distinct useful behaviors against existing current source/tests, restore latest CI and record closure. No new product framework, no redoing known integrated work.
 
 ## Updates
 
-[Ledger](EXECUTION_LEDGER.json) and STATE change together, with exact SHA/run/artifact evidence. [Index](EVIDENCE/INDEX.md), [failure register](EVIDENCE/FAILURE_REGISTER.md), [risks](RISKS.md) and [decisions](DECISIONS.md) have distinct roles. No third current status.
+[Ledger](EXECUTION_LEDGER.json) and STATE update together, [evidence index](EVIDENCE/INDEX.md) links exact receipts, [risks](RISKS.md) and [decisions](DECISIONS.md) record changed facts only. No third current status.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=95ef1919dd59844367fa04b18e4bfd8f6317eb33` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=bab42b5f986de574623571b7fc50512023df545d` (Git content ID, not security attestation).
