@@ -1,0 +1,145 @@
+name: ZX7 one-use complete source branch ancestry
+on:
+  push:
+    branches: [audit/all-current-branch-source-ancestry-20261126]
+    paths: [".github/workflows/zx7-oneuse-branch-source-ancestry-20261126.yml"]
+permissions:
+  contents: read
+jobs:
+  all-branch-source-audit:
+    if: github.ref == 'refs/heads/audit/all-current-branch-source-ancestry-20261126' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          submodules: false
+      - name: Confirm pinned parent and fetch all live public branch refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = '2b626445ecabd3a2837ac549a98ba9dcda94b96d'
+          git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
+          git for-each-ref refs/remotes/origin --format='%(refname)' | wc -l
+      - name: Read-only compare every branch to one exact source and preserve full decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+          from collections import Counter, defaultdict
+          import csv
+          import hashlib
+          import json
+          import pathlib
+          import subprocess
+          
+          baseline = "2b626445ecabd3a2837ac549a98ba9dcda94b96d"
+          out = pathlib.Path("branch-source-audit")
+          out.mkdir(exist_ok=True)
+          def git(*args, binary=False):
+              result = subprocess.run(["git", *args], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+              return result.stdout if binary else result.stdout.decode("utf-8", "replace").strip()
+          assert git("rev-parse", "HEAD^") == baseline, "One-use audit must have exact parent source"
+          assert git("cat-file", "-t", baseline) == "commit", "Pinned baseline disappeared"
+          snapshot_path = pathlib.Path("project-brain/EVIDENCE/branch-review-20261125.tsv")
+          with snapshot_path.open(encoding="utf-8", newline="") as stream:
+              historical = list(csv.DictReader(stream, delimiter="\t"))
+          assert len(historical) == 459 and len({row["branch"] for row in historical}) == 459
+          historical = {row["branch"]: row for row in historical}
+          baseline_paths = set(git("ls-tree", "-rz", "--name-only", baseline, binary=True).split(b"\0"))
+          refs = [line.split("\t", 1) for line in git(
+              "for-each-ref", "--format=%(refname:strip=3)\t%(objectname)", "refs/remotes/origin"
+          ).splitlines() if "\t" in line and not line.startswith("HEAD\t")]
+          assert len(refs) >= 459 and len({name for name, _ in refs}) == len(refs), "Missing or duplicate remote branches"
+          def clean(value):
+              return str(value).replace("\t", " ").replace("\r", " ").replace("\n", " ")[:200]
+          def is_code(path):
+              return path.startswith((b"studio_next/", b"scripts/", b"engines/", b"motion_studio/",
+                                      b"voice_lab/", b"film_ir/")) and (
+                  path.endswith((b".py", b".js", b".ts", b".tsx", b".json", b".sh")))
+          rows = []
+          for i, (name, tip) in enumerate(refs):
+              left, right = map(int, git("rev-list", "--left-right", "--count", f"{baseline}...{tip}").split())
+              relation = ("identical" if not left and not right else
+                          "ancestor" if left and not right else
+                          "ahead" if right and not left else "diverged")
+              tip_paths = set(git("ls-tree", "-rz", "--name-only", tip, binary=True).split(b"\0")) - {b""}
+              absent = sorted(x.decode("utf-8", "replace") for x in tip_paths - baseline_paths if is_code(x))
+              touched = [x.decode("utf-8", "replace") for x in git(
+                  "diff", "--name-only", "-z", baseline, tip, "--", binary=True).split(b"\0") if x]
+              old = historical.get(name, {})
+              rows.append({
+                  "branch": name, "tip": tip, "tip_subject": clean(git("show", "-s", "--format=%s", tip)),
+                  "ahead": right, "behind": left, "relation": relation,
+                  "pr_at_previous_audit": old.get("active_pr", ""),
+                  "pr_title_at_previous_audit": clean(old.get("active_pr_intent", "")),
+                  "snapshot_tip": old.get("head_sha", ""),
+                  "snapshot_tip_matches": old.get("head_sha") == tip,
+                  "changed_file_count_vs_baseline": len(touched),
+                  "code_paths_not_on_baseline": absent,
+                  "different_code_paths_not_on_baseline_count": len(absent),
+                  "diff_paths_sample": touched[:16],
+                  "missing_path_group": hashlib.sha256("\n".join(absent).encode()).hexdigest()[:16] if absent else "",
+              })
+              if (i + 1) % 100 == 0:
+                  print("Read-only Git ancestry/trees reconciled", i + 1, "refs", flush=True)
+          relations = Counter(row["relation"] for row in rows)
+          groups = defaultdict(list)
+          for row in rows:
+              if row["code_paths_not_on_baseline"]:
+                  groups[row["missing_path_group"]].append(row)
+          group_rows = sorted(({
+              "group": key, "branch_count": len(members),
+              "representative_branch": max(members, key=lambda x: x["different_code_paths_not_on_baseline_count"])["branch"],
+              "code_paths_absent_in_current": members[0]["different_code_paths_not_on_baseline_count"],
+              "member_examples": [x["branch"] for x in members[:9]],
+          } for key, members in groups.items()), key=lambda x: (-x["branch_count"], -x["code_paths_absent_in_current"]))
+          snapshot_drift = [x for x in rows if not x["snapshot_tip_matches"]]
+          new_refs = [x for x in rows if not x["snapshot_tip"]]
+          summary = {
+              "schema": 1, "source_baseline": baseline, "audit_checkout": git("rev-parse", "HEAD"),
+              "total_remote_refs": len(rows), "historical_snapshot_ref_count": len(historical),
+              "classification": dict(relations), "snapshot_drifts": [{
+                  "branch": x["branch"], "at_snapshot": x["snapshot_tip"], "live_at_audit": x["tip"]
+              } for x in snapshot_drift], "new_refs_since_snapshot": [x["branch"] for x in new_refs],
+              "unique_missing_code_path_sets": len(group_rows), "group_clusters": group_rows,
+              "baseline_code_filenames_are_not_semantic_acceptance": True,
+          }
+          (out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          (out / "all-branch-relationships.json").write_text(json.dumps(rows, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          with (out / "all-branch-relationships.tsv").open("w", encoding="utf-8", newline="") as target:
+              writer = csv.writer(target, delimiter="\t")
+              writer.writerow(["branch", "tip_sha", "ancestor_relation", "ahead_commits", "behind_commits",
+                               "snapshot_tip_matches", "old_pr", "new_code_paths_not_on_current",
+                               "different_paths_vs_current", "missing_code_set", "tip_subject", "old_pr_title"])
+              for x in rows:
+                  writer.writerow([x["branch"], x["tip"], x["relation"], x["ahead"], x["behind"],
+                                   x["snapshot_tip_matches"], x["pr_at_previous_audit"],
+                                   x["different_code_paths_not_on_baseline_count"],
+                                   x["changed_file_count_vs_baseline"], x["missing_path_group"],
+                                   x["tip_subject"], x["pr_title_at_previous_audit"]])
+          with (out / "README.md").open("w", encoding="utf-8") as f:
+              f.write("# Live complete Git branch source ancestry audit\n\n")
+              f.write(f"Pinned source: \`{baseline}\`; read-only Git ancestry and tree comparison for **{len(rows)}** live remote refs.\n\n")
+              f.write("This does not prove professional creative acceptance or unique behavior. Missing *path names* in historic branch trees are NOT a licence to merge old stacks.\n\n")
+              f.write("## Exact ancestry vs integration baseline\n\n")
+              for name in ("identical", "ancestor", "ahead", "diverged"):
+                  f.write(f"- {name}: {relations[name]}\n")
+              f.write(f"\nSnapshot-tip drifts: {len(snapshot_drift)}; newly created refs: {len(new_refs)}; unique old code-path groups: {len(group_rows)}.\n\n")
+              f.write("## Largest recurring source path groups\n\n")
+              for x in group_rows[:20]:
+                  f.write(f"- {x['branch_count']} refs; {x['code_paths_absent_in_current']} code paths absent by filename; sample \`{x['representative_branch']}\`.\n")
+              f.write("\nAll classifications are computed against a *single pinned current integration commit*, not inherited from the older 407-ref table. Full exact tips, commit subjects, source gaps and historical intent are in the JSON and TSV.\n")
+          print(json.dumps({k: summary[k] for k in ("source_baseline", "total_remote_refs",
+              "classification", "unique_missing_code_path_sets")}, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zx7-complete-branch-ancestry-20261126
+          path: branch-source-audit/
+          retention-days: 30
+          if-no-files-found: error
