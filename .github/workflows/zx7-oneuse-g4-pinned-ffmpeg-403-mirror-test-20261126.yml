@@ -1,0 +1,46 @@
+name: ZX7 G4 vendor FFmpeg 403 bounded exact-digest fallback
+on:
+  push:
+    branches: [trial/g4-pinned-ffmpeg-release-403-source-proof-20261126]
+    paths: ['.github/workflows/zx7-oneuse-g4-pinned-ffmpeg-403-mirror-test-20261126.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g4-pinned-ffmpeg-release-403-source-proof-20261126'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm same source and fail-closed original editor install
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "b561019df09de16b3f82b16ce961ab2f3a786d11"
+          test "$(git rev-parse HEAD^^)" = "892ea43cef689ab558cc49016c3e216e3a30ce9e"
+          test "$(git rev-parse HEAD^^^)" = "4b0b9e5f9ab6c5db7daf2402c60eac04c527fc9d"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "scripts/test_velorn_ci_media_mirror.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = "engines/velorn/install-ci-dependencies.sh"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g4-pinned-ffmpeg-403-mirror-test-20261126.yml"
+          git diff --check HEAD^^^ HEAD
+          bash -n engines/velorn/install-ci-dependencies.sh
+      - name: RED — two upstream GitHub 403 paths must not silently pass
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/zx7-red" "892ea43cef689ab558cc49016c3e216e3a30ce9e"
+          cd "$RUNNER_TEMP/zx7-red"
+          if python -m unittest scripts.test_velorn_ci_media_mirror.PinnedCiMediaDownloadFallbackTests.test_official_assets_403_use_only_fixed_mirror_and_exact_upstream_hash -v > "$RUNNER_TEMP/red.log" 2>&1; then
+            cat "$RUNNER_TEMP/red.log"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/red.log"
+          grep -F "AssertionError" "$RUNNER_TEMP/red.log"
+      - name: GREEN — exact real sha256sum and fixed source TLS host boundary
+        run: |
+          python -m unittest scripts.test_velorn_ci_media_mirror scripts.test_electron_ci_rebuild -v
