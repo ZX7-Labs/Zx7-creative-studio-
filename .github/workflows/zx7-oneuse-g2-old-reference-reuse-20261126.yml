@@ -1,0 +1,53 @@
+name: ZX7 isolated G2 historical physical reference module reuse
+on:
+  push:
+    branches: [trial/g2-old-branch-reference-observation-reuse-20261126]
+    paths: ['.github/workflows/zx7-oneuse-g2-old-reference-reuse-20261126.yml']
+permissions:
+  contents: read
+jobs:
+  physical-original-reference:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g2-old-branch-reference-observation-reuse-20261126'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+          persist-credentials: false
+      - name: Verify source ancestry, exact TDD delta and original provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "7792dff6aa70f1c9c6a3a33aac97166b62a8f2d8"
+          test "$(git rev-parse HEAD^^)" = "c90547ccdcb846cbc55a7ce045431d4c1d803c6f"
+          test "$(git rev-parse HEAD^^^)" = "3b397aa450022ec5d5326e94cda3a533872dd8e4"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "studio_next/test_body_integration.py"
+          test "$(git diff --name-only HEAD^^ HEAD^ | LC_ALL=C sort)" = "$(printf '%s\n' studio_next/body_integration.py studio_next/body_materials.py studio_next/body_tool_contracts.py studio_next/reference_observatory.py studio_next/reference_evidence_tools.py studio_next/reference_comparison.py studio_next/test_reference_observatory.py studio_next/test_reference_comparison.py | LC_ALL=C sort)"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g2-old-reference-reuse-20261126.yml"
+          test "$(git rev-parse HEAD:studio_next/reference_observatory.py)" = "03d0d40f18b36641b41755869ac076be7dc3494c"
+          test "$(git rev-parse HEAD:studio_next/reference_evidence_tools.py)" = "5983d2e40ba944620fa663a55fe26c83e762c8e3"
+          test "$(git rev-parse HEAD:studio_next/reference_comparison.py)" = "bc1118cdfeffa1ef47a0d967adff3be0afb7b803"
+          git diff --check HEAD^^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual local media backends and source package
+        run: |
+          set -euo pipefail
+          command -v ffmpeg || { sudo apt-get update -qq; sudo apt-get install -y --no-install-recommends ffmpeg; }
+          command -v ffprobe
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: TDD RED original BODY does not expose old proven reference graph
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/zx7-red" "c90547ccdcb846cbc55a7ce045431d4c1d803c6f"
+          if ( cd "$RUNNER_TEMP/zx7-red" && python -m unittest studio_next.test_body_integration.TrustedCreativeBodyToolTests.test_reused_owner_reference_graph_is_live_read_only_and_source_bound -v ) >"$RUNNER_TEMP/red.log" 2>&1; then
+            cat "$RUNNER_TEMP/red.log"
+            exit 1
+          fi
+          grep -F "KeyError: 'body.reference_graph'" "$RUNNER_TEMP/red.log"
+      - name: GREEN physical source audio, source SHA, host read grant, cross-domain comparisons
+        run: |
+          set -euo pipefail
+          python -m unittest studio_next.test_body_integration studio_next.test_reference_observatory studio_next.test_reference_comparison studio_next.test_body_capabilities studio_next.test_capability_fabric -v
