@@ -13,20 +13,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 6
+          fetch-depth: 7
           submodules: false
           persist-credentials: false
       - name: Validate exact RED/GREEN provenance and content-only scope
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = 'f141dcb4359b88803660234e1d329cdceac2d2cd'
-          test "$(git rev-parse HEAD^^)" = '8889629c94972f14d13ea598935d9dc7fe6e4547'
-          test "$(git rev-parse HEAD^^^^)" = '2b626445ecabd3a2837ac549a98ba9dcda94b96d'
-          test "$(git diff --name-only HEAD^^^^ HEAD^^^)" = "studio_next/test_native_editor_project.py"
-          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "studio_next/test_native_creative_control.py"
-          test "$(git diff --name-only HEAD^^ HEAD^)" = "$(printf '%s\n' studio_next/native_creative_control.py studio_next/native_editor_project.py studio_next/native_editor_session.py)"
-          git diff --check HEAD^^^^ HEAD
+          test "$(git rev-parse HEAD^)" = '145d0a41be74d71d7d26397fae8b02465e11114e'
+          test "$(git rev-parse HEAD^^)" = 'f141dcb4359b88803660234e1d329cdceac2d2cd'
+          test "$(git rev-parse HEAD^^^)" = '8889629c94972f14d13ea598935d9dc7fe6e4547'
+          test "$(git rev-parse HEAD^^^^^)" = '2b626445ecabd3a2837ac549a98ba9dcda94b96d'
+          test "$(git diff --name-only HEAD^^^^^ HEAD^^^^)" = "studio_next/test_native_editor_project.py"
+          test "$(git diff --name-only HEAD^^^^ HEAD^^^)" = "studio_next/test_native_creative_control.py"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "$(printf '%s\n' studio_next/native_creative_control.py studio_next/native_editor_project.py studio_next/native_editor_session.py)"
+          git diff --check HEAD^^^^^ HEAD
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

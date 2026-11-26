@@ -1744,7 +1744,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     input_schema={"type": "object", "properties": {
                         "previewOnly": {"type": "boolean"},
                         "outputPath": {"type": "string"}}})
-                    for name in ("save_project", "export_timeline", 
+                    for name in ("save_project", "export_timeline",
                                  "zx7_observe_verified_export_samples",
                                  "zx7_observe_verified_export_audio_timeline")]
             async def call_tool(self, name, inputs):
