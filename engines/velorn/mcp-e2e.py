@@ -31,7 +31,8 @@ def digest(path):
 
 
 async def exercise(options):
-    from studio_next.native_editor_project import capture_render_project
+    from studio_next.native_editor_project import (capture_render_project,
+                                               capture_acknowledged_save_identity)
     from studio_next.native_render_evidence import native_render_binding
 
     from studio_next.native_editor_source_pin import (
@@ -159,7 +160,8 @@ async def exercise(options):
         assert data.get("success") is not False or (arguments or {}).get("previewOnly") is True, (name, data)
         return data
 
-    async def render_and_verify(session, output, save_receipt):
+    async def render_and_verify(session, output, save_receipt, *,
+                                source_bound_save=False):
         # Native save success is an application acknowledgement; read the
         # actual document until that exact acknowledged modified revision is
         # physically present BEFORE dispatching an irreversible export. Do
@@ -176,14 +178,20 @@ async def exercise(options):
                 raise AssertionError(
                     "Native saved document never converged to acknowledged revision")
             await asyncio.sleep(.15)
+        save = save_receipt["result"]["project"]
+        # Existing physical source has already converged to exact model-like
+        # explicit save. Capture its immutable creative+media identity before
+        # native render, without adding another native save or write.
+        saved_for_render = (capture_acknowledged_save_identity(
+            projects, snapshots, save) if source_bound_save else
+            (save["path"], save["modified"]))
         rendered = await call(session, "export_timeline", {
             "outputPath": str(output), "target": "h264_project", "width": 320,
             "height": 180, "range": "custom", "startSeconds": 0, "endSeconds": 2,
             "fps": 24, "includeAudio": True, "previewOnly": False})
-        save = save_receipt["result"]["project"]
         binding = native_render_binding(str(output), rendered)
         captured = capture_render_project(
-            projects, snapshots, rendered, binding, (save["path"], save["modified"]))
+            projects, snapshots, rendered, binding, saved_for_render)
         deadline = time.monotonic() + 90
         while True:
             logs = (fixture / "state").glob("session-*/velorn/export-worker.log")
@@ -605,7 +613,7 @@ async def exercise(options):
         shutil.copy2(native_path, fixture / "revision-1.comfystudio")
         first_output = outputs / "mcp-export-first.mp4"
         first_timeline, first_sha, first_profile, first_capture = await render_and_verify(
-            session, first_output, saved_first)
+            session, first_output, saved_first, source_bound_save=True)
         first_frames = await observe_samples(session, first_output, first_sha)
         first_audio = await observe_audio_envelope(session, first_output, first_sha)
         if collaboration_source:
@@ -786,7 +794,7 @@ async def exercise(options):
         assert (await session.call_tool("open_project", {"projectPath": str(linked_project), "previewOnly": False})).is_error
         output = outputs / "mcp-export.mp4"
         second_timeline, second_sha, second_profile, second_capture = await render_and_verify(
-            session, output, saved_second)
+            session, output, saved_second, source_bound_save=True)
         second_frames = await observe_samples(session, output, second_sha)
         second_audio = await observe_audio_envelope(session, output, second_sha)
         assert first_timeline and first_timeline == second_timeline
@@ -794,6 +802,10 @@ async def exercise(options):
         assert first_profile == second_profile
         assert first_capture[0] == digest(fixture / "revision-1.comfystudio")
         assert second_capture[0] == digest(fixture / "revision-2.comfystudio")
+        assert len(list((snapshots / "save-witnesses").glob("*.comfystudio"))) == 2
+        print("ACTUAL_NATIVE_SAVE_WITNESSES_ISOLATED "
+              "two model-like explicit saves and real physical A/V exports",
+              flush=True)
         assert first_capture[1] == second_capture[1]
         assert first_frames != second_frames, "The saved title edit did not change paired decoded frames"
         # Title-only edits must retain this fixture's measured soundtrack.

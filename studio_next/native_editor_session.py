@@ -367,6 +367,7 @@ async def run_native_session(args):
             audio_diagnostics=cloud_diagnostics,
             original_wav_upload=raw_wav_consent)
     capture_render_project = None
+    capture_saved_project_identity = None
     native_revision_source = None
     if getattr(args, "record_av_project_snapshots", False):
         if (not (fresh or getattr(args, "project", None) is not None) or
@@ -374,7 +375,8 @@ async def run_native_session(args):
                 host_grants.get("save_project") != "write"):
             raise ValueError(
                 "Render snapshots require a fresh or owner-selected audiovisual project with a save grant")
-        from .native_editor_project import capture_render_project as capture
+        from .native_editor_project import (capture_render_project as capture,
+                                            capture_acknowledged_save_identity as capture_save)
         from .native_revision_observation import NativeRevisionObservationMcpSession
         from .native_render_evidence import DESTINATION_FIELD
         # Both fresh and selected projects need the same source-bound root.
@@ -384,6 +386,9 @@ async def run_native_session(args):
         native_revision_source = NativeRevisionObservationMcpSession(snapshots_root)
         physical_capture = partial(
             capture, project_root.resolve(strict=True), snapshots_root,
+            expected_project=getattr(args, "project", None))
+        capture_saved_project_identity = partial(
+            capture_save, project_root.resolve(strict=True), snapshots_root,
             expected_project=getattr(args, "project", None))
 
         def capture_and_register_native_revision(response, binding, save_identity):
@@ -505,6 +510,7 @@ async def run_native_session(args):
                 required_evidence=required,
                 host_content_revision_tools=host_revisions,
             host_capture_render_project=capture_render_project,
+                host_capture_saved_project_identity=capture_saved_project_identity,
                 receipt_path=args.receipt).run(brief)
     pair_report = {}
     if REVIEWED_RENDER_PAIR in required:

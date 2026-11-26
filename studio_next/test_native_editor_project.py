@@ -66,6 +66,84 @@ class RenderSnapshotTests(unittest.TestCase):
                 **binding, DESTINATION_FIELD: "f" * 64}, identity)
             self.assertNotEqual(source_media, substituted)
 
+    def test_actual_native_autosave_timestamps_cannot_overwrite_model_approved_content(self):
+        # In genuine model #45735804964 the editor updated two volatile
+        # modified fields during lengthy read-only decisions after save.
+        # The save and render must still agree on ALL creative content and
+        # source bytes. A changed clip, swapped media or sibling document
+        # must remain rejected; never authorize a second native action.
+        from studio_next.native_editor_project import capture_acknowledged_save_identity
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            projects, snapshots = root / "projects", root / "snapshots"
+            project = projects / "film"
+            project.mkdir(parents=True)
+            snapshots.mkdir()
+            media = project / "assets/audio/source.wav"
+            media.parent.mkdir(parents=True)
+            media.write_bytes(b"Q" * 32)
+            document = {
+                "name": "film", "modified": "t1",
+                "currentTimelineId": "timeline-one",
+                "assets": [{"id": "asset-audio", "name": "source.wav",
+                            "path": "assets/audio/source.wav", "size": 32}],
+                "timelines": [{"id": "timeline-one", "modified": "t1",
+                               "clips": [{"id": "clip-one", "type": "audio",
+                                          "assetId": "asset-audio",
+                                          "startTime": 0}]}],
+            }
+            file = project / "project.comfystudio"
+            def persist():
+                file.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+            persist()
+            source_identity = capture_acknowledged_save_identity(
+                projects, snapshots, {"path": str(project), "modified": "t1"})
+            self.assertEqual(source_identity[:2], (str(project), "t1"))
+            self.assertEqual(len(source_identity), 4)
+            self.assertTrue(all(len(value) == 64 for value in source_identity[2:]))
+            # Render registry must not mistake pre-render SAVE checkpoints for
+            # publicly model-observable finished render revisions.
+            self.assertEqual(list(snapshots.glob("*.comfystudio")), [])
+            private_saves = snapshots / "save-witnesses"
+            self.assertEqual(len(list(private_saves.glob("*.comfystudio"))), 1)
+            response = {"projectPath": str(project),
+                        "settings": {"bitrateKbps": 8000,
+                                     "audioBitrateKbps": 192, "preset": "medium"},
+                        "result": {"options": {"rangeStart": 0,
+                                                "rangeEnd": 6, "crf": 18}}}
+            binding = {DESTINATION_FIELD: "a" * 64,
+                       SCOPE_FIELD: timeline_scope_digest(str(project), "timeline-one")}
+            document["modified"] = "t3"
+            document["timelines"][0]["modified"] = "t2"
+            persist()
+            project_sha, options_sha, media_sha = capture_render_project(
+                projects, snapshots, response, binding, source_identity)
+            self.assertEqual(project_sha, hashlib.sha256(file.read_bytes()).hexdigest())
+            self.assertEqual(media_sha, source_identity[3])
+            self.assertRegex(options_sha, r"^[a-f0-9]{64}$")
+            with self.assertRaisesRegex(ValueError, "last acknowledged save"):
+                capture_render_project(projects, snapshots, response,
+                                       {**binding, DESTINATION_FIELD: "b" * 64},
+                                       (str(project), "t1"))
+            # Even a silent same-size source substitution must be refused.
+            media.write_bytes(b"Z" * 32)
+            with self.assertRaisesRegex(ValueError, "media"):
+                capture_render_project(projects, snapshots, response,
+                                       {**binding, DESTINATION_FIELD: "c" * 64},
+                                       source_identity)
+            media.write_bytes(b"Q" * 32)
+            document["timelines"][0]["clips"][0]["startTime"] = 1
+            persist()
+            with self.assertRaisesRegex(ValueError, "content"):
+                capture_render_project(projects, snapshots, response,
+                                       {**binding, DESTINATION_FIELD: "d" * 64},
+                                       source_identity)
+            with self.assertRaisesRegex(ValueError, "owner-selected"):
+                capture_acknowledged_save_identity(
+                    projects, snapshots,
+                    {"path": str(project), "modified": "t3"},
+                    expected_project=projects / "another")
+
     def test_owner_selected_existing_project_does_not_capture_another_native_document(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()

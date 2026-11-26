@@ -1,5 +1,7 @@
 # ZX7 — durable evidence index (positive and negative)
 
+- **2026-11-26 complete all-branch Git ancestry, neural autosave false-divergence and strictly source-preserving repair:** [permanent exact evidence, model-failure and native retest limits](2026-11-26-BRANCH-ANCESTRY-AND-NATIVE-SAVE-CUSTODY.md). No automated edits or neural/professional acceptance claimed.
+
 - **2026-11-26 Super VL true hosted tool response recovery (not creative G1):** [RED/GREEN + one actual one-call read-only provider evidence](2026-11-26-SUPER-VL-TRUNCATION-RECOVERY.md); genuine failed G1 journal #45731089541 retained; no extra editor grants, no automatic native replay, no professional certification.
 
 ## 2026-11-26 — reuse the actual prior #189 reference instrument in existing BODY

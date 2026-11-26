@@ -934,7 +934,8 @@ class NativeCreativeControl:
                  host_verified_timeline_preview_tools: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
                  host_content_revision_tools: tuple[str, ...] = (),
-                 host_capture_render_project=None):
+                 host_capture_render_project=None,
+                 host_capture_saved_project_identity=None):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
             raise NativeCreativeControlError("Native model session requires finite turn budget")
         if not callable(getattr(model, "decide", None)):
@@ -971,6 +972,12 @@ class NativeCreativeControl:
                 or host_tool_access.get("save_project") != "write"):
             raise NativeCreativeControlError("Render snapshots require a trusted A/V session and save grant")
         self._capture_render_project = host_capture_render_project
+        if (host_capture_saved_project_identity is not None and (
+                not callable(host_capture_saved_project_identity) or
+                host_capture_render_project is None)):
+            raise NativeCreativeControlError(
+                "Trusted save-time project capture requires native render custody")
+        self._capture_saved_project_identity = host_capture_saved_project_identity
         self._explicit_render_save_identity = None
         if (not isinstance(host_content_revision_tools, (list, tuple, frozenset)) or
                 any(not isinstance(name, str) or not name
@@ -1325,8 +1332,9 @@ class NativeCreativeControl:
              event.get("tool") != RENDER_TOOL), None)
         saved = self._explicit_render_save_identity
         return (last_write == "save_project" and
-                type(saved) is tuple and len(saved) == 2 and
-                all(type(value) is str and value for value in saved))
+                type(saved) is tuple and len(saved) in (2, 4) and
+                all(type(value) is str and value for value in saved[:2]) and
+                (len(saved) == 2 or all(_digest(value) for value in saved[2:])))
 
     def _missing_completion_evidence(self):
         """Require still-current export receipts, not superseded or failed reads."""
@@ -3200,11 +3208,25 @@ class NativeCreativeControl:
                     render_binding[AV_REVIEW_FIELD] = av_values
                     if native_name == AUDIO_ENVELOPE:
                         render_binding[AV_PCM_FIELD] = p["preview_pcm_sha256"]
+                save_capture_failed = False
                 if self._capture_render_project is not None and native_name == "save_project":
                     save_result = host_response.get("result")
                     saved = save_result.get("project") if isinstance(save_result, dict) else None
                     self._explicit_render_save_identity = (
                         (saved.get("path"), saved.get("modified")) if isinstance(saved, dict) else None)
+                    if self._capture_saved_project_identity is not None:
+                        try:
+                            identity = await asyncio.to_thread(
+                                self._capture_saved_project_identity, saved)
+                            if (type(identity) is not tuple or len(identity) != 4 or
+                                    identity[:2] != self._explicit_render_save_identity or
+                                    not all(_digest(item) for item in identity[2:])):
+                                raise ValueError("Trusted save-time capture returned invalid identity")
+                        except (OSError, ValueError, TypeError):
+                            self._explicit_render_save_identity = None
+                            save_capture_failed = True
+                        else:
+                            self._explicit_render_save_identity = identity
                 if self._capture_render_project is not None and native_name == RENDER_TOOL and render_binding:
                     previous_write = next(
                         (event.get("tool") for event in reversed(self.events)
@@ -3225,6 +3247,8 @@ class NativeCreativeControl:
                             render_binding[SAVED_RENDER_OPTIONS_FIELD] = options_sha
                             render_binding[SAVED_RENDER_MEDIA_FIELD] = media_sha
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
+                              **({"native_save_project_checkpoint_failed": True}
+                                 if save_capture_failed else {}),
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
                               "text_sha256": [hashlib.sha256(s.encode()).hexdigest() for s in texts],
@@ -3253,6 +3277,9 @@ class NativeCreativeControl:
                               "audio_sent_to_model_for_next_decision": bool(audio),
                               "audio_semantically_heard": False,
                               "human_or_artistic_quality_approved": False})
+                if save_capture_failed:
+                    outcome = "native_save_checkpoint_failed"
+                    break
                 if render_binding.get(SAVED_RENDER_FAILURE):
                     outcome = "native_render_snapshot_failed"
                     break
