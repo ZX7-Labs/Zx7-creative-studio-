@@ -1735,6 +1735,84 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                           "host_application_write_acknowledged": True})
         self.assertFalse(ordinary._host_write_already_acknowledged("save_project"))
 
+    async def test_verified_save_anchor_survives_read_only_autosaves_before_render(self):
+        from studio_next.native_render_evidence import REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR
+        class SaveSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.tools += [SimpleNamespace(name=name, description="Pinned host native",
+                    input_schema={"type": "object", "properties": {
+                        "previewOnly": {"type": "boolean"},
+                        "outputPath": {"type": "string"}}})
+                    for name in ("save_project", "export_timeline", 
+                                 "zx7_observe_verified_export_samples",
+                                 "zx7_observe_verified_export_audio_timeline")]
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                if name == "save_project":
+                    result = {"success": True, "action": name, "result": {
+                        "project": {"path": "/owner/project", "modified": "t1"}}}
+                elif name == "export_timeline":
+                    result = {"success": True, "action": name,
+                              "projectPath": "/owner/project",
+                              "timeline": {"id": "timeline-one"},
+                              "outputPath": inputs["outputPath"],
+                              "result": {"started": True,
+                                         "outputPath": inputs["outputPath"]}}
+                else:
+                    return await super().call_tool(name, inputs)
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(result))])
+        session = SaveSession()
+        grants = {item.name: ("write" if item.name in (
+            "save_project", "export_timeline", "update_text_clip") else "read")
+            for item in session.tools}
+        captures = []
+        def witness(saved):
+            captures.append(("save", saved))
+            return ("/owner/project", "t1", "a" * 64, "b" * 64)
+        def render(result, binding, identity):
+            captures.append(("render", identity))
+            return ("c" * 64, "d" * 64, "b" * 64)
+        model = ScriptedModel([
+            decision("invoke", tool="save_project", inputs={"previewOnly": False}),
+            decision("invoke", tool="export_timeline",
+                     inputs={"outputPath": "/owner/export/first.mp4"}),
+            decision("finish", summary="Not a complete paired revision"),
+        ])
+        control = NativeCreativeControl(
+            session, model, max_turns=3, host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",),
+            host_capture_render_project=render,
+            host_capture_saved_project_identity=witness)
+        result = await control.run("Actual source-bound owner audiovisual project")
+        self.assertEqual(captures, [
+            ("save", {"path": "/owner/project", "modified": "t1"}),
+            ("render", ("/owner/project", "t1", "a" * 64, "b" * 64))])
+        self.assertIn("export_timeline", [name for name, _ in session.calls])
+        self.assertEqual(
+            next(e for e in result["events"] if e.get("tool") == "export_timeline"
+                 and e["kind"] == "native_tool_result").get(
+                     "native_render_saved_project_sha256"), "c" * 64)
+        self.assertFalse(result["native_editing_capability_complete"])
+
+        refused = NativeCreativeControl(
+            SaveSession(), ScriptedModel([
+                decision("invoke", tool="save_project", inputs={"previewOnly": False}),
+                decision("invoke", tool="export_timeline",
+                         inputs={"outputPath": "/owner/export/untrusted.mp4"})]),
+            max_turns=2, host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",),
+            host_capture_render_project=render,
+            host_capture_saved_project_identity=lambda saved: (
+                "/untrusted/project", "t1", "a" * 64, "b" * 64))
+        rejected = await refused.run("Reject a mismatched save witness")
+        self.assertEqual(rejected["status"], "native_save_checkpoint_failed")
+        self.assertNotIn("export_timeline", [
+            name for name, _ in refused.session.calls])
+
     async def test_audiovisual_finish_requires_complete_observation_of_both_renders(self):
         from studio_next.native_creative_audit import NativeJournalError, audit_native_journal
         from studio_next.native_render_evidence import (
