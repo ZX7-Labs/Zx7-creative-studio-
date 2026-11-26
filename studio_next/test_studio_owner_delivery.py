@@ -170,6 +170,27 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         studio_cli._write_status(self.session, self.status)
         return first_media
 
+    def test_post_render_native_clock_only_autosave_preserves_valid_owner_delivery(self):
+        """An already genuine first/revised source pair remains releasable if
+        the native editor later auto-updates ONLY its own modified clocks.
+        Do not demand byte identity of a mutable live file; exact render-time
+        hashes, source closure and all editable content still must match.
+        """
+        self.assertTrue(self.verify()["saved_native_matches_last_render_snapshot"])
+        project = json.loads(self.native.read_text(encoding="utf-8"))
+        project["modified"] = "2026-11-26T12:15:00Z"
+        project["timelines"][0]["modified"] = "2026-11-26T12:15:00Z"
+        self.native.write_text(json.dumps(project), encoding="utf-8")
+        receipt = self.verify()
+        self.assertTrue(receipt["physical_audiovisual_pair_verified"])
+        self.assertFalse(receipt["saved_native_matches_last_render_snapshot"])
+        self.assertTrue(receipt["saved_native_content_matches_last_render_snapshot"])
+        self.assertTrue(receipt["native_clock_only_drift_after_render"])
+        project["timelines"][0]["clips"][0]["name"] = "unauthorized post-render edit"
+        self.native.write_text(json.dumps(project), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Final saved native source differs"):
+            self.verify()
+
     def test_autosave_only_timestamps_cannot_certify_an_editable_revision(self):
         """Actual Super VL #45632856001: a passive five-minute autosave
         changed root/timeline modified clocks without changing any creative
