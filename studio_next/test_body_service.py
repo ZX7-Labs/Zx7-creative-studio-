@@ -262,6 +262,42 @@ class IndependentLocalCreativeServiceTests(unittest.TestCase):
                         existing_result_verifier=lambda _:True,lease_seconds=3600)
             finally:restart.close()
 
+    def test_stage_progress_closes_read_only_database_on_every_poll(self):
+        from contextlib import closing
+        from unittest.mock import patch
+        import sqlite3
+        with tempfile.TemporaryDirectory() as root:
+            service = LocalBodyCoordinator(root, execute=lambda ir, workspace: {})
+            opened = []
+            try:
+                folder = service._workspace("actual")
+                folder.mkdir()
+                key = "a" * 64
+                with closing(sqlite3.connect(folder / "production.sqlite3")) as conn, conn:
+                    conn.execute("CREATE TABLE node_results (project_key TEXT, node_id TEXT, "
+                                 "node_state TEXT, attempts INTEGER, updated_at REAL)")
+                    conn.execute("INSERT INTO node_results VALUES (?, 'render', 'running', 1, 0)",
+                                 (key,))
+                real_connect = sqlite3.connect
+                def tracked(*args, **kwargs):
+                    db = real_connect(*args, **kwargs)
+                    opened.append(db)
+                    return db
+                with patch("studio_next.body_service.sqlite3.connect", side_effect=tracked):
+                    for _ in range(5):
+                        result = service._stage_progress("actual", project_key=key,
+                                                         node_ids=["render"])
+                        self.assertTrue(result["tool_progress_is_actual_sqlite"])
+                        self.assertEqual(result["observed_tool_states"][0]["node_id"], "render")
+                self.assertGreaterEqual(len(opened), 5)
+                for db in opened:
+                    with self.assertRaises(sqlite3.ProgrammingError):
+                        db.execute("SELECT 1")
+            finally:
+                for db in opened:
+                    db.close()
+                service.close()
+
     def test_api_exposes_actual_stored_tool_progress_not_invented_percent(self):
         with tempfile.TemporaryDirectory() as root:
             from studio_next.durable_graph import DurableFilmGraph

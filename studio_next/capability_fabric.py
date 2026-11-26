@@ -195,7 +195,9 @@ class CapabilityFabric:
                         schema, ensure_ascii=False, allow_nan=False)),
                     "schema_bytes": schema_bytes,
                     "name_tokens": _tokens(name + " " + namespace),
-                    "description_tokens": _tokens(summary),
+                    # Index the bounded native vocabulary, not just the displayed
+                    # summary. Keep long untrusted descriptions out of model context.
+                    "description_tokens": _tokens(desc[:1024]),
                     "requires": list(requirements.get(name, ())),
                     # Potential effect is an affordance, NOT evidence that a
                     # later native call actually changed a project fact.
@@ -228,7 +230,10 @@ class CapabilityFabric:
         # selection even when the *name* is reused for a different ABI/grant.
         self.revision = hashlib.sha256(_wire([{
             "id": key, "access": value["access"],
-            "summary": value["description"], "schema": value["input_schema"],
+            "summary": value["description"],
+            "search_tokens_sha256": hashlib.sha256(
+                _wire(sorted(value["description_tokens"])).encode("utf-8")).hexdigest(),
+            "schema": value["input_schema"],
             "requires": value["requires"], "may_enable": value["may_enable"]
         } for key, value in sorted(records.items())]).encode("utf-8")).hexdigest()
 
@@ -394,8 +399,8 @@ class CapabilityFabric:
             items.append({"id": ident, "description": record["description"][:96],
                           "access": record["access"],
                           "parameters_sample": param_names,
-                          "requires": record["requires"],
-                          "may_enable": record["may_enable"]})
+                          "requires": list(record["requires"]),
+                          "may_enable": list(record["may_enable"])})
         return {"revision": self.revision, "matches": items,
                 "has_more": len(scored) > end,
                 "requires_refinement": False,

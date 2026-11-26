@@ -14,6 +14,7 @@ import argparse
 import base64
 import binascii
 import concurrent.futures
+from contextlib import closing
 import fcntl
 import hmac
 import json
@@ -402,7 +403,8 @@ class LocalBodyCoordinator:
         if not path.is_file():
             return empty
         try:
-            with sqlite3.connect(f"file:{path}?mode=ro",uri=True,timeout=4) as db:
+            with closing(sqlite3.connect(path.absolute().as_uri()+"?mode=ro",
+                                         uri=True,timeout=4)) as db:
                 tables=db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
                 if ("node_results",) not in tables:
                     return empty

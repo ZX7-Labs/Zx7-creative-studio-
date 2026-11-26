@@ -34,6 +34,54 @@ class PhysicalBodySnapshotTests(unittest.TestCase):
                 self.assertEqual(conn.execute("SELECT value FROM steps").fetchone(),
                                  ("completed",))
 
+    def test_snapshot_and_restore_close_all_database_handles(self):
+        from contextlib import closing
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            project = base / "project"
+            project.mkdir()
+            with closing(sqlite3.connect(project / "production.sqlite3")) as conn, conn:
+                conn.execute("CREATE TABLE owner_state (value TEXT)")
+                conn.execute("INSERT INTO owner_state VALUES ('preserved')")
+            real_connect = sqlite3.connect
+            opened = []
+            def tracked(*args, **kwargs):
+                db = real_connect(*args, **kwargs)
+                opened.append(db)
+                return db
+            try:
+                with patch("studio_next.body_archive.sqlite3.connect", side_effect=tracked):
+                    archive = base / "snapshot.tar.gz"
+                    saved = create_body_archive(project, archive)
+                    import shutil
+                    shutil.rmtree(project)
+                    restore_body_archive(archive, project, expected_sha256=saved["sha256"])
+                self.assertGreaterEqual(len(opened), 3)
+                for db in opened:
+                    with self.assertRaises(sqlite3.ProgrammingError):
+                        db.execute("SELECT 1")
+            finally:
+                for db in opened:
+                    db.close()
+
+    def test_snapshot_reads_exact_sqlite_path_with_uri_reserved_characters(self):
+        from contextlib import closing
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            project = base / "creative #1? revision"
+            project.mkdir()
+            with closing(sqlite3.connect(project / "production.sqlite3")) as conn, conn:
+                conn.execute("CREATE TABLE owner_state (value TEXT)")
+                conn.execute("INSERT INTO owner_state VALUES ('preserved')")
+            archive = base / "snapshot.tar.gz"
+            saved = create_body_archive(project, archive)
+            import shutil
+            shutil.rmtree(project)
+            restore_body_archive(archive, project, expected_sha256=saved["sha256"])
+            with closing(sqlite3.connect(project / "production.sqlite3")) as conn:
+                self.assertEqual(conn.execute("SELECT value FROM owner_state").fetchone(),
+                                 ("preserved",))
+
     def test_tampered_archive_and_wrong_restore_path_cannot_impersonate_original(self):
         with tempfile.TemporaryDirectory() as root:
             p=Path(root)

@@ -609,17 +609,17 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Check exact-head SDK/native installed CI for the restored guard reconciliation; do not restart already-green full workflows on docs-only commits unnecessarily. Resume behavior-level historical consolidation and shared whole-studio code-first attachment evaluation; do not mark complete, delete branches, or infer neural acceptance from offline fixtures."
+    "next_action": "Refresh latest exact-head CI; verify new shared discovery/SQLite changes. Do not repeat previous passing native/installed paths except necessary regression. Continue remaining unique historical behaviors and full A–L shared/domain integration from existing gateway, engines and native evidence. No branch deletion or professional acceptance claim until gates pass; no unauthorized inference."
   },
   "latest_ci_checkpoint": {
-    "source": "fbdbfc3ce92dc042a15bec99cac2914a2c357ade",
+    "source": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
+    "observed_date": "2026-11-26",
     "checks_observed": 29,
     "counts": {
-      "success": 17,
-      "in_progress": 3,
-      "failure": 9
+      "success": 28,
+      "in_progress": 1
     },
-    "context": "Source/native project gate all four jobs passed, including 336 official MCP SDK transport tests; unified installed creative gate passed. Actual editor common E2E fails at placement negative fixture line 528 because tokenless request is refused before placement-plan metadata. New fixture tests tokenless rejection/no mutation separately and supplies live native revision for invalid-asset assertions. Exact physical retest pending.",
+    "context": "Previous physical fixture correction passed actual native Electron, unified creative, installer, all installed package and independent release artifact jobs; full MLT gate status must be refreshed. Hosted/local inference jobs skipped. New shared source changes require fresh exact-head verification.",
     "creativity_release_accepted": false
   },
   "latest_artifact_audit_20261126": {
@@ -874,6 +874,139 @@
           "apt_failure_run": 45869371164,
           "apt_retry": "targeted retry; final run failure is common E2E fixture, not apt"
         }
+      },
+      "shared_discovery_archive": {
+        "base_source": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
+        "source_variants": [
+          {
+            "variant": "8fe04689b2c2348cb7f3f1d755dd4092de706ae50afe3bc9a776cde726df41a1",
+            "historical_tip": "e3f8b057cf45eae767dce0433388fc8deac09f07",
+            "path": "studio_next/capability_fabric.py",
+            "status": "restored_bounded_full_description_index_and_revision"
+          },
+          {
+            "variant": "210ebed34db31107bd4ba23ba38e1f74a2c372d4c41db5075dadd40196d5b0b9",
+            "historical_tip": "e3f8b057cf45eae767dce0433388fc8deac09f07",
+            "path": "studio_next/test_capability_fabric.py",
+            "status": "historical_regression_replayed_RED_then_GREEN"
+          },
+          {
+            "variant": "f9862510472186eb0968bbdfc1d3276fa80bd1297774c013ac47f789e9cfbf39",
+            "path": "studio_next/body_motion_project.py",
+            "status": "superseded_by_same_exclusive_publication_plus_decode_clock_and_fsync",
+            "evidence": "current source diff and current physical test suite"
+          },
+          {
+            "variant": "7d84f85d9000a9ec6d07212ff5194eb45ffe9be116cb9aab8d42cdd783a5a732",
+            "path": "studio_next/test_body_motion_project.py",
+            "status": "current_tests_retain_and_strengthen_old_race_tests_with_actual_media"
+          },
+          {
+            "variant": "1d22bf7c7449d41d3d217d175cdaf4e53fb101000dcb43cb82ec8af014766b13",
+            "path": "studio_next/reference_observatory.py",
+            "status": "current_source_retains_old_behavior_adds_exact_sample_count"
+          },
+          {
+            "variant": "2565c58617609bf192430a179c51deb57434cc65abcc02dc7d9a17ae8402af70",
+            "path": "studio_next/test_reference_observatory.py",
+            "status": "current_tests_retain_old_and_add_linear_energy_regression"
+          },
+          {
+            "variant": "cfb97338734ece3665309aacfb17461ea6277675a85a3fabf5a9b657ea09ee2f",
+            "path": "studio_next/capability_reference_guard.py",
+            "status": "whole_file_AST_equal_except_comment"
+          },
+          {
+            "variant": "0dfac7c6bcb3137dab51fb6a573754f2574e98a704b29de235d0ef25c749f8fd",
+            "path": "studio_next/test_body_editor_catalog.py",
+            "status": "exact_worktree_bytes_already_restored"
+          },
+          {
+            "variant": "45498edcfc4031ac2e33a7768b1c5c1f2bdafbc3398cc132cf136cd4642fe8db",
+            "path": "studio_next/body_document_schemas.py",
+            "status": "gain_fields_present_with_pan"
+          },
+          {
+            "variant": "fdd1e8ac25b794784b5d7266cbe386da98759866c5ec15d70fb0f342663b9b60",
+            "path": "studio_next/body_document_schemas.py",
+            "status": "gap_color_implemented_as_separate_director_render_argument_not_duplicate_plan_field"
+          },
+          {
+            "variant": "3ca361055ba9e116bcd5ed9b4aaa4ef930d9d47fbb45ec233be20d714eea6fcc",
+            "path": "studio_next/body_document_schemas.py",
+            "status": "clip_grade_current"
+          },
+          {
+            "variant": "789449ca6b61c6eb1b5fd402fa623b89c3fa31f8b9836e63c593627c22ca372e",
+            "path": "studio_next/body_document_schemas.py",
+            "status": "zero_clip_picture_track_current"
+          }
+        ],
+        "historical_registry": "Do not revive separate LiveCapabilityRegistry; reuse gateway refresh lock, current future-tool discovery and failed-refresh preservation. Whole-source hot replacement not claimed.",
+        "new_defects": {
+          "search_result_mutation": "Returned readiness/effect lists aliased internal host snapshot; defensive copies",
+          "late_description_change": "Live invocation compares bounded discovery vocabulary as well as ABI and grants",
+          "concurrent_refresh": "Old slow tools/list could overwrite newer snapshot; serialize publication",
+          "sqlite_handles": "Archive backup/restore and service polling left raw sqlite handles open; close deterministically",
+          "sqlite_path": "URI-reserved workspace characters could back up an incorrect empty database; encode actual absolute file URI"
+        },
+        "red": {
+          "discovery_initial": "3 failures / 3",
+          "refresh": "1 failure and 1 already passing / 2",
+          "sqlite": "2 failures and 1 error / 3"
+        },
+        "green": {
+          "fabric_gateway_integration_catalog": {
+            "passed": 80,
+            "skipped": 0
+          },
+          "cross_domain": {
+            "run": 156,
+            "passed": 153,
+            "skipped": 3
+          },
+          "physical_selected": {
+            "passed": 37
+          },
+          "archive_service": {
+            "passed": 26
+          },
+          "new_exact_test_blobs": [
+            {
+              "path": "studio_next/capability_fabric.py",
+              "sha": "d78b2132dce40e9fdb8754f0c9bade37b03ae7a6"
+            },
+            {
+              "path": "studio_next/capability_gateway.py",
+              "sha": "9f22f157f5e9998a5f38648149209471ac40602a"
+            },
+            {
+              "path": "studio_next/test_capability_fabric.py",
+              "sha": "659780b0a9a9e45579de17bee91c1166eb9e1c1d"
+            },
+            {
+              "path": "studio_next/test_capability_gateway.py",
+              "sha": "839d5bc036d975438cb168afe2394e3721b8a144"
+            },
+            {
+              "path": "studio_next/body_archive.py",
+              "sha": "a18d19787943e1fa8cd64dbc7039cffc00820e7c"
+            },
+            {
+              "path": "studio_next/body_service.py",
+              "sha": "4a1f26912fb5463767da145dcc7f67445121e1c0"
+            },
+            {
+              "path": "studio_next/test_body_archive.py",
+              "sha": "de332061707afd5ad995a946147b3b7843246d20"
+            },
+            {
+              "path": "studio_next/test_body_service.py",
+              "sha": "7c4b17e8e09296829c60d73dded1a6e274379f99"
+            }
+          ]
+        },
+        "limits": "No SDK or MLT/Blender installed locally; artifact verification on preceding exact tree, new source requires full CI. Counts overlap where test groups include targeted tests; do not sum as unique tests. Structural/behavior subset not all-branch closure."
       }
     }
   },
@@ -918,5 +1051,38 @@
     "scope": "whole A–L studio; no mandatory video-first serial gate",
     "runtime": "compatible replaceable Brain via executable capability discovery, typed native actions, state and feedback, no runtime Markdown/manual creative prompt pack",
     "acceptance": "unchanged; distinguish transport instructions and user intent from engineered creative scripts"
+  },
+  "latest_installed_artifact_audit": {
+    "head": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
+    "merge_test_commit": "7ae3747e800dfb9b830fd078627db70d80d7f7c7",
+    "exact_equal_tree": "3e50bef8f8c02d987dbaa5f118d5f4515153f55a",
+    "installed": {
+      "run": 45870260276,
+      "artifact": 15143422540,
+      "zip_sha256": "8849f64710815d87975175ab2b3d7d1d15a84114d8d24ee792133038094c39e3",
+      "tests_run": 1743,
+      "pass": 1713,
+      "skip": 30,
+      "failed": 0,
+      "manifest_verified": 24,
+      "physical_mp4_full_decode": 3,
+      "sqlite_integrity_pass": 2
+    },
+    "unified": {
+      "run": 45870259932,
+      "artifact": 15142442764,
+      "zip_sha256": "5fb10712b0915be50439562a5c9f56894f153bbc83cb9ab6c2024df889296b4d",
+      "manifest_verified": 16,
+      "physical_mp4_full_decode": 4,
+      "scripted": true
+    },
+    "native": 45870260347,
+    "source_gate": 45870260362,
+    "brain": 45870259833,
+    "actual_model_jobs_skipped": [
+      140083604936,
+      140083534559
+    ],
+    "independent_professional_acceptance": false
   }
 }

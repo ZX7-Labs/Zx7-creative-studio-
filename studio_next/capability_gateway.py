@@ -186,6 +186,7 @@ class CapabilityGateway:
             except CapabilitySessionBudgetError as exc:
                 raise CapabilityExecutionError(str(exc)) from exc
         self._fabric = None
+        self._refresh_lock = asyncio.Lock()
         self._events = []
 
     def _live_grants(self, namespace):
@@ -203,12 +204,16 @@ class CapabilityGateway:
         Refreshing changes the contract digest. Previously selected handles
         never gain authority under an updated ABI or grant set.
         """
-        discovery = {name: (entry[0], self._live_grants(name),
-                            entry[2], entry[4])
-                     for name, entry in self._bindings.items()}
-        fabric = await CapabilityFabric.from_connections(discovery)
-        self._fabric = fabric
-        return fabric.overview()
+        # Keep the last complete snapshot until a newer complete discovery
+        # succeeds. Serial publication prevents a slow older tools/list from
+        # replacing a newer catalog; invocation still checks live grants/ABI.
+        async with self._refresh_lock:
+            discovery = {name: (entry[0], self._live_grants(name),
+                                entry[2], entry[4])
+                         for name, entry in self._bindings.items()}
+            fabric = await CapabilityFabric.from_connections(discovery)
+            self._fabric = fabric
+            return fabric.overview()
 
     def _current(self):
         if self._fabric is None:
@@ -297,7 +302,7 @@ class CapabilityGateway:
                 advertised, grants, conditions, effects)})
             live_record = fresh.resolve(operation_id, revision=fresh.revision)
             for field in ("access", "input_schema", "description",
-                          "requires", "may_enable"):
+                          "requires", "may_enable", "description_tokens"):
                 if record[field] != live_record[field]:
                     raise CapabilityExecutionError(
                         "Native operation contract changed; rediscover capability")

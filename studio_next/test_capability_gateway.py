@@ -100,6 +100,23 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         await gateway.invoke("video/make", revision=new["revision"], inputs={"value": 1.25})
         self.assertEqual(len(e.calls), 1)
 
+    async def test_late_native_search_vocabulary_change_requires_rediscovery(self):
+        entry = tool("edit")
+        entry.description = "Edit native artwork. " + "Detailed operation. " * 8 + "vector"
+        engine = Engine([entry])
+        gateway = CapabilityGateway({"graphics": (engine, {"edit": "write"})})
+        before = await gateway.refresh()
+        entry.description = entry.description.replace("vector", "raster")
+        with self.assertRaisesRegex(CapabilityExecutionError, "contract changed"):
+            await gateway.invoke("graphics/edit", revision=before["revision"], inputs={})
+        self.assertEqual(engine.calls, [])
+        after = await gateway.refresh()
+        self.assertNotEqual(before["revision"], after["revision"])
+        self.assertFalse(gateway.search("vector")["matches"])
+        self.assertEqual(gateway.search("raster")["matches"][0]["id"], "graphics/edit")
+        await gateway.invoke("graphics/edit", revision=after["revision"], inputs={})
+        self.assertEqual(engine.calls, [("edit", {})])
+
     async def test_grantless_new_tool_cannot_become_executable_by_model(self):
         e = Engine([tool("edit"), tool("wipe_all")])
         g = CapabilityGateway({"motion": (e, {"edit": "write"})})
@@ -213,6 +230,58 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
                                        revision=current["revision"], inputs={})
         self.assertEqual(applied["state"], "host_reported_success_unverified")
         self.assertEqual(engine.calls, [("future_vfx", {})])
+
+    async def test_concurrent_refresh_cannot_publish_an_older_catalog_last(self):
+        class DelayedEngine(Engine):
+            def __init__(self):
+                super().__init__([tool("original")])
+                self.started = asyncio.Event()
+                self.release = asyncio.Event()
+                self.list_calls = 0
+
+            async def list_tools(self):
+                self.list_calls += 1
+                snapshot = list(self.tools)
+                if self.list_calls == 1:
+                    self.started.set()
+                    await self.release.wait()
+                return SimpleNamespace(tools=snapshot)
+
+        engine = DelayedEngine()
+        grants = {"original": "read"}
+        gateway = CapabilityGateway({"creative": (engine, lambda: dict(grants))})
+        older = asyncio.create_task(gateway.refresh())
+        await engine.started.wait()
+        engine.tools.append(tool("new_vfx"))
+        grants["new_vfx"] = "write"
+        newer = asyncio.create_task(gateway.refresh())
+        try:
+            await asyncio.sleep(0)
+            # The older discovery may be slow; the newer one must not publish
+            # first and then be overwritten by the older snapshot.
+            self.assertEqual(engine.list_calls, 1)
+        finally:
+            engine.release.set()
+            previous, current = await asyncio.gather(older, newer)
+        self.assertEqual(current["operation_count"], 2)
+        self.assertNotEqual(previous["revision"], current["revision"])
+        self.assertEqual(gateway.search("new_vfx")["matches"][0]["id"],
+                         "creative/new_vfx")
+        with self.assertRaisesRegex(CapabilityContractError, "Stale"):
+            gateway.describe("creative/original", revision=previous["revision"])
+
+    async def test_failed_refresh_preserves_last_complete_snapshot(self):
+        engine = Engine([tool("make")])
+        gateway = CapabilityGateway({"creative": (engine, {"make": "write"})})
+        prior = await gateway.refresh()
+        # Duplicate names are malformed discovery, not a valid replacement.
+        engine.tools.append(tool("make"))
+        with self.assertRaises(CapabilityContractError):
+            await gateway.refresh()
+        self.assertEqual(gateway.search("make")["revision"], prior["revision"])
+        with self.assertRaises(CapabilityContractError):
+            await gateway.invoke("creative/make", revision=prior["revision"], inputs={})
+        self.assertEqual(engine.calls, [])
 
     async def test_host_revokes_grant_after_discovery_and_gateway_blocks_execution(self):
         e = Engine([tool("write_original")])
