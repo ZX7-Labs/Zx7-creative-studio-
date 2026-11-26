@@ -1,0 +1,50 @@
+name: ZX7 source-pinned G4 owner final project autosave safety RED GREEN
+on:
+  push:
+    branches: [trial/g4-postrender-autosave-source-custody-20261126]
+    paths: ['.github/workflows/zx7-oneuse-g4-postrender-autosave-source-custody-20261126.yml']
+permissions:
+  contents: read
+jobs:
+  exact-owner-gate:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g4-postrender-autosave-source-custody-20261126'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 4
+          submodules: recursive
+      - run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "3fed76fde7f15aa5136260e00db8d336bfeac197"
+          test "$(git rev-parse HEAD^^)" = "087495dd4bc8cae145275b6f18761a8be60eed31"
+          test "$(git rev-parse HEAD^^^)" = "43fb433e24cbf4c2c2176c08feb4d34cc9378876"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = "studio_next/test_studio_owner_delivery.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = "studio_next/studio_owner_delivery.py"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/zx7-oneuse-g4-postrender-autosave-source-custody-20261126.yml"
+          git diff --check HEAD^^^ HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          if ! command -v ffmpeg || ! command -v ffprobe; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: Prove unchanged verifier falsely refuses passive native autosave
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/zx7-red" "087495dd4bc8cae145275b6f18761a8be60eed31"
+          cd "$RUNNER_TEMP/zx7-red"
+          if python -m unittest studio_next.test_studio_owner_delivery.OwnerAudiovisualDeliveryTests.test_post_render_native_clock_only_autosave_preserves_valid_owner_delivery -v > "$RUNNER_TEMP/red.log" 2>&1; then
+            cat "$RUNNER_TEMP/red.log"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/red.log"
+          grep -F 'Final saved native source differs from the reviewed render' "$RUNNER_TEMP/red.log"
+      - name: Physically verify first/revised videos and reject creative/media tamper
+        run: |
+          python -m unittest studio_next.test_studio_owner_delivery studio_next.test_native_editor_project studio_next.test_native_render_evidence -v
