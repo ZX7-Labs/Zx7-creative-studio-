@@ -21,6 +21,28 @@ from threading import Lock
 
 REFERENCE_LANGUAGE_PATTERN = r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}"
 ASSET_RESEARCH_MEDIA = ("image", "audio", "video", "3d", "texture", "hdri")
+# Fixed, host-installed source capabilities; omission preserves the established
+# fallback order. A named provider never silently queries a different service.
+_ASSET_PROVIDER_MEDIA = {
+    "openverse": ("image", "audio"),
+    "art_institute_chicago": ("image",),
+    "cleveland_museum": ("image",),
+    "sfxmint_free_library": ("audio",),
+    "wikimedia_commons": ("image", "audio", "video"),
+    "poly_haven": ("3d", "texture", "hdri"),
+    "ambientcg": ("3d", "texture", "hdri"),
+}
+ASSET_RESEARCH_PROVIDERS = tuple(_ASSET_PROVIDER_MEDIA)
+STUDY_RESEARCH_PROVIDERS = ("crossref", "europe_pmc")
+REFERENCE_RESEARCH_PROVIDERS = ("wikipedia", "searxng", "nasa_archive")
+_DEFAULT_ASSET_PROVIDERS = {
+    "image": ("openverse", "art_institute_chicago", "wikimedia_commons"),
+    "audio": ("openverse", "sfxmint_free_library", "wikimedia_commons"),
+    "video": ("wikimedia_commons",),
+    "3d": ("poly_haven", "ambientcg"),
+    "texture": ("poly_haven", "ambientcg"),
+    "hdri": ("poly_haven", "ambientcg"),
+}
 _WIKIPEDIA_HOST = re.compile(r"([a-z]{2,8}(?:-[a-z0-9]{1,8}){0,3})\.wikipedia\.org")
 _WIKIMEDIA_SITE_MATRIX = "https://meta.wikimedia.org/w/api.php"
 
@@ -113,6 +135,9 @@ def _public_api_json(url):
     specialist_api = (host, parsed.path) in {
         ("api.polyhaven.com", "/search"),
         ("ambientcg.com", "/api/v3/assets"),
+        ("openaccess-api.clevelandart.org", "/api/artworks/"),
+        ("images-api.nasa.gov", "/search"),
+        ("www.ebi.ac.uk", "/europepmc/webservices/rest/search"),
     }
     if (parsed.scheme != "https" or parsed.netloc != host or parsed.fragment or
             (host not in hosts and not wikimedia_api and not specialist_api)):
@@ -170,18 +195,27 @@ class CreativeResearch:
         self._site_catalog = None
         self._site_lock = Lock()
 
-    def web(self, *, query, limit=8, language=None):
+    def web(self, *, query, limit=8, language=None, provider=None):
         query = _check(query, limit)
         if language is not None:
             if not isinstance(language, str) or not re.fullmatch(REFERENCE_LANGUAGE_PATTERN, language):
                 raise CreativeResearchError("Reference search requires a valid language tag")
-        if self._searxng_url is None:
-            provider = "wikipedia"
+        if provider is None:
+            provider = "wikipedia" if self._searxng_url is None else "searxng"
+        if not isinstance(provider, str) or provider not in REFERENCE_RESEARCH_PROVIDERS:
+            raise CreativeResearchError("Reference research provider is not installed")
+        if provider == "wikipedia":
             language, base = self._resolve_wikipedia_site((language or "en").lower())
             results = self._wikipedia_references(query, limit, base)
-        else:
-            provider = "searxng"
+        elif provider == "searxng":
+            if self._searxng_url is None:
+                raise CreativeResearchError("SearXNG requires owner configuration")
             results = self._searxng_references(query, limit, language)
+        else:
+            if language is not None:
+                raise CreativeResearchError("NASA archive does not accept a language selector")
+            from .creative_research_sources import nasa_video_references
+            results = nasa_video_references(self._fetch, query, limit)
         return {
             "kind": "research_web_references", "provider": provider, "results": results,
             "language": language,
@@ -289,46 +323,27 @@ class CreativeResearch:
                 break
         return results
 
-    def assets(self, *, query, media, limit=8):
+    def assets(self, *, query, media, limit=8, provider=None):
         query = _check(query, limit)
         if media not in ASSET_RESEARCH_MEDIA:
             raise CreativeResearchError("Unsupported creative asset media type")
-        failures = []
-        specialist_types = {"3d": ("models", "3d-model"),
-                            "texture": ("textures", "material"),
-                            "hdri": ("hdris", "hdri")}
-        if media in specialist_types:
-            # Reuse the original source adapters from #189, sharing this
-            # existing bounded transport and owner network grant. No fanout,
-            # new download permission, model credentials or separate hub.
-            from .creative_research_3d import poly_haven_assets, ambientcg_assets
-            primary, fallback = specialist_types[media]
-            try:
-                items = poly_haven_assets(self._fetch, query, limit, type_name=primary)
-                provider = "poly_haven"
-            except CreativeResearchError:
-                failures.append("poly_haven_unavailable_or_invalid")
-                items = ambientcg_assets(self._fetch, query, limit, type_name=fallback)
-                provider = "ambientcg"
-        elif media == "video":
-            items, provider = self._commons_media(query, media, limit), "wikimedia_commons"
+        if provider is None:
+            choices = _DEFAULT_ASSET_PROVIDERS[media]
         else:
+            if (not isinstance(provider, str) or provider not in _ASSET_PROVIDER_MEDIA
+                    or media not in _ASSET_PROVIDER_MEDIA[provider]):
+                raise CreativeResearchError("Asset provider is not installed for this media type")
+            choices = (provider,)
+        failures = []
+        for index, provider in enumerate(choices):
             try:
-                items, provider = self._openverse(query, media, limit), "openverse"
+                items = self._assets_from_provider(provider, query, media, limit)
+                break
             except CreativeResearchError:
-                failures.append("openverse_unavailable_or_invalid")
-                # These are independent, free, GET-only candidate libraries.
-                # No paid generation or third-party asset download exists.
-                alternatives = (("art_institute_chicago", self._artic_images)
-                                if media == "image" else
-                                ("sfxmint_free_library", self._sfxmint_audio))
-                name, adapter = alternatives
-                try:
-                    items, provider = adapter(query, limit), name
-                except CreativeResearchError:
-                    failures.append(name + "_unavailable_or_invalid")
-                    items, provider = self._commons_media(
-                        query, media, limit), "wikimedia_commons"
+                # A source-specific selection never egresses to another API.
+                if index == len(choices) - 1:
+                    raise
+                failures.append(provider + "_unavailable_or_invalid")
         return {
             "kind": "research_asset_candidates",
             "provider": provider,
@@ -346,8 +361,53 @@ class CreativeResearch:
                 "before any use. Search metadata is not legal clearance."),
         }
 
-    def studies(self, *, query, limit=8):
+    def _assets_from_provider(self, provider, query, media, limit):
+        if provider == "openverse":
+            return self._openverse(query, media, limit)
+        if provider == "art_institute_chicago":
+            return self._artic_images(query, limit)
+        if provider == "cleveland_museum":
+            from .creative_research_sources import cleveland_images
+            return cleveland_images(self._fetch, query, limit)
+        if provider == "sfxmint_free_library":
+            return self._sfxmint_audio(query, limit)
+        if provider == "wikimedia_commons":
+            return self._commons_media(query, media, limit)
+        # Existing source-attested #189 metadata adapters; no new download
+        # path or network authority. Provider/media compatibility was checked.
+        from .creative_research_3d import poly_haven_assets, ambientcg_assets
+        if provider == "poly_haven":
+            return poly_haven_assets(self._fetch, query, limit, type_name={
+                "3d": "models", "texture": "textures", "hdri": "hdris"}[media])
+        if provider == "ambientcg":
+            return ambientcg_assets(self._fetch, query, limit, type_name={
+                "3d": "3d-model", "texture": "material", "hdri": "hdri"}[media])
+        raise CreativeResearchError("Asset provider is not installed")
+
+    def studies(self, *, query, limit=8, provider="crossref"):
         query = _check(query, limit)
+        if not isinstance(provider, str) or provider not in STUDY_RESEARCH_PROVIDERS:
+            raise CreativeResearchError("Scholarly research provider is not installed")
+        if provider == "europe_pmc":
+            from .creative_research_sources import europe_pmc_abstracts
+            out = europe_pmc_abstracts(self._fetch, query, limit)
+            claim = ("Abstract excerpts are unreviewed source text, not "
+                     "independent evidence of audience or creative effects.")
+        else:
+            out = self._crossref_studies(query, limit)
+            claim = ("Bibliographic search leads only. A paper title is not "
+                     "evidence that an editing or storytelling style improves "
+                     "retention, emotional response, or audience preference.")
+        return {
+            "kind": "creative_audience_research",
+            "query": query, "provider": provider, "results": out,
+            "claim": claim,
+            "required_next_step": (
+                "Read eligible papers and methods; distinguish tested audiences, "
+                "causality, genre and platform. Validate selected hypotheses "
+                "with permissioned audience experiments and real outcomes.")}
+
+    def _crossref_studies(self, query, limit):
         url = _request_params("https://api.crossref.org/works", {
             "query.bibliographic": query, "filter": "type:journal-article",
             "rows": limit, "select": "DOI,title,container-title,published,type"})
@@ -384,16 +444,7 @@ class CreativeResearch:
                 "study_results_verified": False,
                 "peer_review_independently_verified": False,
                 "abstract_or_full_text_reviewed": False})
-        return {
-            "kind": "creative_audience_research",
-            "query": query, "provider": "crossref", "results": out,
-            "claim": ("Bibliographic search leads only. A paper title is not "
-                      "evidence that an editing or storytelling style improves "
-                      "retention, emotional response, or audience preference."),
-            "required_next_step": (
-                "Read eligible papers and methods; distinguish tested audiences, "
-                "causality, genre and platform. Validate selected hypotheses "
-                "with permissioned audience experiments and real outcomes.")}
+        return out
 
     def _openverse(self, query, media, limit):
         url = _request_params("https://api.openverse.org/v1/" + (
