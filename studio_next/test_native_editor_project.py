@@ -101,6 +101,11 @@ class RenderSnapshotTests(unittest.TestCase):
             self.assertEqual(source_identity[:2], (str(project), "t1"))
             self.assertEqual(len(source_identity), 4)
             self.assertTrue(all(len(value) == 64 for value in source_identity[2:]))
+            # Render registry must not mistake pre-render SAVE checkpoints for
+            # publicly model-observable finished render revisions.
+            self.assertEqual(list(snapshots.glob("*.comfystudio")), [])
+            private_saves = snapshots / "save-witnesses"
+            self.assertEqual(len(list(private_saves.glob("*.comfystudio"))), 1)
             response = {"projectPath": str(project),
                         "settings": {"bitrateKbps": 8000,
                                      "audioBitrateKbps": 192, "preset": "medium"},
