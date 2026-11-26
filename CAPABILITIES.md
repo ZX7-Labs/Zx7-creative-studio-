@@ -126,20 +126,7 @@ independent creative acceptance and support of realistic workloads.
 
 ## Implementation focus after research and design
 
-**Video editing (C), together with its necessary B/A/F/G/I/J dependencies,
-is the first active completion field**, rather than shallow expansion into all
-domains. Native MLT editing, FFmpeg compositing, OTIO exchange, retiming,
-original-source audio and review need to form one coherent reversible
-artist-operated system. The engineering lead independently judges when this field has reached a
-defensible professional completion level, based on relevant creative, technical,
-safety, source-rights, usability and actual real-model evidence; there is no
-fixed owner-prescribed checklist or mandatory demo duration. **When choosing
-to transition to the next capability**, show the owner a concrete original
-video created with the capability now considered complete. Choose its length,
-creative approach and evidence autonomously. Then continue to the next field
-without unnecessary permission pauses. Short internal synthetic clips and CI
-exports are development evidence, not that transition showcase; green tests
-alone do not establish field completion.
+**Whole-studio integration across A–L is active (owner clarification, 26 November 2026).** Video/NLE is one important workload, not a prerequisite that blocks graphics, motion, CGI/3D, VFX, photography, typography, color or sound. Resolve shared and domain-specific dependencies by measured evidence. Reuse existing implementation and tests before adding work. Judge completion independently for each field from real editable native projects, physically verified outputs, model-controlled operation, rights, security, usability and professional quality; showcase completed capabilities with concrete original work, not scripted fixtures. Continue other independent work without unnecessary permission pauses.
 
 At the end of each engineering cycle, prefer concrete verified work and an
 honest unresolved gate over progress prose. Keep durable intent in this contract,
@@ -167,7 +154,7 @@ applications instead of recreating their capabilities from primitives.** The
 owner superseded the earlier research-only freeze and authorized implementation,
 redesign and repository updates. Make independent source-backed decisions;
 the owner's examples describe breadth, not a required library or fixed pipeline.
-Finish one creative field before expanding. A working short export is technical
+Integrate the full studio in dependency order; do not make one field a mandatory serial prerequisite for unrelated work. A working short export is technical
 evidence, not professional field completion or autonomous creative acceptance.
 
 ### 1. The actual product and its users
@@ -384,10 +371,9 @@ materially different briefs. Technical correctness, model competence and
 artistic acceptance are distinct. A six-second demonstration, a successful
 MP4 export or passing CI cannot certify an entire creative field.
 
-After research and design, complete one field with its necessary dependencies
-before declaring it accepted and advancing. Video editing remains the first
-implementation focus unless the evidence supports an explicitly reasoned
-change. No honest engineering process can promise that no future defect or
+After research and design, resolve shared and domain-specific dependencies
+across A–L and declare a field accepted only on its own evidence. The order of
+work is determined by measured dependencies, not a mandatory first field. No honest engineering process can promise that no future defect or
 revision will ever be needed; the requirement is rigorous completion against
 the full agreed gate, not knowingly leaving a prototype disguised as finished.
 

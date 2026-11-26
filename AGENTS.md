@@ -11,6 +11,8 @@ Build one local-first, free/open-source creative BODY operated by a replaceable 
 
 ## Work rules
 
+- Whole A–L studio is the active product scope. Prioritize measured shared and domain-specific dependencies, not a mandatory video-first sequence. Runtime Brain attachment must use executable discovery, typed contracts, live state, actions and feedback—not runtime Markdown or engineer-written creative prompt packs.
+
 - Use the canonical workstream in STATE. Before editing, inspect current source, branch/PR overlap and latest positive and negative evidence. Never recreate working behavior or merge historical experiments merely because paths differ.
 - During consolidation, pause new features and model trials. Evaluate distinct old source behavior, preserve history, explicit reversions, rights, security and negative results. Restore the verified technical baseline; no branch deletion.
 - Normal work: reproduce real defects, reuse mature pinned engines, make minimal tested changes, verify installed outputs and failure/recovery. Source, offline tests, physical output, genuine AI decisions and independent professional acceptance are separate tiers.

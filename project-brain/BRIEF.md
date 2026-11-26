@@ -18,16 +18,20 @@ Maintain one coherent native workspace and host-granted capability boundary; use
 
 **Proof separation:** offline contract tests, installed native physical tests, genuine real-model runs and independently accepted professional art are distinct. Passing one does not certify another.
 
-First accepted native platform: Ubuntu 24.04 x86-64; mobile/remote and full A–L remain planned, not discarded. The immediate vertical is video/NLE (C) including A/B/F/G/I/J dependencies. Multilingual, worldwide, high-quality public creative research without required API keys remains a product requirement; current built-in Wikipedia reach alone does not satisfy global full-web research.
+First accepted native platform: Ubuntu 24.04 x86-64; mobile/remote and full A–L remain planned, not discarded. Video/NLE (C) including A/B/F/G/I/J dependencies is one acceptance workload; no mandatory video-first sequence applies. Multilingual, worldwide, high-quality public creative research without required API keys remains a product requirement; current built-in Wikipedia reach alone does not satisfy global full-web research.
 
 ## Owner priority — 26 November 2026
 
 Pause feature development until repository consolidation is verified. One canonical working branch, clear document ownership, existing useful source reused without duplication, exact branch recovery and behavior reconciliation before any branch deletion. This changes work sequencing only, not A–L, professional acceptance or consent. No model trial required for cleanup. Owner will decide deletion after verification; agents must not delete refs.
 
+## Owner clarification — 26 November 2026: integrated Brain and BODY
+
+The complete creative studio is the target, not a video editor. Connect a compatible API or local Brain to one coherent BODY through code-defined capability discovery, native typed action contracts, current state and perceptual/verification feedback. No runtime Markdown instructions or engineer-written creative prompt packs should be needed. The natural-language user brief remains the task input. Preserve replaceability and host-owned permissions; do not promise that an arbitrary model gains native expertise simply by connecting. Measure tool competence, response latency, creative quality and failure behavior across domains. Resolve independent work by evidence and dependencies, reusing completed behavior rather than repeating it. Existing consent and acceptance limits remain unchanged.
+
 ## Hard acceptance gates
 
 1. Genuine model independently chooses nontrivial original work from a natural-language brief without engineer-written creative action scripts; actual typed native tools and original-rights media are used.
-2. Save and reopen an editable native project, independently verify and decode a brief-compliant physical first export, observe meaningful picture **and timed/audio** evidence, choose an intentional editable revision, verify a distinct conforming second output and preserve revisions/custody.
+2. Save and reopen an editable native project, independently verify and decode a brief-compliant physical first export, observe meaningful domain-appropriate evidence (including picture **and timed/audio** for audiovisual work), choose an intentional editable revision, verify a distinct conforming second output and preserve revisions/custody.
 3. Verify failure cases, permission isolation, no uncertain-write replay, source identity, licensing, portability and resource ceilings. A scripted fixture is a protocol test, not neural artistic acceptance.
 4. Independently review professional creative quality on diverse briefs and compare with relevant existing editor workflows. A non-empty MP4, still frame or passing test suite alone does not close an A–L domain.
 5. Preserve explicit consent boundaries for private inputs, production deployment, destructive changes and paid/nontrivial API usage. Do not leak existing NVIDIA credentials into public CI artifacts, logs or the creative editor.
