@@ -1589,6 +1589,73 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e.get("host_application_write_acknowledged")
                              for e in result["events"]))
 
+    async def test_split_av_review_across_separate_exports_does_not_block_recovery(self):
+        """A real sound read on B and real frames on A are NOT a complete
+        source-bound A/V review of either film. A model may independently
+        choose a new export; the host must not misreport one common film.
+        This tests the source-consistent review frontier, not artistic merit.
+        """
+        from studio_next.native_render_evidence import (
+            REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES,
+            AUDIO_ENVELOPE, DESTINATION_FIELD, AV_REVIEW_FIELD, AV_PCM_FIELD,
+        )
+        session = FakeSession()
+        for name in ("save_project", "export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE):
+            session.tools.append(SimpleNamespace(
+                name=name, description="Trusted native action",
+                input_schema={"type": "object", "properties": {
+                    "outputPath": {"type": "string"}}}))
+        grants = {tool.name: ("write" if tool.name in
+                             ("save_project", "export_timeline", "update_text_clip")
+                             else "read") for tool in session.tools}
+        model = ScriptedModel([decision(
+            "invoke", tool="export_timeline",
+            inputs={"outputPath": "/synthetic/recovery.mp4"})])
+        control = NativeCreativeControl(
+            session, model, max_turns=1, host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",),
+            host_capture_render_project=lambda *_: ("1"*64, "2"*64, "3"*64))
+        control._explicit_render_save_identity = ("/synthetic/project", "saved")
+        a, b, dest_a, dest_b = "a"*64, "b"*64, "c"*64, "d"*64
+        control._verified_exports.update((a, b))
+        control._append({"kind": "native_tool_result", "tool": "save_project",
+                         "host_application_write_acknowledged": True})
+        for dest in (dest_a, dest_b):
+            control._append({"kind": "native_tool_result", "tool": "export_timeline",
+                             "host_application_write_acknowledged": True,
+                             DESTINATION_FIELD: dest,
+                             "native_export_timeline_sha256": "e"*64,
+                             "native_render_saved_project_sha256": "f"*64})
+        for dest, sha in ((dest_a, a), (dest_b, b)):
+            control._append({"kind": "native_tool_result",
+                             "tool": "zx7_verify_native_export",
+                             DESTINATION_FIELD: dest,
+                             "independently_verified_export_sha256": sha,
+                             AV_REVIEW_FIELD: [6.0]})
+        control._append({"kind": "native_tool_result", "tool": TIMED_FRAMES,
+                         DESTINATION_FIELD: dest_a,
+                         "observed_export_sha256": a,
+                         "image_sha256": ["1"*64],
+                         AV_REVIEW_FIELD: [0.0, 2.0, 4.0]})
+        control._append({"kind": "native_tool_result", "tool": AUDIO_ENVELOPE,
+                         DESTINATION_FIELD: dest_b,
+                         "observed_export_sha256": b,
+                         AV_REVIEW_FIELD: [0.0, 6.0],
+                         AV_PCM_FIELD: "2"*64})
+        evidence = control._current_export_evidence()
+        self.assertEqual(evidence["current_verified"], {a, b})
+        self.assertEqual(evidence["current_frames"], {a})
+        self.assertEqual(evidence["current_full_audio"], {b})
+        self.assertEqual(evidence["current_verified"] &
+                         evidence["current_frames"] &
+                         evidence["current_full_audio"], set())
+        outcome = await control.run("Do not mistake disjoint picture and sound for a common A/V review")
+        self.assertIn("export_timeline", [name for name, _ in session.calls])
+        self.assertFalse(any(e.get("validation_keyword") ==
+                             "native_second_export_needs_content_revision"
+                             for e in outcome["events"]))
+
     async def test_reviewed_av_second_export_cannot_skip_model_chosen_content_revision(self):
         """Real Super VL G1 #45632856001: the first export was genuinely
         verified and both actual frame and full sound were observed. The model

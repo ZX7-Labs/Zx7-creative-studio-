@@ -170,6 +170,33 @@ class OwnerAudiovisualDeliveryTests(unittest.TestCase):
         studio_cli._write_status(self.session, self.status)
         return first_media
 
+    def test_autosave_only_timestamps_cannot_certify_an_editable_revision(self):
+        """Actual Super VL #45632856001: a passive five-minute autosave
+        changed root/timeline modified clocks without changing any creative
+        content. Two different rendered MP4 files and two different native
+        byte hashes must not certify a real model-authored project revision.
+        """
+        original = json.loads(json.dumps(self.final_doc))
+        later = json.loads(json.dumps(self.final_doc))
+        original["modified"] = "2026-11-25T14:30:33.059Z"
+        original["timelines"][0]["modified"] = "2026-11-25T14:30:33.036Z"
+        later["modified"] = "2026-11-25T14:35:33.087Z"
+        later["timelines"][0]["modified"] = "2026-11-25T14:35:33.073Z"
+        for index, (binding, document) in enumerate(
+                zip(self.pair, (original, later), strict=True)):
+            source = json.dumps(document)
+            snapshot = self.snapshots / (
+                binding["destination_sha256"] + ".comfystudio")
+            snapshot.write_text(source, encoding="utf-8")
+            self.status["result"]["reviewed_native_snapshot_sha256"][index] = (
+                hashlib.sha256(source.encode("utf-8")).hexdigest())
+        self.native.write_text(json.dumps(later), encoding="utf-8")
+        studio_cli._write_status(self.session, self.status)
+        self.assertNotEqual(*self.status["result"]["reviewed_native_snapshot_sha256"])
+        self.assertNotEqual(self.media[0].read_bytes(), self.media[1].read_bytes())
+        with self.assertRaisesRegex(ValueError, "content revision|autosave"):
+            self.verify()
+
     def test_first_and_final_revisions_with_distinct_retained_sources_remain_portable(self):
         first_media = self._two_revisions_with_distinct_original_media()
         report = self.verify()
