@@ -189,10 +189,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             # Readiness projects onto declared fields, so reject extras before
             # the export can see an option that its preflight did not inspect.
             schema = {**schema, "additionalProperties": False}
-        _local_schema_references(schema)
-        validator = jsonschema.validators.validator_for(schema)
-        validator.check_schema(schema)
-        validators[name] = validator(schema)
+        validators[name] = native_admission_validator(schema)
         tools[name] = types.Tool.model_validate({
             **native[name], "description": declared_description,
             "inputSchema": schema})

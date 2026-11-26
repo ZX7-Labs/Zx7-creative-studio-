@@ -612,13 +612,13 @@
     "next_action": "Reconcile remaining distinct useful historical source/test behavior and check exact-head CI. Prioritize whole-studio shared and domain dependencies by measured evidence, not mandatory video-first ordering. Prove code-defined Brain attachment across A–L, then genuine model and independent professional acceptance. Do not reactivate historical one-use requests or delete refs."
   },
   "latest_ci_checkpoint": {
-    "source": "f7492f05a65f5e9048000c010ed99a3ba85cb5d2",
+    "source": "a59e2486940324a9b8a2c12e5f8af2e8fbfbb60b",
     "observed_date": "2026-11-26",
-    "checks_observed": 29,
-    "passed": 27,
+    "checks_observed": 27,
+    "passed": 0,
     "failed": 0,
-    "pending": 2,
-    "context": "Observed before historical native catalog restoration at dbc6257bfee830cb8e78a40732d04cd139f7863f. New-head CI must be checked; real model jobs skipped.",
+    "pending": 27,
+    "context": "Latest observed documentation head still starting CI. Prior f7492f05: 28 success/1 cancelled; dbc6257b: 19 success/7 cancelled/3 in progress; superseding commits restart concurrent checks. New exact head verification required.",
     "creativity_release_accepted": false
   },
   "latest_artifact_audit_20261126": {
@@ -811,6 +811,36 @@
         "unclosed_fences": 0,
         "malformed_atx_headings": 0,
         "leading_tabs_outside_fences": 0
+      },
+      "additional_reconciliation": {
+        "historical_tests_already_passed": [
+          "Crossref untrusted publication shape",
+          "versioned complete MCP discovery",
+          "partial versioned MCP catalog refusal"
+        ],
+        "direct_mcp_schema_negative": "Prior direct validator accepted undeclared fakePermission field; shared validator rejects it. Reused shared validator in direct server and restored 2 historical SDK integration tests (SDK absent locally).",
+        "local_combined": {
+          "passed": 64,
+          "skipped": 35,
+          "failed": 0
+        },
+        "exact_tested_code_blobs": [
+          {
+            "path": "studio_next/body_editor_mcp.py",
+            "sha": "d31091b83572685736ec75683247dbdf7b72e97a"
+          },
+          {
+            "path": "studio_next/test_body_editor_mcp.py",
+            "sha": "b2b0b900211cced840e23a8db0a1d49c9277d413"
+          }
+        ],
+        "doc_verification": {
+          "source": "a59e2486940324a9b8a2c12e5f8af2e8fbfbb60b",
+          "changed_markdown": 11,
+          "relative_links": 127,
+          "errors": 0,
+          "ledger_binding_verified": true
+        }
       }
     }
   },

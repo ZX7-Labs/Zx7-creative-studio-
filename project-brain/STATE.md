@@ -10,8 +10,9 @@
 ## Verified foundations and current gap
 
 - Existing native Velorn, MLT/FFmpeg, Blender/2D, portable projects, source custody, exact clocks, host-granted tools, recovery and mobile UI have scoped technical evidence. Unified installed artifact: 16/16 manifest files verified and four MP4s decoded ([receipt](EVIDENCE/INDEX.md)). Scripted output is not genuine model creativity.
-- Prior `642565f125` 29/29 workflows; installed 1,706/1,736, MLT 1,735/1,736 passed; actual model jobs skipped. At `f7492f05`, 27/29 successful, two pending, zero failed at observation; new source CI must be checked.
+- Prior `642565f125` 29/29 workflows; installed 1,706/1,736, MLT 1,735/1,736 passed; actual model jobs skipped. At `f7492f05`, 28/29 successful and one cancelled. Later `dbc6257b` had 19 successful, seven cancelled, three running; concurrent workflows restart on superseding commits. Latest exact-head CI is open.
 - Reproduced missing historical catalog admission behavior and restored its validator/checks/tests at `dbc6257bfee830cb8e78a40732d04cd139f7863f`. Local focused 32 passed, 33 skipped; discovery/gateway 88 passed; visual/research 62 passed, 3 skipped. Long local physical suite timed out. No full integration claim.
+- Further historical tests: Crossref and two versioned MCP discovery tests pass current behavior; no new implementation. Direct MCP admission used a weaker validator than gateway; restored the same shared validator and two historical SDK tests. Combined local suite 64 pass, 35 skip (SDK absent). Actual SDK transport tests still require CI.
 - Genuine Super VL trials #45738534918 and #45740294453 failed without verified exports. G1 semantic A/V and creative revision, G1-HUMAN, G2 comparison, G3 full A–L and G4 release remain open. No field independently accepted.
 
 ## Consolidation and next action
@@ -25,4 +26,4 @@
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md), [risks](RISKS.md), [decisions](DECISIONS.md) hold changed facts only.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=055b3e57e42e54cc09d3957a48f814604c61a7d8` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=a48f9c30e43e8ef33a6fdb16c757923f334985d7` (Git content ID, not security attestation).
