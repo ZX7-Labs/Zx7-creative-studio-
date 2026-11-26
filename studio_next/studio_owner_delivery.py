@@ -63,6 +63,28 @@ def _bounded_native_project(path):
     return doc, hashlib.sha256(raw).hexdigest()
 
 
+def _native_revision_content(document: dict):
+    """Keep every native-editable field except passive autosave clocks.
+
+    A second save can change the root and timeline modified timestamps
+    without changing picture, sound, media assets, or any editable scene.
+    A different raw project SHA is necessary for the host's custody proof,
+    but not sufficient evidence that the model authored a *content* revision.
+    Never mutate or normalize away creative fields from either source.
+    """
+    timelines = document.get("timelines")
+    if not isinstance(timelines, list) or any(
+            not isinstance(item, dict) for item in timelines):
+        raise ValueError("Native snapshot contains malformed editable timelines")
+    result = {key: value for key, value in document.items()
+              if key not in ("modified", "timelines")}
+    result["timelines"] = [
+        {key: value for key, value in item.items() if key != "modified"}
+        for item in timelines
+    ]
+    return result
+
+
 def _sha256_beneath_directory(project: Path, parts: list[str], expected_bytes: int):
     """Hash authorized source inside one pinned directory-fd chain, not via a
     re-resolved pathname that could cross a concurrently swapped parent link.
@@ -396,6 +418,7 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
                     for value in expected_media_hashes)):
             raise ValueError("Host-required render-time native media digests are missing")
         revisions = []
+        content_revisions = []
         for index, (binding, captured_sha) in enumerate(zip(
                 pair, expected_snapshot_hashes, strict=True)):
             snapshot = snapshots_root / (binding["destination_sha256"] + ".comfystudio")
@@ -420,8 +443,11 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
                 raise ValueError(
                     "Native snapshot source media differ from original render-time custody")
             revisions.append(snapshot_sha)
+            content_revisions.append(_native_revision_content(snapshot_doc))
         if revisions[0] == revisions[1]:
             raise ValueError("Native snapshots do not establish an editable revision")
+        if content_revisions[0] == content_revisions[1]:
+            raise ValueError("Native snapshots differ only by autosave metadata; no content revision")
         if revisions[-1] != saved_sha:
             raise ValueError("Final saved native source differs from the reviewed render")
         if (native_media_observation["native_media_observation_sha256"] !=
