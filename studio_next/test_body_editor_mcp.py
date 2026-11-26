@@ -60,6 +60,47 @@ class OwnerDeliveryGuidanceTests(unittest.TestCase):
                 "fps": 24, "max_duration": 6, "video_codec": "h264"})
 
 
+class NativeAdmissionCompatibilityTests(unittest.TestCase):
+    def test_only_source_verified_unconstrained_export_aliases_are_admitted(self):
+        from studio_next.body_editor_mcp import native_admission_validator
+        schema = {"type": "object", "properties": {"target": {"type": "string"}}}
+        self.assertFalse(native_admission_validator(schema).is_valid({"codec": "h265"}))
+        trusted = native_admission_validator(schema, source_verified_export_aliases=True)
+        for name, value in (("codec", "h265"), ("aspect", "vertical"),
+                            ("size", 720), ("preset", "h264_hd")):
+            with self.subTest(name=name):
+                self.assertTrue(trusted.is_valid({name: value}))
+        self.assertFalse(trusted.is_valid({"fakePermission": "write"}))
+        self.assertFalse(trusted.is_valid({"codec": {"bad": 1}}))
+        self.assertFalse(trusted.is_valid({"__zx7ExpectedRevision": "x" * 40}))
+        self.assertFalse(native_admission_validator(
+            {**schema, "additionalProperties": False},
+            source_verified_export_aliases=True).is_valid({"codec": "h265"}))
+        self.assertEqual(schema, {"type": "object", "properties": {"target": {"type": "string"}}})
+
+    def test_exact_revision_wire_projection_preserves_payload_and_rejects_spoof(self):
+        from studio_next.body_editor_mcp import native_revision_schema_arguments
+        revision = "x" * 40
+        args = {"assetId": "real", "previewOnly": False,
+                "__zx7ExpectedRevision": revision}
+        granted = frozenset({"add_asset_to_timeline"})
+        self.assertEqual(native_revision_schema_arguments("add_asset_to_timeline", args, granted),
+                         {"assetId": "real", "previewOnly": False})
+        self.assertEqual(args["__zx7ExpectedRevision"], revision)
+        for name, bad, tools in (
+            ("add_asset_to_timeline", args, frozenset()),
+            ("get_project", args, granted),
+            ("add_asset_to_timeline", {**args, "previewOnly": True}, granted),
+            ("add_asset_to_timeline", {**args, "__zx7ExpectedRevision": "short"}, granted),
+            ("add_asset_to_timeline", {"assetId": "real", "previewOnly": False}, granted),
+        ):
+            with self.subTest(name=name, args=bad, tools=tools):
+                with self.assertRaises(ValueError):
+                    native_revision_schema_arguments(name, bad, tools)
+        preview = {"assetId": "real", "previewOnly": True}
+        self.assertEqual(native_revision_schema_arguments("add_asset_to_timeline", preview, granted), preview)
+
+
 @unittest.skipUnless(HAS_MCP, "Install the editor extra to test the official MCP protocol")
 class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -406,6 +447,11 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(accepted.is_error)
                 self.assertEqual(self.requests[-1]["params"], {
                     "name": "export_timeline", "arguments": unconstrained_args})
+                self.assertEqual(self.requests[-2]["params"]["arguments"]["codec"], "h265")
+                before = len(self.requests)
+                denied = await session.call_tool("export_timeline", {**args, "fakePermission": "write"})
+                self.assertTrue(denied.is_error)
+                self.assertEqual(len(self.requests), before)
             await self.with_session(no_constraint, native_source=source)
 
     async def test_owner_delivery_fails_closed_without_native_readiness_authority(self):

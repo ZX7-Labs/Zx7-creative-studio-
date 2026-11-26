@@ -1,6 +1,6 @@
 # ZX7 — canonical working checkpoint
 
-**Owner priority: consolidate existing behavior before new feature work; whole A–L studio, not mandatory video-first.** [Draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), branch `workstream/g1-existing-owner-project-av-snapshot-20261115`. Main at audit `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. Source checkpoint `dbc6257bfee830cb8e78a40732d04cd139f7863f`; refresh live refs and CI. No model trial, new feature expansion or branch deletion during reconciliation.
+**Owner priority: consolidate existing behavior before new feature work; whole A–L studio, not mandatory video-first.** [Draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), branch `workstream/g1-existing-owner-project-av-snapshot-20261115`. Main at audit `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. Source checkpoint `458ace268dda80cdbecd00c77829d997c5db3492`; refresh live refs and CI. No model trial, new feature expansion or branch deletion during reconciliation.
 
 ## Product boundary
 
@@ -15,6 +15,12 @@
 - Further historical tests: Crossref and two versioned MCP discovery tests pass current behavior; no new implementation. Direct MCP admission used a weaker validator than gateway; restored the same shared validator and two historical SDK tests. Combined local suite 64 pass, 35 skip (SDK absent). Actual SDK transport tests still require CI.
 - Genuine Super VL trials #45738534918 and #45740294453 failed without verified exports. G1 semantic A/V and creative revision, G1-HUMAN, G2 comparison, G3 full A–L and G4 release remain open. No field independently accepted.
 
+## Current critical technical correction
+
+- Exact CI at `458ace268dda80cdbecd00c77829d997c5db3492`: {"in_progress":1,"success":15,"failure":13} at observation. Source gate [#45866754019](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45866754019), actual native [#45866754225](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45866754225), unified creative [#45866753793](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45866753793) expose a genuine compatibility regression introduced by the historical guard restore: newer source-native revision-fenced tools were missing from the direct bridge's token projection; unscoped native export aliases were rejected.
+- Current change shares one source-pinned revision-tool policy and commit-intent predicate, admits the private wire token only on its exact eligible commit, preserves native freshness checking and source-authorized unscoped aliases, keeps scoped owner delivery strict. Local 302 tests: 267 passed, 35 SDK-dependent skips, no failures; exact installed SDK and physical CI still required.
+- No inference, release, or deletion approval. Verify the new exact head before additional work; avoid repeated docs-only changes that cancel long-running verification.
+
 ## Consolidation and next action
 
 - 478 refs/476 distinct tips archived; [permanent tag](https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/cb3121df28ec12da391dac42a4485c3c1bb83213) independently restored all 478 exact refs ([run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45863302941)). Live comparison found only canonical ref advanced. Archive is not integration.
@@ -26,4 +32,4 @@
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md), [risks](RISKS.md), [decisions](DECISIONS.md) hold changed facts only.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=a48f9c30e43e8ef33a6fdb16c757923f334985d7` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=2d9e2922f241633eb56ea3e396c71ef1cb8e03e0` (Git content ID, not security attestation).

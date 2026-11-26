@@ -609,16 +609,17 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Reconcile remaining distinct useful historical source/test behavior and check exact-head CI. Prioritize whole-studio shared and domain dependencies by measured evidence, not mandatory video-first ordering. Prove code-defined Brain attachment across A–L, then genuine model and independent professional acceptance. Do not reactivate historical one-use requests or delete refs."
+    "next_action": "Check exact-head SDK/native installed CI for the restored guard reconciliation; do not restart already-green full workflows on docs-only commits unnecessarily. Resume behavior-level historical consolidation and shared whole-studio code-first attachment evaluation; do not mark complete, delete branches, or infer neural acceptance from offline fixtures."
   },
   "latest_ci_checkpoint": {
-    "source": "a59e2486940324a9b8a2c12e5f8af2e8fbfbb60b",
-    "observed_date": "2026-11-26",
-    "checks_observed": 27,
-    "passed": 0,
-    "failed": 0,
-    "pending": 27,
-    "context": "Latest observed documentation head still starting CI. Prior f7492f05: 28 success/1 cancelled; dbc6257b: 19 success/7 cancelled/3 in progress; superseding commits restart concurrent checks. New exact head verification required.",
+    "source": "458ace268dda80cdbecd00c77829d997c5db3492",
+    "checks_observed": 29,
+    "counts": {
+      "in_progress": 1,
+      "success": 15,
+      "failure": 13
+    },
+    "context": "Exact source CI exposed source-pinned native CAS wire field wrongly rejected by restored direct admission guard and unscoped export codec alias refused. The current change reconciles the source policy and alias validation. New exact-head CI is pending; old green does not certify new code.",
     "creativity_release_accepted": false
   },
   "latest_artifact_audit_20261126": {
@@ -841,6 +842,26 @@
           "errors": 0,
           "ledger_binding_verified": true
         }
+      },
+      "admission_compatibility": {
+        "source": "458ace268dda80cdbecd00c77829d997c5db3492",
+        "failed_source_gate": 45866754019,
+        "failed_actual_native_gate": 45866754225,
+        "failed_unified_creative_gate": 45866753793,
+        "local_tests": {
+          "run": 302,
+          "passed": 267,
+          "skipped": 35,
+          "failed": 0
+        },
+        "local_sdk_unavailable": true,
+        "root_cause": "direct bridge knew older CAS tool subset only; strict top-level validation rejected host-injected token for newer source-pinned editor operations, and existing unscoped export codec alias. Shared exact native revision-tool policy and commit-intent semantics; preserve token on authorized commit, reject on other calls, keep preflight preview token-free. Explicit source-proven unscoped aliases codec/aspect/preset/size; owner-constrained closed schemas unchanged.",
+        "validated_blobs": [
+          "2ca0ad073c928370576e17ca93661871b778d40c",
+          "86dc9135676c4fec07b1d92567942a967250689d",
+          "3bab645284e3325900c31473699d752d85f98a70",
+          "ef478ec213deeba2b0bfe8c2b6edcac05b9234a7"
+        ]
       }
     }
   },

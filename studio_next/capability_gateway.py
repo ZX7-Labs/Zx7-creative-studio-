@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
 from .body_editor_mcp import native_admission_validator
+from .native_editor_identity import source_native_commit_intent as _source_native_commit_intent
 from .capability_attempts import CapabilityAttemptStore
 from .capability_reference_guard import (
     CapabilityReferenceError, compile_reference_rules, validate_live_references)
@@ -26,14 +27,6 @@ from .capability_session_budget import (
 
 
 _MODEL_NATIVE_OBSERVATION_UNCHECKED = object()
-# Only pinned, synchronously committing editorial actions. An arbitrary
-# WRITE does not acquire native revision semantics by its name.
-_SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS = frozenset((
-    "move_clips", "trim_clips", "delete_clips",
-    "add_asset_to_timeline", "add_assets_to_timeline",
-    "set_clip_audio", "set_clip_speed", "update_track",
-    "add_transition", "set_clip_style", "split_clip", "extract_range",
-))
 
 
 class CapabilityExecutionError(ValueError):
@@ -68,20 +61,6 @@ class NativeReferencePreDispatchError(CapabilityExecutionError):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
-
-
-def _source_native_commit_intent(tool, inputs):
-    """Only source-attested *commits* need a native writer CAS token.
-
-    Reader-like previews remain public-schema clean. In the pinned editor
-    keyframe previews are the default; text and shape previews require an
-    explicit true. Never infer that a preview is a write from the tool name.
-    """
-    if tool == "set_clip_keyframes" or tool in _SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS:
-        return inputs.get("previewOnly") is False
-    if tool in ("update_text_clip", "update_shape_clip"):
-        return inputs.get("previewOnly") is not True
-    return False
 
 
 def _confirmed_native_revision_conflict(result, code):

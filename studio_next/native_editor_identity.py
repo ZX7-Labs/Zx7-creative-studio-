@@ -228,26 +228,37 @@ class NativeEditorIdentityReader:
         return inventory
 
 
-def pinned_native_editor_identity_policy(source: Path, grants, session, *,
-                                         reserve_read=None):
-    """Host-only opt-in; clean source pin and full read grants are mandatory.
+# Only pinned, synchronously committing editorial actions. An arbitrary
+# WRITE does not acquire native revision semantics by its name.
+_SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS = frozenset((
+    "move_clips", "trim_clips", "delete_clips",
+    "add_asset_to_timeline", "add_assets_to_timeline",
+    "set_clip_audio", "set_clip_speed", "update_track",
+    "add_transition", "set_clip_style", "split_clip", "extract_range",
+))
 
-    Unsupported/modified source means no claims of pin-verified ID checking,
-    rather than pretending an arbitrary fork uses this exact native contract.
+
+def source_native_commit_intent(tool, inputs):
+    """Only source-attested *commits* need a native writer CAS token.
+
+    Reader-like previews remain public-schema clean. In the pinned editor
+    keyframe previews are the default; text and shape previews require an
+    explicit true. Never infer that a preview is a write from the tool name.
     """
-    if not isinstance(source, Path) or not isinstance(grants, Mapping):
-        raise ValueError("native_identity_requires_host_source_and_grants")
-    candidates = {name: dict(rules) for name, rules in _NATIVE_REFERENCES.items()
-                  if grants.get(name) == "write"}
-    if not candidates:
-        return None
-    # The host must explicitly grant every required inventory read. A partial
-    # read catalog cannot be silently promoted or advertised as validated.
-    # Preserve the existing editor control path and report preflight disabled.
-    if any(grants.get(name) != "read" for name in _READ_NAMES):
-        return None
-    if not _source_matches_pinned_electron_mcp(source):
-        return None
+    if tool == "set_clip_keyframes" or tool in _SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS:
+        return inputs.get("previewOnly") is False
+    if tool in ("update_text_clip", "update_shape_clip"):
+        return inputs.get("previewOnly") is not True
+    return False
+
+
+
+def pinned_native_revision_tools(source: Path, grants) -> frozenset[str]:
+    """Single source-pin authority for the gateway and direct MCP wire bridge."""
+    if (not isinstance(source, Path) or not isinstance(grants, Mapping) or
+            any(grants.get(name) != "read" for name in _READ_NAMES) or
+            not _source_matches_pinned_electron_mcp(source)):
+        return frozenset()
     source_fenced = _source_matches_pinned_native_collaboration(source)
     scene_fenced = (_source_matches_pinned_native_scene(source)
                     if source_fenced else False)
@@ -269,8 +280,30 @@ def pinned_native_editor_identity_policy(source: Path, grants, session, *,
         fenced_names.append("split_clip")
     if _source_matches_pinned_native_loss_aware_extract(source):
         fenced_names.append("extract_range")
-    fenced_names = [name for name in fenced_names
-                    if grants.get(name) == "write"]
+    return frozenset(name for name in fenced_names if grants.get(name) == "write")
+
+
+def pinned_native_editor_identity_policy(source: Path, grants, session, *,
+                                         reserve_read=None):
+    """Host-only opt-in; clean source pin and full read grants are mandatory.
+
+    Unsupported/modified source means no claims of pin-verified ID checking,
+    rather than pretending an arbitrary fork uses this exact native contract.
+    """
+    if not isinstance(source, Path) or not isinstance(grants, Mapping):
+        raise ValueError("native_identity_requires_host_source_and_grants")
+    candidates = {name: dict(rules) for name, rules in _NATIVE_REFERENCES.items()
+                  if grants.get(name) == "write"}
+    if not candidates:
+        return None
+    # The host must explicitly grant every required inventory read. A partial
+    # read catalog cannot be silently promoted or advertised as validated.
+    # Preserve the existing editor control path and report preflight disabled.
+    if any(grants.get(name) != "read" for name in _READ_NAMES):
+        return None
+    if not _source_matches_pinned_electron_mcp(source):
+        return None
+    fenced_names = pinned_native_revision_tools(source, grants)
     reader = NativeEditorIdentityReader(
         session, grants, reserve_read=reserve_read,
         require_live_revision=bool(fenced_names))
