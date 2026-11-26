@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "request_id": "ZX7_G1_SUPER_VL_DIRECT_TOOL_RECOVERY_20261126",
+  "kind": "oneuse-synthetic-native-tool-protocol",
+  "model_id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "max_provider_calls": 1,
+  "max_tokens": 512,
+  "reasoning_effort": "none",
+  "run_authorized": true,
+  "synthetic_only": true,
+  "private_media_allowed": false,
+  "native_dispatch_allowed": false,
+  "automatic_replay_allowed": false
+}

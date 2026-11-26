@@ -1,0 +1,88 @@
+name: ZX7 one-use hosted Super VL direct tool recovery (no native dispatch)
+on:
+  push:
+    branches: [trial/g1-super-vl-direct-tool-actual-provider-20261126]
+    paths: ['.github/workflows/zx7-oneuse-g1-super-vl-direct-tool-actual-provider-20261126.yml']
+permissions:
+  contents: read
+jobs:
+  one-hosted-function:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-super-vl-direct-tool-actual-provider-20261126'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 3
+      - name: Source-pinned consent and exactly two changed files
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 'ca1fde6e8d50fa6f9df357c9cac0596b2201b963'
+          expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-g1-super-vl-direct-tool-actual-provider-20261126.yml' 'research/nvidia-oneuse-super-vl-direct-tool-actual-provider-20261126.json' | sort)"
+          actual="$(git diff --name-only HEAD^ HEAD | sort)"
+          test "$actual" = "$expected"
+          git diff --check HEAD^ HEAD
+          python - <<'PY'
+          import json
+          data=json.load(open('research/nvidia-oneuse-super-vl-direct-tool-actual-provider-20261126.json'))
+          expected={"schema":1,"request_id":"ZX7_G1_SUPER_VL_DIRECT_TOOL_RECOVERY_20261126","kind":"oneuse-synthetic-native-tool-protocol","model_id":"nvidia/nemotron-3.5-super-vl-120b-a12b","max_provider_calls":1,"max_tokens":512,"reasoning_effort":"none","run_authorized":true,"synthetic_only":true,"private_media_allowed":false,"native_dispatch_allowed":false,"automatic_replay_allowed":false}
+          assert data==expected, 'unapproved one-use scope'
+          print('ONE_CALL_NO_MEDIA_EXACT_SOURCE_CONSENT')
+          PY
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check --no-cache-dir '.[editor,production]'
+      - name: Exactly one native READ-function choice from actual provider, no editor
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${NVIDIA_API_KEY:-}"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel
+          from studio_next.nvidia_model import NvidiaModelSettings
+          model = NvidiaNativeToolCreativeModel(
+              NvidiaModelSettings(
+                  model_id="nvidia/nemotron-3.5-super-vl-120b-a12b",
+                  timeout_seconds=150, max_tokens=512,
+                  sampling={"reasoning_effort": "none"}),
+              system_prompt="Select exactly one host-granted get_project READ function with empty inputs and a brief reason. No native editor is connected, no media or private data exist.")
+          model.verify_host_credentials()
+          ctx = {"available_actions": ["invoke"], "compact_tool_catalog": False,
+                 "actual_granted_native_tools": ["get_project"],
+                 "host_native_tool_contracts": [
+                     {"name": "get_project", "description": "Read real host project state",
+                      "input_schema": {"type": "object", "properties": {},
+                                       "additionalProperties": False}}],
+                 "last_rejected_model_output_feedback": {
+                     "previous_model_json_rejected": True,
+                     "reason_code": "truncated_tool_decision",
+                     "return_one_unambiguous_json_object": True,
+                     "no_native_dispatch": True,
+                     "remaining_model_output_corrections": 1}}
+          answer = model.decide(ctx)
+          ok = (answer["action"] == "invoke" and
+                answer["arguments"] == {"tool": "get_project", "inputs": {}} and
+                isinstance(answer["reason"], str) and answer["reason"].strip())
+          report = {"actual_hosted_native_tool_protocol_accepted": bool(ok),
+                    "model": model.settings.model_id, "mode": "none",
+                    "provider_calls": 1, "native_dispatched": 0,
+                    "private_media_uploaded": False,
+                    "creative_quality_verified": False,
+                    "tokens": model.last_call_usage}
+          Path("safe-hosted-tool-summary.json").write_text(json.dumps(report, sort_keys=True))
+          print(json.dumps(report, sort_keys=True))
+          if not ok:
+              raise SystemExit("Actual provider response did not satisfy host read")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zx7-super-vl-oneuse-direct-tool-${{ github.sha }}
+          path: safe-hosted-tool-summary.json
+          if-no-files-found: warn
+          retention-days: 7
