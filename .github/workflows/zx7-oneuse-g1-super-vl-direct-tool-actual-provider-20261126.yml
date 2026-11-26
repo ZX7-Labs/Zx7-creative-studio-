@@ -18,15 +18,15 @@ jobs:
       - name: Source-pinned consent and exactly two changed files
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = 'ca1fde6e8d50fa6f9df357c9cac0596b2201b963'
+          test "$(git rev-parse HEAD^^)" = 'ca1fde6e8d50fa6f9df357c9cac0596b2201b963'
           expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-g1-super-vl-direct-tool-actual-provider-20261126.yml' 'research/nvidia-oneuse-super-vl-direct-tool-actual-provider-20261126.json' | sort)"
-          actual="$(git diff --name-only HEAD^ HEAD | sort)"
+          actual="$(git diff --name-only HEAD^^ HEAD | sort)"
           test "$actual" = "$expected"
-          git diff --check HEAD^ HEAD
+          git diff --check HEAD^^ HEAD
           python - <<'PY'
           import json
           data=json.load(open('research/nvidia-oneuse-super-vl-direct-tool-actual-provider-20261126.json'))
-          expected={"schema":1,"request_id":"ZX7_G1_SUPER_VL_DIRECT_TOOL_RECOVERY_20261126","kind":"oneuse-synthetic-native-tool-protocol","model_id":"nvidia/nemotron-3.5-super-vl-120b-a12b","max_provider_calls":1,"max_tokens":512,"reasoning_effort":"none","run_authorized":true,"synthetic_only":true,"private_media_allowed":false,"native_dispatch_allowed":false,"automatic_replay_allowed":false}
+          expected=json.loads('{"schema":1,"request_id":"ZX7_G1_SUPER_VL_DIRECT_TOOL_RECOVERY_20261126","kind":"oneuse-synthetic-native-tool-protocol","model_id":"nvidia/nemotron-3.5-super-vl-120b-a12b","max_provider_calls":1,"max_tokens":512,"reasoning_effort":"none","run_authorized":true,"synthetic_only":true,"private_media_allowed":false,"native_dispatch_allowed":false,"automatic_replay_allowed":false}')
           assert data==expected, 'unapproved one-use scope'
           print('ONE_CALL_NO_MEDIA_EXACT_SOURCE_CONSENT')
           PY
