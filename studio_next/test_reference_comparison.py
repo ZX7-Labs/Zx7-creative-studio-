@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from .reference_evidence_tools import inspect_authorized_reference
-from .reference_comparison import (
+from studio_next.reference_evidence_tools import inspect_authorized_reference
+from studio_next.reference_comparison import (
     ReferenceComparisonError, compare_observed_cases, editing_signature)
 
 

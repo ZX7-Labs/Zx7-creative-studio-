@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from .reference_observatory import observe_reference, ReferenceObservationError
-from .reference_evidence_tools import inspect_authorized_reference
+from studio_next.reference_observatory import observe_reference, ReferenceObservationError
+from studio_next.reference_evidence_tools import inspect_authorized_reference
 
 
 class ReferenceObservatoryTests(unittest.TestCase):
@@ -116,7 +116,7 @@ class ReferenceObservatoryTests(unittest.TestCase):
 
     def test_source_mutation_during_decode_blocks_false_identity(self):
         from unittest.mock import patch
-        from . import reference_observatory as measured
+        from studio_next import reference_observatory as measured
         with tempfile.TemporaryDirectory() as temp:
             movie = Path(temp) / "changing.mp4"
             subprocess.run([
