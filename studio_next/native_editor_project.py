@@ -99,8 +99,15 @@ def capture_acknowledged_save_identity(projects_root, snapshots_root, saved,
         raise ValueError("Native model save differs from the owner-selected project")
     if snapshots_root.is_symlink() or not snapshots_root.is_dir():
         raise ValueError("Native immutable save root is unavailable")
+    witness_root = snapshots_root / "save-witnesses"
+    if witness_root.is_symlink():
+        raise ValueError("Native save witness directory is redirected")
+    witness_root.mkdir(mode=0o700, exist_ok=True)
+    if (witness_root.resolve(strict=True) != witness_root or
+            not witness_root.is_dir()):
+        raise ValueError("Native save witness directory is not owned by this state")
     identity_hash = hashlib.sha256((raw_path + "\0" + modified).encode()).hexdigest()
-    snapshot = snapshots_root / ("save-" + identity_hash + ".comfystudio")
+    snapshot = witness_root / (identity_hash + ".comfystudio")
     checkpoint_saved_project(project, snapshot, max_bytes=16 * 1024 * 1024)
     document = _load_json(snapshot.read_text(encoding="utf-8"))
     if not isinstance(document, dict) or document.get("modified") != modified:
