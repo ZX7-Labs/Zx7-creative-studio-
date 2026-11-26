@@ -612,14 +612,14 @@
     "next_action": "Check exact-head SDK/native installed CI for the restored guard reconciliation; do not restart already-green full workflows on docs-only commits unnecessarily. Resume behavior-level historical consolidation and shared whole-studio code-first attachment evaluation; do not mark complete, delete branches, or infer neural acceptance from offline fixtures."
   },
   "latest_ci_checkpoint": {
-    "source": "458ace268dda80cdbecd00c77829d997c5db3492",
+    "source": "fbdbfc3ce92dc042a15bec99cac2914a2c357ade",
     "checks_observed": 29,
     "counts": {
-      "in_progress": 1,
-      "success": 15,
-      "failure": 13
+      "success": 17,
+      "in_progress": 3,
+      "failure": 9
     },
-    "context": "Exact source CI exposed source-pinned native CAS wire field wrongly rejected by restored direct admission guard and unscoped export codec alias refused. The current change reconciles the source policy and alias validation. New exact-head CI is pending; old green does not certify new code.",
+    "context": "Source/native project gate all four jobs passed, including 336 official MCP SDK transport tests; unified installed creative gate passed. Actual editor common E2E fails at placement negative fixture line 528 because tokenless request is refused before placement-plan metadata. New fixture tests tokenless rejection/no mutation separately and supplies live native revision for invalid-asset assertions. Exact physical retest pending.",
     "creativity_release_accepted": false
   },
   "latest_artifact_audit_20261126": {
@@ -861,7 +861,19 @@
           "86dc9135676c4fec07b1d92567942a967250689d",
           "3bab645284e3325900c31473699d752d85f98a70",
           "ef478ec213deeba2b0bfe8c2b6edcac05b9234a7"
-        ]
+        ],
+        "followup": {
+          "source": "fbdbfc3ce92dc042a15bec99cac2914a2c357ade",
+          "source_gate": 45869371030,
+          "source_gate_sdk_tests": 336,
+          "unified_installed_gate": 45869370859,
+          "project_brain_gate": 45869370774,
+          "physical_fixture_failure": 45869371013,
+          "fixture_blob": "1a98b443368dd6e5719a9ffe21ec02ee186fae2e",
+          "fixture_local_check": "Python compilation and diff whitespace pass; actual Electron retest pending",
+          "apt_failure_run": 45869371164,
+          "apt_retry": "targeted retry; final run failure is common E2E fixture, not apt"
+        }
       }
     }
   },

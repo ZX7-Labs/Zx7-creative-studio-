@@ -522,12 +522,27 @@ async def exercise(options):
         for name, count in (("source.mp4", 1), ("tone.wav", 2)):
             await call(session, "import_asset_from_path", {"path": str(staging / name), "previewOnly": False})
             await wait(session, lambda state: state.get("assetCount") == count)
+        # Independently exercise revision admission AND placement admission.
+        # A tokenless commit on the pinned editorial writer must fail before
+        # any write; the invalid-asset cases below supply the live source
+        # token so they actually reach the independent read-only plan guard.
+        placement_revision = {}
+        if editorial_source:
+            revision = (await call(session, "get_project"))["zx7NativeRevision"]
+            assert isinstance(revision, str) and 38 <= len(revision) <= 80
+            tokenless = await session.call_tool("add_assets_to_timeline", {
+                "assetNames": ["source.mp4"], "previewOnly": False})
+            assert tokenless.is_error and "revision" in tokenless.content[0].text.lower(), tokenless
+            assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
+            placement_revision = {"__zx7ExpectedRevision": revision}
         unimported = await session.call_tool("add_assets_to_timeline", {
-            "assetNames": ["source.mp4", "not-imported.mp4"], "previewOnly": False})
+            "assetNames": ["source.mp4", "not-imported.mp4"], "previewOnly": False,
+            **placement_revision})
         assert unimported.is_error, unimported
         assert unimported.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
         missing = await session.call_tool("add_asset_to_timeline", {
-            "assetName": "not-imported.mp4", "previewOnly": False})
+            "assetName": "not-imported.mp4", "previewOnly": False,
+            **placement_revision})
         assert missing.is_error, missing
         assert missing.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
         assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0

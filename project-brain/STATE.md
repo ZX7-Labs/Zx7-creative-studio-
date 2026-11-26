@@ -1,6 +1,6 @@
 # ZX7 — canonical working checkpoint
 
-**Owner priority: consolidate existing behavior before new feature work; whole A–L studio, not mandatory video-first.** [Draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), branch `workstream/g1-existing-owner-project-av-snapshot-20261115`. Main at audit `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. Source checkpoint `458ace268dda80cdbecd00c77829d997c5db3492`; refresh live refs and CI. No model trial, new feature expansion or branch deletion during reconciliation.
+**Owner priority: consolidate existing behavior before new feature work; whole A–L studio, not mandatory video-first.** [Draft PR #356](https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356), branch `workstream/g1-existing-owner-project-av-snapshot-20261115`. Main at audit `716c226ab7cb24e5a662229d951bf7f8bc17a28f`. Source checkpoint `fbdbfc3ce92dc042a15bec99cac2914a2c357ade`; refresh live refs and CI. No model trial, new feature expansion or branch deletion during reconciliation.
 
 ## Product boundary
 
@@ -21,6 +21,8 @@
 - Current change shares one source-pinned revision-tool policy and commit-intent predicate, admits the private wire token only on its exact eligible commit, preserves native freshness checking and source-authorized unscoped aliases, keeps scoped owner delivery strict. Local 302 tests: 267 passed, 35 SDK-dependent skips, no failures; exact installed SDK and physical CI still required.
 - No inference, release, or deletion approval. Verify the new exact head before additional work; avoid repeated docs-only changes that cancel long-running verification.
 
+- Exact head `fbdbfc3ce92dc042a15bec99cac2914a2c357ade`: {"success":17,"in_progress":3,"failure":9}. [Source gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45869371030) all four jobs pass, including 336 official MCP SDK tests; [unified installed creative gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45869370859) and [continuity gate](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45869370774) pass. [Actual editor](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45869371013) and common E2E siblings fail at missing-asset test line 528: tokenless request is refused before placement-plan rejection metadata. Separate tokenless admission/no-mutation test from invalid-asset rejection using actual live revision; fixture compiled locally, actual native retest pending. Do not weaken either guard.
+
 ## Consolidation and next action
 
 - 478 refs/476 distinct tips archived; [permanent tag](https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/cb3121df28ec12da391dac42a4485c3c1bb83213) independently restored all 478 exact refs ([run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45863302941)). Live comparison found only canonical ref advanced. Archive is not integration.
@@ -32,4 +34,4 @@
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md), [risks](RISKS.md), [decisions](DECISIONS.md) hold changed facts only.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=2d9e2922f241633eb56ea3e396c71ef1cb8e03e0` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=c8221ea5f1a9acfdaf3da954036c8382cd8eadf7` (Git content ID, not security attestation).
