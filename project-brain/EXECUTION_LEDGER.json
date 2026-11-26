@@ -609,18 +609,63 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Refresh latest exact-head CI; verify new shared discovery/SQLite changes. Do not repeat previous passing native/installed paths except necessary regression. Continue remaining unique historical behaviors and full A–L shared/domain integration from existing gateway, engines and native evidence. No branch deletion or professional acceptance claim until gates pass; no unauthorized inference."
+    "next_action": "Exact 13482c55 technical CI is green. Continue behavior-level historical consolidation from existing gateway, engines and native evidence; prioritize genuinely missing source and regression variants, preserve explicit reversions and run focused regression before integrating. Do not repeat green checks merely for activity. No branch deletion, new features/model trials during consolidation, or professional acceptance claim."
   },
   "latest_ci_checkpoint": {
-    "source": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
+    "source": "13482c55b7f084910beca6c8413953d6d60f4b70",
     "observed_date": "2026-11-26",
     "checks_observed": 29,
     "counts": {
-      "success": 28,
-      "in_progress": 1
+      "success": 29
     },
-    "context": "Previous physical fixture correction passed actual native Electron, unified creative, installer, all installed package and independent release artifact jobs; full MLT gate status must be refreshed. Hosted/local inference jobs skipped. New shared source changes require fresh exact-head verification.",
-    "creativity_release_accepted": false
+    "context": "All exact-head workflows completed successfully. Actual model jobs skipped; full MLT and independent installed release integrity jobs passed. Tested synthetic PR merge tree equals source tree. Raw CI logs and artifact metadata inspected; no separate local artifact re-decode at this checkpoint.",
+    "creativity_release_accepted": false,
+    "merge_test_commit": "0d368a18376f2265f9687008b8ce1be256dd609e",
+    "exact_equal_tree": "1619ecf7c133a7a3e70a43f2e89b24dd1665b575",
+    "previous_source_final_counts": {
+      "source": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
+      "success": 28,
+      "cancelled": 1
+    },
+    "actual_model_jobs_skipped": [
+      140093337739,
+      140094132646
+    ],
+    "installed": {
+      "run": 45873124419,
+      "job": 140093334903,
+      "tests_run": 1751,
+      "pass": 1721,
+      "skip": 30,
+      "failed": 0,
+      "independent_ci_job": 140099416931,
+      "artifact": 15144482504,
+      "published_and_ci_download_sha256": "6cadb71296c77d6dabd1513c6b3db99d5da425f92dc90786acba37a7b91f08e1",
+      "independent_ci_manifest_files": 24,
+      "independent_ci_publication_receipts": 5,
+      "local_redownload_verified": false
+    },
+    "mlt": {
+      "run": 45873124498,
+      "job": 140093462898,
+      "tests_run": 1751,
+      "pass": 1750,
+      "skip": 1,
+      "failed": 0
+    },
+    "source_gate": {
+      "run": 45873124446,
+      "job": 140093336314,
+      "sdk_tests_run": 336
+    },
+    "unified": {
+      "run": 45873124339,
+      "job": 140093772503,
+      "artifact": 15144151611,
+      "published_sha256": "649289cb7ca2e2579250b4171f85e96a2952caa192e5ac11f21a6439f061f408",
+      "scripted": true,
+      "local_redownload_verified": false
+    }
   },
   "latest_artifact_audit_20261126": {
     "head": "642565f1252f10caf65a1aa6f434672d25dcc3ba",
