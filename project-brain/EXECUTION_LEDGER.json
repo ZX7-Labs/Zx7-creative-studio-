@@ -609,7 +609,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify exact integrated marker candidate in native/installed CI; reconcile remaining distinct archive behavior, especially removed diagnostics/research surfaces. Do not rebuild already retained behavior or delete refs; no inference during consolidation."
+    "next_action": "Retain the one canonical PR #356; while marker-source installed/MLT CI is running, preserve this exact linear candidate on a single retention ref only. Refresh the live canonical head and its 29 workflows; inspect raw final jobs. If source remains 5b9efc49 and CI is complete, fast-forward the canonical ref to the retained candidate commit via expected-SHA lease (no force or replay). Verify all candidate CI, including actual public APIs and MCP SDK, before accepting technical checkpoint. Continue distinct archive behavior, then actual G1/G1-HUMAN/G2/G3/G4; no paid inference during consolidation."
   },
   "latest_ci_checkpoint": {
     "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
@@ -618,7 +618,7 @@
     "counts": {
       "success": 29
     },
-    "context": "Exact source and tested PR merge trees match; all 29 workflows passed including targeted mobile retry. Actual local and hosted inference skipped. Raw CI logs and artifact metadata inspected; no independent local re-decode of these new ZIPs.",
+    "context": "Exact source and tested PR merge trees match; all 29 workflows passed including targeted mobile retry. Actual local and hosted inference skipped. Raw CI logs, artifact metadata and independently downloaded ZIP hashes, exact manifests, full MP4 decodes and SQLite integrity verified.",
     "creativity_release_accepted": false,
     "merge_test_commit": "e00afafc2a450329771fbc452280ccbbc4f06913",
     "exact_equal_tree": "0fe910ad409916ed5190b0ffd8f363cc3f69c954",
@@ -642,7 +642,7 @@
       "published_and_ci_download_sha256": "6d20464e408caec7773288de1a5fafb2d97ae252b3263e9b300e941b39d7617a",
       "independent_ci_manifest_files": 24,
       "independent_ci_publication_receipts": 5,
-      "local_redownload_verified": false
+      "local_redownload_verified": true
     },
     "mlt": {
       "run": 45879882833,
@@ -670,7 +670,7 @@
       "artifact": 15147335161,
       "published_sha256": "513d15459a1e612ba7ea086d458f38cff703d479146f78bd737b1f8592ea0d53",
       "scripted": true,
-      "local_redownload_verified": false
+      "local_redownload_verified": true
     },
     "mobile_retry": {
       "run": 45879882820,
@@ -1165,13 +1165,56 @@
         "upstream_snapshot_blob": "f0a182947efda52f7f017ab78303c06708a1e196",
         "upstream_electron_blob": "22693419834cd1f24515e1ce5a6ff5c1b7f45311",
         "upstream_renderer_blob": "cf2d61167dd6a83e5e6266c065ecad0945b66fc1",
-        "status": "integrated_pending_runtime",
+        "status": "integrated_runtime_regressions_pass_full_CI_pending",
         "scope": "Complete bounded marker inventory and existing-ID admission for removal and property updates; malformed marker receipt does not invalidate unrelated source reads. No native commit CAS or renderer race proof; native partial-target behavior separately characterized.",
         "tests": [
           "test_marker_inventory_requires_complete_counted_native_receipt",
           "test_marker_edits_refuse_partial_targets_before_write",
           "Pinned marker source exposes counted IDs and can otherwise dispatch a partial explicit batch"
-        ]
+        ],
+        "tested_source": "5b9efc497717f81e63c26c14ff621af58201bc57",
+        "merge_test_commit": "cc11df9ea3e070d7d64cf4c7dc9e9c0ab4565d8d",
+        "exact_equal_tree": "fadccded3cd51b8641bd074159e0d0127fb8741a",
+        "core": {
+          "run": 45889714101,
+          "job": 140149056131,
+          "tests_run": 232,
+          "passed": 228,
+          "skipped": 4,
+          "failed": 0
+        },
+        "native_source": {
+          "run": 45889714101,
+          "job": 140149056088,
+          "python_passed": 258,
+          "node_passed": 42
+        },
+        "unified": {
+          "run": 45889714245,
+          "job": 140149517011,
+          "artifact": 15151735553,
+          "zip_sha256": "604b5d78b39631b069a26ed541927e9c187dd6432ff27de5263e393efa3dd19f",
+          "local_manifest_verified": 16,
+          "physical_mp4_full_decode": 4,
+          "scripted": true
+        },
+        "ci_observation": {
+          "counts": {
+            "in_progress": 2,
+            "success": 27
+          },
+          "pending": [
+            {
+              "id": 45889714235,
+              "name": "ZX7 MLT Editorial Native Research and Fidelity Gate"
+            },
+            {
+              "id": 45889714441,
+              "name": "ZX7 BODY — Installed Package, Desktop and Physical Crash Proof"
+            }
+          ],
+          "failed": []
+        }
       },
       "ordered_source_comparisons": {
         "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
@@ -1261,6 +1304,92 @@
           140116243037
         ],
         "unresolved": "Legacy diagnostics/aptitude and research hub API were removed; not equivalent to current public research and local editor status without further review."
+      },
+      "research_restoration": {
+        "source_candidate": "cea19dadc38cccb212e9d37331ca1869d200b724",
+        "base": "5b9efc497717f81e63c26c14ff621af58201bc57",
+        "archived_source_variants": [
+          {
+            "id": "b6cdc6e1458f5cb82a46acff4e6d31562a556a6fe9537f24457b1b3732a80987",
+            "blob": "2eef6eb756c050941595fa6cb41f6e841b62cb3f",
+            "status": "CMA adapter restored; whole fanout/cache hub not reconciled"
+          },
+          {
+            "id": "c069b943c5397522af8c7507bfeca573e730b0452ca8b98a71b57b9c52177a80",
+            "blob": "d73e94b9c97807200448ee35d84eab493d9a8a3b",
+            "status": "NASA and Europe PMC adapters restored within existing network grant"
+          }
+        ],
+        "archived_test_variant": "d48a2b1c187dcb92cfdae0380cb12cd2891b83210f195cd0c9a98fdc828c1037",
+        "scope": "Use existing research engine, BODY and MCP schemas; optional exact provider selection, unchanged default fallback, no arbitrary URL, no new grant or automatic download/import. Metadata, not viewing, rights or independent scientific review.",
+        "source_blobs": {
+          "studio_next/creative_research.py": "68608f5f570d4f96dbfbce05fd6c47893f2c3b19",
+          "studio_next/creative_research_mcp.py": "c6822fc2e0e776cd180154d0aa70d377e238a354",
+          "studio_next/body_integration.py": "adedf0bd4d313826e163eeca796f90b0b6c11955",
+          "studio_next/creative_research_sources.py": "850b02f71f5f0c9e7e0f2fd249d224a5ee6fef3a",
+          "studio_next/test_creative_research.py": "5c8164d8d5566aaafa6a0680eedb73513c9a20a9",
+          ".github/workflows/zx7-creative-research-live.yml": "eafa2a90f19109d96dc477e95afa08903b5f55cf"
+        },
+        "local_exact_wheel_baseline": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
+        "local_red": {
+          "new_tests_run": 5,
+          "errors": 5,
+          "reason": "missing provider ABI/allowlist"
+        },
+        "local_green": {
+          "run": 29,
+          "pass": 25,
+          "skip": 4,
+          "failed": 0,
+          "cross_suite_pass": 83,
+          "cross_initial_failure": "installed wheel omitted repository-root config; recovered exact Git blob d9e347eb66f843026fae5766237ed82fb668130d",
+          "additional_native_project_suite": {
+            "run": 12,
+            "pass": 8,
+            "errors": 4,
+            "reason": "MCP SDK absent locally; requires installed CI"
+          }
+        },
+        "status": "candidate_locally_tested_CI_and_live_API_pending"
+      },
+      "diagnostic_evidence_restoration": {
+        "source_candidate": "633348babde51ba037bf1917fe1f051bd2515aae",
+        "source_blob": "051e251f3b10f31440c1fb390f3d8a289ac04998",
+        "test_blob": "03685508e8686a3c81d8a53b5903e9bbf0999455",
+        "scope": "Durable scheduler state does not physically prove native execution or movie. Preserve prior key false, add truthful durable-state key.",
+        "local_red": {
+          "failed": 1
+        },
+        "local_green": {
+          "service_pass": 17,
+          "archive_sensory_resources_pass": 19
+        },
+        "remaining": "Historical full diagnostic dashboard, trace and model aptitude not reconciled. Do not invent comparison provenance or duplicate existing journal. Test fixture-only SQLite ResourceWarnings traced to test_body_service/test_body_archive, not a new observed production leak.",
+        "status": "candidate_locally_tested_CI_pending"
+      },
+      "native_json_restoration": {
+        "source_candidate": "3f3995a8593123f71b23043318af59c512d598bb",
+        "source_blob": "e83474c614f6f14a866bbf7f1139a2208d009a2b",
+        "test_blob": "e890e032a13fdc044a0a0a203ad0288ad35fa4c0",
+        "shared_parser_blob": "431808e873b8b0ba2560e13050496789e7bd59f3",
+        "archived_source_variants": [
+          {
+            "id": "c6b699511cd73a10016362b1a1e039128b796f753f58493ecefba9178ab2ecea",
+            "blob": "d4116b1b45aeff341cd09814cd001523bd38fb3b",
+            "status": "duplicate-field rejection restored through existing strict parser; remaining name selector semantics not classified"
+          }
+        ],
+        "local_red": {
+          "failed_subcases": 3,
+          "reason": "duplicate top-level count, duplicate nested asset id, nonfinite 1e999 accepted at native write admission"
+        },
+        "local_green": {
+          "run": 103,
+          "pass": 103,
+          "failed": 0
+        },
+        "scope": "Reuse existing native JSON loader, fail closed with redacted categorical error before write budget/evidence. No broadened schema or host grant.",
+        "status": "candidate_locally_tested_CI_pending"
       }
     }
   },
@@ -1307,15 +1436,15 @@
     "acceptance": "unchanged; distinguish transport instructions and user intent from engineered creative scripts"
   },
   "latest_installed_artifact_audit": {
-    "head": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
-    "merge_test_commit": "7ae3747e800dfb9b830fd078627db70d80d7f7c7",
-    "exact_equal_tree": "3e50bef8f8c02d987dbaa5f118d5f4515153f55a",
+    "head": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
+    "merge_test_commit": "e00afafc2a450329771fbc452280ccbbc4f06913",
+    "exact_equal_tree": "0fe910ad409916ed5190b0ffd8f363cc3f69c954",
     "installed": {
-      "run": 45870260276,
-      "artifact": 15143422540,
-      "zip_sha256": "8849f64710815d87975175ab2b3d7d1d15a84114d8d24ee792133038094c39e3",
-      "tests_run": 1743,
-      "pass": 1713,
+      "run": 45879882526,
+      "artifact": 15147372439,
+      "zip_sha256": "6d20464e408caec7773288de1a5fafb2d97ae252b3263e9b300e941b39d7617a",
+      "tests_run": 1753,
+      "pass": 1723,
       "skip": 30,
       "failed": 0,
       "manifest_verified": 24,
@@ -1323,19 +1452,17 @@
       "sqlite_integrity_pass": 2
     },
     "unified": {
-      "run": 45870259932,
-      "artifact": 15142442764,
-      "zip_sha256": "5fb10712b0915be50439562a5c9f56894f153bbc83cb9ab6c2024df889296b4d",
+      "run": 45879882902,
+      "artifact": 15147335161,
+      "zip_sha256": "513d15459a1e612ba7ea086d458f38cff703d479146f78bd737b1f8592ea0d53",
       "manifest_verified": 16,
       "physical_mp4_full_decode": 4,
       "scripted": true
     },
-    "native": 45870260347,
-    "source_gate": 45870260362,
-    "brain": 45870259833,
+    "source_gate": 45879882839,
     "actual_model_jobs_skipped": [
-      140083604936,
-      140083534559
+      140116242499,
+      140116316432
     ],
     "independent_professional_acceptance": false
   }
