@@ -1053,6 +1053,43 @@
         },
         "limits": "No SDK or MLT/Blender installed locally; artifact verification on preceding exact tree, new source requires full CI. Counts overlap where test groups include targeted tests; do not sum as unique tests. Structural/behavior subset not all-branch closure."
       }
+    },
+    "followup_source_review": {
+      "source": "13482c55b7f084910beca6c8413953d6d60f4b70",
+      "archive": "cb3121df28ec12da391dac42a4485c3c1bb83213",
+      "method": "Exact ordered full-file normalization of historical blob against current file, plus existing exact-head installed regression log.",
+      "variants": [
+        {
+          "variant": "0c44c44bbc89cd81d2d30a47df34d42f2db965cf3c9ba0bb65caa6521f2876bf",
+          "path": "studio_next/native_editor_asset_reader.py",
+          "historical_blob": "dc1c23cc2dab9e471a5d10e9996a7281938c3866",
+          "current_blob": "4c5ac4536d06198c371c6d73c190f5557a58a34b",
+          "status": "superseded_by_same_behavior_plus_strict_boolean_transport_status_validation",
+          "proof": "exact file equality outside one replaced transport-status block; two status compatibility/negative regressions pass installed job 140093334903"
+        },
+        {
+          "variant": "ecbfadc6fbb33f140db4edabe8ae865d7b3d9fe7feb7de995020a19d6af222ef",
+          "path": "studio_next/body_affordances.py",
+          "historical_blob": "e88ba436094f1d56696224d0b35ea3bfc366937e",
+          "current_blob": "8b0fbb06efc31f4f550491602370be80faeb7b91",
+          "status": "current_source_retains_old_affordance_behavior_with_explicit_permission_and_native_runner_admission",
+          "proof": "exact whole-file equality after five targeted text replacements; authenticated live preflight/no execution and denied rights tests pass installed job 140093334903"
+        }
+      ],
+      "pending_timeline_identity": {
+        "variant": "a4281045e49d6cd60e7400326615e4397d1acf3a0fba19827d8b07919d2b6693",
+        "historical_blob": "61d4f916b51020e98bc05a7a47edc5c09be327dd",
+        "current_owner": "studio_next/native_editor_identity.py",
+        "status": "not_yet_dispositioned",
+        "reason": "New owner has bounded live project/timeline/asset reads and CAS; need verify archived schema-based ID admission coverage and current source-specific mapping before declaring semantic equivalence."
+      },
+      "handoff_correction": {
+        "reported_candidate": "642565f1252f10caf65a1aa6f434672d25dcc3ba",
+        "actual_commit": "fix(release): preserve reviewed native project through clock-only autosave without accepting content drift",
+        "current_source_and_regression_present": true,
+        "marker_candidate_verified": false,
+        "action": "Do not replay the already present autosave fix or assume the reported SHA is a marker fix; recover marker candidate from exact object evidence or reproduce the actual marker gap before change."
+      }
     }
   },
   "history": {
