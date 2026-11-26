@@ -609,7 +609,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Exact 13482c55 technical CI is green. Continue behavior-level historical consolidation from existing gateway, engines and native evidence; prioritize genuinely missing source and regression variants, preserve explicit reversions and run focused regression before integrating. Do not repeat green checks merely for activity. No branch deletion, new features/model trials during consolidation, or professional acceptance claim."
+    "next_action": "Verify exact candidate CI (new explicit native clip/track reference coverage), preserve failures and resolve any compatibility regression. Continue remaining historical source/test behavior reconciliation; no branch retirement or inference during consolidation."
   },
   "latest_ci_checkpoint": {
     "source": "13482c55b7f084910beca6c8413953d6d60f4b70",
@@ -1080,8 +1080,54 @@
         "variant": "a4281045e49d6cd60e7400326615e4397d1acf3a0fba19827d8b07919d2b6693",
         "historical_blob": "61d4f916b51020e98bc05a7a47edc5c09be327dd",
         "current_owner": "studio_next/native_editor_identity.py",
-        "status": "not_yet_dispositioned",
-        "reason": "New owner has bounded live project/timeline/asset reads and CAS; need verify archived schema-based ID admission coverage and current source-specific mapping before declaring semantic equivalence."
+        "status": "coverage_gap_candidate_integrated_pending_runtime",
+        "reason": "New owner has bounded live project/timeline/asset reads and CAS; need verify archived schema-based ID admission coverage and current source-specific mapping before declaring semantic equivalence.",
+        "candidate": {
+          "base": "caa5071dcb07f3165b2e2056ad64db079add53b3",
+          "source_blob": "6cfbd7b3412ea584ed7004393cf287f1679ffc23",
+          "test_blob": "af4ca64c2de8fa51319111d70a54bdcdc382ff6c",
+          "pinned_upstream": "b3c02adbd5c0779feb8abf34978299e9502cc0e7",
+          "upstream_electron_blob": "22693419834cd1f24515e1ce5a6ff5c1b7f45311",
+          "upstream_renderer_blob": "cf2d61167dd6a83e5e6266c065ecad0945b66fc1",
+          "archived_test_variant": "e0cb652f9be43d0208bfc40491b14b42ee0be930590d5a8938dcb029405c9983",
+          "missing_reference_paths_before": [
+            "update_caption_cues:/clipId",
+            "set_clip_label_color:/clipIds/*",
+            "select_clips:/clipId",
+            "select_clips:/clipIds/*",
+            "select_clips:/trackId",
+            "add_solid_color:/trackId",
+            "add_glsl_effect:/clipId",
+            "update_glsl_effect:/clipId",
+            "remove_glsl_effect:/clipId",
+            "add_dip_to_black:/clipIds/*",
+            "add_dip_to_black:/trackId",
+            "add_dip_to_black:/clipPairs/*/outClipId",
+            "add_dip_to_black:/clipPairs/*/inClipId",
+            "add_dip_to_black:/clipPairs/*/clipAId",
+            "add_dip_to_black:/clipPairs/*/clipBId",
+            "add_dip_to_black:/clipPairs/*/fromClipId",
+            "add_dip_to_black:/clipPairs/*/toClipId",
+            "add_dip_to_black:/clipPairs/*/firstClipId",
+            "add_dip_to_black:/clipPairs/*/secondClipId",
+            "add_dip_to_black:/pairs/*/outClipId",
+            "add_dip_to_black:/pairs/*/inClipId",
+            "add_dip_to_black:/pairs/*/clipAId",
+            "add_dip_to_black:/pairs/*/clipBId",
+            "add_dip_to_black:/pairs/*/fromClipId",
+            "add_dip_to_black:/pairs/*/toClipId",
+            "add_dip_to_black:/pairs/*/firstClipId",
+            "add_dip_to_black:/pairs/*/secondClipId",
+            "set_clip_style:/trackId"
+          ],
+          "missing_reference_paths_after": 0,
+          "proof_tier": "source-map structural comparison; runtime regression and exact-head CI pending",
+          "scope": "Explicit existing clip/track references on eight already-grantable tools and missing trackId on set_clip_style. Nested dip aliases sourced from actual renderer; no new grant, CAS or marker identity claim.",
+          "tests": [
+            "test_source_attested_explicit_clip_track_reference_coverage",
+            "test_partial_label_batch_refused_before_native_write"
+          ]
+        }
       },
       "handoff_correction": {
         "reported_candidate": "642565f1252f10caf65a1aa6f434672d25dcc3ba",

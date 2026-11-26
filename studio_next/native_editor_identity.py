@@ -61,7 +61,51 @@ _NATIVE_REFERENCES = {
         "/trackId": "tracks", "/maskAssetId": "assets"},
     "set_clips_enabled": {"/clipIds/*": "clips"},
     "set_clip_keyframes": {"/clipId": "clips"},
-    "set_clip_style": {"/clipId": "clips", "/clipIds/*": "clips"},
+    "set_clip_style": {
+        "/clipId": "clips", "/clipIds/*": "clips", "/trackId": "tracks"},
+    "update_caption_cues": {
+        "/clipId": "clips",
+    },
+    "set_clip_label_color": {
+        "/clipIds/*": "clips",
+    },
+    "select_clips": {
+        "/clipId": "clips",
+        "/clipIds/*": "clips",
+        "/trackId": "tracks",
+    },
+    "add_solid_color": {
+        "/trackId": "tracks",
+    },
+    "add_glsl_effect": {
+        "/clipId": "clips",
+    },
+    "update_glsl_effect": {
+        "/clipId": "clips",
+    },
+    "remove_glsl_effect": {
+        "/clipId": "clips",
+    },
+    "add_dip_to_black": {
+        "/clipIds/*": "clips",
+        "/trackId": "tracks",
+        "/clipPairs/*/outClipId": "clips",
+        "/clipPairs/*/inClipId": "clips",
+        "/clipPairs/*/clipAId": "clips",
+        "/clipPairs/*/clipBId": "clips",
+        "/clipPairs/*/fromClipId": "clips",
+        "/clipPairs/*/toClipId": "clips",
+        "/clipPairs/*/firstClipId": "clips",
+        "/clipPairs/*/secondClipId": "clips",
+        "/pairs/*/outClipId": "clips",
+        "/pairs/*/inClipId": "clips",
+        "/pairs/*/clipAId": "clips",
+        "/pairs/*/clipBId": "clips",
+        "/pairs/*/fromClipId": "clips",
+        "/pairs/*/toClipId": "clips",
+        "/pairs/*/firstClipId": "clips",
+        "/pairs/*/secondClipId": "clips",
+    },
 }
 
 
