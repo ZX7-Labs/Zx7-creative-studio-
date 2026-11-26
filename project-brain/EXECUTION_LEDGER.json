@@ -609,62 +609,75 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify exact candidate CI (new explicit native clip/track reference coverage), preserve failures and resolve any compatibility regression. Continue remaining historical source/test behavior reconciliation; no branch retirement or inference during consolidation."
+    "next_action": "Verify exact integrated marker candidate in native/installed CI; reconcile remaining distinct archive behavior, especially removed diagnostics/research surfaces. Do not rebuild already retained behavior or delete refs; no inference during consolidation."
   },
   "latest_ci_checkpoint": {
-    "source": "13482c55b7f084910beca6c8413953d6d60f4b70",
+    "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
     "observed_date": "2026-11-26",
     "checks_observed": 29,
     "counts": {
       "success": 29
     },
-    "context": "All exact-head workflows completed successfully. Actual model jobs skipped; full MLT and independent installed release integrity jobs passed. Tested synthetic PR merge tree equals source tree. Raw CI logs and artifact metadata inspected; no separate local artifact re-decode at this checkpoint.",
+    "context": "Exact source and tested PR merge trees match; all 29 workflows passed including targeted mobile retry. Actual local and hosted inference skipped. Raw CI logs and artifact metadata inspected; no independent local re-decode of these new ZIPs.",
     "creativity_release_accepted": false,
-    "merge_test_commit": "0d368a18376f2265f9687008b8ce1be256dd609e",
-    "exact_equal_tree": "1619ecf7c133a7a3e70a43f2e89b24dd1665b575",
+    "merge_test_commit": "e00afafc2a450329771fbc452280ccbbc4f06913",
+    "exact_equal_tree": "0fe910ad409916ed5190b0ffd8f363cc3f69c954",
     "previous_source_final_counts": {
-      "source": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
-      "success": 28,
-      "cancelled": 1
+      "source": "13482c55b7f084910beca6c8413953d6d60f4b70",
+      "success": 29
     },
     "actual_model_jobs_skipped": [
-      140093337739,
-      140094132646
+      140116242499,
+      140116316432
     ],
     "installed": {
-      "run": 45873124419,
-      "job": 140093334903,
-      "tests_run": 1751,
-      "pass": 1721,
+      "run": 45879882526,
+      "job": 140116240531,
+      "tests_run": 1753,
+      "pass": 1723,
       "skip": 30,
       "failed": 0,
-      "independent_ci_job": 140099416931,
-      "artifact": 15144482504,
-      "published_and_ci_download_sha256": "6cadb71296c77d6dabd1513c6b3db99d5da425f92dc90786acba37a7b91f08e1",
+      "independent_ci_job": 140124474029,
+      "artifact": 15147372439,
+      "published_and_ci_download_sha256": "6d20464e408caec7773288de1a5fafb2d97ae252b3263e9b300e941b39d7617a",
       "independent_ci_manifest_files": 24,
       "independent_ci_publication_receipts": 5,
       "local_redownload_verified": false
     },
     "mlt": {
-      "run": 45873124498,
-      "job": 140093462898,
-      "tests_run": 1751,
-      "pass": 1750,
+      "run": 45879882833,
+      "job": 140116348153,
+      "tests_run": 1753,
+      "pass": 1752,
       "skip": 1,
       "failed": 0
     },
     "source_gate": {
-      "run": 45873124446,
-      "job": 140093336314,
-      "sdk_tests_run": 336
+      "run": 45879882839,
+      "job": 140116243037,
+      "sdk_tests_run": 336,
+      "universal_job": 140116242464,
+      "universal_tests": {
+        "run": 230,
+        "pass": 226,
+        "skip": 4,
+        "failed": 0
+      }
     },
     "unified": {
-      "run": 45873124339,
-      "job": 140093772503,
-      "artifact": 15144151611,
-      "published_sha256": "649289cb7ca2e2579250b4171f85e96a2952caa192e5ac11f21a6439f061f408",
+      "run": 45879882902,
+      "job": 140116923995,
+      "artifact": 15147335161,
+      "published_sha256": "513d15459a1e612ba7ea086d458f38cff703d479146f78bd737b1f8592ea0d53",
       "scripted": true,
       "local_redownload_verified": false
+    },
+    "mobile_retry": {
+      "run": 45879882820,
+      "first_job": 140116241413,
+      "first_failure": "Microsoft apt repository HTTP 403 during setup, before product test",
+      "attempt": 2,
+      "conclusion": "success"
     }
   },
   "latest_artifact_audit_20261126": {
@@ -1080,8 +1093,8 @@
         "variant": "a4281045e49d6cd60e7400326615e4397d1acf3a0fba19827d8b07919d2b6693",
         "historical_blob": "61d4f916b51020e98bc05a7a47edc5c09be327dd",
         "current_owner": "studio_next/native_editor_identity.py",
-        "status": "coverage_gap_candidate_integrated_pending_runtime",
-        "reason": "New owner has bounded live project/timeline/asset reads and CAS; need verify archived schema-based ID admission coverage and current source-specific mapping before declaring semantic equivalence.",
+        "status": "restored_explicit_clip_track_path_coverage_exact_source_CI_passed",
+        "reason": "Existing pinned host reader and guard reused; nine operations covered by targeted mapping. Archived generic behavior not reintroduced, no blanket claim for every native reference kind.",
         "candidate": {
           "base": "caa5071dcb07f3165b2e2056ad64db079add53b3",
           "source_blob": "6cfbd7b3412ea584ed7004393cf287f1679ffc23",
@@ -1121,11 +1134,18 @@
             "set_clip_style:/trackId"
           ],
           "missing_reference_paths_after": 0,
-          "proof_tier": "source-map structural comparison; runtime regression and exact-head CI pending",
+          "proof_tier": "28 missing paths in source-map baseline; new runtime positive/negative coverage and mixed-label-batch no-dispatch regression passed; 29/29 exact-source CI; not runtime RED-before-fix",
           "scope": "Explicit existing clip/track references on eight already-grantable tools and missing trackId on set_clip_style. Nested dip aliases sourced from actual renderer; no new grant, CAS or marker identity claim.",
           "tests": [
             "test_source_attested_explicit_clip_track_reference_coverage",
             "test_partial_label_batch_refused_before_native_write"
+          ],
+          "verified_source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
+          "verified_jobs": [
+            140116242464,
+            140116243037,
+            140116240531,
+            140116348153
           ]
         }
       },
@@ -1135,6 +1155,112 @@
         "current_source_and_regression_present": true,
         "marker_candidate_verified": false,
         "action": "Do not replay the already present autosave fix or assume the reported SHA is a marker fix; recover marker candidate from exact object evidence or reproduce the actual marker gap before change."
+      },
+      "marker_identity_candidate": {
+        "source_candidate": "c7ebb91fa581765fc1dd46daa4fb871101947ee2",
+        "base": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
+        "source_blob": "fa6b415fef7adead4b34f94c85c920985942475d",
+        "test_blob": "dc998f540cd3ac6800b06545af95a1a21a55196c",
+        "node_test_blob": "e58ab3db9e0046f50dc3e5d4448715eb009f0ebc",
+        "upstream_snapshot_blob": "f0a182947efda52f7f017ab78303c06708a1e196",
+        "upstream_electron_blob": "22693419834cd1f24515e1ce5a6ff5c1b7f45311",
+        "upstream_renderer_blob": "cf2d61167dd6a83e5e6266c065ecad0945b66fc1",
+        "status": "integrated_pending_runtime",
+        "scope": "Complete bounded marker inventory and existing-ID admission for removal and property updates; malformed marker receipt does not invalidate unrelated source reads. No native commit CAS or renderer race proof; native partial-target behavior separately characterized.",
+        "tests": [
+          "test_marker_inventory_requires_complete_counted_native_receipt",
+          "test_marker_edits_refuse_partial_targets_before_write",
+          "Pinned marker source exposes counted IDs and can otherwise dispatch a partial explicit batch"
+        ]
+      },
+      "ordered_source_comparisons": {
+        "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
+        "method": "Ordered full-file line comparison of historical/current Git blobs; existing installed regression log on unchanged paths. Preserve intentional stronger behavior and changed API/format boundaries; not professional domain acceptance.",
+        "variants": [
+          {
+            "variant": "a88af279a0d55a2fad8f2c79f8e02cdc38914f9cd3927250a943cea4a2af5f41",
+            "path": "studio_next/registry.py",
+            "historical_blob": "adf332fc0101df864bd20eaf8fc81a5d4564f840",
+            "current_blob": "ca1c31681506a2dae805da8eecb8f5efde75623a",
+            "status": "retains_durable_admission_and_blocks_unsupported_access"
+          },
+          {
+            "variant": "4a94cfff411cf1aff5c3bd267181411b4c23a5a57092cf386ad3d7bc4c8355a2",
+            "path": "studio_next/body_signal.py",
+            "historical_blob": "26d9edadd44fe087a381f6a31ea42bc6374c4e63",
+            "current_blob": "4f661431555fd9c325820c8a636b9ac3c89c9c8c",
+            "status": "retains_DAG_admission_adds_immutable_plan_selection"
+          },
+          {
+            "variant": "ab5ad94104bc18a5f36cc2f3c8d72e722621fbd656c3208c75b894f69c157c6a",
+            "path": "studio_next/body_capability_adapter.py",
+            "historical_blob": "2a6b894cd903c828ff0b737e72b2542f49caa5d8",
+            "current_blob": "b7a055acbf24cf8ed156f808db80f8e4ef14056f",
+            "status": "retains_pre_journal_asset_guard_adds_bounded_reads_and_durable_publication"
+          },
+          {
+            "variant": "3348d577ae5a3d892b39f4c1d2e4575453b1d0af23f932c8583cf4d87365d6a3",
+            "path": "studio_next/body_capability_adapter.py",
+            "historical_blob": "4901e811413fadcbde1847ee0b702bfc7eeee495",
+            "current_blob": "b7a055acbf24cf8ed156f808db80f8e4ef14056f",
+            "status": "same_guard_and_current_read_only_discovery"
+          },
+          {
+            "variant": "ac69818b6957106959ee06c6f9bfbcfc9939d7383694556825fa7033c5b0351b",
+            "path": "studio_next/body_mlt_compare.py",
+            "historical_blob": "5bc61a48f5cf8eacd41d2cd62b379f3c86f1aa5e",
+            "current_blob": "a8abb8111ec35e5bb1c9f8148fdf2311f661f525",
+            "status": "retains_full_review_with_focus_all_and_adds_color_audio_semantics"
+          },
+          {
+            "variant": "90161ec7f9a1f3804bbec205d154e682537c6a56d76405a5f4fa810c029f75c1",
+            "path": "studio_next/body_mlt_linked_actions.py",
+            "historical_blob": "53452c4f56dea385c79eacd4a9e6b686181d1b05",
+            "current_blob": "92709b865af92a7a35306af9bd752772fec22d03",
+            "status": "retains_linked_time_actions_adds_native_placement_and_transform_mask_grade_tone"
+          },
+          {
+            "variant": "b790488935c2426c92030e854683449605214344d47aed90faf52ac113eb059f",
+            "path": "studio_next/reference_evidence_tools.py",
+            "historical_blob": "384698986e3e310dab2ff41d83513c5fc49d11e7",
+            "current_blob": "5983d2e40ba944620fa663a55fe26c83e762c8e3",
+            "status": "corrects_unphysical_arithmetic_dB_average_to_sample_weighted_linear_energy"
+          },
+          {
+            "variant": "a8ccdf30bfb1f7fd146c9fd02a6aa7d63ecc93ded46bc6b179a83e09c7063c51",
+            "path": "studio_next/body_editor_extract_guard.py",
+            "historical_blob": "a58a9f7cb4e1e7750b8e14a2837bc39eefb90f26",
+            "current_blob": "5ca7be83eb047ad7e962759bac687ee016a56026",
+            "status": "retains_guard_corrects_actual_nested_native_preview_envelope"
+          },
+          {
+            "variant": "57ce695897541157131e37364e9cc19d1b6f41a0c94aa728ac19bcfd8603fc4b",
+            "path": "studio_next/media_vault.py",
+            "historical_blob": "22aab948196a4c074cb74d88561a7e09a7d7bb16",
+            "current_blob": "53e8d642533668f561eaad1616f0b09a1b8cea31",
+            "status": "fixed_width_PCM_no_ffmpeg_dependency_optional_physical_crosscheck"
+          },
+          {
+            "variant": "eada02ace180c6185555debaaa553b6cbd0012c79f5df5e1b9568131769f3dde",
+            "path": "studio_next/media_vault.py",
+            "historical_blob": "aaf78fc1f53bdc91771063097ff1382a4c65f05f",
+            "current_blob": "53e8d642533668f561eaad1616f0b09a1b8cea31",
+            "status": "all_audio_video_stream_decode_and_safe_read_only_vault"
+          },
+          {
+            "variant": "04cf8522b996bf5d1268400ae1c7edb5ce3e5308d959585172817d000015b1cc",
+            "path": "studio_next/media_vault.py",
+            "historical_blob": "b06194e5606a4ced8add258f6df2b28d4aa17568",
+            "current_blob": "53e8d642533668f561eaad1616f0b09a1b8cea31",
+            "status": "strict_RIFF_extent_and_extensible_PCM_support"
+          }
+        ],
+        "evidence_jobs": [
+          140116240531,
+          140116348153,
+          140116243037
+        ],
+        "unresolved": "Legacy diagnostics/aptitude and research hub API were removed; not equivalent to current public research and local editor status without further review."
       }
     }
   },
