@@ -52,13 +52,32 @@ class CGIContractTests(unittest.TestCase):
         with self.assertRaises(Invalid3DShot):validate_blender_shot(s)
 
     def test_cgi_texture_source_bytes_are_in_actual_material_fingerprint(self):
+        from PIL import Image
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d);p=root/'label.png';p.write_bytes(b'first original')
-            plan={'scene':{},'assets':[{'name':'label.png','media':{'source':'label.png','asset_id':'x','attestation_id':'y'}}]}
-            (root/'cgi.json').write_text(json.dumps(plan))
-            a=fingerprint_physical_inputs('body.cgi_shot',{'plan':'cgi.json','out':'out.mp4'},root)
-            p.write_bytes(b'changed original');b=fingerprint_physical_inputs('body.cgi_shot',{'plan':'cgi.json','out':'out.mp4'},root)
+            root=Path(d);p=root/'label.png';vault=MediaVault(root/'vault')
+            def admit():
+                r=vault.ingest(p,mime='image/png',rights='owner_supplied',source_type='owner_upload',
+                    source_id='synthetic-label',evidence='Original generated test texture',owner_or_generator='test author')
+                return {'source':'label.png','asset_id':r['asset_id'],'attestation_id':r['attestation_id']}
+            def fingerprint(ref):
+                plan={'scene':{},'assets':[{'name':'label.png','media':ref}]}
+                (root/'cgi.json').write_text(json.dumps(plan))
+                return fingerprint_physical_inputs('body.cgi_shot',{'plan':'cgi.json','out':'out.mp4'},root)
+            Image.new('RGB',(8,8),(20,40,60)).save(p)
+            first=admit();a=fingerprint(first)
+            self.assertIn(first['asset_id'],[item['sha256'] for item in a])
+            Image.new('RGB',(8,8),(60,40,20)).save(p)
+            with self.assertRaisesRegex(ValueError,'Original workspace source differs'):
+                fingerprint(first)
+            second=admit();b=fingerprint(second)
+            self.assertNotEqual(first['asset_id'],second['asset_id'])
+            self.assertIn(second['asset_id'],[item['sha256'] for item in b])
             self.assertNotEqual(a,b)
+            with self.assertRaisesRegex(ValueError,'Unsafe media content digest'):
+                fingerprint({'source':'label.png','asset_id':'x','attestation_id':'y'})
+            vault.withdraw_attestation(second['asset_id'],second['attestation_id'],reason='test withdrawal')
+            with self.assertRaisesRegex(ValueError,'has been withdrawn'):
+                fingerprint(second)
 
 TRACKING_READY=bool(importlib.util.find_spec('cv2') and importlib.util.find_spec('numpy') and shutil.which('ffmpeg'))
 SETTINGS={'max_features':1800,'min_matches':10,'min_inlier_ratio':.55,'ransac_pixels':2,'max_reprojection_error':1.5}

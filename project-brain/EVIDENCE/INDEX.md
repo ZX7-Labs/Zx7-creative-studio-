@@ -1035,3 +1035,62 @@ Exact structured value from prior ledger blob `38959fe180502cacba095f8d49f17868a
   "failed": 0
  }
 }
+
+## 2026-11-27 — terminal genuine G1 and integrated A/D/E failure audit
+
+{
+ "g1": {
+  "run": 46007258095,
+  "job": 140533444321,
+  "source": "c29c135f96bf6d25658b3fd830245c907119ea2c",
+  "parent": "f2da4f90",
+  "retired": "68235047091de0a0312c6bdd1b65a8c34d8a596b",
+  "request": "ZX7_SUPER_VL_G1_WIRE_PLACEMENT_20261127",
+  "authority": "Prior bounded owner consent, exact synthetic brief and grant profile, no private media or expanded grant, 48-turn Super VL",
+  "status": "failure: turn_budget_exhausted; one conforming native A/V export only; no reviewed distinct pair or professional acceptance; scoped trigger retired",
+  "artifact": 15203767091,
+  "sha256": "1c2c1180f3a4f1f9f858481613325cdcbba1bbefafe0d82ad31bfa56f7d7012d",
+  "artifact_crc": "pass; 23 files",
+  "decisions": 48,
+  "searches": 21,
+  "write_acks": 8,
+  "usage_records": 46,
+  "reported_tokens": 572800,
+  "model_wall_ms": 1362433.837,
+  "native_ms": 2756.901,
+  "physical_export": {
+   "count": 1,
+   "sha256": "6cf4cfa9fb1ebfaad11edd5b74581443aefa2d8bd6bc694c83012ec10c5c6cb7",
+   "video": "640x360 H264 24fps 144 frames",
+   "audio": "AAC stereo 44100Hz; full decode; float PCM RMS 0.05555946 peak 0.12276136",
+   "duration_s": 6
+  },
+  "source_custody": "Both staged and native original video/audio copies match source-ledger SHA256; saved native project SHA256 ab6924c0e7d350acb3b4e6fe6b857b2ff50e2786484d7cfb59248585ef46d73d; 3 clips, 2 video and 1 audio",
+  "causal_observations": "Export turn23, combined verification turn25, timeline read26, searches27–36, frame37, numeric audio39, truncated decisions41/45, stale set_clip_style refusal43, fresh project44, redundant verification46, AV window47; no distinct revised export. Native safety refusal is not evidence of a controller defect. No new paid trial."
+ },
+ "integrated": {
+  "source": "fbb95665280c58e8550d1f703b221a83a3b7e52a",
+  "tree": "da6fece917fb55da5b89783b35234edac9c69978",
+  "hosted": "25/29 success; 4 failure terminal",
+  "common_failure": {
+   "source_run": 46010679696,
+   "installed_run": 46010679646,
+   "mlt_run": 46010679250,
+   "source_job": 140545074917,
+   "installed_job": 140545076483,
+   "mlt_job": 140545074025,
+   "test": "test_cgi_texture_source_bytes_are_in_actual_material_fingerprint",
+   "cause": "Legacy fixture fabricates x/y custody identifiers and arbitrary bytes; strict source custody correctly rejects it.",
+   "red": "Exact local reproduction with body_materials and media_vault blobs matching remote; Unsafe media content digest.",
+   "green": "16/16 local tests in test_cgi_tracking, test_body_materials and test_body_custody_graph; real PNG admission and digest change after explicit reattestation; reject mutated source under old receipt, forged IDs and withdrawn grant; physical planar A/V preserves native audio and color.",
+   "test_blob": "826d5ab8561aade98e54990c37057b84d1beceba",
+   "runtime_changed": false
+  },
+  "scene": {
+   "run": 46010679491,
+   "job": 140545307832,
+   "status": "failed after successful Vite build, exact subsequent failure cause unresolved; do not label infrastructure or source defect without evidence"
+  },
+  "limits": "Candidate hosted verification pending. No new domain acceptance. Last fully green integrated parent remains 66b4465b."
+ }
+}
