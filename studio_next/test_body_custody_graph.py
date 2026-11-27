@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from studio_next.body_integration import run_body_project,validate_witness
-from studio_next.media_vault import MediaVault,sha256_file
+from studio_next.media_vault import MediaCustodyError,MediaVault,sha256_file
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
@@ -83,6 +83,41 @@ class OwnerAssetProductionGraphProof(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"trusted renderer dependency"):
                 run_body_project(invalid,root)
             self.assertEqual(sha256_file(finished),actual)
+            master_grant=proof["rights_attestations"][0]["attestation_id"]
+            descendant=vault.ingest(finished,mime="video/mp4",rights="generated_original",
+                source_type="trusted_renderer",source_id="second-generation",
+                evidence="Verified derivative of the master",owner_or_generator="trusted-renderer",
+                parent_attestations=[(actual,master_grant)])
+            vault.inspect(actual,attestation_id=descendant["attestation_id"])
+            vault.withdraw_attestation(clips[0]["asset_id"],clips[0]["attestation_id"],
+                                       reason="Withdraw exact input rights")
+            reopened=MediaVault(root/"vault")
+            with self.assertRaises(MediaCustodyError):
+                reopened.inspect(actual,attestation_id=master_grant)
+            with self.assertRaises(MediaCustodyError):
+                reopened.inspect(actual)
+            with self.assertRaises(MediaCustodyError):
+                reopened.checkout(actual,master_grant,root/"denied.mp4")
+            with self.assertRaises(MediaCustodyError):
+                reopened.inspect(actual,attestation_id=descendant["attestation_id"])
+            with self.assertRaises(MediaCustodyError):
+                reopened.ingest(finished,mime="video/mp4",rights="generated_original",
+                    source_type="trusted_renderer",source_id="denied-generation",
+                    evidence="Attempted reuse of a withdrawn source",owner_or_generator="trusted-renderer",
+                    parent_attestations=[(actual,master_grant)])
+            self.assertNotEqual(run_body_project(ir,root)["status"],"all_tool_results_verified")
+            self.assertFalse((root/"denied.mp4").exists())
+            self.assertEqual(sha256_file(finished),actual)
+            # Independent source rights are not withdrawn by association.
+            reopened.inspect(clips[1]["asset_id"],attestation_id=clips[1]["attestation_id"])
+            independent=reopened.ingest(finished,mime="video/mp4",rights="owner_supplied",
+                source_type="owner_upload",source_id="separate-owner-grant",
+                evidence="Independent authorization for identical bytes",
+                owner_or_generator="authenticated-original-owner")
+            self.assertEqual([x["attestation_id"] for x in reopened.inspect(actual)["rights_attestations"]],
+                             [independent["attestation_id"]])
+            reopened.checkout(actual,independent["attestation_id"],root/"allowed.mp4")
+            self.assertEqual(sha256_file(root/"allowed.mp4"),actual)
 
 
 if __name__=="__main__":

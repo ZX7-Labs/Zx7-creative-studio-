@@ -1522,3 +1522,41 @@ Previous full ledger and STATE retained at commit `573e952ccf1b9556fec8d56204ac7
  },
  "limits": "No paid model call, no measured artistic or semantic improvement. Exact hosted integration pending."
 }
+
+## 2026-11-27 — Field A owned-edit derivative grant closure
+
+{
+ "base": "f05af66bef639fefc184cf946330a96d760e428f",
+ "scope": "Field A: exact attestation dependency closure for new trusted-renderer admissions. Existing body.render_edit_owned returns exact source grant pairs, body.asset_vault binds them into the attestation identity and SQLite foreign-key lineage. Ancestor withdrawal blocks future exact/generic inspection, checkout and descendant admission; independently authorized identical bytes remain available.",
+ "red": "Actual FFmpeg owner edit → verified generated master → withdraw one input; old runtime allowed master inspection (assertion failed).",
+ "green": "47/47 local affected tests, no skips/errors; physical picture/audio decode, same graph reuse before withdrawal, transitive second-generation grant refused, cached graph refused, denied checkout absent, unchanged master/source bytes, separate exact grant allowed. 24/24 earlier intermediate run. Local installed-wheel source overlay, not complete checkout.",
+ "blobs": {
+  "studio_next/media_vault.py": "592a72b62b58c6e11c98805db8d047c4497cae20",
+  "studio_next/body_integration.py": "f4f90290189e8778bc8a774a5d8649a9d337cad1",
+  "studio_next/test_body_custody_graph.py": "1f2fb427463ddef625cf6d3c1d7b7039be08c773"
+ },
+ "limits": "New owned-edit lineage only, no retroactive dependency inference for legacy receipts, unlinked producers, arbitrary raw paths, existing copies, old backups, or license/professional acceptance. No broad revoke-by-content. Hosted full proof pending."
+}
+
+## 2026-11-27 — Integrated atomic range physical success
+
+{
+ "source": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
+ "observed": {
+  "success": 27,
+  "failure": 0,
+  "in_progress": 2
+ },
+ "atomic": {
+  "run": 46030660837,
+  "job": 140613651638,
+  "status": "success",
+  "electron": "v45.2.3",
+  "proof": "ACTUAL_NATIVE_ATOMIC_AV_RANGE: linked picture/sound ripple, exact frame edges, undo/redo, physical save/reopen and decoded A/V change; original media hash/keyframes/sound retained. Earlier silent post-Vite failure cause remains unproven."
+ },
+ "pending": [
+  46030660749,
+  46030660842
+ ],
+ "decision": "Preserve running installed/MLT proof before non-force canonical advance. No independent acceptance."
+}

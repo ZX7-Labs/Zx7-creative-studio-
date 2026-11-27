@@ -583,6 +583,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         return {**receipt,"source_custody_count":len(original["clips"]),
                 "distinct_originals":len(source_hashes),
                 "director_plan_sha256":initial_sha,
+                "source_attestation_refs":[list(ref) for ref in sorted({
+                    (clip["asset_id"],clip["attestation_id"]) for clip in authored["clips"]})],
                 "original_footage_unchanged":True,
                 "full_picture_and_sound_decoder_completed":True,
                 "artistic_quality_certified":False}
@@ -965,7 +967,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         ref=vault.ingest(source,mime=mime,rights="generated_original",
                   source_type="trusted_renderer",source_id=proof["sha256"],
                   evidence="Verified original media from a registered trusted executable",
-                  owner_or_generator="zx7-authorized-body-graph")
+                  owner_or_generator="zx7-authorized-body-graph",
+                  parent_attestations=proof.get("source_attestation_refs",()))
         record=vault.inspect(ref["asset_id"],attestation_id=ref["attestation_id"])
         return {"path":record["path"],"sha256":ref["asset_id"],"success":True,
                 "asset_id":ref["asset_id"],"attestation_id":ref["attestation_id"],

@@ -355,6 +355,13 @@ class MediaVault:
               PRIMARY KEY(digest,attestation_id),
               FOREIGN KEY(digest,attestation_id) REFERENCES attestations(digest,attestation_id))""")
 
+            db.execute("""CREATE TABLE IF NOT EXISTS attestation_dependencies(
+              digest TEXT NOT NULL, attestation_id TEXT NOT NULL,
+              parent_digest TEXT NOT NULL, parent_attestation_id TEXT NOT NULL,
+              PRIMARY KEY(digest,attestation_id,parent_digest,parent_attestation_id),
+              FOREIGN KEY(digest,attestation_id) REFERENCES attestations(digest,attestation_id),
+              FOREIGN KEY(parent_digest,parent_attestation_id) REFERENCES attestations(digest,attestation_id))""")
+
     def _connect(self):
         if self.db.is_symlink():
             raise MediaCustodyError("Original source custody DB was replaced by a link")
@@ -371,7 +378,7 @@ class MediaVault:
         return parent/digest
 
     def ingest(self,source,*,mime,rights,source_type,source_id,evidence,
-               owner_or_generator):
+               owner_or_generator,parent_attestations=()):
         """Attest real file source and rights; never infer rights from an extension."""
         if mime not in _ALLOWED_MIME or rights not in _RIGHTS:
             raise MediaCustodyError("Unsupported media type or unverified rights class")
@@ -385,6 +392,17 @@ class MediaVault:
                   "licensed_library":"appropriately_licensed"}[source_type]
         if rights!=expected:
             raise MediaCustodyError("Declared rights disagree with original media source")
+        if not isinstance(parent_attestations,(tuple,list)):
+            raise MediaCustodyError("Exact parent attestation references required")
+        parents=set()
+        for ref in parent_attestations:
+            if (not isinstance(ref,(tuple,list)) or len(ref)!=2 or
+                    any(not isinstance(x,str) or not _DIGEST.fullmatch(x) for x in ref)):
+                raise MediaCustodyError("Exact parent attestation references required")
+            parents.add(tuple(ref))
+        parents=sorted(parents)
+        if parents and source_type!="trusted_renderer":
+            raise MediaCustodyError("Only trusted renderer may bind derivative attestations")
         path=Path(source)
         if not path.is_file() or path.stat().st_size==0:
             raise MediaCustodyError("Asset has no actual file bytes")
@@ -431,6 +449,8 @@ class MediaVault:
             "rights":rights,"source_type":source_type,"source_id":source_id,
             "evidence":evidence,"owner_or_generator":owner_or_generator,
             "digest":digest}
+        if parents:
+            attestation["parent_attestations"]=parents
         encoded=json.dumps(attestation,sort_keys=True,ensure_ascii=False).encode()
         att_id=hashlib.sha256(encoded).hexdigest()
         with self._connect() as db:
@@ -439,20 +459,39 @@ class MediaVault:
             if old is not None and tuple(old)!=(size,mime):
                 db.execute("ROLLBACK")
                 raise MediaCustodyError("Contradictory MIME or file size for same content")
+            for parent_digest,parent_id in parents:
+                if db.execute("SELECT 1 FROM attestations WHERE digest=? AND attestation_id=?",
+                              (parent_digest,parent_id)).fetchone() is None:
+                    raise MediaCustodyError("Unknown derivative source attestation")
+                self._require_not_withdrawn(db,parent_digest,parent_id)
             db.execute("INSERT OR IGNORE INTO blobs VALUES(?,?,?,?)",
                        (digest,size,mime,time.time()))
             db.execute("INSERT OR IGNORE INTO attestations VALUES(?,?,?,?,?,?,?,?)",
                  (digest,att_id,rights,source_type,source_id,evidence,owner_or_generator,time.time()))
+            db.executemany("INSERT OR IGNORE INTO attestation_dependencies VALUES(?,?,?,?)",
+                           [(digest,att_id,d,a) for d,a in parents])
             self._require_not_withdrawn(db,digest,att_id)
             db.execute("COMMIT")
         return {"asset_id":digest,"attestation_id":att_id,"mime":mime,
                 "rights":rights,"size_bytes":size,"verified_bytes":True}
 
     @staticmethod
+    def _is_withdrawn(db,digest,attestation_id):
+        # UNION (not UNION ALL) deduplicates shared ancestors and terminates
+        # even if a corrupt database contains a cycle.
+        return db.execute("""WITH RECURSIVE ancestry(digest,attestation_id) AS (
+            SELECT ?,? UNION
+            SELECT d.parent_digest,d.parent_attestation_id
+            FROM attestation_dependencies d JOIN ancestry a
+            ON d.digest=a.digest AND d.attestation_id=a.attestation_id)
+            SELECT 1 FROM ancestry a JOIN withdrawn_attestations w
+            ON w.digest=a.digest AND w.attestation_id=a.attestation_id LIMIT 1""",
+            (digest,attestation_id)).fetchone() is not None
+
+    @staticmethod
     def _require_not_withdrawn(db,digest,attestation_id):
-        if db.execute("SELECT 1 FROM withdrawn_attestations WHERE digest=? AND attestation_id=?",
-                      (digest,attestation_id)).fetchone() is not None:
-            raise MediaCustodyError("Exact original rights attestation has been withdrawn")
+        if MediaVault._is_withdrawn(db,digest,attestation_id):
+            raise MediaCustodyError("Exact original rights attestation or derivative source has been withdrawn")
 
     def withdraw_attestation(self,digest,attestation_id,*,reason):
         """Owner-side, irreversible denial of this exact future vault admission.
@@ -481,17 +520,20 @@ class MediaVault:
         return {"asset_id":digest,"attestation_id":attestation_id,"withdrawn":True,
                 "reason":recorded[0],"withdrawn_at":recorded[1],
                 "scope":"current_vault_exact_attestation_future_admissions",
+                "linked_derivative_future_admissions_denied":True,
                 "historical_copies_deleted":False,"previous_backups_updated":False,
                 "independent_grants_revoked":False}
 
     def inspect(self,digest,*,attestation_id=None):
         path=self._loc(digest)
         with self._connect() as db:
+            db.execute("BEGIN")
             blob=db.execute("SELECT size_bytes,mime FROM blobs WHERE digest=?",(digest,)).fetchone()
             if blob is None:raise MediaCustodyError("Unknown media reference")
             if attestation_id is None:
-                rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations a WHERE digest=? AND NOT EXISTS (SELECT 1 FROM withdrawn_attestations w WHERE w.digest=a.digest AND w.attestation_id=a.attestation_id)",
+                rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=?",
                               (digest,)).fetchall()
+                rows=[row for row in rows if not self._is_withdrawn(db,digest,row[0])]
             else:
                 self._require_not_withdrawn(db,digest,attestation_id)
                 rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=? AND attestation_id=?",

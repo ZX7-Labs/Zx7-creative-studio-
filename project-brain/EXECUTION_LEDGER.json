@@ -1173,17 +1173,10 @@
   "limits": "Not full rigging, IK, character animation, rendering, artistic control, neural or professional acceptance."
  },
  "field_a_withdrawal_20261127": {
+  "immutable_ledger_commit": "f05af66bef639fefc184cf946330a96d760e428f",
+  "immutable_ledger_blob": "aa7c2a1c5a9da1d39e97aa1401f92a3a687583ca",
   "scope": "Field A: irreversible exact-attestation withdrawal for future admissions in the current vault, via owner-authenticated quiescent service and zx7-client withdraw-rights. Existing SQLite authority, no separate registry, no model write grant.",
-  "blobs": {
-   "studio_next/media_vault.py": "b35fee6f64eb6a0efe4c8571c3ef152e969c81c4",
-   "studio_next/body_materials.py": "61a26f66b9f66b2b8b58c2a320eebe5a65943732",
-   "studio_next/body_service.py": "44b47388f428d1693acd1b3b5baf4ad3b722bc41",
-   "studio_next/body_client.py": "8404e65b625f9b07dea2e8bcbdd286c111f474f0",
-   "studio_next/test_body_rights_withdrawal.py": "48f74f04d9e36b42384b9dea04a7551dad15d50b"
-  },
-  "negative": "Missing withdrawal and legacy material fingerprint reproduced. Checkout withdrawal after last inspect denied at final transactional publish. Initial restore test wrong path denied as designed; corrected test restores exact original path.",
   "proof": "62/62 local affected tests, including actual FFmpeg native subtitle delivery, withdrawn fresh and cached graph admission denied, prior delivered bytes unchanged; exact reingest refused, independent active grant retained, immutable reason/time, post-withdrawal backup/restore retains tombstone, unauthorized owner HTTP 401, active workspace job denied, idle owner success.",
-  "route": "POST /v1/workspaces/{workspace_id}/rights/withdraw",
   "limits": "No recall of historical exports, raw/non-attested paths, derivative propagation, other independent grants, externally copied media, or pre-withdrawal backups; no complete license/professional acceptance. Hosted combined proof pending. Additional broader local material suite timed out before terminal result; no pass claimed."
  },
  "g1_wire_placement_retest_20261127": {
@@ -1373,46 +1366,24 @@
   "note": "Earlier observed in-progress matrix superseded by terminal parent receipt; full exact prior record retained."
  },
  "parent_terminal_20261127": {
+  "immutable_ledger_commit": "f05af66bef639fefc184cf946330a96d760e428f",
+  "immutable_ledger_blob": "aa7c2a1c5a9da1d39e97aa1401f92a3a687583ca",
   "source": "f036a1552af2b6080344e4e840c5b6d35727c207",
   "matrix": {
    "success": 28,
    "failure": 1,
    "in_progress": 0
   },
-  "mlt": {
-   "run": 46023937016,
-   "job": 140590479244,
-   "tests_run": 1814,
-   "passed": 1812,
-   "skipped": 2,
-   "failed": 0,
-   "additional_separate_test_runs": [
-    52,
-    26
-   ],
-   "result": "success"
-  },
   "remaining_failure": {
    "run": 46023936864,
    "job": 140591531636,
    "stage": "post-Vite sandbox/version checks; exact failed subcommand unproven; diagnostic correction in candidate"
-  },
-  "candidate": "cd6858ec3989b498def8e121b3c95c69cfbeb72a",
-  "decision": "Parent matrix terminal; integrate cumulative candidate via non-force expected-head update. No merge into main or independent acceptance."
+  }
  },
  "cross_project_observation_fence_20261127": {
-  "base": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
-  "gate": "G1-HUMAN",
-  "cause": "Complete timeline read can renew model write epoch after switching to a different source project with same timeline and clip IDs. The prior wrapper binds timeline ID but not project identity.",
-  "red": "Exact source-backed host protocol fixture: switch project path retaining IDs; complete model-selected timeline read; old planned update incorrectly accepted (expected native_identity_model_observation_required, got None).",
-  "fix": "Carry existing _project_state hashed source identity internally in fenced native reader; anchor it only on model-visible get_project and require same identity across full timeline bracket before renewing revision. New project requires explicit model-selected project read. No extra native calls, no raw path egress, unchanged final source CAS.",
-  "code_blobs": {
-   "studio_next/capability_mcp_session.py": "99fded07497032eb9b1110fdf0c9f0e768b816da",
-   "studio_next/native_editor_identity.py": "0ac116f64188528cfb34b72b726ea944210fedcc",
-   "studio_next/test_native_revision_fence.py": "4bd483449323eb77e33e5749805e26781521fe71"
-  },
-  "green": "3/3 direct regression/control tests. 86/86 related fence/identity/gateway/reference tests. Wider 96 tests: 95 pass, one missing scripts.run_native_model_trial import in local installed-wheel overlay; no assertion failures. Exact source blobs match local tested files.",
-  "limits": "Synthetic renderer/interleaving test, not real Electron project switch, independent human usability or creative acceptance. Cannot attribute historical G1 #46007258095 stale refusal to this defect; raw project revisions unavailable. Exact hosted candidate still pending.",
+  "immutable_ledger_commit": "f05af66bef639fefc184cf946330a96d760e428f",
+  "immutable_ledger_blob": "aa7c2a1c5a9da1d39e97aa1401f92a3a687583ca",
+  "scope": "Source identity binding for model observation; 86/86 focused; broader 95/96 local import error; physical Electron harness awaiting hosted execution.",
   "native_harness": {
    "path": "engines/velorn/mcp-e2e.py",
    "blob": "a1343380d919c3e200d0eae735bfcd9460812056",
@@ -1439,5 +1410,37 @@
    "studio_next/test_nvidia_native_tool_model.py": "6866b7cfd433dddaf3afb3ecd66929bca1b64dda"
   },
   "limits": "No paid model call, no measured artistic or semantic improvement. Exact hosted integration pending."
+ },
+ "field_a_derivative_lineage_20261127": {
+  "base": "f05af66bef639fefc184cf946330a96d760e428f",
+  "scope": "Field A: exact attestation dependency closure for new trusted-renderer admissions. Existing body.render_edit_owned returns exact source grant pairs, body.asset_vault binds them into the attestation identity and SQLite foreign-key lineage. Ancestor withdrawal blocks future exact/generic inspection, checkout and descendant admission; independently authorized identical bytes remain available.",
+  "red": "Actual FFmpeg owner edit → verified generated master → withdraw one input; old runtime allowed master inspection (assertion failed).",
+  "green": "47/47 local affected tests, no skips/errors; physical picture/audio decode, same graph reuse before withdrawal, transitive second-generation grant refused, cached graph refused, denied checkout absent, unchanged master/source bytes, separate exact grant allowed. 24/24 earlier intermediate run. Local installed-wheel source overlay, not complete checkout.",
+  "blobs": {
+   "studio_next/media_vault.py": "592a72b62b58c6e11c98805db8d047c4497cae20",
+   "studio_next/body_integration.py": "f4f90290189e8778bc8a774a5d8649a9d337cad1",
+   "studio_next/test_body_custody_graph.py": "1f2fb427463ddef625cf6d3c1d7b7039be08c773"
+  },
+  "limits": "New owned-edit lineage only, no retroactive dependency inference for legacy receipts, unlinked producers, arbitrary raw paths, existing copies, old backups, or license/professional acceptance. No broad revoke-by-content. Hosted full proof pending."
+ },
+ "current_integrated_atomic_audit_20261127": {
+  "source": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
+  "observed": {
+   "success": 27,
+   "failure": 0,
+   "in_progress": 2
+  },
+  "atomic": {
+   "run": 46030660837,
+   "job": 140613651638,
+   "status": "success",
+   "electron": "v45.2.3",
+   "proof": "ACTUAL_NATIVE_ATOMIC_AV_RANGE: linked picture/sound ripple, exact frame edges, undo/redo, physical save/reopen and decoded A/V change; original media hash/keyframes/sound retained. Earlier silent post-Vite failure cause remains unproven."
+  },
+  "pending": [
+   46030660749,
+   46030660842
+  ],
+  "decision": "Preserve running installed/MLT proof before non-force canonical advance. No independent acceptance."
  }
 }
