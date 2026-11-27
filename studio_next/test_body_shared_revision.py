@@ -42,6 +42,11 @@ class SharedSourceCodecRevisionProof(unittest.TestCase):
             with self.subTest(tool=tool):
                 self._assert_native_cache_invalidation(tool,"composite_mix.py")
 
+    def test_soundtrack_decoder_policy_change_invalidates_cached_measurements(self):
+        for tool in ("body.loudness", "body.subtitle_delivery"):
+            with self.subTest(tool=tool):
+                self._assert_native_cache_invalidation(tool,"edit_timeline.py")
+
     def test_critical_full_decoder_change_invalidates_exact_native_witnesses(self):
         for tool in COMPLETE_DECODE_RENDER_TOOLS:
             with self.subTest(tool=tool):

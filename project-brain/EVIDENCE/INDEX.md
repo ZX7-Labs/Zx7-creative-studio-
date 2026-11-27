@@ -1326,3 +1326,21 @@ Previous full ledger and STATE retained at commit `573e952ccf1b9556fec8d56204ac7
   "summary": "Visual calibration passed basic sampled/numeric tasks; raw audio pitch failed, speech calibration passed only short synthetic English. Exact lookup correction retained, no professional semantic acceptance."
  }
 }
+
+## 2026-11-27 — Field G selected audio program/standalone master audit candidate
+
+{
+ "parent": "f036a1552af2b6080344e4e840c5b6d35727c207",
+ "code_blobs": {
+  "studio_next/body_loudness.py": "bb6e38c7892fc643f8c1786d871ae38687f81a29",
+  "studio_next/body_document_schemas.py": "6855129674f56b41b05141e149a15fda17502c55",
+  "studio_next/body_integration.py": "55e14a4f22740bf0159c2cfc1d12e59a48f0066b",
+  "studio_next/test_body_loudness.py": "974bcb3762a5e65fca6efe6a16c2b8cdebe0e294",
+  "studio_next/test_body_shared_revision.py": "f6bd950cb001e2330f8250bbefd0c692cdecc39c"
+ },
+ "scope": "Read-only body.loudness explicitly selects one to eight audio stream ordinals, preserves default first-stream behavior and scalar contract, returns separately measured LUFS/LRA/true peak, actual decoded count/sample rate/channel count/language. WAV, FLAC and MP3 masters supported; no stem inference, semantic listening, normalization or professional acceptance.",
+ "negative": "Prior first-track-only contract cannot express alternate selections or standalone audio; local RED confirmed edit_timeline decoder-policy change left new loudness cache revision unchanged.",
+ "local_verification": "18/18 loudness/subtitles/materials/custody graph tests and 16/16 physical composite_mix tests. After cache dependency correction 11/11 shared-revision/loudness tests. Actual alternate AAC programs at 48k/44.1k with distinct gains and language tags, independent PCM sample count oracle, standalone PCM 57600 samples at 48k, FLAC and MP3 actual stereo decode counts, original SHA unchanged; invalid selection and withdrawn receipt refused. No hosted acceptance yet.",
+ "parent_hosted_observed": "25 success, 1 failure, 3 in progress; native atomic range #46023936864 failed in pinned Electron build after Vite/JS checks; exact subcommand unproven. Do not cancel active parent verification.",
+ "limits": "No private media/model use, no mix quality judgment, no calibrated professional acceptance. Existing source custody only; no expansion of grants."
+}

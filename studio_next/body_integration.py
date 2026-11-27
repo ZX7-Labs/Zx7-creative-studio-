@@ -259,7 +259,7 @@ def _trusted_body_revision(tool_id, *, revision_inputs=None):
         "body.color_lut":["body_color_pipeline.py","media_vault.py","delivery_audit.py","composite_mix.py","production_qc.py"],
         "body.reference_graph":["reference_observatory.py","reference_evidence_tools.py"],
         "body.full_decode":["production_qc.py","delivery_audit.py"],
-        "body.loudness":["body_loudness.py","media_vault.py","composite_mix.py"],
+        "body.loudness":["body_loudness.py","media_vault.py","composite_mix.py","edit_timeline.py"],
         "body.subtitle_delivery":["body_subtitles.py","media_vault.py","composite_mix.py","edit_timeline.py"],
         "body.review":["body_observation.py","production_qc.py","media_vault.py"],
         "body.temporal_evidence":["body_temporal_evidence.py","composite_mix.py","precision_retime.py","body_observation.py","production_qc.py","media_vault.py"],
@@ -1007,8 +1007,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "write",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")
                      and importlib.util.find_spec("numpy") is not None),
         ["plan","out"],temporal_all_frames)
-    add("body.loudness","measure actual first soundtrack LUFS, LRA and measured true-peak",
-        "Read-only native FFmpeg EBU R128 measurement of original rights-cleared movie, no forced mastering targets",
+    add("body.loudness","measure selected original soundtrack programs LUFS, LRA and measured true-peak",
+        "Read-only native FFmpeg EBU R128 on rights-cleared audio master or movie; up to eight explicitly selected audio programs, separate decoded sample counts and true peaks, no forced targets or stem inference",
         "read",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
         ["plan"],physical_audio_loudness)
     add("body.subtitle_delivery","original editable multilingual timed-text delivery",

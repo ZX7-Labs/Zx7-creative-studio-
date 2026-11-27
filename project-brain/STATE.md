@@ -27,6 +27,9 @@
 - Field A: exact owner-attestation withdrawal, durable tombstone, refuse fresh/cached attested graph, reingest and checkout; 62/62 affected local, no historical recall, old-backup revocation, raw-path/derivative propagation or independent field acceptance.
 - Field D: editable animated cubic path mask, geometry/holes/alpha and actual PNG/MOV revision; 26/26 local. Bounded sampled coverage, no automatic segmentation or professional acceptance. Integrated A/D/E hosted still not green.
 
+- Field G audio program audit candidate: existing loudness instrument now reads explicitly selected alternate soundtracks and standalone PCM/FLAC/MP3 masters; separate native LUFS/LRA/true peak, actual decoded samples and rate; original rights/bytes preserved. Local 34/34 affected tests and final 11/11 shared revision/loudness checks, including RED→GREEN shared decoder policy cache invalidation. Exact candidate hosted verification pending; no semantic listening, normalized media, stem or independent acceptance.
+- Parent `f036a155` hosted at observation 25 successful/1 failed/3 running; [atomic range #46023936864](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/46023936864) failed in native Electron build (exact check not established). Canonical integrity passed; retain running parent checks.
+
 ## Next executable work
 
 G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 native/compositional/hybrid experiment, G3 A–L and G4 release all open. No independently accepted domain. Inspect candidate exact hosted matrix and diagnose scene launch failure from actual exit path; investigate decision-loop causes without blind paid replay. Advance independent missing A–L product capabilities in parallel. Preserve actual native editable revision, rights, security and professional assessment; never replace human acceptance with passing tests.
@@ -35,4 +38,4 @@ G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 native/co
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md) preserves exact receipts and negative history. Exact previous full ledger/STATE retained at [573e952c](https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/573e952ccf1b9556fec8d56204ac749f30bc9cd8/project-brain), with archived receipts indexed; no lost records. [Document map](../docs/DOCUMENT_MAP.md), [decisions](DECISIONS.md), [risks](RISKS.md) have separate roles. Refresh live refs before acting; no third status page.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=fb504ba3608c54d90e7bcaddf9db59b8858fca0e` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=db3de815162f871bf51ec4deb987c7aaf2fb5b5d` (Git content ID, not security attestation).

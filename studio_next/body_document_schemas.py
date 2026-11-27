@@ -185,7 +185,9 @@ _SCHEMAS = {
     "body.review": ("plan", obj({"media": SOURCE,
         "timecodes_seconds": array(TIME, minItems=1, maxItems=24),
         "audio_windows_seconds": array(PAIR, maxItems=24)})),
-    "body.loudness": ("plan", obj({"media": SOURCE})),
+    "body.loudness": ("plan", obj({"media": SOURCE}, {
+        "audio_stream_indices": {**array(number(0,integer=True),minItems=1,maxItems=8),
+            "description": "Unique zero-based audio-only stream ordinals in requested order; default [0]."}})),
     "body.subtitle_delivery": ("plan", obj({"media": SOURCE,
         "tracks": array(obj({"language": {"type": "string", "pattern": "[a-z]{3}"},
             "default": {"type": "boolean"}, "cues": array(obj({
