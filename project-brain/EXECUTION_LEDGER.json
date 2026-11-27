@@ -30,7 +30,7 @@
    "id": "A",
    "slug": "truth_rights_provenance",
    "implementation": "scoped_foundations_present",
-   "technical_evidence": "Source custody plus exact owner attestation withdrawal blocks fresh/cached attested media admission, reingest and checkout; complete revocation propagation and professional acceptance open.",
+   "technical_evidence": "Source custody, exact owner withdrawal, and candidate owned-edit derivative lineage deny future linked admissions and preserve independent grants; legacy and other producers, raw paths and professional acceptance open.",
    "independent_field_acceptance": "NOT_ACCEPTED",
    "owner_source_paths": [
     "media_vault.py",
@@ -1421,7 +1421,12 @@
    "studio_next/body_integration.py": "f4f90290189e8778bc8a774a5d8649a9d337cad1",
    "studio_next/test_body_custody_graph.py": "1f2fb427463ddef625cf6d3c1d7b7039be08c773"
   },
-  "limits": "New owned-edit lineage only, no retroactive dependency inference for legacy receipts, unlinked producers, arbitrary raw paths, existing copies, old backups, or license/professional acceptance. No broad revoke-by-content. Hosted full proof pending."
+  "limits": "New owned-edit lineage only, no retroactive dependency inference for legacy receipts, unlinked producers, arbitrary raw paths, existing copies, old backups, or license/professional acceptance. No broad revoke-by-content. Hosted full proof pending.",
+  "followup": {
+   "evidence": "EVIDENCE/INDEX.md — Derivative publication boundary and exact prior regression fixture",
+   "test_blob": "87754c545c780a5ce07e69b6714076699536a1fe",
+   "result": "4/4 exact prior + 1/1 new publication-race. HTTP owner/idle not rerun locally."
+  }
  },
  "current_integrated_atomic_audit_20261127": {
   "source": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",

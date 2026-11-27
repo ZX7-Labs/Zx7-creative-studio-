@@ -41,7 +41,7 @@
 - NVIDIA native adapter candidate: exact duplicated latest read text transmitted once with same-request reference; provenance and nonidentical reads intact. Actual saved synthetic timeline matched serialization 10438→5474 bytes, exact reconstruction, 30/30 focused; wider 39/42 with three missing local MCP imports. No measured provider token or neural effect. Candidate hosted verification pending.
 
 - Exact canonical atomic [#46030660837](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/46030660837) passed pinned Electron v45.2.3 and actual linked A/V range edit, undo/redo, save/reopen, decoded verification and original preservation. Matrix observed 27/29 successful, installed and MLT running. Earlier failure subcommand not proven; no guard relaxation.
-- Field A derivative candidate: physical RED allowed newly edited master admission after input withdrawal; new exact source grant lineage in existing vault blocks linked future admissions transitively, preserves independent grants. 47/47 affected local tests; legacy unlinked receipts, other producers and external copies/backups not retroactively revoked. Exact hosted proof pending.
+- Field A derivative candidate: physical RED allowed newly edited master admission after input withdrawal; new exact source grant lineage in existing vault blocks linked future admissions transitively, preserves independent grants. 47/47 affected local tests plus 4/4 exact prior withdrawal regressions and 1/1 physical publication-race test; legacy unlinked receipts, other producers and external copies/backups not retroactively revoked. Exact hosted proof pending.
 
 ## Next executable work
 
@@ -51,4 +51,4 @@ G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 native/co
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md) preserves exact receipts and negative history. Exact previous full ledger/STATE retained at [573e952c](https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/573e952ccf1b9556fec8d56204ac749f30bc9cd8/project-brain), with archived receipts indexed; no lost records. [Document map](../docs/DOCUMENT_MAP.md), [decisions](DECISIONS.md), [risks](RISKS.md) have separate roles. Refresh live refs before acting; no third status page.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=aaa77e6d8d539e4a98fed897f719ff8f9ee3d9ae` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=0c456d381efc1815a9bfc8591dca105448afa3c1` (Git content ID, not security attestation).

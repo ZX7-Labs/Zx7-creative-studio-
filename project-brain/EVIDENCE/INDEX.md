@@ -1560,3 +1560,13 @@ Previous full ledger and STATE retained at commit `573e952ccf1b9556fec8d56204ac7
  ],
  "decision": "Preserve running installed/MLT proof before non-force canonical advance. No independent acceptance."
 }
+
+### Derivative publication boundary and exact prior regression fixture
+
+{
+ "source": "e2fb5b4f34433a903d6c03e566435d6e182f37d1",
+ "exact_prior_withdrawal_fixture_blob": "48f74f04d9e36b42384b9dea04a7551dad15d50b",
+ "existing_four": "4/4 exact fixture tests pass: restart and independent grant, legacy/neutral source preflight, final checkout boundary, actual cached native delivery plus archive restore. HTTP owner/idle test not rerun locally because body_service/body_client overlay is older; hosted required.",
+ "new_one": "1/1 physical derivative admission: actual video validation then source withdrawal fault injection before SQLite publication, unknown parent refused and no admissible grant/changed source.",
+ "test_blob": "87754c545c780a5ce07e69b6714076699536a1fe"
+}

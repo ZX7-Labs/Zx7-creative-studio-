@@ -120,5 +120,36 @@ class OwnerAssetProductionGraphProof(unittest.TestCase):
             self.assertEqual(sha256_file(root/"allowed.mp4"),actual)
 
 
+    def test_derivative_admission_rechecks_parent_at_transaction_boundary(self):
+        from unittest.mock import patch
+        from studio_next.media_vault import verify_media_container
+        with tempfile.TemporaryDirectory() as workspace:
+            root=Path(workspace)
+            vault=MediaVault(root/"vault")
+            media=root/"source.mp4"
+            subprocess.run(["ffmpeg","-v","error","-f","lavfi","-i",
+                "color=c=green:s=64x48:r=12:d=1","-c:v","libx264",
+                "-pix_fmt","yuv420p",str(media)],check=True,timeout=40)
+            parent=vault.ingest(media,mime="video/mp4",rights="owner_supplied",
+                source_type="owner_upload",source_id="parent",evidence="Original",
+                owner_or_generator="owner")
+            refs=[(parent["asset_id"],parent["attestation_id"])]
+            args=dict(mime="video/mp4",rights="generated_original",
+                source_type="trusted_renderer",source_id="new-derivative",
+                evidence="Trusted source-bound output",owner_or_generator="renderer",
+                parent_attestations=refs)
+            with self.assertRaisesRegex(MediaCustodyError,"Unknown derivative source"):
+                vault.ingest(media,**{**args,"parent_attestations":[("0"*64,"1"*64)]})
+            def decode_then_withdraw(path,mime):
+                verify_media_container(path,mime)
+                vault.withdraw_attestation(*refs[0],reason="Withdraw during validation")
+            with patch("studio_next.media_vault.verify_media_container",side_effect=decode_then_withdraw):
+                with self.assertRaisesRegex(MediaCustodyError,"withdrawn"):
+                    vault.ingest(media,**args)
+            with self.assertRaises(MediaCustodyError):
+                vault.inspect(parent["asset_id"])
+            self.assertEqual(sha256_file(media),parent["asset_id"])
+
+
 if __name__=="__main__":
     unittest.main()
