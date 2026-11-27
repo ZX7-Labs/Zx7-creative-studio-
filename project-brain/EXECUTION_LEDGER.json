@@ -1301,26 +1301,17 @@
   }
  },
  "field_g_audio_program_audit_20261127": {
+  "retained_in": "EVIDENCE/INDEX.md#2026-11-27--field-g-selected-audio-programstandalone-master-audit-candidate",
+  "immutable_ledger_commit": "024e4edb33a506c67548a6b562db1ed63a8511b5",
+  "immutable_ledger_blob": "7fb1035d35406fd8b1fcfc80cacd1e546e13f32b",
   "parent": "f036a1552af2b6080344e4e840c5b6d35727c207",
-  "code_blobs": {
-   "studio_next/body_loudness.py": "bb6e38c7892fc643f8c1786d871ae38687f81a29",
-   "studio_next/body_document_schemas.py": "6855129674f56b41b05141e149a15fda17502c55",
-   "studio_next/body_integration.py": "55e14a4f22740bf0159c2cfc1d12e59a48f0066b",
-   "studio_next/test_body_loudness.py": "974bcb3762a5e65fca6efe6a16c2b8cdebe0e294",
-   "studio_next/test_body_shared_revision.py": "f6bd950cb001e2330f8250bbefd0c692cdecc39c"
-  },
   "scope": "Read-only body.loudness explicitly selects one to eight audio stream ordinals, preserves default first-stream behavior and scalar contract, returns separately measured LUFS/LRA/true peak, actual decoded count/sample rate/channel count/language. WAV, FLAC and MP3 masters supported; no stem inference, semantic listening, normalization or professional acceptance.",
-  "negative": "Prior first-track-only contract cannot express alternate selections or standalone audio; local RED confirmed edit_timeline decoder-policy change left new loudness cache revision unchanged.",
-  "local_verification": "18/18 loudness/subtitles/materials/custody graph tests and 16/16 physical composite_mix tests. After cache dependency correction 11/11 shared-revision/loudness tests. Actual alternate AAC programs at 48k/44.1k with distinct gains and language tags, independent PCM sample count oracle, standalone PCM 57600 samples at 48k, FLAC and MP3 actual stereo decode counts, original SHA unchanged; invalid selection and withdrawn receipt refused. No hosted acceptance yet.",
-  "parent_hosted_observed": "25 success, 1 failure, 3 in progress; native atomic range #46023936864 failed in pinned Electron build after Vite/JS checks; exact subcommand unproven. Do not cancel active parent verification.",
   "limits": "No private media/model use, no mix quality judgment, no calibrated professional acceptance. Existing source custody only; no expansion of grants."
  },
  "g1_alternating_metadata_search_feedback_20261127": {
-  "parent": "654c5b0275d87998d34a5181f5da35fd78f4cc82",
-  "code_blobs": {
-   "studio_next/native_creative_control.py": "11b3fc50aef57f244e55a7c7ffdbe4ab72462db0",
-   "studio_next/test_native_creative_control.py": "d42fc0fa3cdd3cbad77454f445e5bfb7014b6478"
-  },
+  "retained_in": "EVIDENCE/INDEX.md#2026-11-27--g1-alternating-capability-search-cycle",
+  "immutable_ledger_commit": "024e4edb33a506c67548a6b562db1ed63a8511b5",
+  "immutable_ledger_blob": "7fb1035d35406fd8b1fcfc80cacd1e546e13f32b",
   "actual_trial": {
    "run": 46007258095,
    "artifact": 15203767091,
@@ -1347,21 +1338,6 @@
   },
   "cause": "Previous controller only flags consecutive identical query+limit+catalog revision; alternating same queries within uninterrupted metadata-only streak evade signal. RED exact local test KeyError for missing feedback.",
   "correction": "Replace adjacent-only counter with bounded per-streak signature counts (max 128 decision turns); reset at non-search action, preserve exact query/limit/revision and grants, no automatic dispatch or artistic decision. Journal emits bounded repeat count telemetry, not acceptance.",
-  "verification": {
-   "targeted": "3/3 RED→GREEN alternating repeat, consecutive repeat and describe reset. No native calls, no invocation from empty result, journal structure valid.",
-   "combined": {
-    "run": 248,
-    "passed": 241,
-    "errors": 7,
-    "failures": 0,
-    "errors_due_to_missing_local_checkout_or_dependencies": [
-     "scripts.run_native_model_trial",
-     "engines/velorn/editor.example.json",
-     "mcp"
-    ],
-    "scope": "Wheel-based local overlay, not full checkout. Hosted exact source verification pending."
-   }
-  },
   "limits": "No measured genuine model turn/token savings, no semantic/creative/release acceptance, no new live model trial or private egress."
  },
  "parent_installed_and_atomic_diagnostics_20261127": {
@@ -1443,5 +1419,25 @@
    "scope": "Two actual copies of synthetic saved project under authorized root with identical timeline/clip IDs; external native open of second; model full timeline read cannot grant stale plan; no gateway write, unchanged shape; explicit new project read permits shape edit; save and fresh native reopen of edited copy; other copy shape and original document/media unchanged.",
    "verification": "Locally parsed exact 96-line inserted fragment; Git blob of fragment matches remote patch. Full Electron physical test not run in this environment; hosted execution required."
   }
+ },
+ "g1_exact_native_transport_dedup_20261127": {
+  "base": "024e4edb33a506c67548a6b562db1ed63a8511b5",
+  "scope": "NVIDIA native typed transport only. Remove an exact duplicate latest read from cross-turn snapshot entries when bytes saved; preserve immediate full texts, snapshot provenance and nonidentical/short entries. Reference is same-request only; no new cache, external request or grant.",
+  "red": "Missing exact same-request reference, KeyError in new transport regression.",
+  "green": "30/30 related typed NVIDIA, generic tool and native audio tests. Broader 42 tests: 39 passed, three missing local mcp imports, zero assertion failures.",
+  "measurement": {
+   "source_artifact": 15203767091,
+   "native_saved_timeline_json_utf8": 4508,
+   "matched_test_message_baseline_bytes": 10438,
+   "candidate_bytes": 5474,
+   "saved_bytes": 4964,
+   "exact_reconstruction": true,
+   "qualification": "Saved native timeline from actual synthetic trial serialized into a matched local test context, not the historical provider request; no token or neural savings inferred."
+  },
+  "code_blobs": {
+   "studio_next/nvidia_native_tool_model.py": "0815e0a443c39a84b6531f55acb795922e549251",
+   "studio_next/test_nvidia_native_tool_model.py": "6866b7cfd433dddaf3afb3ecd66929bca1b64dda"
+  },
+  "limits": "No paid model call, no measured artistic or semantic improvement. Exact hosted integration pending."
  }
 }

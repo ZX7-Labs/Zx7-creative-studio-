@@ -1499,3 +1499,26 @@ Previous full ledger and STATE retained at commit `573e952ccf1b9556fec8d56204ac7
  "scope": "Two actual copies of synthetic saved project under authorized root with identical timeline/clip IDs; external native open of second; model full timeline read cannot grant stale plan; no gateway write, unchanged shape; explicit new project read permits shape edit; save and fresh native reopen of edited copy; other copy shape and original document/media unchanged.",
  "verification": "Locally parsed exact 96-line inserted fragment; Git blob of fragment matches remote patch. Full Electron physical test not run in this environment; hosted execution required."
 }
+
+## 2026-11-27 — G1 lossless native read serialization
+
+{
+ "base": "024e4edb33a506c67548a6b562db1ed63a8511b5",
+ "scope": "NVIDIA native typed transport only. Remove an exact duplicate latest read from cross-turn snapshot entries when bytes saved; preserve immediate full texts, snapshot provenance and nonidentical/short entries. Reference is same-request only; no new cache, external request or grant.",
+ "red": "Missing exact same-request reference, KeyError in new transport regression.",
+ "green": "30/30 related typed NVIDIA, generic tool and native audio tests. Broader 42 tests: 39 passed, three missing local mcp imports, zero assertion failures.",
+ "measurement": {
+  "source_artifact": 15203767091,
+  "native_saved_timeline_json_utf8": 4508,
+  "matched_test_message_baseline_bytes": 10438,
+  "candidate_bytes": 5474,
+  "saved_bytes": 4964,
+  "exact_reconstruction": true,
+  "qualification": "Saved native timeline from actual synthetic trial serialized into a matched local test context, not the historical provider request; no token or neural savings inferred."
+ },
+ "code_blobs": {
+  "studio_next/nvidia_native_tool_model.py": "0815e0a443c39a84b6531f55acb795922e549251",
+  "studio_next/test_nvidia_native_tool_model.py": "6866b7cfd433dddaf3afb3ecd66929bca1b64dda"
+ },
+ "limits": "No paid model call, no measured artistic or semantic improvement. Exact hosted integration pending."
+}

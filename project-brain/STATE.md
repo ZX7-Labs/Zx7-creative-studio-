@@ -38,6 +38,8 @@
 - Canonical `4b6e0334` integrates the audio audit, alternating-search feedback and atomic diagnostics; [integrity #46030660646](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/46030660646) passed, physical/installed matrix still running. Do not interrupt active verification.
 - G1 human coedit candidate: RED proved cross-project source identity confusion with duplicate timeline/clip IDs; bind complete-timeline renewal to model-observed project hash, refuse stale plan and require new project observation. Same-project renewal and human post-observation changes preserved. 86/86 focused, broader 95/96 passed (one missing local scripts import). Added exact native Electron two-copy switch/refusal/fresh edit/save/reopen and source-custody harness; inserted fragment syntax checked, actual native run pending. No live project-switch or independent human acceptance yet; no causal attribution of older G1 stale refusal.
 
+- NVIDIA native adapter candidate: exact duplicated latest read text transmitted once with same-request reference; provenance and nonidentical reads intact. Actual saved synthetic timeline matched serialization 10438→5474 bytes, exact reconstruction, 30/30 focused; wider 39/42 with three missing local MCP imports. No measured provider token or neural effect. Candidate hosted verification pending.
+
 ## Next executable work
 
 G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 native/compositional/hybrid experiment, G3 A–L and G4 release all open. No independently accepted domain. Inspect integrated candidate exact hosted matrix and diagnose atomic range failure from actual exit path; investigate decision-loop causes without blind paid replay. Advance independent missing A–L product capabilities in parallel. Preserve actual native editable revision, rights, security and professional assessment; never replace human acceptance with passing tests.
@@ -46,4 +48,4 @@ G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 native/co
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md) preserves exact receipts and negative history. Exact previous full ledger/STATE retained at [573e952c](https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/573e952ccf1b9556fec8d56204ac749f30bc9cd8/project-brain), with archived receipts indexed; no lost records. [Document map](../docs/DOCUMENT_MAP.md), [decisions](DECISIONS.md), [risks](RISKS.md) have separate roles. Refresh live refs before acting; no third status page.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=7fb1035d35406fd8b1fcfc80cacd1e546e13f32b` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=aa7c2a1c5a9da1d39e97aa1401f92a3a687583ca` (Git content ID, not security attestation).

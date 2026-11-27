@@ -179,6 +179,24 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
         compact = copy.deepcopy(context)
         compact.pop("host_native_tool_contracts", None)
         compact.pop("host_declared_tool_hints", None)
+        # The controller keeps the latest complete read both as immediate
+        # evidence and in its cross-turn snapshot cache. Preserve the exact
+        # text once, plus each snapshot's own tool/input/source provenance.
+        # A reference always resolves within this same request; no remote
+        # state, extra model call, schema/permission change or lossy summary.
+        latest = compact.get("last_native_result_texts")
+        snapshots = compact.get("native_read_snapshot_cache")
+        if (type(latest) is list and latest and
+                all(type(text) is str for text in latest) and
+                type(snapshots) is list):
+            ref = {"result_texts_ref": "last_native_result_texts"}
+            if (len(json.dumps({"result_texts": latest}, ensure_ascii=False).encode("utf-8")) >
+                    len(json.dumps(ref, ensure_ascii=False).encode("utf-8"))):
+                for snapshot in snapshots:
+                    if (type(snapshot) is dict and "result_texts_ref" not in snapshot and
+                            snapshot.get("result_texts") == latest):
+                        del snapshot["result_texts"]
+                        snapshot.update(ref)
         feedback = compact.get("last_rejected_model_output_feedback")
         if isinstance(feedback, dict) and feedback.pop("return_one_unambiguous_json_object", False):
             feedback["choose_one_offered_function_call"] = True

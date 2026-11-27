@@ -92,6 +92,37 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertNotIn("response_format", body)
         self.assertEqual(len(context["host_native_tool_contracts"]), 2)
 
+    def test_exact_duplicate_native_read_texts_are_transmitted_once_without_losing_provenance(self):
+        # The controller retains a complete latest READ in both fields.
+        # Preserve its real text and every snapshot's provenance, not two copies.
+        raw = json.dumps({"id": "timeline-1", "clips": [
+            {"id": f"clip-{i}", "startTime": i * .25, "duration": .25}
+            for i in range(40)]}, ensure_ascii=False)
+        context = _context(compact=True)
+        context["last_native_result_texts"] = [raw]
+        context["native_read_snapshot_cache"] = [
+            {"tool": "get_timeline", "source": "model_selected", "inputs": {"includeClips": True},
+             "result_texts": [raw], "not_a_live_editor_state_lock": True},
+            {"tool": "get_project", "source": "host_reconciliation", "inputs": {},
+             "result_texts": [raw + " "], "not_a_live_editor_state_lock": True},
+        ]
+        original = json.loads(json.dumps(context))
+        model = NvidiaNativeToolCreativeModel(system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+        sent = json.loads(model._messages(context, ())[1]["content"])
+        self.assertEqual(sent["last_native_result_texts"], [raw])
+        first, second = sent["native_read_snapshot_cache"]
+        self.assertEqual(first["result_texts_ref"], "last_native_result_texts")
+        self.assertNotIn("result_texts", first)
+        first["result_texts"] = sent[first.pop("result_texts_ref")]
+        self.assertEqual([first, second], original["native_read_snapshot_cache"])
+        self.assertEqual(context, original)
+        # Tiny duplicates do not earn extra indirection.
+        context["last_native_result_texts"] = ["ok"]
+        context["native_read_snapshot_cache"][0]["result_texts"] = ["ok"]
+        short = json.loads(model._messages(context, ())[1]["content"])
+        self.assertEqual(short["native_read_snapshot_cache"][0]["result_texts"], ["ok"])
+        self.assertNotIn("result_texts_ref", short["native_read_snapshot_cache"][0])
+
     def test_super_vl_truncation_uses_bounded_direct_recovery_only_for_host_rejection(self):
         # Genuine Super VL #45731089541 spent two bounded recovery turns
         # generating truncated reasoning instead of one native tool call.
