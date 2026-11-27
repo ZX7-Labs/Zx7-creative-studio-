@@ -1243,6 +1243,7 @@ class NativeCreativeControl:
         full_audio = set()
         unbound = set()  # Compatible with older, non-reviewed test journals.
         frames = set()
+        timed_frames = {}
         any_write = saw_frame = post_review_write = False
         verified_receipts = 0
         distinct_receipts = set()
@@ -1258,6 +1259,7 @@ class NativeCreativeControl:
                         frames.discard(invalid)
                         full_audio.discard(invalid)
                     durations.pop(destination, None)
+                    timed_frames.pop(destination, None)
                 continue
             if kind != "native_tool_result":
                 continue
@@ -1271,6 +1273,7 @@ class NativeCreativeControl:
                 full_audio.clear()
                 unbound.clear()
                 frames.clear()
+                timed_frames.clear()
                 verified_receipts = 0
                 distinct_receipts.clear()
             sha = event.get("independently_verified_export_sha256")
@@ -1285,6 +1288,7 @@ class NativeCreativeControl:
                         frames.discard(previous)
                         full_audio.discard(previous)
                         durations.pop(destination, None)
+                        timed_frames.pop(destination, None)
                     by_destination[destination] = sha
                     values = event.get(AV_REVIEW_FIELD)
                     if (tool == _VERIFIED_EXPORT_TOOL and
@@ -1302,6 +1306,18 @@ class NativeCreativeControl:
                     isinstance(event.get(AV_PCM_FIELD), str) and
                     re.fullmatch(r"[a-f0-9]{64}", event[AV_PCM_FIELD])):
                 full_audio.add(observed)
+            # A still is not separated timed picture evidence. Keep the
+            # latest valid source-bound sample set for each destination.
+            times = event.get(AV_REVIEW_FIELD)
+            hashes = event.get("image_sha256")
+            if (tool in (TIMED_FRAMES, ACTIVE_AV_WINDOW) and
+                    destination in durations and by_destination.get(destination) == observed and
+                    valid_av_review_values(tool, times) and
+                    isinstance(hashes, list) and len(hashes) == len(times) and
+                    all(isinstance(h, str) and re.fullmatch(r"[a-f0-9]{64}", h)
+                        for h in hashes) and
+                    (tool != ACTIVE_AV_WINDOW or audio_values is not None)):
+                timed_frames[destination] = (observed, times)
             if observed is not None and event.get("image_sha256"):
                 if ((destination is not None and by_destination.get(destination) == observed)
                         or (destination is None and observed in unbound)):
@@ -1313,6 +1329,11 @@ class NativeCreativeControl:
             "post_review_write_acknowledged": post_review_write,
             "current_verified": current_verified,
             "current_frames": frames,
+            "current_timed_frames": {
+                digest for dest, (digest, times) in timed_frames.items()
+                if dest in durations and by_destination.get(dest) == digest and
+                times[-1] < durations[dest] and times[-1] - times[0] >= durations[dest] / 3
+            },
             "current_full_audio": full_audio,
             "current_short_av_exports": {by_destination[dest] for dest, duration in
                                          durations.items() if duration <= 30 and dest in by_destination},
@@ -1789,6 +1810,13 @@ class NativeCreativeControl:
                          export_evidence["current_frames"]) and
                     ("verified_export_frame_observed" in self.required_evidence or
                      REVIEWED_RENDER_PAIR in self.required_evidence))
+                timed_frame_review_pending = (
+                    self.catalog_mode == "indexed" and self._requires_av_review and
+                    bool(export_evidence["current_verified"] -
+                         export_evidence["current_timed_frames"]) and
+                    TIMED_FRAMES in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(TIMED_FRAMES) == "read")
                 audio_review_pending = (
                     self.catalog_mode == "indexed" and self._requires_av_review and
                     bool(export_evidence["current_verified"] -
@@ -1849,7 +1877,7 @@ class NativeCreativeControl:
                         actual_frame_tools +
                         [tool for tool in self._host_frontier_tools
                          if tool not in actual_frame_tools])
-                if matching_frame_review_pending:
+                if timed_frame_review_pending or matching_frame_review_pending:
                     self._host_frontier_tools = (
                         [TIMED_FRAMES] +
                         [tool for tool in self._host_frontier_tools
@@ -2061,6 +2089,13 @@ class NativeCreativeControl:
                             name for name in visible_selectable
                             if frame_review_pending and name in _VERIFIED_FRAME_TOOLS],
                         "current_frame_observation_not_automatically_executed": True,
+                        "verified_export_still_needs_separated_timed_frames": (
+                            self._requires_av_review and
+                            bool(export_evidence["current_verified"] -
+                                 export_evidence["current_timed_frames"])),
+                        "current_timed_picture_read_selectable": (
+                            [TIMED_FRAMES] if timed_frame_review_pending and
+                            TIMED_FRAMES in visible_selectable else []),
                         "current_same_time_picture_comparison_read_selectable": (
                             [TIMED_FRAMES] if matching_frame_review_pending and
                             TIMED_FRAMES in visible_selectable else []),

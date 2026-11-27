@@ -1087,6 +1087,98 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(REVIEWED_AV_PAIR, context["missing_completion_evidence"]
                               ) if expected else None
 
+    async def test_av_still_and_full_audio_keep_separated_timed_reader_selectable(self):
+        """A still plus full PCM is not the paired gate's timed picture proof.
+
+        Source-bound synthetic receipts exercise the actual controller frontier,
+        not an independent model or decoder. No host-selected read/write.
+        """
+        from studio_next.native_render_evidence import (
+            ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD,
+            AV_WINDOW_AUDIO_FIELD, DESTINATION_FIELD, REVIEWED_AV_PAIR,
+            REVIEWED_RENDER_PAIR, TIMED_FRAMES,
+        )
+        session = FakeSession()
+        single_frame = "zx7_observe_verified_export_frame"
+        existing = {tool.name for tool in session.tools}
+        for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE,
+                     ACTIVE_AV_WINDOW, single_frame):
+            if name not in existing:
+                session.tools.append(SimpleNamespace(
+                    name=name, description="Host-granted native operation",
+                    input_schema={"type": "object", "properties": {}}))
+        grants = {tool.name: ("write" if tool.name in
+                  {"update_text_clip", "export_timeline"} else "read")
+                  for tool in session.tools}
+        model = ScriptedModel([decision("search", query="not_a_real_native_tool")])
+        control = NativeCreativeControl(
+            session, model, catalog_mode="indexed", max_turns=1,
+            host_tool_access=grants,
+            required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",))
+        sha, dest = "a" * 64, "b" * 64
+        control._verified_exports.add(sha)
+        control.events.extend([
+            {"kind": "native_tool_result", "tool": "zx7_verify_native_export",
+             DESTINATION_FIELD: dest, "independently_verified_export_sha256": sha,
+             AV_REVIEW_FIELD: [6]},
+            {"kind": "native_tool_result", "tool": AUDIO_ENVELOPE,
+             DESTINATION_FIELD: dest, "observed_export_sha256": sha,
+             AV_REVIEW_FIELD: [0, 6], AV_PCM_FIELD: "c" * 64},
+            {"kind": "native_tool_result", "tool": single_frame,
+             DESTINATION_FIELD: dest, "observed_export_sha256": sha,
+             "image_sha256": ["d" * 64]},
+        ])
+        result = await control.run("Review the actual audiovisual output")
+        progress = model.observed[0]["host_verified_execution_progress"]
+        self.assertFalse(progress["verified_export_still_needs_model_visible_frame"])
+        self.assertFalse(progress["verified_export_still_needs_full_duration_audio"])
+        self.assertTrue(progress["verified_export_still_needs_separated_timed_frames"])
+        self.assertIn(TIMED_FRAMES, progress["current_timed_picture_read_selectable"])
+        self.assertIn(TIMED_FRAMES, model.observed[0]["selectable_native_tools"])
+        self.assertNotIn("finish", model.observed[0]["available_actions"])
+        self.assertEqual(session.calls, [])
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+
+        def read(tool, times, hashes, **extra):
+            return {"kind": "native_tool_result", "tool": tool,
+                    DESTINATION_FIELD: dest, "observed_export_sha256": sha,
+                    AV_REVIEW_FIELD: times, "image_sha256": hashes, **extra}
+
+        valid = read(TIMED_FRAMES, [1, 4], ["d" * 64, "e" * 64])
+        for invalid in (
+            read(TIMED_FRAMES, [1, 1.01], ["d" * 64, "e" * 64]),
+            read(TIMED_FRAMES, [1, 6], ["d" * 64, "e" * 64]),
+            read(TIMED_FRAMES, [1, 4], ["d" * 64]),
+            read(TIMED_FRAMES, [1, 4], ["d" * 64, "not-a-sha"]),
+            {**valid, "observed_export_sha256": "f" * 64},
+            {**valid, DESTINATION_FIELD: "f" * 64},
+            read(ACTIVE_AV_WINDOW, [1, 4], ["d" * 64, "e" * 64],
+                 **{AV_WINDOW_AUDIO_FIELD: [0, 2], AV_PCM_FIELD: "c" * 64}),
+        ):
+            with self.subTest(invalid=invalid):
+                control.events.append(invalid)
+                self.assertEqual(control._current_export_evidence()["current_timed_frames"], set())
+                control.events.pop()
+        control.events.append(valid)
+        self.assertEqual(control._current_export_evidence()["current_timed_frames"], {sha})
+        control.events.append(read(TIMED_FRAMES, [1, 1.01], ["d" * 64, "e" * 64]))
+        self.assertEqual(control._current_export_evidence()["current_timed_frames"], set())
+        control.events.append(read(ACTIVE_AV_WINDOW, [1, 4], ["d" * 64, "e" * 64],
+                                   **{AV_WINDOW_AUDIO_FIELD: [0, 6], AV_PCM_FIELD: "c" * 64}))
+        self.assertEqual(control._current_export_evidence()["current_timed_frames"], {sha})
+        control.events.append({"kind": "native_read_tool_reported_error",
+                               "tool": TIMED_FRAMES, DESTINATION_FIELD: dest})
+        self.assertEqual(control._current_export_evidence()["current_timed_frames"], set())
+        control.events.extend([
+            {"kind": "native_tool_result", "tool": "zx7_verify_native_export",
+             DESTINATION_FIELD: dest, "independently_verified_export_sha256": sha,
+             AV_REVIEW_FIELD: [6]}, valid])
+        self.assertEqual(control._current_export_evidence()["current_timed_frames"], {sha})
+        control.events.append({"kind": "native_tool_result", "tool": "update_text_clip",
+                               "host_application_write_acknowledged": True})
+        self.assertEqual(control._current_export_evidence()["current_timed_frames"], set())
+
     async def test_real_neural_av_missing_audio_surfaces_granted_read_without_dispatch(self):
         """Regression for failed real model #43883369538: its first export was
         visually reviewed but not audio-reviewed before its creative edit.

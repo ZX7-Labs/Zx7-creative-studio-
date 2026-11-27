@@ -1386,9 +1386,38 @@
     "acceptance": {
       "professional": false,
       "genuine_model": false,
-      "exact_source_ci": "PENDING"
+      "exact_source_ci": "29/29 workflows SUCCESS at f676146e7a95da42fd39eb62d72154e2bce1af54; actual model jobs skipped"
     },
     "guard": "Existing grants, model-selected action, frame separation, verified duration, actual PCM and hash binding; no semantic listening or approval inferred. No new provider spend.",
-    "next": "Run exact candidate CI including physical MCP comparison, isolate any failure; then qualify provider/model and run comparable genuine synthetic trial only within current one-use consent. Preserve all A-L gates."
+    "next": "Baseline physical parity passed. Qualify provider/model and run comparable genuine synthetic trial only within exact-source, one-use consent; no available dispatch action in current connector.",
+    "physical_mcp_parity": {
+      "run": 45894468630,
+      "jobs": [
+        140164828950,
+        140164829134,
+        140164829172
+      ],
+      "result": "SUCCESS on Python 3.13/3.12/3.11; real SDK + independent FFmpeg + source-bound negatives; not neural"
+    }
+  },
+  "critical_path_timed_feedback_20261127": {
+    "baseline": "f676146e7a95da42fd39eb62d72154e2bce1af54",
+    "source_blobs": {
+      "studio_next/native_creative_control.py": "8445235d5b213d36d36fba51e0e05e69bd623aab",
+      "studio_next/test_native_creative_control.py": "56cd5068850e12a04a9027cbcb565953c4a4c8bf"
+    },
+    "causal_gap": "Source-derived counterexample: a single still plus full numeric audio hid remaining separated timed-picture requirement from the indexed model frontier. This is an interface gap, not proof that it caused any historical trial failure.",
+    "correction": "Retain generic still evidence; report separated source-bound timed sample coverage independently and keep the already-granted timed read selectable. The pair acceptance gate, native writes, authorization and artistic judgment are unchanged.",
+    "local": {
+      "red": "Source-derived isolated method reproduction: still incorrectly counted as timed readiness; assertion failed.",
+      "green": "5/5 scoped Python excerpt tests passed, including narrow/invalid/mismatched samples, combined window, failed read and write revocation.",
+      "limitations": "No repository checkout in current runtime; connector-only source access and no GitHub DNS. Full integrated controller regression and actual CI pending."
+    },
+    "acceptance": {
+      "exact_source_ci": "PENDING",
+      "genuine_model": false,
+      "professional": false
+    },
+    "next": "Verify exact-source CI and scripted controller regression before any genuine trial. Actual local/NVIDIA jobs on baseline skipped; no dispatch action available. Do not merge draft or bypass one-use consent. No new paid spend or private egress."
   }
 }
