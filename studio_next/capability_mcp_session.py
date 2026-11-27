@@ -141,14 +141,26 @@ class CapabilityGatewayMcpSession:
             return None
 
     async def call_tool(self, name, arguments):
-        """Route the exact native call through the existing source lock/policy.
+        """Route a model-visible call through the existing source lock/policy."""
+        return await self._call_tool(name, arguments, model_visible=True)
 
-        A failed or uncertain WRITE is not retried. Return the underlying MCP
-        object unchanged so existing native inspectors can validate its status.
+    async def call_host_read(self, name, arguments):
+        """A host-only preflight is never evidence of what the model observed.
+
+        The same admitted live catalog, budget, gateway and source lock apply.
+        No host-only invocation can acquire WRITE authority or update the
+        model's observation anchor, even when it reads the complete timeline.
         """
+        return await self._call_tool(name, arguments, model_visible=False)
+
+    async def _call_tool(self, name, arguments, *, model_visible):
+        """Preserve the exact native response; never retry an uncertain write."""
         operation = self._operation(name)
         record = self._gateway._current().resolve(
             operation, revision=self._revision)
+        if not model_visible and record["access"] != "read":
+            raise CapabilityExecutionError("Host-only native observation requires a READ grant")
+        observe_native_revision = model_visible and self._require_model_native_observation
         request_id = None
         if record["access"] == "write" and self._gateway._attempt_store is not None:
             # Allocator belongs to the trusted host, not the model or raw tool.
@@ -159,7 +171,7 @@ class CapabilityGatewayMcpSession:
         # Only a successful, source-shaped native get_project read made via
         # this exact model-visible session can establish model observation.
         # A host-only preflight read must never silently promote stale intent.
-        if self._require_model_native_observation and name == "get_project":
+        if observe_native_revision and name == "get_project":
             self._model_observed_native_revision = None
             self._model_has_observed_project = False
             self._model_observed_timeline_id = None
@@ -169,7 +181,7 @@ class CapabilityGatewayMcpSession:
         # model just chose a real timeline read. Bracket that model-visible
         # read with host-only complete source observations. Neither host READ
         # is a creative decision, permission, preview apply or hidden write.
-        full_timeline_read = (self._require_model_native_observation and
+        full_timeline_read = (observe_native_revision and
             self._model_has_observed_project and name == "get_timeline" and
             type(arguments) is dict and arguments.get("includeClips") is True)
         before_timeline = None
@@ -177,7 +189,7 @@ class CapabilityGatewayMcpSession:
             before_timeline = await self._observed_source_inventory()
             self._model_observed_native_revision = None
         observed = {}
-        if self._require_model_native_observation and record["access"] == "write":
+        if observe_native_revision and record["access"] == "write":
             observed["model_observed_revision"] = self._model_observed_native_revision
             # Source-attested preview-only calls are observations, not
             # mutations. Do not force another expensive model turn merely
@@ -218,7 +230,7 @@ class CapabilityGatewayMcpSession:
                     "version": 1, "tool": name,
                     "inputs_sha256": native_input_digest(arguments),
                     "code": code}})
-        if self._require_model_native_observation and name == "get_project":
+        if observe_native_revision and name == "get_project":
             # Native response and MCP status are checked, never model text.
             # An unavailable/partial project read deliberately leaves this
             # session without write authority until a complete new read.
@@ -287,6 +299,11 @@ class CombinedCapabilityMcpSession:
         if not isinstance(name, str) or name not in self._routes:
             raise CapabilityExecutionError("Creative operation is not granted to this session")
         return await self._routes[name].call_tool(name, arguments)
+
+    async def call_host_read(self, name, arguments):
+        if not isinstance(name, str) or name not in self._routes:
+            raise CapabilityExecutionError("Creative operation is not granted to this session")
+        return await self._routes[name].call_host_read(name, arguments)
 
 
 def _model_tool_description(tool):

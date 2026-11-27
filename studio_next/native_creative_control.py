@@ -1179,6 +1179,20 @@ class NativeCreativeControl:
             return None
         return _native_project_asset_count_from_text(snapshot["result_texts"])
 
+    async def _host_preflight_read(self, tool, arguments):
+        """Inspect mechanical prerequisites without refreshing a Brain's epoch.
+
+        Canonical gateway sessions expose a separate host-only READ path.
+        Older transport/test sessions without an observation fence retain
+        their original read call; no host path gains a new grant.
+        """
+        if self.host_tool_access is None or self.host_tool_access.get(tool) != "read":
+            raise NativeCreativeControlError("Host preflight requires an explicit READ grant")
+        read = getattr(self.session, "call_host_read", None)
+        if read is None:
+            read = self.session.call_tool
+        return await read(tool, arguments)
+
     async def _observe_placement_inventory(self, tool, arguments, validator, *, refresh=False):
         timeline_id = self._trusted_project_active_timeline_id()
         if timeline_id is None or not validator.is_valid(arguments):
@@ -1188,7 +1202,7 @@ class NativeCreativeControl:
             return previous[1]
         inventory = None
         try:
-            result = await self.session.call_tool(tool, arguments)
+            result = await self._host_preflight_read(tool, arguments)
             if not _native_mcp_error_status(result):
                 texts, images, audio = _native_content(result)
                 if not images and not audio:
@@ -2582,7 +2596,7 @@ class NativeCreativeControl:
                     timeline_id = self._trusted_project_active_timeline_id()
                     if timeline_id is not None:
                         try:
-                            checked = await self.session.call_tool(
+                            checked = await self._host_preflight_read(
                                 "get_timeline", {"includeClips": True, "limit": 1000})
                             if not _native_mcp_error_status(checked):
                                 checked_texts, checked_images, checked_audio = (

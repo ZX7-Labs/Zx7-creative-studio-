@@ -1,1459 +1,1512 @@
 {
-  "schema_version": "zx7.execution-ledger.v1",
-  "purpose": "Typed, source-linked snapshot of what is built, physically verified, actually failed, and still unaccepted. NOT raw action log, not a new planning spec, not automatic live status.",
-  "snapshot": {
-    "observed_utc": "2026-11-27",
-    "github_main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
-    "notes": "Live canonical integration is newer than main. Other legacy snapshot inventory numbers are retained only in the immutable full ledger; current branch audit is consolidation."
-  },
-  "claims_policy": {
-    "fixed_requirements_source": "docs/BUILD_BLUEPRINT.md",
-    "canonical_original_scope": "CAPABILITIES.md",
-    "owner_strategy": "project-brain/BRIEF.md",
-    "human_current_status": "project-brain/STATE.md",
-    "physical_evidence": "project-brain/EVIDENCE/INDEX.md",
-    "failure_diagnosis": "project-brain/EVIDENCE/FAILURE_REGISTER.md",
-    "no_accepted_fields_without_independent_proof": true,
-    "raw_logs_not_stored_here": true,
-    "acceptance_levels": [
-      "source_present",
-      "offline_contract_tested",
-      "physical_native_tested",
-      "genuine_model_verified",
-      "independently_professionally_accepted"
-    ],
-    "future_acceptance_protocol": "Structural checker allows a future field ACCEPTED/G1 ACCEPTED only with linked exact 40-char source SHA, report_url, named reviewer and scope. Genuine model retest PASSED needs exact run URL, 40-char source SHA, same_task_as original failure ID and 64-char artifact digest. These are receipt shapes, not independent verification that claims are true."
-  },
-  "product": "NOT_COMPLETE",
-  "domains": [
-    {
-      "id": "A",
-      "slug": "truth_rights_provenance",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "source custody and selected physical tests; complete revocation/license not accepted",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "media_vault.py",
-        "body_archive.py",
-        "body_publication.py"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/301",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/307"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "B",
-      "slug": "editable_cross_engine_project",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "native snapshots/reopen supported; complete loss-aware cross-domain interchange unproved",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "body_project_heads.py",
-        "body_sequence_otio.py",
-        "body_project_revision.py"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/313",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "C",
-      "slug": "professional_video_nle",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "native source-pinned picture/audio editing and source custody tested; creative/professional field not accepted",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "third_party/velorn",
-        "body_mlt_editor.py",
-        "precision_retime.py"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/342",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/349"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "D",
-      "slug": "2d_graphic_vector_photo_typography",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "editable visual graph to native film tested; full typography/motion/masks craft unproved",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "body_visual_graph.py",
-        "body_visual_render.py",
-        "motion_studio"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/338",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/339"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "E",
-      "slug": "3d_cgi_vfx_simulation",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "source-pinned Blender real CGI/video handoff demonstrated; professional scene/VFX breadth not accepted",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "blender_scene.py",
-        "body_motion_project.py",
-        "body_exr_passes.py"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/340",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "F",
-      "slug": "color_hdr_mastering",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "partial mastering/BT.709/ACES paths; cross-engine HDR fidelity unproved",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "body_color_pipeline.py",
-        "body_aces2_movie.py",
-        "film_finishing.py"
-      ],
-      "evidence_prs": [],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "G",
-      "slug": "music_voice_sound_subtitles",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "5.1 physical bus and A/V source audio tested; no real model semantic listening/mix craft",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "composite_mix.py",
-        "body_loudness.py",
-        "voice_lab"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/307",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/319",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/349"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "H",
-      "slug": "generated_media_and_rights",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "optional adapters/source paths; installed weights/licenses/creative consistency not accepted",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "comfy_video_runtime.py",
-        "generative_video_providers.py"
-      ],
-      "evidence_prs": [],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "I",
-      "slug": "orchestration_recovery_security",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "host grants/save/attempt durability and real selected failures tested; full multi-host/uncertain-write scope open",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "capability_gateway.py",
-        "durable_graph.py",
-        "capability_attempts.py"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/303",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/332"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "J",
-      "slug": "semantic_perception_and_revision",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "timed numerical A/V and physical frames are selectable; real learned sound/art review not accepted",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "body_observation.py",
-        "body_review_compare.py",
-        "native_creative_control.py"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/317",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/319"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "K",
-      "slug": "owner_human_ai_product_ux",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "GUI pointer-style and native co-edit guards tested; no full human UX/remote-secure acceptance",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "body_mobile.py",
-        "body_desktop.py",
-        "body_service.py"
-      ],
-      "evidence_prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/325",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/333"
-      ],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    },
-    {
-      "id": "L",
-      "slug": "release_independent_professional_quality",
-      "implementation": "scoped_foundations_present",
-      "technical_evidence": "technical integrated foundation exists; no independent multi-genre professional release evidence",
-      "independent_field_acceptance": "NOT_ACCEPTED",
-      "owner_source_paths": [
-        "README.md",
-        "licenses",
-        "tooling",
-        "independent assessment"
-      ],
-      "evidence_prs": [],
-      "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
-    }
+ "schema_version": "zx7.execution-ledger.v1",
+ "purpose": "Typed, source-linked snapshot of what is built, physically verified, actually failed, and still unaccepted. NOT raw action log, not a new planning spec, not automatic live status.",
+ "snapshot": {
+  "observed_utc": "2026-11-27",
+  "github_main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+  "notes": "Live canonical integration is newer than main. Other legacy snapshot inventory numbers are retained only in the immutable full ledger; current branch audit is consolidation."
+ },
+ "claims_policy": {
+  "fixed_requirements_source": "docs/BUILD_BLUEPRINT.md",
+  "canonical_original_scope": "CAPABILITIES.md",
+  "owner_strategy": "project-brain/BRIEF.md",
+  "human_current_status": "project-brain/STATE.md",
+  "physical_evidence": "project-brain/EVIDENCE/INDEX.md",
+  "failure_diagnosis": "project-brain/EVIDENCE/FAILURE_REGISTER.md",
+  "no_accepted_fields_without_independent_proof": true,
+  "raw_logs_not_stored_here": true,
+  "acceptance_levels": [
+   "source_present",
+   "offline_contract_tested",
+   "physical_native_tested",
+   "genuine_model_verified",
+   "independently_professionally_accepted"
   ],
-  "milestones": [
-    {
-      "id": "M-AUTH",
-      "kind": "technical",
-      "result": "MERGED_SCOPED",
-      "evidence": "host-owned discovery/grants, native source admission, journals",
-      "prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/301",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/303"
-      ],
-      "creative_acceptance": "NOT_PROVEN"
-    },
-    {
-      "id": "M-G1-OWN",
-      "kind": "technical",
-      "result": "MERGED_SCOPED",
-      "evidence": "owner CLI native pair A/V source/render and actual physical verification",
-      "prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/307",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/313"
-      ],
-      "creative_acceptance": "NOT_PROVEN"
-    },
-    {
-      "id": "M-G1-SENSE",
-      "kind": "technical",
-      "result": "MERGED_SCOPED",
-      "evidence": "model-selectable timed numeric A/V and gated original WAV transport (offline)",
-      "prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/317",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/319"
-      ],
-      "creative_acceptance": "NO_SEMANTIC_NEURAL_SUCCESS"
-    },
-    {
-      "id": "M-G1-HUMAN",
-      "kind": "technical",
-      "result": "MERGED_SCOPED",
-      "evidence": "X11 pointer-like edit, same source authority and refusal to override stale revision",
-      "prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/324",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/325",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/332"
-      ],
-      "creative_acceptance": "NO_REAL_HUMAN_AND_NEURAL_COEDIT_ACCEPTANCE"
-    },
-    {
-      "id": "M-G3-CREATE",
-      "kind": "technical",
-      "result": "MERGED_SCOPED",
-      "evidence": "editable graphics, original Blender source and physical picture+sound native editor revision",
-      "prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/338",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/339",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/340",
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343"
-      ],
-      "creative_acceptance": "SCRIPTED_NOT_AUTONOMOUS"
-    },
-    {
-      "id": "M-G1-AV",
-      "kind": "technical",
-      "result": "MERGED_SCOPED",
-      "evidence": "5.1 source-attested physical sound + globally authored cues retained in native atomic A/V ripple (19/19 exact-head CI)",
-      "prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/349"
-      ],
-      "tested_code_head": "11fc1aef2de11b4790e50085039e430dcf39ef6e",
-      "merged_tree": "2d0857c0d003ade1e807f8cb2f6fc45a51704988",
-      "creative_acceptance": "SCRIPTED_NOT_AUTONOMOUS"
-    },
-    {
-      "id": "M-G1-SELECTED-RENDER-SNAPSHOT",
-      "kind": "technical",
-      "result": "PHYSICAL_TECHNICAL_DRAFT_UNMERGED",
-      "evidence": "Draft PR #356 code head 276d30ac9c648d487739bf9de06d07c98e3479a6: 13/13 GitHub technical workflows success, with independent synthetic native A/V artifact #14191830274 (16/16 file digests; 72/66/66 frames, complete relocatable 3-source closure and matching decoded relocated picture/sound) and installed release artifact #14190804292 (24/24 manifest digests; 1542 tests run, 1515 passed, 27 skipped, 0 failed; 57-frame 320x480 A/V film). Exact evidence and limits in EVIDENCE/INDEX. Source/custody/portability is technical, not neural creative, human coediting or professional acceptance.",
-      "prs": [
-        "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356"
-      ],
-      "creative_acceptance": "NOT_PROVEN"
-    }
-  ],
-  "failures": [
-    {
-      "id": "F-REAL-001",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run": 42711402879,
-      "job": 129481639892,
-      "details": "Qwen3.5 4B 46 decisions; 9068 vs 8192 context and final HTTP 400; wrong-profile mostly-black output; no qualifying reviewed revision",
-      "source_or_fix": "PR #311 already merged the source-compatible model-payload context dedup from still-open historical #289 (2026-11-12, 89990723aec8abb3b5c5eee79546c57de0591631); no accepted equivalent real-model retest",
-      "root_confidence": "context-overflow supported; entire creative failure not fully attributed",
-      "post_fix_real_model_retest": "NOT_PASSED",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-REAL-002",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run": 42754872382,
-      "job": 129626811890,
-      "details": "NVIDIA 120B five saved MP4 paths only two SHA; 1920x1080 vs 640x360 requested; no audio; turn21 truncated_tool_decision (no dispatch)",
-      "source_or_fix": "PRs #292/#293/#298 merged offline/physical guards; no accepted comparable new neural run; owner paid use deferred",
-      "root_confidence": "native h264_hd default explains dimension mismatch; creative and missing sound not fully closed",
-      "post_fix_real_model_retest": "NOT_PASSED",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42754872382",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-REAL-003",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run": 42669603529,
-      "job": null,
-      "details": "NVIDIA turn16 transport timeout ~90.057 seconds; no verified export; not verified HTTP429",
-      "source_or_fix": "PR #290 merged finite timeout/no-automatic-retry; later model failed different gates",
-      "root_confidence": "transport timeout observed",
-      "post_fix_real_model_retest": "NO_COMPLETE_ACCEPTED_FILM",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42669603529",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-CI-004",
-      "kind": "TECHNICAL_CI",
-      "result": "FIRST_ATTEMPT_FAILED_RERUN_PASSED",
-      "run": 43680525680,
-      "job": 132710004217,
-      "details": "first installed Electron scene preflight failed after successful build; identical-head targeted rerun passed",
-      "source_or_fix": "PR #349 merged after 19/19 passing workflows, exact tested-tree match",
-      "root_confidence": "exact first-run predicate unknown",
-      "post_fix_real_model_retest": "NOT_APPLICABLE",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43680525680",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-REAL-004",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run": 43875955529,
-      "job": 133328916078,
-      "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07fe1a84c7249df8a76f8ec83f838c96358604d2: two identical SHA/decoded 640x360 24fps 6s H264/AAC outputs with native video+audio; 5 export_delivery_mismatch pre-dispatch rejections; 48-turn budget exhaustion; no accepted review pair.",
-      "source_or_fix": "Git commit 3c4b91e814ec0bc950f68e7a1bf384e8c1535021 later exposed owner-specific native export target metadata to the model; subsequent run #43883369538 produced distinct video but failed full G1.",
-      "root_confidence": "Exact model journal and original retained synthetic artifact ZIP #14230378968 independently inspected; source-cause of entire creative failure not fully proven.",
-      "post_fix_real_model_retest": "FAILED_NO_ACCEPTED_REVIEW",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43875955529",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-REAL-005",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run": 43883369538,
-      "job": 133354875086,
-      "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07487c0babc36b7eaf6bc02f3a70b8e4b2334f85: two distinct conformant decoded 640x360 24fps 6s H264/AAC files, 107/144 RGB frame hashes different, same decoded 48kHz stereo PCM; real native project and video/audio; 6 safe output_exists pre-dispatch rejections; 48 turns exhausted, reviewed A/V pair absent; no semantic hearing.",
-      "source_or_fix": "Export target metadata fix was present. Current #356 exact head 00dcfc69c3d20455bbc875d2e8eef0406c9188f2 35/35 technical checks PASS but no succeeding comparable real model trial. Next isolate source-bound review pairing/model competence before spending another authorized trial.",
-      "root_confidence": "Retained artifact #14233632889 independently downloaded, ZIP SHA256 5f393460bcb8dca0de243148e458dfba92533de96f69dc658bc457f6e3efbd95, FFprobe/FFmpeg picture/audio decoding and native JSONL journal inspected.",
-      "post_fix_real_model_retest": "NOT_PASSED",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43883369538",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-REAL-006",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run": 43991467485,
-      "job": 133732842887,
-      "details": "2026-11-17 one explicitly owner-authorized synthetic-only NVIDIA Nemotron 3.5 Super VL 120B G1 trial at exact executing commit 10ef5a992acde37bd680976cb8a0a44aa35d12a6, 48 turns (46 submitted model tools), 118 host journal events, 13 model-selected native writes, 2 independently verified H264/AAC exports plus a third not verified. Three actual six-second 640x360 24fps/144-frame videos with 3 distinct RGB sequences and identical audible decoded PCM, physical first vs second 144/144 corresponding frames differ. First real model frame observation times [1,3,5] seconds versus second [0.5,2.6,4.7], no intersection, PCM unchanged: host correctly cannot certify revised A/V pair, though both cuts had full-duration numeric audio observation. Subsequent edits and third unverified output consumed budget; host_evidence_satisfied=false; artistic_quality_approved=false. Two safe output_exists pre-dispatch denials, no original owner media upload.",
-      "source_or_fix": "One-use guarded branch authorization 10ef5a992acde37bd680976cb8a0a44aa35d12a6 was revoked by 2ddef2aef87e2a0f50a27ebcc2b295b51a49b707, restoring exactly previously 35/35 CI-green source tree 1c9cfdd33d253b1a046a49d483671a1dcf044a4f. Offline TDD candidate in this PR surfaces earlier source-verified model-selected picture sample timestamps to the model for a comparable read; does not relax actual reviewed_render_pair acceptance, automatically dispatch reads, choose art or grant another paid trial.",
-      "root_confidence": "HIGH for incomparable sampled timestamps as immediate A/V-pair rejection: original model journal, pinned source state machine, separately independently decoded physical synthetic ZIP #14287639311 SHA256 93480cd1c2dbc0468506ffc32d6d78b03ecbb156fd67c2c59594692101906ede. No claim model would finish after feedback fix; professional/audio-semantics untested.",
-      "post_fix_real_model_retest": "NOT_RUN_GRANT_SPENT",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43991467485",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-CI-010",
-      "kind": "TECHNICAL_CI",
-      "result": "FIRST_ATTEMPT_FAILED_RERUN_PASSED",
-      "run": 44917858593,
-      "job": 136887222391,
-      "details": "Original camera fixture failed native acknowledged save revision convergence; unchanged-source rerun job 137106897395 passed actual picture/audio/source and revision checks.",
-      "source_or_fix": "No raw upstream change; existing opt-in save-authority source fixes retained; first failure not resolved merely by rerun.",
-      "root_confidence": "Observed failed convergence predicate; exact timing mechanism not independently established.",
-      "post_fix_real_model_retest": "NOT_APPLICABLE",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44917858593",
-      "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
-    },
-    {
-      "id": "F-REAL-20261125-VL-FULL-503",
-      "run": 45558490087,
-      "details": "Full catalogue model chose one read; HTTP 503 before first write.",
-      "source_or_fix": "Explicit opt-in indexed trial harness, verified in 45560515665; no claim provider fixed.",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45558490087",
-      "post_fix_real_model_retest": "NOT_PASSED",
-      "root_confidence": "Exact executed source and independently downloaded CRC/SHA256-verified synthetic artifact; no causal inference beyond observed failure.",
-      "failure_register": "project-brain/EVIDENCE/INDEX.md"
-    },
-    {
-      "id": "F-REAL-20261125-VL-INDEXED-503",
-      "run": 45560619414,
-      "details": "Indexed model chose acknowledged create and video import; HTTP 503 before timeline or export.",
-      "source_or_fix": "No blind repeat; transport availability outside BODY.",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45560619414",
-      "post_fix_real_model_retest": "NOT_PASSED",
-      "root_confidence": "Exact executed source and independently downloaded CRC/SHA256-verified synthetic artifact; no causal inference beyond observed failure.",
-      "failure_register": "project-brain/EVIDENCE/INDEX.md"
-    },
-    {
-      "id": "F-REAL-20261125-OMNI-SHAPE",
-      "run": 45561366838,
-      "details": "Corrected exact function surface; acknowledged create, then repeated malformed mixed input envelope, safe no-dispatch refusal and exhausted bounded corrections.",
-      "source_or_fix": "Strict decoder retained; model competence/protocol still open, no guessed argument repair.",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45561366838",
-      "post_fix_real_model_retest": "NOT_PASSED",
-      "root_confidence": "Exact executed source and independently downloaded CRC/SHA256-verified synthetic artifact; no causal inference beyond observed failure.",
-      "failure_register": "project-brain/EVIDENCE/INDEX.md"
-    },
-    {
-      "id": "F-REAL-20261125-OMNI-UNIFORM-IMPORT",
-      "run": 45565200710,
-      "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45565200710",
-      "kind": "GENUINE_MODEL",
-      "result": "FAILED",
-      "details": "Uniform wrapper contract passed run 45565052626; genuine run yielded two acknowledged writes, one schema rejection, then native placement error; downloaded saved project contains one WAV asset mislabeled video and zero clips; no exports. Raw model arguments and native error text were hashed, so exact rejected placement reason cannot be reconstructed.",
-      "source_or_fix": "Existing host import policy now rejects explicit visual category on existing conventional audio-only files before dispatch; tests on exact installed source red then 49/49 policy/client green. Does not auto-select category or prove model acceptance.",
-      "post_fix_real_model_retest": "NOT_PASSED",
-      "root_confidence": "Artifact CRC/SHA verified; pinned source prioritizes explicit category over filename inference. Observed misclassification and native placement failure are proven, causal connection to specific hidden placement error is not.",
-      "failure_register": "project-brain/EVIDENCE/INDEX.md"
-    }
-  ],
-  "open_gates": [
-    {
-      "id": "G1-AUTONOMY",
-      "priority": 1,
-      "state": "OPEN_CRITICAL",
-      "owner_outcome": "Genuine Brain creates original artistic picture AND sound with independent choices, native version and physical conformant output",
-      "success": "actual model decisions and first conforming editable saved native export; neither scripted plan nor claimed success",
-      "requirements": [
-        "C",
-        "G",
-        "I",
-        "J"
-      ],
-      "blocking_authorization": "bounded synthetic NVIDIA G1 authorized on 2026-11-22; private egress still prohibited"
-    },
-    {
-      "id": "G1-OBSERVE-REVISE",
-      "priority": 2,
-      "state": "OPEN_CRITICAL",
-      "owner_outcome": "Meaningful semantic time-aligned image/audio review and targeted model-authored improved revision",
-      "success": "two separately decoded conforming source-attested picture+sound outputs, different intentional edit, native reopen and independent critique",
-      "requirements": [
-        "C",
-        "G",
-        "J"
-      ],
-      "blocking_authorization": "bounded synthetic NVIDIA G1 authorized; local model optional; private egress prohibited"
-    },
-    {
-      "id": "G1-HUMAN",
-      "priority": 3,
-      "state": "OPEN",
-      "owner_outcome": "Human changes the same live native project, AI sees current head, continues without lost manual edits",
-      "success": "actual human-operable co-edit and saved/reopened untouched source plus conflict/rollback",
-      "requirements": [
-        "B",
-        "C",
-        "I",
-        "K"
-      ]
-    },
-    {
-      "id": "G2-FABRIC-COMPARISON",
-      "priority": 4,
-      "state": "EXPERIMENT_UNRUN",
-      "owner_outcome": "Measure whether minimal adaptive fabric earns its complexity vs existing native tools and sandboxed code",
-      "success": "held-out A/B/C creative/economic/fidelity/security outcomes across video, motion, 3D, audio",
-      "requirements": [
-        "C",
-        "D",
-        "E",
-        "G",
-        "J"
-      ]
-    },
-    {
-      "id": "G3-AL",
-      "priority": 5,
-      "state": "OPEN",
-      "owner_outcome": "Full professional A–L fields in one native source-aware production system",
-      "success": "domain-specific real editable results, physical evidence and independent professional acceptance",
-      "requirements": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L"
-      ]
-    },
-    {
-      "id": "G4-RELEASE",
-      "priority": 6,
-      "state": "OPEN",
-      "owner_outcome": "Safe installed owner product, legally correct self-hostable distribution, usable human UX and independent security/art review",
-      "success": "cold install, A–L acceptance, rights/license, benchmark, privacy, reliability, multi-genre owner studies",
-      "requirements": [
-        "A",
-        "K",
-        "L"
-      ]
-    }
-  ],
-  "open_prs_needing_overlap_review": [
-    {
-      "number": 288,
-      "head": "cd6ff58b7882e6d961af51169d6976e93cd47060",
-      "status": "OPEN_DRAFT",
-      "meaning": "historical Qwen local model trial proposal",
-      "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/288"
-    },
-    {
-      "number": 236,
-      "head": "22ae43d9dffac341155aba887a2947a1f133661c",
-      "status": "OPEN_DRAFT",
-      "meaning": "host-observed source/timeline affordances; compare exact current code",
-      "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/236"
-    },
-    {
-      "number": 202,
-      "head": "ab411623ae2f1ad22214f7512508e74fc70c7fc3",
-      "status": "OPEN_NON_DRAFT",
-      "meaning": "live native object identity fencing; compare exact current code",
-      "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/202"
-    }
-  ],
-  "historical_artifact_retention": {
-    "verified_at": "2026-11-15",
-    "records": [
-      {
-        "run": 42711402879,
-        "artifact_id": 13722569378,
-        "scheduled_expires_utc": "2026-11-24T00:30:23Z",
-        "expired_at_check": false
-      },
-      {
-        "run": 42754872382,
-        "artifact_id": 13735184585,
-        "scheduled_expires_utc": "2026-11-17T04:33:33Z",
-        "expired_at_check": false
-      },
-      {
-        "run": 43680525717,
-        "artifact_id": 14148286780,
-        "scheduled_expires_utc": "2026-11-22T05:20:24Z",
-        "expired_at_check": false
-      }
-    ],
-    "policy": "GitHub artifact links are time-limited. Do NOT claim full trace bytes in Markdown or copy private media/keys into public repository. Arrange separately authorized safe retention where needed."
+  "future_acceptance_protocol": "Structural checker allows a future field ACCEPTED/G1 ACCEPTED only with linked exact 40-char source SHA, report_url, named reviewer and scope. Genuine model retest PASSED needs exact run URL, 40-char source SHA, same_task_as original failure ID and 64-char artifact digest. These are receipt shapes, not independent verification that claims are true."
+ },
+ "product": "NOT_COMPLETE",
+ "domains": [
+  {
+   "id": "A",
+   "slug": "truth_rights_provenance",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "source custody and selected physical tests; complete revocation/license not accepted",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "media_vault.py",
+    "body_archive.py",
+    "body_publication.py"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/301",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/307"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "update_protocol": {
-    "when": "only after meaningful source change, negative run, owner delta, or changed acceptance status",
-    "requirements": [
-      "refresh live main/PRs/runs before editing snapshot",
-      "retain exact SHA, PR, run/job/artifact refs and first negative outcomes",
-      "separate implemented technical foundations from creative/independent acceptance",
-      "mark merged source fix separately from post-fix real model retest",
-      "do not infer completion from passing CI or JSON fields",
-      "preserve old records in Git and EVIDENCE/INDEX",
-      "do not paste actual private inputs, keys, or whole raw traces in public Git",
-      "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
-      "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
-    ],
-    "next_action": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
+  {
+   "id": "B",
+   "slug": "editable_cross_engine_project",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "native snapshots/reopen supported; complete loss-aware cross-domain interchange unproved",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "body_project_heads.py",
+    "body_sequence_otio.py",
+    "body_project_revision.py"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/313",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "latest_ci_checkpoint": {
-    "source": "5b9efc497717f81e63c26c14ff621af58201bc57",
-    "observed_date": "2026-11-27",
-    "checks_observed": 29,
-    "counts": {
-      "success": 29
-    },
-    "context": "All exact-head workflows success; tested merge tree equals source tree. Actual local/hosted jobs skipped. Independent installed CI download integrity verified; latest ZIPs not locally re-decoded in this review.",
-    "creativity_release_accepted": false,
-    "merge_test_commit": "cc11df9ea3e070d7d64cf4c7dc9e9c0ab4565d8d",
-    "exact_equal_tree": "fadccded3cd51b8641bd074159e0d0127fb8741a",
-    "previous_source_final_counts": {
-      "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
-      "success": 29
-    },
-    "actual_model_jobs_skipped": [
-      140149407365,
-      140149059289
-    ],
-    "installed": {
-      "run": 45889714441,
-      "job": 140149056589,
-      "tests_run": 1755,
-      "pass": 1725,
-      "skip": 30,
-      "failed": 0,
-      "independent_ci_job": 140156764253,
-      "artifact": 15152416041,
-      "published_and_ci_download_sha256": "9a955efceda8c5c949d1b86354a96e464434db632ad5730a82a0c8ffd2d3d946",
-      "independent_ci_manifest_files": 24,
-      "independent_ci_publication_receipts": 5,
-      "local_redownload_verified": false
-    },
-    "mlt": {
-      "run": 45889714235,
-      "job": 140149056186,
-      "tests_run": 1755,
-      "pass": 1754,
-      "skip": 1,
-      "failed": 0
-    },
-    "source_gate": {
-      "run": 45889714101,
-      "job": 140149056088,
-      "sdk_tests_run": 258,
-      "node_tests": 42,
-      "universal_job": 140149056131,
-      "universal_tests": {
-        "run": 232,
-        "pass": 228,
-        "skip": 4,
-        "failed": 0
-      }
-    },
-    "unified": {
-      "run": 45889714245,
-      "job": 140149517011,
-      "artifact": 15151735553,
-      "published_sha256": "604b5d78b39631b069a26ed541927e9c187dd6432ff27de5263e393efa3dd19f",
-      "scripted": true,
-      "local_redownload_verified": false
-    }
+  {
+   "id": "C",
+   "slug": "professional_video_nle",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "native source-pinned picture/audio editing and source custody tested; creative/professional field not accepted",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "third_party/velorn",
+    "body_mlt_editor.py",
+    "precision_retime.py"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/342",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/349"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "latest_artifact_audit_20261126": {
-    "head": "642565f1252f10caf65a1aa6f434672d25dcc3ba",
-    "main": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
-    "workflow_success": 29,
-    "installed": {
-      "run": 45740635402,
-      "tests": 1736,
-      "pass": 1706,
-      "skip": 30,
-      "artifact": 15082046544,
-      "zip_sha256": "7b3182e3c55ba123c273e842f77e67e571f37a7946489d90e7ff0ffe5d9ea621",
-      "manifest_pass": 24,
-      "ffmpeg_decode_pass": 3
-    },
-    "mlt": {
-      "run": 45740635652,
-      "tests": 1736,
-      "pass": 1735,
-      "skip": 1
-    },
-    "electron": 45740635512,
-    "browser": 45740635468,
-    "model_jobs_skipped": [
-      45740635638,
-      45740635629
-    ],
-    "failed_real_runs": [
-      {
-        "run": 45738534918,
-        "artifact": 15081186723,
-        "zip_sha256": "3fa8af4f57d0e3a29ea8145bcfaf45c8427293e7eaefa30bb6c9ea68b652c43d",
-        "write_acks": 7,
-        "verified_exports": 0,
-        "terminal": "native_render_snapshot_failed"
-      },
-      {
-        "run": 45740294453,
-        "artifact": 15081337311,
-        "zip_sha256": "06cc972bfe825ce5d0fa280a2256593433f6e79ffe622d1303a402ddee286a11",
-        "write_acks": 6,
-        "verified_exports": 0,
-        "terminal": "stale identity cleared project snapshot; turn 23 preview rejected",
-        "correction": "Refuse source-bound image preview before dispatch without trusted project observation; model selects get_project; retain exact JPEG/identity validation.",
-        "regression": "added; execution pending"
-      }
-    ],
-    "acceptance": "G1/G1-HUMAN/G2/G3/G4 OPEN; no new cloud consent or independent acceptance"
+  {
+   "id": "D",
+   "slug": "2d_graphic_vector_photo_typography",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "editable visual graph to native film tested; full typography/motion/masks craft unproved",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "body_visual_graph.py",
+    "body_visual_render.py",
+    "motion_studio"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/338",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/339"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "live_branch_ancestry_20261126": {
-    "status": "ALL_REF_SOURCE_COMPARISON_NOT_PRODUCT_ACCEPTANCE",
-    "baseline": "2b626445ecabd3a2837ac549a98ba9dcda94b96d",
-    "run": 45737776415,
-    "artifact": 15079562880,
-    "zip_sha256": "9af70a197570059aadbe4f8f726bb1bb1bfca2c9c508ca4366495f521825a468",
-    "refs": 472,
-    "snapshot_refs": 459,
-    "ancestor": 149,
-    "identical": 1,
-    "ahead_audit_only": 1,
-    "diverged": 321,
-    "unique_old_missing_code_sets": 17,
-    "old_stack_branches_same_7_path_set": 48,
-    "pr189_old_absent_names": 43,
-    "no_bulk_merge": true,
-    "evidence": "project-brain/EVIDENCE/2026-11-26-BRANCH-ANCESTRY-AND-NATIVE-SAVE-CUSTODY.md",
-    "current_refs": 478,
-    "additional_refs_compared": 6,
-    "followup_source": "642565f1252f10caf65a1aa6f434672d25dcc3ba"
+  {
+   "id": "E",
+   "slug": "3d_cgi_vfx_simulation",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "source-pinned Blender real CGI/video handoff demonstrated; professional scene/VFX breadth not accepted",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "blender_scene.py",
+    "body_motion_project.py",
+    "body_exr_passes.py"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/340",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "g1_autosave_custody_20261126": {
-    "status": "PHYSICAL_INSTALLED_PASS_GENUINE_MODEL_NOT_ACCEPTED",
-    "real_run": 45735804964,
-    "real_artifact": 15078888361,
-    "zip_sha256": "97fde7d322af5b09e5338313e0964d2c271e65776a395947cce8a5a9fe2e83a2",
-    "native_write_acks": 7,
-    "first_export_ack": true,
-    "verified_movie": false,
-    "three_real_autosaves_same_non_clock_content_sha": "14ba70dcfe274ee70cb865485ebb2b01e5a98b4e409e7eb8feb09ab21a36e6f1",
-    "exact_green": "94d33d6c5919b6af02c85783d0456b42455acb46",
-    "red_green_run": 45739025215,
-    "adjacent_pass": 185,
-    "preservation": "Only 2 editor modified clocks may change between real model save and render; all creative and original media SHA stay equal; save witnesses separate from native rendered-revision registry.",
-    "no_automatic_write_replay": true,
-    "full_g1": "NOT_ACCEPTED",
-    "physical_e2e_run": 45740635512
+  {
+   "id": "F",
+   "slug": "color_hdr_mastering",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "partial mastering/BT.709/ACES paths; cross-engine HDR fidelity unproved",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "body_color_pipeline.py",
+    "body_aces2_movie.py",
+    "film_finishing.py"
+   ],
+   "evidence_prs": [],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "g1_post_review_second_export_guard_20261125": {
-    "source": "61cce9a78b44986e282102260c421d0df6204685",
-    "real_negative_run": 45632856001,
-    "real_negative_artifact": 15033430161,
-    "source_event": "second export was model-selected and host-ACKed after verified first picture/audio, but before any post-review native content revision; capture did not attest a distinct saved native source",
-    "scope": "Strict reviewed A/V, after first physically verified, frame-and-full-audio-observed export; reject second committed export until model-selected content revision (no automatic edit or write retry).",
-    "red": "2998ddd22388d9882aa7b4e46d55754188cd20d6",
-    "green": "61cce9a78b44986e282102260c421d0df6204685",
-    "run": 45666106360,
-    "red_failure": 1,
-    "adjacent_green_tests": 193,
-    "real_model_retest": "NOT_RUN",
-    "professional_quality": "NOT_ACCEPTED"
+  {
+   "id": "G",
+   "slug": "music_voice_sound_subtitles",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "5.1 physical bus and A/V source audio tested; no real model semantic listening/mix craft",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "composite_mix.py",
+    "body_loudness.py",
+    "voice_lab"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/307",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/319",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/349"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "consolidation": {
-    "owner_priority": "2026-11-26",
-    "working_branch": "workstream/g1-existing-owner-project-av-snapshot-20261115",
-    "main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
-    "source_at_audit": "766dd9d0076c442f364124b23d1c04412581d184",
-    "observed_refs": 478,
-    "distinct_tips": 476,
-    "markdown_files": 35,
-    "branch_retirement": "NOT_READY_FOR_DELETE",
-    "audit_workflow": ".github/workflows/zx7-consolidation-audit.yml",
-    "previous_exact_snapshot": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/766dd9d0076c442f364124b23d1c04412581d184/project-brain/EXECUTION_LEDGER.json",
-    "audited_source": "56b55a6b44bdabd1311b69514a3f5311497339c6",
-    "run": 45862198310,
-    "artifact": 15138861698,
-    "artifact_zip_sha256": "19bb42b5fcac593cc821dda450be46aa583bca921bdc2885ed9397a5b7d85bfb",
-    "bundle_sha256": "09e087440f6225e6c6a83ad7ff25d62a95c4d3d406f3fb8c428ee3e174a5d7b5",
-    "restore": "478_OF_478_REMOTE_TIPS_CI_AND_LOCAL_RESTORE_PASS",
-    "historical_markdown_paths": 39,
-    "historical_markdown_path_blob_variants": 388,
-    "relative_links_checked": 282,
-    "broken_links": 0,
-    "branch_path_variants": 1096,
-    "exact_active_object": 126,
-    "reachable_canonical_history_object": 385,
-    "unmatched_object_variants": 585,
-    "source_review_variants": 221,
-    "regression_test_review_variants": 142,
-    "merge_simulation": {
-      "ancestor": 150,
-      "clean_same_tree": 32,
-      "clean_changed_tree": 70,
-      "conflict": 226
-    },
-    "historical_commits_not_reachable": 1683,
-    "nonmerge_patch_id_equivalent": 91,
-    "semantic_review": "INCOMPLETE; one missing historical behavior actually reproduced and restored. Structural equivalence does not establish domain acceptance.",
-    "archive_tag_intended": "archive/zx7-all-branches-20261126",
-    "archive_tag_status": "VERIFIED_REMOTE_TAG_AND_INDEPENDENT_478_REF_RESTORE",
-    "current_doc_and_tests": {
-      "controller_pass": 150,
-      "brain_pass": 16
-    },
-    "archive_tag_commit": "cb3121df28ec12da391dac42a4485c3c1bb83213",
-    "archive_verified_run": 45863302941,
-    "archive_verified_jobs": [
-      140059618643,
-      140059765386,
-      140060445380
-    ],
-    "archive_audited_source": "b124d560e0920c76b3cc0d9c4d6cc1543d8ba28f",
-    "archive_inventory": "https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/cb3121df28ec12da391dac42a4485c3c1bb83213/branch-retirement-review.tsv",
-    "latest_tag_counts": {
-      "historical_markdown_path_blob_variants": 389,
-      "exact_active_object": 125,
-      "reachable_historical_object": 386,
-      "unmatched_object_variants": 585
-    },
-    "latest_review": {
-      "historical_exact_source": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/4e2c4338841e77f601443cfc55f986c53437b183/project-brain/EXECUTION_LEDGER.json",
-      "field": "consolidation.latest_review",
-      "status": "Full detailed archive review retained at immutable parent; targeted reuse remains current."
-    },
-    "followup_source_review": {
-      "historical_exact_source": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/4e2c4338841e77f601443cfc55f986c53437b183/project-brain/EXECUTION_LEDGER.json",
-      "field": "consolidation.followup_source_review",
-      "status": "Full detailed archive review retained at immutable parent; targeted reuse remains current."
-    }
+  {
+   "id": "H",
+   "slug": "generated_media_and_rights",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "optional adapters/source paths; installed weights/licenses/creative consistency not accepted",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "comfy_video_runtime.py",
+    "generative_video_providers.py"
+   ],
+   "evidence_prs": [],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "history": {
-    "source": "56b55a6b44bdabd1311b69514a3f5311497339c6",
-    "full_ledger_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/56b55a6b44bdabd1311b69514a3f5311497339c6/project-brain/EXECUTION_LEDGER.json",
-    "archived_keys": [
-      "body_gateway_read_only_discovery_2026_11_17",
-      "native_scene_save_convergence_ci_2026_11_17",
-      "indexed_brain_verified_wav_affordance_2026_11_17",
-      "explicit_model_wav_transport_gate_2026_11_17",
-      "matching_native_av_review_frontier_2026_11_17",
-      "native_live_revision_vs_volatile_snapshot_2026_11_17",
-      "editorial_installer_source_parity_2026_11_17",
-      "whole_system_durable_media_witness_2026_11_18",
-      "ci_runner_mirror_2026_11_18",
-      "ci_source_native_ffmpeg_environment_2026_11_18",
-      "omni_synthetic_trial_20261118",
-      "native_function_recovery",
-      "omni_native_recovery_trial",
-      "branch_integration_review",
-      "exact_head_technical_verification_2026_11_22",
-      "planar_vfx_color_integration_2026_11_22",
-      "exact_head_followup_20261122",
-      "existing_scipy_branch_port_20261122",
-      "browser_gate_repair_20261122",
-      "current_synthetic_trial_and_body_audit_20261122",
-      "historical_checkpoint_archive",
-      "g1_native_timeline_observation_20261124",
-      "g1_indexed_omni_asset_observation_20261125",
-      "g1_source_current_save_noop_20261125",
-      "body_verified_route_checkpoint_20261125",
-      "integration_batch_20261125",
-      "branch_audit_20261125",
-      "g1_super_vl_retained_20261125",
-      "source_candidates_20261125",
-      "latest_integrated_verification_20261125"
-    ],
-    "policy": "Exact prior fields remain in immutable reachable Git source. Retrieve by key as needed. No negative evidence or owner requirement revoked. This is a current typed index, not a duplicate historical diary."
+  {
+   "id": "I",
+   "slug": "orchestration_recovery_security",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "host grants/save/attempt durability and real selected failures tested; full multi-host/uncertain-write scope open",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "capability_gateway.py",
+    "durable_graph.py",
+    "capability_attempts.py"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/303",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/332"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "owner_delta_20261126": {
-    "scope": "whole A–L studio; no mandatory video-first serial gate",
-    "runtime": "compatible replaceable Brain via executable capability discovery, typed native actions, state and feedback, no runtime Markdown/manual creative prompt pack",
-    "acceptance": "unchanged; distinguish transport instructions and user intent from engineered creative scripts"
+  {
+   "id": "J",
+   "slug": "semantic_perception_and_revision",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "timed numerical A/V and physical frames are selectable; real learned sound/art review not accepted",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "body_observation.py",
+    "body_review_compare.py",
+    "native_creative_control.py"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/317",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/319"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "latest_installed_artifact_audit": {
-    "head": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
-    "merge_test_commit": "7ae3747e800dfb9b830fd078627db70d80d7f7c7",
-    "exact_equal_tree": "3e50bef8f8c02d987dbaa5f118d5f4515153f55a",
-    "installed": {
-      "run": 45870260276,
-      "artifact": 15143422540,
-      "zip_sha256": "8849f64710815d87975175ab2b3d7d1d15a84114d8d24ee792133038094c39e3",
-      "tests_run": 1743,
-      "pass": 1713,
-      "skip": 30,
-      "failed": 0,
-      "manifest_verified": 24,
-      "physical_mp4_full_decode": 3,
-      "sqlite_integrity_pass": 2
-    },
-    "unified": {
-      "run": 45870259932,
-      "artifact": 15142442764,
-      "zip_sha256": "5fb10712b0915be50439562a5c9f56894f153bbc83cb9ab6c2024df889296b4d",
-      "manifest_verified": 16,
-      "physical_mp4_full_decode": 4,
-      "scripted": true
-    },
-    "native": 45870260347,
-    "source_gate": 45870260362,
-    "brain": 45870259833,
-    "actual_model_jobs_skipped": [
-      140083604936,
-      140083534559
-    ],
-    "independent_professional_acceptance": false
+  {
+   "id": "K",
+   "slug": "owner_human_ai_product_ux",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "GUI pointer-style and native co-edit guards tested; no full human UX/remote-secure acceptance",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "body_mobile.py",
+    "body_desktop.py",
+    "body_service.py"
+   ],
+   "evidence_prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/325",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/333"
+   ],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   },
-  "owner_delta_20261127": {
-    "assessment_source": "5b9efc497717f81e63c26c14ff621af58201bc57",
-    "assessment_path": "project-brain/EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md",
-    "assessment_blob": "e2247fe926a01ff3a44343d873f94653aa360528",
-    "scope": "owner approved engineering approach; documentation first then execution; full A-L",
-    "strategy": "outcome-first, isolate critical uncertainties, deterministic host coordination without artistic substitutions, staged verification, targeted archival reconciliation on verified baseline",
-    "retirement": "NOT_READY_FOR_DELETE",
-    "consent": "unchanged synthetic-only bounded policy",
-    "proof": "no gate accepted by documentation"
-  },
-  "critical_path_coordination_20261127": {
-    "baseline": "c02c2d0b6989eed4b0a9e7232ba79c2e18012221",
-    "source_blobs": {
-      "studio_next/native_render_evidence.py": "bf734855f314bf0d992ed11ba86bab6012f1ccda",
-      "studio_next/native_creative_control.py": "aa6709dc61f8c83f904f747fa3050bce61ae4527",
-      "studio_next/native_creative_audit.py": "72c7be04bf3562ef96531cd0c70fe7f589732e28",
-      "studio_next/body_editor_mcp.py": "ecaaceea4883cde93724f68cd7812a6f7a9e0ee9",
-      "studio_next/test_body_editor_mcp.py": "42beba2ac3c0fd655c715487f3605e5a013564de",
-      "studio_next/test_native_creative_control.py": "56c1de9049586333b553bea8d867ede8622925c2"
-    },
-    "causal_gap": "Existing model-selected AV window delivered source-bound frames and numeric PCM but strict pair gate credited only separate frame/audio calls.",
-    "matched_control": {
-      "decision_turns": 10,
-      "native_calls": 9
-    },
-    "matched_candidate": {
-      "decision_turns": 8,
-      "native_calls": 7
-    },
-    "scope": "Scripted identical evidence fixture only; 20% fewer decision turns, not measured neural speed/cost or artistic quality.",
-    "red": "Combined full coverage exhausted budget on baseline; separate route passed.",
-    "green": "Both routes accepted technical pair, partial/overstated coverage rejected; altered receipt values refused by auditor.",
-    "local": {
-      "eligible_tests": 201,
-      "passed": 201,
-      "limitations": "Broader runs had missing MCP SDK (3) and repository-only scripts (2); not full suite. Added real decoder MCP comparison awaiting CI."
-    },
-    "acceptance": {
-      "professional": false,
-      "genuine_model": false,
-      "exact_source_ci": "29/29 workflows SUCCESS at f676146e7a95da42fd39eb62d72154e2bce1af54; actual model jobs skipped"
-    },
-    "guard": "Existing grants, model-selected action, frame separation, verified duration, actual PCM and hash binding; no semantic listening or approval inferred. No new provider spend.",
-    "next": "Baseline physical parity passed. Qualify provider/model and run comparable genuine synthetic trial only within exact-source, one-use consent; no available dispatch action in current connector.",
-    "physical_mcp_parity": {
-      "run": 45894468630,
-      "jobs": [
-        140164828950,
-        140164829134,
-        140164829172
-      ],
-      "result": "SUCCESS on Python 3.13/3.12/3.11; real SDK + independent FFmpeg + source-bound negatives; not neural"
-    }
-  },
-  "critical_path_timed_feedback_20261127": {
-    "baseline": "f676146e7a95da42fd39eb62d72154e2bce1af54",
-    "source_blobs": {
-      "studio_next/native_creative_control.py": "8445235d5b213d36d36fba51e0e05e69bd623aab",
-      "studio_next/test_native_creative_control.py": "56cd5068850e12a04a9027cbcb565953c4a4c8bf"
-    },
-    "causal_gap": "Source-derived counterexample: a single still plus full numeric audio hid remaining separated timed-picture requirement from the indexed model frontier. This is an interface gap, not proof that it caused any historical trial failure.",
-    "correction": "Retain generic still evidence; report separated source-bound timed sample coverage independently and keep the already-granted timed read selectable. The pair acceptance gate, native writes, authorization and artistic judgment are unchanged.",
-    "local": {
-      "red": "Source-derived isolated method reproduction: still incorrectly counted as timed readiness; assertion failed.",
-      "green": "5/5 scoped Python excerpt tests passed, including narrow/invalid/mismatched samples, combined window, failed read and write revocation.",
-      "limitations": "No repository checkout in current runtime; connector-only source access and no GitHub DNS. Full integrated controller regression and actual CI pending."
-    },
-    "acceptance": {
-      "exact_source_ci": "24/29 SUCCESS; 5 FAILURE at d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
-      "genuine_model": false,
-      "professional": false
-    },
-    "next": "Verify exact candidate CI. Only after stable baseline, qualify actual model/provider and creative interface; no connector dispatch.",
-    "hosted_regression": {
-      "source": "d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
-      "success": 24,
-      "failure": 5,
-      "runs": [
-        45926146560,
-        45926146497,
-        45926146559,
-        45926146423,
-        45926146408
-      ],
-      "observed": "test_indexed_same_time_av_comparison_keeps_verified_native_reader_visible: already_comparable and invalidated_by_write expected TIMED_FRAMES absent, actual present; Python 3.11–3.13 and shared suites.",
-      "diagnosis": "Older pair fixture uses abbreviated image hashes, stricter readiness requires 64-character digests. Source-supported candidate explanation; write invalidation needs independent reproduction. Not a proven root cause.",
-      "genuine_model": false,
-      "professional": false
-    },
-    "fixture_correction": {
-      "parent": "5023d44e125c60ce895de35493b8c953c53cb98c",
-      "source_blobs": {
-        "studio_next/test_native_render_evidence.py": "0d8c5070ca933a8b5d696a5fcd1f41e62a4dd668",
-        "studio_next/test_native_creative_control.py": "2350a20114e9555dcccff9fe816c23b8b5e157b8"
-      },
-      "cause": "Shared old pair fixture used one-character hashes; invalidation injected add_text_clip absent from fixture write grants. Source-derived isolated current-evidence reproduction: two original assertions fail; realistic hash and admitted update_text_clip ACK pass both. No production validation relaxed.",
-      "verification": "Exact parent 385534021c47efdecf70685e5f54095ea37e3d2d 29/29 CI SUCCESS (actual model jobs skipped); revision and Omni Python 3.11–3.13 passed; source apt missing ffmpeg recovered on targeted unchanged-source retry. Actual controller RED/GREEN 11 tests; previous broader run 222 run/216 pass/6 environment import errors, no assertions failed. Details PR #356 comment 7208810798.",
-      "next": "Baseline technical regression closed; no genuine model or professional acceptance."
-    }
-  },
-  "critical_path_delivery_affordance_20261127": {
-    "baseline": "385534021c47efdecf70685e5f54095ea37e3d2d",
-    "source_blobs": {
-      "studio_next/native_creative_control.py": "7e72f643708623936e617d59360382c7fa5df10e",
-      "studio_next/test_native_creative_control.py": "63bc3c1ac42bed39d91bcc501dd14a3270a7672e"
-    },
-    "negative": {
-      "real_run": 45731089541,
-      "artifact": 15078171115,
-      "sha256": "47c46e631c1cd6e691199d906a3c4ab4c5e1134573ad049f335b61fd328c35f0",
-      "facts": "88 events, 37 decision turns, 14 searches, 2 stale source refusals, save at turn 31, search again at 32, zero exports. Exact causal contribution of visibility not established."
-    },
-    "correction": "Expose one already-granted source-bound save/export/verify affordance from positive live clip count, current save and latest captured render. No automatic native action, grant or artistic choice; current destination evidence stops repeated verify visibility.",
-    "matched_scripted": {
-      "baseline_delivery_decisions": 6,
-      "candidate_delivery_decisions": 3,
-      "identical_native_call_sequence": true,
-      "red": "4-turn baseline executed save and render but exhausted before verify",
-      "green": "Matched controller and auditor fixture passed, including missing/empty project, capture disabled, invalidated evidence, malformed capture, wrong grant and later edit."
-    },
-    "local": {
-      "run": 223,
-      "pass": 217,
-      "assertion_failures": 0,
-      "environment_import_errors": 6,
-      "limitations": "Reconstructed exact parent blobs from installed wheel; no complete checkout, MCP SDK or repository-only scripts. Actual local model/provider absent."
-    },
-    "acceptance": {
-      "exact_candidate_ci": "29/29 SUCCESS at fce6049bbee21ad65a3421e383a862644d1aa364; genuine indexed trial FAIL (see indexed_trial)",
-      "genuine_model": false,
-      "professional": false
-    },
-    "next": "Both single arms failed final completion. Direct mode removed 17 searches and reached transient reviewed pair, with 2.23x reported tokens and less wall time. Do not infer statistically proven architecture preference. Inspect completion/revision handoff and stale filename correction; no paid blind rerun.",
-    "parent_installed_artifact": {
-      "run": 45932518653,
-      "artifact": 15169717251,
-      "source_commit": "f4fb523f0c4c0334cb2e8f514092c3d74093318e",
-      "tree_equivalent_to": "385534021c47efdecf70685e5f54095ea37e3d2d",
-      "sha256": "4130f18bdbda3cbf91262384a144e4f6360394983e1625f978756e0bfcc62f87",
-      "manifest_verified": 24,
-      "tests": {
-        "run": 1757,
-        "passed": 1727,
-        "skipped": 30,
-        "failed": 0
-      },
-      "physical_decode": "Full mixed:57 frames 320x480 4.75s AAC stereo 48k; 2D:33 frames 320x480 2.75s AAC stereo; 3D:24 frames 256x256 2s video-only; full FFmpeg decode successful. Scripted physical proof only."
-    },
-    "indexed_trial": {
-      "run": 45934918405,
-      "source": "c5d5de094f6d61e181b5c10088b47cf68d646a19",
-      "revoked": "1096550254f2e5c59c621880d3de171eec0716f8",
-      "artifact": 15171390542,
-      "sha256": "c1f880a29113a4ffa967deebf66a7be7544f51b7110986bdb5fec2f510ddde86",
-      "status": "FAILED: turn_budget_exhausted, no second export/pair",
-      "events": 117,
-      "turns": 48,
-      "searches": 17,
-      "reported_tokens": 589619,
-      "search_tokens": 212272,
-      "model_ms": 1026490.065,
-      "native_mcp_ms": 1925.473,
-      "write_acks": 11,
-      "export_verified": 1,
-      "first_export_sha": "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
-      "receipt": "ZIP CRC+SHA match; independent ffprobe and full FFmpeg decode 640x360 H264 24fps 144 frames/6s AAC; saved native source SHA verified; no rendered-original pixel proof, semantic listening or quality approval."
-    },
-    "direct_trial": {
-      "run": 45937037913,
-      "source": "e4abbd93c6aa82a3593e1014dd069fac05d68f23",
-      "revoked": "9d27019f0a8b2e0aecd29ad954cc4cbc51322807",
-      "same_runtime_parent": "fce6049bbee21ad65a3421e383a862644d1aa364",
-      "request": "ZX7_SUPER_VL_G1_DIRECT_CATALOG_20261127",
-      "status": "FAILED terminal turn_budget_exhausted; transient pair passed then revoked by later model edit",
-      "scope": "Same source/model/brief/48-turn budget; only existing full vs indexed catalog route changes. Whole-interface comparison, not single-factor internal ablation or repeated controlled trials.",
-      "artifact": 15171327555,
-      "sha256": "438d92a0b030ace86723a61aafc03b8cf91618d80207eb2e283601e8fcd0c684",
-      "events": 135,
-      "turns": 48,
-      "searches": 0,
-      "reported_tokens": 1315967,
-      "reported_prompt_tokens": 1251098,
-      "reported_completion_tokens": 64869,
-      "model_ms": 578863.636,
-      "native_mcp_ms": 3390.493,
-      "write_acks": 14,
-      "export_verified": 2,
-      "export_shas": [
-        "9da3574b0244e54cfbc9131d3f61482f2a132e7106a93721b22f49c411f8afbd",
-        "31391ea2abd493e461b3d597cb97c611b9dbe9e89c00c3a04d34c08bed3c8cd7"
-      ],
-      "saved_render_shas": [
-        "29d6785bd0dee6e0c3288a4730f555b1734190e596a79cf65b121d0007b9b893",
-        "8ff5dc05b4bcae9256b87d98825606a6c0afbdefe63820fb6b37a5e97b600561"
-      ],
-      "prefix_observation": "Actual pair comparator returns both exports after turn 41/seq 118, and None after turn 42/seq 120 acknowledged text edit; final two exports rejected output_exists; no automatic replay. Exact retained render-time autosave hashes match. Independent ffprobe and full decode both six-second 640x360 H264 24fps 144 frames, 79/144 RGB frames differ, identical decoded AAC PCM, RMS 0.05555946. No final model finish, semantic hearing, independent quality or rendered-original pixels proof."
-    },
-    "checkpoint_followup": {
-      "observed": "Direct model received turn index, not configured remaining turn budget; at turn 42 six decisions remained after actual prefix pair readiness.",
-      "change": "Expose host-verified current-required-evidence boolean and exact max/remaining decisions; compute missing evidence once, preserve independent finish/revise choice, later-write invalidation and actual grants.",
-      "red": "Missing decision_turn_budget KeyError",
-      "green": "Model fixture chooses additional edit after readiness; evidence revoked, reverified, independently finishes. 215 affected run/210 pass/5 missing MCP and repo script import errors; zero assertion failures.",
-      "acceptance": "Local protocol only; genuine benefit unverified, no new paid inference."
-    }
-  },
-  "reused_archived_scope_20261127": {
-    "research": "cea19dadc38cccb212e9d37331ca1869d200b724",
-    "scheduler": "633348babde51ba037bf1917fe1f051bd2515aae",
-    "source": "Existing exact 8 blobs; matching unchanged parent blobs, no reimplementation. Add 3 read-only public metadata providers and explicit source choice, preserve network/rights gates; truthful scheduler state label.",
-    "local": "Scheduler RED assertion true vs false; GREEN 17/17. Research RED provider kwarg unsupported; exact four production + test blobs match. 63 affected tests: 58 pass, 4 SDK skips, 1 no-display error, targeted desktop Xvfb rerun passes (59 distinct passed). Real public endpoints/SDK and CI pending.",
-    "acceptance": "candidate, not full public web, domain or release acceptance",
-    "live_followup": {
-      "run": 45937275501,
-      "observed": "Cleveland success; NASA empty because all three live Apollo IDs have spaces; Europe PMC runner request failed, independent same-query HTTP 200 JSON returned; runner cause not proven.",
-      "correction": "Allow bounded interior ASCII spaces in NASA ID and quote URL segment; reject path and control characters. Exact RED→GREEN; 71 run/67 pass/4 optional SDK skips.",
-      "physical_oracle": "Four synthetic aligned, offset, sound-only, picture-only controls; known target detects brief red event missed by equal-count uniform samples; FFmpeg decoded PNG and audio bins verified; no neural or artistic acceptance.",
-      "native_ci_negative": "45937275794 job 140303602801 Microsoft apt repository HTTP 403 before tests; not a source regression.",
-      "acceptance": "Exact new head live verification pending.",
-      "latest_live": {
-        "run": 45937892821,
-        "initial": "30/30 offline research; NASA live 3 reference leads; EPMC timeout",
-        "diagnostic": 45938105014,
-        "diagnostic_result": "Exact query HTTP 200 in 2.733s, 3 accepted records; p53 control timed out. Intermittent transport, not proven parser defect.",
-        "retry": "SUCCESS attempt 2, unchanged source"
-      },
-      "repeated_transport": {
-        "run": 45938988502,
-        "job": 140308669885,
-        "result": "Europe PMC failed again; earlier exact same query succeeded independently and on unchanged-source live retry.",
-        "correction": "One additional same-URL public GET only for exact Europe PMC metadata endpoint on direct/wrapped TimeoutError; 10s socket timeout per attempt, no redirect/status/JSON/other provider/loopback retry.",
-        "verification": "RED: recovery missing, attempts 1 instead of 2; GREEN direct/wrapped timeouts, persistent timeout terminal, other errors single attempt. 31 tests run/27 pass/4 local MCP skips. Real live CI pending."
-      }
-    }
-  },
-  "self_contained_source_custody_20261127": {
-    "baseline": "4e2c4338841e77f601443cfc55f986c53437b183",
-    "baseline_ci_observed": {
-      "success": 27,
-      "in_progress": 2
-    },
-    "red": "Actual HLS file containing only a separate TS reference accepted as MP4, MP3 and FLAC custody; delivery and timeline probes also accepted. All five assertions failed independently.",
-    "fix": "Restrict self-contained video input demuxers to MOV/Matroska/WebM families and local file/pipe protocols at probe, full decode, timeline render and frame/audio readers; MP3/FLAC ingest uses matching demuxer. No remote/playlist imports inferred. Does not replace OS sandbox or solve all decoder vulnerabilities.",
-    "green": "82/82 affected tests, real HLS refused before custody publication, no object/attestation, actual MP4/MOV/MKV/WebM/MP3/FLAC positive controls and extensionless video CAS.",
-    "status": "local exact tested blob candidate; hosted verification pending",
-    "followup_reference": {
-      "red": "HLS within authorized reference directory decoded outside-root TS file",
-      "green": "Shared demuxer restriction across reference probe, visual and audio decode; all 6 reference tests passed; no OS-sandbox claim."
-    },
-    "hosted_observed": {
-      "source": "78d68dca27ff37fe077ce556c7fddae0430fd888",
-      "counts": {
-        "in_progress": 15,
-        "success": 13,
-        "failure": 1
-      }
-    },
-    "followup_staged_ingest": {
-      "baseline": "ec4af1176fc9cd91d18b5e0dd7ef1051b6784f9a",
-      "red": "Exact SVG source replaced by same-sized invalid bytes immediately after genuine parser validation; old ingest attested the replacement digest.",
-      "green": "Copy to private same-filesystem stage, check source FD stability, validate and hash the same staged bytes before no-replace CAS publication; rehash after validation, always clean stage. Reproduced race now retains validated original; replacement has no attestation.",
-      "combined_tests": {
-        "run": 92,
-        "passed": 88,
-        "skipped": 4,
-        "failures": 0
-      },
-      "source_blob": "4a882a8205fc9911e2de8bb8ca51e552e46448f4",
-      "test_blob": "efaf60371e81203ca93758566e4990f348f1f3d9",
-      "limits": "Local regression; no broad OS sandbox or external adversary guarantee. Exact new hosted CI pending."
-    }
-  },
-  "perception_and_exact_lookup_20261127": {
-    "parent": "21bac3469fe6d87c630fd66178f5c17796b3810e",
-    "previous_exact_head_ci": {
-      "success": 28,
-      "failure": 1,
-      "failed_run": 45939750087,
-      "failed_job": 140311086464,
-      "reason": "Europe PMC repeated timeout after bounded retry; 31 offline research tests passed. Do not weaken live gate or rerun blindly."
-    },
-    "visual": {
-      "model": "NVIDIA Super VL",
-      "source": "95eb692104bc88d042f7203a90ea6b9121b6f4f6",
-      "script_blob": "74e302d369fa1709a0ddfe6b7ecbf593dabd07df",
-      "run": 45941783748,
-      "job": 140317496319,
-      "artifact": 15173003314,
-      "sha256": "fa09a74be694c973e9b55e4f3c7aa85970adc5e1203c0fa422e2735b13ac28df",
-      "retired_trigger": "eea64016d32165400a576a5dacea88f0ef706891",
-      "passed": 5,
-      "cases": 5,
-      "reported_tokens": 15047,
-      "model_wall_ms": 29442.041,
-      "independent": "ZIP SHA/CRC; five full MP4 decodes; 15 PNG hashes and independent RGB equality; numeric audio peaks and case oracle verified. Aligned, offset, sound-only, neither, picture-only typed observations.",
-      "limits": "Basic sampled visual and numeric audio-bin recognition only; no continuous motion, semantic listening, full artistic or G1 acceptance."
-    },
-    "raw_audio": {
-      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-      "source": "aa8c21526f6f12dab636f61ef5becfb59b3fd5db",
-      "script_blob": "1ce7960163fc918db11978d9082a58ac0407b6f4",
-      "run": 45942171828,
-      "job": 140318717014,
-      "artifact": 15173153626,
-      "sha256": "8c1540adbf8787325ac077d1c3c9d1d29fed8aed7d19b09e4b1f4b49524144c6",
-      "retired_trigger": "e0fc18741813bccd12ac1daab9e16006e226adce",
-      "offline_tests_passed": 47,
-      "passed": 1,
-      "cases": 4,
-      "reported_tokens": 4351,
-      "model_wall_ms": 4375.409,
-      "expected_hz": [
-        [
-          880,
-          440
-        ],
-        [
-          0,
-          0
-        ],
-        [
-          440,
-          880
-        ],
-        [
-          440,
-          440
-        ]
-      ],
-      "observations": [
-        "rising",
-        "silent then high/rising",
-        "rising",
-        "rising"
-      ],
-      "independent": "ZIP SHA/CRC; all four full MP4 decodes; source and WAV receipt hashes; independent 16kHz mono 2s PCM byte-identical to retained WAV, FFT verifies pitch and silence. Typed transport succeeded; wrong model reports remain failure.",
-      "limits": "Single four-case calibration at this model and prompt; no proven semantic hearing, no cause attribution between service internals/model. No blind retry."
-    },
-    "index": {
-      "hypothesis": "17 indexed searches returned 101 name occurrences, 23 distinct, 78 repeats. Exact already-granted IDs can reduce discovery ambiguity without full schema dump. Genuine efficiency not yet measured.",
-      "source_blobs": {
-        "studio_next/capability_fabric.py": "8dd3cac29c9308f4970b64480b2c4ee2c5e187e9",
-        "studio_next/native_creative_control.py": "7b343d1100a4cf9c92bc492aa2d9bdcf25c6888c",
-        "studio_next/test_capability_fabric.py": "39f5f44f181d91670f76c1476ef48f7ae90c36b4",
-        "studio_next/test_native_creative_control.py": "c014d18b96d8f3c64aa5cdb290772d0e2ee27a50"
-      },
-      "change": "Complete or absent retrieval-only exact ID index, <=48 operations, <=4096 serialized bytes, queryable <=160 byte IDs; no new schema, grant or dispatch. Large catalog unchanged.",
-      "red": "Missing exact_lookup_index and model context field",
-      "green": "Three focused tests passed including large catalog no dump; unselected invoke blocked; exact lookup collision qualification and bounds tested.",
-      "local": {
-        "run": 250,
-        "passed": 243,
-        "environment_errors": 7,
-        "assertion_failures": 0,
-        "limits": "Reconstructed exact parent blobs; absent MCP SDK, repository scripts and example config; no full checkout."
-      },
-      "hosted": {
-        "head": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
-        "counts": {
-          "success": 28,
-          "in_progress": 1
-        },
-        "installed": {
-          "run": 45942606959,
-          "artifact": 15174550542,
-          "sha256": "47d53ab4716c683965ba41832323d8a9815234097facb64d53b0c9851788e788",
-          "merge_commit": "10afc0a827195f3d7e5d3ae90a3d271af1ee87a4",
-          "exact_tree_equivalence": true,
-          "manifest_verified": 24,
-          "tests_run": 1775,
-          "passed": 1745,
-          "skipped": 30,
-          "failures": 0
-        },
-        "native_conflict": "Installed cross-process job 140320939079 initially refused stale add_assets_to_timeline at commit boundary; targeted unchanged-source retry successful. No proof exact cause; no safety relaxation."
-      },
-      "genuine_model_benefit": false
-    },
-    "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality.",
-    "speech": {
-      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-      "run": 45944055906,
-      "job": 140324606233,
-      "source": "b282fd85606c38b87be2411833f092fe628da6a3",
-      "script_blob": "5a3ea4893b1a2364386996329ba02bae54a5d444",
-      "retired_trigger": "b0afff228fbf84f32a18e03252ec3bec59ee75e5",
-      "artifact": 15174256003,
-      "sha256": "a71c16e0191a302d53ff091b8a154bb3f27b8b09786fea99a3362d32af6c2352",
-      "passed": 4,
-      "cases": 4,
-      "reported_tokens": 3785,
-      "model_wall_ms": 5219.613,
-      "observations": [
-        "silver moon",
-        "",
-        "paper boat",
-        "winter rain"
-      ],
-      "independent": "ZIP CRC/SHA verified, four complete physical MP4 decodes and WAV+PCM hashes match; independent 16kHz mono decode byte-identical. Silence RMS zero.",
-      "limits": "Short English synthetic speech/silence discrimination only. Prior pitch failure stands; no general musical or artistic competence inferred."
-    }
-  },
-  "compositional_measurement_20261127": {
-    "parent": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
-    "source_blobs": {
-      "studio_next/capability_fabric.py": "4ee3423709bd317966801ef4309307d2df7e972b",
-      "studio_next/test_capability_fabric.py": "5c17c3ca6ce275369720099791770ac7bbdce29d",
-      "studio_next/body_creative_session.py": "d8c12239fc94a539c59c5d12f29e7c3b6a5bcc6a",
-      "studio_next/test_body_creative_session.py": "917a7b3717f8abf74dfa958222397c40767e2215"
-    },
-    "negative": "On exact installed baseline (four targeted tests): persisted owner fact was forged by adapter mutating context; legacy/known pending decision measurement absent; failed model call measurement absent; actual installed 77-grant profile had no exact lookup index because 48 limit too low. Two failures and three errors reproduced.",
-    "correction": "Deep-copy model context and returned intent. Persist model-call wall time and bounded provider-reported usage with pending intent, preserve receipt on resume, measure dispatch separately, failed inference cannot inherit prior usage. Raise existing complete-or-absent retrieval count cap to 96; retain 4096-byte/160-byte ID bounds, no new dispatch grant.",
-    "local": "Exact installed wheel from #15174550542; exact parent hashes and editor.example.json hash checked; recovered candidate GREEN 74/74 body creative session, picture selection, durable graph, fabric, media vault tests; actual FFmpeg fixture renders. Not an independent model or creative acceptance.",
-    "acceptance": "Exact 3320ba88 hosted 28 success/1 in progress at observation; actual compositional model comparator still unrun.",
-    "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
-  },
-  "compositional_configuration_guard_20261127": {
-    "parent": "3320ba88cee133f26947098ce34f775a36657329",
-    "source_blobs": {
-      "studio_next/body_creative_session.py": "52e2234780caa9c05b0dcb10925212c253ddadf3",
-      "studio_next/test_body_creative_session.py": "2ddb931f3d241eb226158aeabf620a857a741537"
-    },
-    "negative": "Exact installed parent reproduced four resume configuration mismatch failures (sampling, timeout, max_tokens, image upload consent), one mid-call mutation dispatch, and one legacy pending decision dispatch without original configuration evidence. Equivalent reordered sampling control passes.",
-    "correction": "Persist canonical digest of configured sampling, timeout, response/token limits and adapter image/original-audio upload permissions; match original session before inference and before dispatch. No raw configuration or credentials persisted. Legacy active session without receipt is blocked, existing facts/pending intent retained; terminal sessions remain readable.",
-    "local": {
-      "run": 94,
-      "passed": 94,
-      "skipped": 0,
-      "failures": 0,
-      "environment": "Exact installed wheel, candidate two blobs, exact native editor example config; Python 3.13, real FFmpeg synthetic fixtures. No full native checkout or genuine inference."
-    },
-    "limits": "Host configuration continuity, not proof of model weights, external provider behavior, professional acceptance, or protection from a malicious in-process adapter. No expanded grants.",
-    "installed_parent": {
-      "run": 45945182492,
-      "artifact": 15174368688,
-      "sha256": "aa657722d44cf725d9539ea4b0699f67c0a72f7a7b776dc6e57905722cb999ac",
-      "tested_merge": "5457fd39482f8266bfb366bbf1443bf4853bc871",
-      "exact_tree_equivalence": true,
-      "manifest_verified": 24,
-      "tests_run": 1778,
-      "passed": 1748,
-      "skipped": 30,
-      "failures": 0,
-      "local_decode": "Complete three MP4s: mixed H264 320x480 57 frames/4.75s with AAC stereo; 2D 320x480 33 frames/2.75s with AAC stereo; 3D 256x256 24 frames/2s picture-only."
-    },
-    "hosted_parent": {
-      "success": 28,
-      "in_progress": 1,
-      "mlt_run": 45945182260
-    },
-    "active_indexed_retest": {
-      "run": 45945314825,
-      "job": 140328553996,
-      "source": "a5399047915a2a4061e0a3fe2e1798d0eb77039e",
-      "one_use_trigger_retired": "62b3c17ef5d5d61aec46591ef0e014d13ef1de7d",
-      "observed": "Terminal FAILED; inspect latest indexed_checkpoint_retest_20261127."
-    },
-    "acceptance": "Candidate affected tests passed; exact hosted candidate pending. G1-G4 remain open."
-  },
-  "indexed_checkpoint_retest_20261127": {
-    "run": 45945314825,
-    "job": 140328553996,
-    "source": "a5399047915a2a4061e0a3fe2e1798d0eb77039e",
-    "trial_parent": "3320ba88cee133f26947098ce34f775a36657329",
-    "retired_trigger": "62b3c17ef5d5d61aec46591ef0e014d13ef1de7d",
-    "artifact": 15174959264,
-    "artifact_sha256": "d7a5b31fb4241726e484d3183c98467227301fde3139a4bbfb2ca03e37f55c83",
-    "result": "FAILED_TURN_BUDGET_EXHAUSTED",
-    "turns": 48,
-    "reported_usage_turns": 47,
-    "reported_total_tokens": 547741,
-    "measured_model_wall_ms": 1255093.74,
-    "searches": 17,
-    "search_reported_tokens": 178911,
-    "search_wall_ms": 407203.779,
-    "model_write_receipts": 13,
-    "verified_export_receipts": 2,
-    "distinct_exports": 1,
-    "export_sha256": "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
-    "independent_decode": "Both ZIP entries byte-identical: 144 RGB frames, 640x360 H.264, 24/1 fps, 6s, stereo AAC 44100Hz; full RGB and PCM streams byte-identical locally. Original staged/native source SHAs agree. All saved project SHA receipts matched retained autosaves; first had 2 original clips; second only adds an empty video track; final adds two editable animated text clips at turns 41/42, saved 43, never re-exported. Prior model-selected samples 1/3/5 vs 0/2/4 seconds; full numeric audio read each. Original picture source correlation 0.9990, RGB MAE 2.635 at matched frame indices, no black frames; structural native source verifier explicitly does not attest render pixel provenance, preserve that limit.",
-    "failed_events": "Turns 7, 14 and 44 stale identity safe rejection; 45/46 host preconditions project_open/project_assets_available unknown; turn 31 truncated tool response; 17 search events, empty results at 36/38/39. No pair, no neural semantic hearing, no professional acceptance. Scope digest denotes project path+timeline ID, not content identity; actual full decode proves duplication.",
-    "comparison": "Prior indexed #45934918405 48 turns/17 searches/589619 reported tokens/1 output; latest 48/17/547741/2 paths but 1 digest. No causal efficiency or artistic win; direct arm had 2 distinct physical outputs but failed terminal acceptance."
-  },
-  "indexed_recovery_frontier_20261127": {
-    "parent": "fd648e50d41cf17ef68815db5e42b683bae1e239",
-    "source_blobs": {
-      "studio_next/native_creative_control.py": "7d2980233ec180e6966336381072fdd4f66caa63",
-      "studio_next/test_native_creative_control.py": "e01da471962884aeb20fad737b8bd3c8ab69b143"
-    },
-    "negative": "Exact installed source: stale bridge rejection clears project identity; indexed recovery get_project not selectable even if granted; model-chosen direct recovery rejected as unsearched. RED one error/one assertion failure. No-grant/invalid-schema controls pass.",
-    "correction": "Prioritize only actual installed granted READ get_project with valid empty inputs in indexed frontier after model identity invalidation; disappear after successful valid read. Provider sees exact contract. No automatic dispatch, grant expansion, cache trust or write replay.",
-    "local": {
-      "run": 266,
-      "passed": 260,
-      "environment_errors": 6,
-      "assertion_failures": 0,
-      "limits": "Exact installed controller/test source checked; missing repository scripts and optional MCP SDK. Four focused controls GREEN; not physical or neural acceptance."
-    },
-    "parent_ci": {
-      "success": 25,
-      "in_progress": 4,
-      "original_failed_job": 140335168274,
-      "run": 45947254008,
-      "diagnosis": "HTTP403 recovered, checksum Electron and Vite build succeeded; later silent build-step preflight failed, exact predicate unconfirmed. One targeted same-source non-model rerun requested; do not label pass."
-    },
-    "next": "Complete parent hosted gates without cancelling; integrate this tested candidate and validate exact-source gates. Investigate the no-content second render and uncompleted saved edit; compare matched compositional/direct routes only after evidence and within valid scope. No replay of spent trial."
-  },
-  "indexed_duplicate_feedback_20261127": {
-    "parent": "eb565a7a3da256532d89b6b2eff6bc1edd82b919",
-    "source_blobs": {
-      "studio_next/native_creative_control.py": "c85094fefa0d1cbcde696ed2e7a7f271d46208b9",
-      "studio_next/test_native_creative_control.py": "a53f4416d0cc03cce19bc1828e75f9bca3181cc5",
-      "studio_next/native_render_evidence.py": "965f03986d55493fed8c16620222d6ca1c4d8429",
-      "studio_next/test_native_render_evidence.py": "3ad14cfa04ddb30e6b531e8f9b7dab938b67616e"
-    },
-    "negative": "Real trial duplicate export at turn 33 not explicitly identified against prior fully reviewed same-scope bytes. Existing pair gate refused completion. RED two tests, three missing contract errors.",
-    "correction": "Reuse existing scoped, invalidation-aware pair state to report current verified export matching prior reviewed bytes. Does not count new perception, suppress reads, choose edits, grant completion or infer equivalence of different encodings.",
-    "verification": "Two focused tests GREEN, controls for distinct/absent verification, unrelated scope, absent prior complete A/V review, failed read and later write. Replay of original journal shows true immediately after verify turn 33 and false after new write turn 41; pair remains absent. Affected suite 254 run/249 pass/5 missing scripts or MCP imports/zero assertion failures.",
-    "installed_parent": {
-      "head": "fd648e50d41cf17ef68815db5e42b683bae1e239",
-      "run": 45947254432,
-      "artifact": 15176330121,
-      "zip_sha256": "c90d80223d18a751256774c89246542429ea9f8bb201052689749d165573892c",
-      "tested_merge": "0b62e26f6300ac654df43d9cd7b06752fe06ce35",
-      "tree": "04e4b2c9c72b3054ac2538e7609fb94642da3b6c",
-      "local_manifest": 24,
-      "tests": 1781,
-      "passed": 1751,
-      "skipped": 30,
-      "failed": 0,
-      "local_decode": "Three complete H264 exports: mixed 320x480/57 frames/4.75s stereo AAC 48kHz; 2D 320x480/33 frames/2.75s stereo AAC 48kHz; 3D 256x256/24 frames/2s video only. Exact installed controller/session source and test blobs match parent.",
-      "hosted": {
-        "success": 28,
-        "in_progress": 1
-      },
-      "loss_aware_rerun": "SUCCESS",
-      "mlt": 45947253893
-    },
-    "next": "Advance coherent tested candidate without cancelling parent verification. Actual neural improvement, human co-edit and professional acceptance remain unproved; no new inference or grant."
+  {
+   "id": "L",
+   "slug": "release_independent_professional_quality",
+   "implementation": "scoped_foundations_present",
+   "technical_evidence": "technical integrated foundation exists; no independent multi-genre professional release evidence",
+   "independent_field_acceptance": "NOT_ACCEPTED",
+   "owner_source_paths": [
+    "README.md",
+    "licenses",
+    "tooling",
+    "independent assessment"
+   ],
+   "evidence_prs": [],
+   "required_gate_ref": "docs/BUILD_BLUEPRINT.md §6"
   }
+ ],
+ "milestones": [
+  {
+   "id": "M-AUTH",
+   "kind": "technical",
+   "result": "MERGED_SCOPED",
+   "evidence": "host-owned discovery/grants, native source admission, journals",
+   "prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/301",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/303"
+   ],
+   "creative_acceptance": "NOT_PROVEN"
+  },
+  {
+   "id": "M-G1-OWN",
+   "kind": "technical",
+   "result": "MERGED_SCOPED",
+   "evidence": "owner CLI native pair A/V source/render and actual physical verification",
+   "prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/307",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/313"
+   ],
+   "creative_acceptance": "NOT_PROVEN"
+  },
+  {
+   "id": "M-G1-SENSE",
+   "kind": "technical",
+   "result": "MERGED_SCOPED",
+   "evidence": "model-selectable timed numeric A/V and gated original WAV transport (offline)",
+   "prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/317",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/319"
+   ],
+   "creative_acceptance": "NO_SEMANTIC_NEURAL_SUCCESS"
+  },
+  {
+   "id": "M-G1-HUMAN",
+   "kind": "technical",
+   "result": "MERGED_SCOPED",
+   "evidence": "X11 pointer-like edit, same source authority and refusal to override stale revision",
+   "prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/324",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/325",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/332"
+   ],
+   "creative_acceptance": "NO_REAL_HUMAN_AND_NEURAL_COEDIT_ACCEPTANCE"
+  },
+  {
+   "id": "M-G3-CREATE",
+   "kind": "technical",
+   "result": "MERGED_SCOPED",
+   "evidence": "editable graphics, original Blender source and physical picture+sound native editor revision",
+   "prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/338",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/339",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/340",
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/343"
+   ],
+   "creative_acceptance": "SCRIPTED_NOT_AUTONOMOUS"
+  },
+  {
+   "id": "M-G1-AV",
+   "kind": "technical",
+   "result": "MERGED_SCOPED",
+   "evidence": "5.1 source-attested physical sound + globally authored cues retained in native atomic A/V ripple (19/19 exact-head CI)",
+   "prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/349"
+   ],
+   "tested_code_head": "11fc1aef2de11b4790e50085039e430dcf39ef6e",
+   "merged_tree": "2d0857c0d003ade1e807f8cb2f6fc45a51704988",
+   "creative_acceptance": "SCRIPTED_NOT_AUTONOMOUS"
+  },
+  {
+   "id": "M-G1-SELECTED-RENDER-SNAPSHOT",
+   "kind": "technical",
+   "result": "PHYSICAL_TECHNICAL_DRAFT_UNMERGED",
+   "evidence": "Draft PR #356 code head 276d30ac9c648d487739bf9de06d07c98e3479a6: 13/13 GitHub technical workflows success, with independent synthetic native A/V artifact #14191830274 (16/16 file digests; 72/66/66 frames, complete relocatable 3-source closure and matching decoded relocated picture/sound) and installed release artifact #14190804292 (24/24 manifest digests; 1542 tests run, 1515 passed, 27 skipped, 0 failed; 57-frame 320x480 A/V film). Exact evidence and limits in EVIDENCE/INDEX. Source/custody/portability is technical, not neural creative, human coediting or professional acceptance.",
+   "prs": [
+    "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356"
+   ],
+   "creative_acceptance": "NOT_PROVEN"
+  }
+ ],
+ "failures": [
+  {
+   "id": "F-REAL-001",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run": 42711402879,
+   "job": 129481639892,
+   "details": "Qwen3.5 4B 46 decisions; 9068 vs 8192 context and final HTTP 400; wrong-profile mostly-black output; no qualifying reviewed revision",
+   "source_or_fix": "PR #311 already merged the source-compatible model-payload context dedup from still-open historical #289 (2026-11-12, 89990723aec8abb3b5c5eee79546c57de0591631); no accepted equivalent real-model retest",
+   "root_confidence": "context-overflow supported; entire creative failure not fully attributed",
+   "post_fix_real_model_retest": "NOT_PASSED",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42711402879",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-REAL-002",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run": 42754872382,
+   "job": 129626811890,
+   "details": "NVIDIA 120B five saved MP4 paths only two SHA; 1920x1080 vs 640x360 requested; no audio; turn21 truncated_tool_decision (no dispatch)",
+   "source_or_fix": "PRs #292/#293/#298 merged offline/physical guards; no accepted comparable new neural run; owner paid use deferred",
+   "root_confidence": "native h264_hd default explains dimension mismatch; creative and missing sound not fully closed",
+   "post_fix_real_model_retest": "NOT_PASSED",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42754872382",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-REAL-003",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run": 42669603529,
+   "job": null,
+   "details": "NVIDIA turn16 transport timeout ~90.057 seconds; no verified export; not verified HTTP429",
+   "source_or_fix": "PR #290 merged finite timeout/no-automatic-retry; later model failed different gates",
+   "root_confidence": "transport timeout observed",
+   "post_fix_real_model_retest": "NO_COMPLETE_ACCEPTED_FILM",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/42669603529",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-CI-004",
+   "kind": "TECHNICAL_CI",
+   "result": "FIRST_ATTEMPT_FAILED_RERUN_PASSED",
+   "run": 43680525680,
+   "job": 132710004217,
+   "details": "first installed Electron scene preflight failed after successful build; identical-head targeted rerun passed",
+   "source_or_fix": "PR #349 merged after 19/19 passing workflows, exact tested-tree match",
+   "root_confidence": "exact first-run predicate unknown",
+   "post_fix_real_model_retest": "NOT_APPLICABLE",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43680525680",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-REAL-004",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run": 43875955529,
+   "job": 133328916078,
+   "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07fe1a84c7249df8a76f8ec83f838c96358604d2: two identical SHA/decoded 640x360 24fps 6s H264/AAC outputs with native video+audio; 5 export_delivery_mismatch pre-dispatch rejections; 48-turn budget exhaustion; no accepted review pair.",
+   "source_or_fix": "Git commit 3c4b91e814ec0bc950f68e7a1bf384e8c1535021 later exposed owner-specific native export target metadata to the model; subsequent run #43883369538 produced distinct video but failed full G1.",
+   "root_confidence": "Exact model journal and original retained synthetic artifact ZIP #14230378968 independently inspected; source-cause of entire creative failure not fully proven.",
+   "post_fix_real_model_retest": "FAILED_NO_ACCEPTED_REVIEW",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43875955529",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-REAL-005",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run": 43883369538,
+   "job": 133354875086,
+   "details": "2026-11-16 authorized synthetic NVIDIA 120B at 07487c0babc36b7eaf6bc02f3a70b8e4b2334f85: two distinct conformant decoded 640x360 24fps 6s H264/AAC files, 107/144 RGB frame hashes different, same decoded 48kHz stereo PCM; real native project and video/audio; 6 safe output_exists pre-dispatch rejections; 48 turns exhausted, reviewed A/V pair absent; no semantic hearing.",
+   "source_or_fix": "Export target metadata fix was present. Current #356 exact head 00dcfc69c3d20455bbc875d2e8eef0406c9188f2 35/35 technical checks PASS but no succeeding comparable real model trial. Next isolate source-bound review pairing/model competence before spending another authorized trial.",
+   "root_confidence": "Retained artifact #14233632889 independently downloaded, ZIP SHA256 5f393460bcb8dca0de243148e458dfba92533de96f69dc658bc457f6e3efbd95, FFprobe/FFmpeg picture/audio decoding and native JSONL journal inspected.",
+   "post_fix_real_model_retest": "NOT_PASSED",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43883369538",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-REAL-006",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run": 43991467485,
+   "job": 133732842887,
+   "details": "2026-11-17 one explicitly owner-authorized synthetic-only NVIDIA Nemotron 3.5 Super VL 120B G1 trial at exact executing commit 10ef5a992acde37bd680976cb8a0a44aa35d12a6, 48 turns (46 submitted model tools), 118 host journal events, 13 model-selected native writes, 2 independently verified H264/AAC exports plus a third not verified. Three actual six-second 640x360 24fps/144-frame videos with 3 distinct RGB sequences and identical audible decoded PCM, physical first vs second 144/144 corresponding frames differ. First real model frame observation times [1,3,5] seconds versus second [0.5,2.6,4.7], no intersection, PCM unchanged: host correctly cannot certify revised A/V pair, though both cuts had full-duration numeric audio observation. Subsequent edits and third unverified output consumed budget; host_evidence_satisfied=false; artistic_quality_approved=false. Two safe output_exists pre-dispatch denials, no original owner media upload.",
+   "source_or_fix": "One-use guarded branch authorization 10ef5a992acde37bd680976cb8a0a44aa35d12a6 was revoked by 2ddef2aef87e2a0f50a27ebcc2b295b51a49b707, restoring exactly previously 35/35 CI-green source tree 1c9cfdd33d253b1a046a49d483671a1dcf044a4f. Offline TDD candidate in this PR surfaces earlier source-verified model-selected picture sample timestamps to the model for a comparable read; does not relax actual reviewed_render_pair acceptance, automatically dispatch reads, choose art or grant another paid trial.",
+   "root_confidence": "HIGH for incomparable sampled timestamps as immediate A/V-pair rejection: original model journal, pinned source state machine, separately independently decoded physical synthetic ZIP #14287639311 SHA256 93480cd1c2dbc0468506ffc32d6d78b03ecbb156fd67c2c59594692101906ede. No claim model would finish after feedback fix; professional/audio-semantics untested.",
+   "post_fix_real_model_retest": "NOT_RUN_GRANT_SPENT",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/43991467485",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-CI-010",
+   "kind": "TECHNICAL_CI",
+   "result": "FIRST_ATTEMPT_FAILED_RERUN_PASSED",
+   "run": 44917858593,
+   "job": 136887222391,
+   "details": "Original camera fixture failed native acknowledged save revision convergence; unchanged-source rerun job 137106897395 passed actual picture/audio/source and revision checks.",
+   "source_or_fix": "No raw upstream change; existing opt-in save-authority source fixes retained; first failure not resolved merely by rerun.",
+   "root_confidence": "Observed failed convergence predicate; exact timing mechanism not independently established.",
+   "post_fix_real_model_retest": "NOT_APPLICABLE",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/44917858593",
+   "failure_register": "project-brain/EVIDENCE/FAILURE_REGISTER.md"
+  },
+  {
+   "id": "F-REAL-20261125-VL-FULL-503",
+   "run": 45558490087,
+   "details": "Full catalogue model chose one read; HTTP 503 before first write.",
+   "source_or_fix": "Explicit opt-in indexed trial harness, verified in 45560515665; no claim provider fixed.",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45558490087",
+   "post_fix_real_model_retest": "NOT_PASSED",
+   "root_confidence": "Exact executed source and independently downloaded CRC/SHA256-verified synthetic artifact; no causal inference beyond observed failure.",
+   "failure_register": "project-brain/EVIDENCE/INDEX.md"
+  },
+  {
+   "id": "F-REAL-20261125-VL-INDEXED-503",
+   "run": 45560619414,
+   "details": "Indexed model chose acknowledged create and video import; HTTP 503 before timeline or export.",
+   "source_or_fix": "No blind repeat; transport availability outside BODY.",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45560619414",
+   "post_fix_real_model_retest": "NOT_PASSED",
+   "root_confidence": "Exact executed source and independently downloaded CRC/SHA256-verified synthetic artifact; no causal inference beyond observed failure.",
+   "failure_register": "project-brain/EVIDENCE/INDEX.md"
+  },
+  {
+   "id": "F-REAL-20261125-OMNI-SHAPE",
+   "run": 45561366838,
+   "details": "Corrected exact function surface; acknowledged create, then repeated malformed mixed input envelope, safe no-dispatch refusal and exhausted bounded corrections.",
+   "source_or_fix": "Strict decoder retained; model competence/protocol still open, no guessed argument repair.",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45561366838",
+   "post_fix_real_model_retest": "NOT_PASSED",
+   "root_confidence": "Exact executed source and independently downloaded CRC/SHA256-verified synthetic artifact; no causal inference beyond observed failure.",
+   "failure_register": "project-brain/EVIDENCE/INDEX.md"
+  },
+  {
+   "id": "F-REAL-20261125-OMNI-UNIFORM-IMPORT",
+   "run": 45565200710,
+   "run_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45565200710",
+   "kind": "GENUINE_MODEL",
+   "result": "FAILED",
+   "details": "Uniform wrapper contract passed run 45565052626; genuine run yielded two acknowledged writes, one schema rejection, then native placement error; downloaded saved project contains one WAV asset mislabeled video and zero clips; no exports. Raw model arguments and native error text were hashed, so exact rejected placement reason cannot be reconstructed.",
+   "source_or_fix": "Existing host import policy now rejects explicit visual category on existing conventional audio-only files before dispatch; tests on exact installed source red then 49/49 policy/client green. Does not auto-select category or prove model acceptance.",
+   "post_fix_real_model_retest": "NOT_PASSED",
+   "root_confidence": "Artifact CRC/SHA verified; pinned source prioritizes explicit category over filename inference. Observed misclassification and native placement failure are proven, causal connection to specific hidden placement error is not.",
+   "failure_register": "project-brain/EVIDENCE/INDEX.md"
+  }
+ ],
+ "open_gates": [
+  {
+   "id": "G1-AUTONOMY",
+   "priority": 1,
+   "state": "OPEN_CRITICAL",
+   "owner_outcome": "Genuine Brain creates original artistic picture AND sound with independent choices, native version and physical conformant output",
+   "success": "actual model decisions and first conforming editable saved native export; neither scripted plan nor claimed success",
+   "requirements": [
+    "C",
+    "G",
+    "I",
+    "J"
+   ],
+   "blocking_authorization": "bounded synthetic NVIDIA G1 authorized on 2026-11-22; private egress still prohibited"
+  },
+  {
+   "id": "G1-OBSERVE-REVISE",
+   "priority": 2,
+   "state": "OPEN_CRITICAL",
+   "owner_outcome": "Meaningful semantic time-aligned image/audio review and targeted model-authored improved revision",
+   "success": "two separately decoded conforming source-attested picture+sound outputs, different intentional edit, native reopen and independent critique",
+   "requirements": [
+    "C",
+    "G",
+    "J"
+   ],
+   "blocking_authorization": "bounded synthetic NVIDIA G1 authorized; local model optional; private egress prohibited"
+  },
+  {
+   "id": "G1-HUMAN",
+   "priority": 3,
+   "state": "OPEN",
+   "owner_outcome": "Human changes the same live native project, AI sees current head, continues without lost manual edits",
+   "success": "actual human-operable co-edit and saved/reopened untouched source plus conflict/rollback",
+   "requirements": [
+    "B",
+    "C",
+    "I",
+    "K"
+   ]
+  },
+  {
+   "id": "G2-FABRIC-COMPARISON",
+   "priority": 4,
+   "state": "EXPERIMENT_UNRUN",
+   "owner_outcome": "Measure whether minimal adaptive fabric earns its complexity vs existing native tools and sandboxed code",
+   "success": "held-out A/B/C creative/economic/fidelity/security outcomes across video, motion, 3D, audio",
+   "requirements": [
+    "C",
+    "D",
+    "E",
+    "G",
+    "J"
+   ]
+  },
+  {
+   "id": "G3-AL",
+   "priority": 5,
+   "state": "OPEN",
+   "owner_outcome": "Full professional A–L fields in one native source-aware production system",
+   "success": "domain-specific real editable results, physical evidence and independent professional acceptance",
+   "requirements": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L"
+   ]
+  },
+  {
+   "id": "G4-RELEASE",
+   "priority": 6,
+   "state": "OPEN",
+   "owner_outcome": "Safe installed owner product, legally correct self-hostable distribution, usable human UX and independent security/art review",
+   "success": "cold install, A–L acceptance, rights/license, benchmark, privacy, reliability, multi-genre owner studies",
+   "requirements": [
+    "A",
+    "K",
+    "L"
+   ]
+  }
+ ],
+ "open_prs_needing_overlap_review": [
+  {
+   "number": 288,
+   "head": "cd6ff58b7882e6d961af51169d6976e93cd47060",
+   "status": "OPEN_DRAFT",
+   "meaning": "historical Qwen local model trial proposal",
+   "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/288"
+  },
+  {
+   "number": 236,
+   "head": "22ae43d9dffac341155aba887a2947a1f133661c",
+   "status": "OPEN_DRAFT",
+   "meaning": "host-observed source/timeline affordances; compare exact current code",
+   "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/236"
+  },
+  {
+   "number": 202,
+   "head": "ab411623ae2f1ad22214f7512508e74fc70c7fc3",
+   "status": "OPEN_NON_DRAFT",
+   "meaning": "live native object identity fencing; compare exact current code",
+   "url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/202"
+  }
+ ],
+ "historical_artifact_retention": {
+  "verified_at": "2026-11-15",
+  "records": [
+   {
+    "run": 42711402879,
+    "artifact_id": 13722569378,
+    "scheduled_expires_utc": "2026-11-24T00:30:23Z",
+    "expired_at_check": false
+   },
+   {
+    "run": 42754872382,
+    "artifact_id": 13735184585,
+    "scheduled_expires_utc": "2026-11-17T04:33:33Z",
+    "expired_at_check": false
+   },
+   {
+    "run": 43680525717,
+    "artifact_id": 14148286780,
+    "scheduled_expires_utc": "2026-11-22T05:20:24Z",
+    "expired_at_check": false
+   }
+  ],
+  "policy": "GitHub artifact links are time-limited. Do NOT claim full trace bytes in Markdown or copy private media/keys into public repository. Arrange separately authorized safe retention where needed."
+ },
+ "update_protocol": {
+  "when": "only after meaningful source change, negative run, owner delta, or changed acceptance status",
+  "requirements": [
+   "refresh live main/PRs/runs before editing snapshot",
+   "retain exact SHA, PR, run/job/artifact refs and first negative outcomes",
+   "separate implemented technical foundations from creative/independent acceptance",
+   "mark merged source fix separately from post-fix real model retest",
+   "do not infer completion from passing CI or JSON fields",
+   "preserve old records in Git and EVIDENCE/INDEX",
+   "do not paste actual private inputs, keys, or whole raw traces in public Git",
+   "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
+   "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
+  ],
+  "next_action": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
+ },
+ "latest_ci_checkpoint": {
+  "source": "5b9efc497717f81e63c26c14ff621af58201bc57",
+  "observed_date": "2026-11-27",
+  "checks_observed": 29,
+  "counts": {
+   "success": 29
+  },
+  "context": "All exact-head workflows success; tested merge tree equals source tree. Actual local/hosted jobs skipped. Independent installed CI download integrity verified; latest ZIPs not locally re-decoded in this review.",
+  "creativity_release_accepted": false,
+  "merge_test_commit": "cc11df9ea3e070d7d64cf4c7dc9e9c0ab4565d8d",
+  "exact_equal_tree": "fadccded3cd51b8641bd074159e0d0127fb8741a",
+  "previous_source_final_counts": {
+   "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
+   "success": 29
+  },
+  "actual_model_jobs_skipped": [
+   140149407365,
+   140149059289
+  ],
+  "installed": {
+   "run": 45889714441,
+   "job": 140149056589,
+   "tests_run": 1755,
+   "pass": 1725,
+   "skip": 30,
+   "failed": 0,
+   "independent_ci_job": 140156764253,
+   "artifact": 15152416041,
+   "published_and_ci_download_sha256": "9a955efceda8c5c949d1b86354a96e464434db632ad5730a82a0c8ffd2d3d946",
+   "independent_ci_manifest_files": 24,
+   "independent_ci_publication_receipts": 5,
+   "local_redownload_verified": false
+  },
+  "mlt": {
+   "run": 45889714235,
+   "job": 140149056186,
+   "tests_run": 1755,
+   "pass": 1754,
+   "skip": 1,
+   "failed": 0
+  },
+  "source_gate": {
+   "run": 45889714101,
+   "job": 140149056088,
+   "sdk_tests_run": 258,
+   "node_tests": 42,
+   "universal_job": 140149056131,
+   "universal_tests": {
+    "run": 232,
+    "pass": 228,
+    "skip": 4,
+    "failed": 0
+   }
+  },
+  "unified": {
+   "run": 45889714245,
+   "job": 140149517011,
+   "artifact": 15151735553,
+   "published_sha256": "604b5d78b39631b069a26ed541927e9c187dd6432ff27de5263e393efa3dd19f",
+   "scripted": true,
+   "local_redownload_verified": false
+  }
+ },
+ "latest_artifact_audit_20261126": {
+  "head": "642565f1252f10caf65a1aa6f434672d25dcc3ba",
+  "main": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+  "workflow_success": 29,
+  "installed": {
+   "run": 45740635402,
+   "tests": 1736,
+   "pass": 1706,
+   "skip": 30,
+   "artifact": 15082046544,
+   "zip_sha256": "7b3182e3c55ba123c273e842f77e67e571f37a7946489d90e7ff0ffe5d9ea621",
+   "manifest_pass": 24,
+   "ffmpeg_decode_pass": 3
+  },
+  "mlt": {
+   "run": 45740635652,
+   "tests": 1736,
+   "pass": 1735,
+   "skip": 1
+  },
+  "electron": 45740635512,
+  "browser": 45740635468,
+  "model_jobs_skipped": [
+   45740635638,
+   45740635629
+  ],
+  "failed_real_runs": [
+   {
+    "run": 45738534918,
+    "artifact": 15081186723,
+    "zip_sha256": "3fa8af4f57d0e3a29ea8145bcfaf45c8427293e7eaefa30bb6c9ea68b652c43d",
+    "write_acks": 7,
+    "verified_exports": 0,
+    "terminal": "native_render_snapshot_failed"
+   },
+   {
+    "run": 45740294453,
+    "artifact": 15081337311,
+    "zip_sha256": "06cc972bfe825ce5d0fa280a2256593433f6e79ffe622d1303a402ddee286a11",
+    "write_acks": 6,
+    "verified_exports": 0,
+    "terminal": "stale identity cleared project snapshot; turn 23 preview rejected",
+    "correction": "Refuse source-bound image preview before dispatch without trusted project observation; model selects get_project; retain exact JPEG/identity validation.",
+    "regression": "added; execution pending"
+   }
+  ],
+  "acceptance": "G1/G1-HUMAN/G2/G3/G4 OPEN; no new cloud consent or independent acceptance"
+ },
+ "live_branch_ancestry_20261126": {
+  "status": "ALL_REF_SOURCE_COMPARISON_NOT_PRODUCT_ACCEPTANCE",
+  "baseline": "2b626445ecabd3a2837ac549a98ba9dcda94b96d",
+  "run": 45737776415,
+  "artifact": 15079562880,
+  "zip_sha256": "9af70a197570059aadbe4f8f726bb1bb1bfca2c9c508ca4366495f521825a468",
+  "refs": 472,
+  "snapshot_refs": 459,
+  "ancestor": 149,
+  "identical": 1,
+  "ahead_audit_only": 1,
+  "diverged": 321,
+  "unique_old_missing_code_sets": 17,
+  "old_stack_branches_same_7_path_set": 48,
+  "pr189_old_absent_names": 43,
+  "no_bulk_merge": true,
+  "evidence": "project-brain/EVIDENCE/2026-11-26-BRANCH-ANCESTRY-AND-NATIVE-SAVE-CUSTODY.md",
+  "current_refs": 478,
+  "additional_refs_compared": 6,
+  "followup_source": "642565f1252f10caf65a1aa6f434672d25dcc3ba"
+ },
+ "g1_autosave_custody_20261126": {
+  "status": "PHYSICAL_INSTALLED_PASS_GENUINE_MODEL_NOT_ACCEPTED",
+  "real_run": 45735804964,
+  "real_artifact": 15078888361,
+  "zip_sha256": "97fde7d322af5b09e5338313e0964d2c271e65776a395947cce8a5a9fe2e83a2",
+  "native_write_acks": 7,
+  "first_export_ack": true,
+  "verified_movie": false,
+  "three_real_autosaves_same_non_clock_content_sha": "14ba70dcfe274ee70cb865485ebb2b01e5a98b4e409e7eb8feb09ab21a36e6f1",
+  "exact_green": "94d33d6c5919b6af02c85783d0456b42455acb46",
+  "red_green_run": 45739025215,
+  "adjacent_pass": 185,
+  "preservation": "Only 2 editor modified clocks may change between real model save and render; all creative and original media SHA stay equal; save witnesses separate from native rendered-revision registry.",
+  "no_automatic_write_replay": true,
+  "full_g1": "NOT_ACCEPTED",
+  "physical_e2e_run": 45740635512
+ },
+ "g1_post_review_second_export_guard_20261125": {
+  "source": "61cce9a78b44986e282102260c421d0df6204685",
+  "real_negative_run": 45632856001,
+  "real_negative_artifact": 15033430161,
+  "source_event": "second export was model-selected and host-ACKed after verified first picture/audio, but before any post-review native content revision; capture did not attest a distinct saved native source",
+  "scope": "Strict reviewed A/V, after first physically verified, frame-and-full-audio-observed export; reject second committed export until model-selected content revision (no automatic edit or write retry).",
+  "red": "2998ddd22388d9882aa7b4e46d55754188cd20d6",
+  "green": "61cce9a78b44986e282102260c421d0df6204685",
+  "run": 45666106360,
+  "red_failure": 1,
+  "adjacent_green_tests": 193,
+  "real_model_retest": "NOT_RUN",
+  "professional_quality": "NOT_ACCEPTED"
+ },
+ "consolidation": {
+  "owner_priority": "2026-11-26",
+  "working_branch": "workstream/g1-existing-owner-project-av-snapshot-20261115",
+  "main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
+  "source_at_audit": "766dd9d0076c442f364124b23d1c04412581d184",
+  "observed_refs": 478,
+  "distinct_tips": 476,
+  "markdown_files": 35,
+  "branch_retirement": "NOT_READY_FOR_DELETE",
+  "audit_workflow": ".github/workflows/zx7-consolidation-audit.yml",
+  "previous_exact_snapshot": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/766dd9d0076c442f364124b23d1c04412581d184/project-brain/EXECUTION_LEDGER.json",
+  "audited_source": "56b55a6b44bdabd1311b69514a3f5311497339c6",
+  "run": 45862198310,
+  "artifact": 15138861698,
+  "artifact_zip_sha256": "19bb42b5fcac593cc821dda450be46aa583bca921bdc2885ed9397a5b7d85bfb",
+  "bundle_sha256": "09e087440f6225e6c6a83ad7ff25d62a95c4d3d406f3fb8c428ee3e174a5d7b5",
+  "restore": "478_OF_478_REMOTE_TIPS_CI_AND_LOCAL_RESTORE_PASS",
+  "historical_markdown_paths": 39,
+  "historical_markdown_path_blob_variants": 388,
+  "relative_links_checked": 282,
+  "broken_links": 0,
+  "branch_path_variants": 1096,
+  "exact_active_object": 126,
+  "reachable_canonical_history_object": 385,
+  "unmatched_object_variants": 585,
+  "source_review_variants": 221,
+  "regression_test_review_variants": 142,
+  "merge_simulation": {
+   "ancestor": 150,
+   "clean_same_tree": 32,
+   "clean_changed_tree": 70,
+   "conflict": 226
+  },
+  "historical_commits_not_reachable": 1683,
+  "nonmerge_patch_id_equivalent": 91,
+  "semantic_review": "INCOMPLETE; one missing historical behavior actually reproduced and restored. Structural equivalence does not establish domain acceptance.",
+  "archive_tag_intended": "archive/zx7-all-branches-20261126",
+  "archive_tag_status": "VERIFIED_REMOTE_TAG_AND_INDEPENDENT_478_REF_RESTORE",
+  "current_doc_and_tests": {
+   "controller_pass": 150,
+   "brain_pass": 16
+  },
+  "archive_tag_commit": "cb3121df28ec12da391dac42a4485c3c1bb83213",
+  "archive_verified_run": 45863302941,
+  "archive_verified_jobs": [
+   140059618643,
+   140059765386,
+   140060445380
+  ],
+  "archive_audited_source": "b124d560e0920c76b3cc0d9c4d6cc1543d8ba28f",
+  "archive_inventory": "https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/cb3121df28ec12da391dac42a4485c3c1bb83213/branch-retirement-review.tsv",
+  "latest_tag_counts": {
+   "historical_markdown_path_blob_variants": 389,
+   "exact_active_object": 125,
+   "reachable_historical_object": 386,
+   "unmatched_object_variants": 585
+  },
+  "latest_review": {
+   "historical_exact_source": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/4e2c4338841e77f601443cfc55f986c53437b183/project-brain/EXECUTION_LEDGER.json",
+   "field": "consolidation.latest_review",
+   "status": "Full detailed archive review retained at immutable parent; targeted reuse remains current."
+  },
+  "followup_source_review": {
+   "historical_exact_source": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/4e2c4338841e77f601443cfc55f986c53437b183/project-brain/EXECUTION_LEDGER.json",
+   "field": "consolidation.followup_source_review",
+   "status": "Full detailed archive review retained at immutable parent; targeted reuse remains current."
+  }
+ },
+ "history": {
+  "source": "56b55a6b44bdabd1311b69514a3f5311497339c6",
+  "full_ledger_url": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/56b55a6b44bdabd1311b69514a3f5311497339c6/project-brain/EXECUTION_LEDGER.json",
+  "archived_keys": [
+   "body_gateway_read_only_discovery_2026_11_17",
+   "native_scene_save_convergence_ci_2026_11_17",
+   "indexed_brain_verified_wav_affordance_2026_11_17",
+   "explicit_model_wav_transport_gate_2026_11_17",
+   "matching_native_av_review_frontier_2026_11_17",
+   "native_live_revision_vs_volatile_snapshot_2026_11_17",
+   "editorial_installer_source_parity_2026_11_17",
+   "whole_system_durable_media_witness_2026_11_18",
+   "ci_runner_mirror_2026_11_18",
+   "ci_source_native_ffmpeg_environment_2026_11_18",
+   "omni_synthetic_trial_20261118",
+   "native_function_recovery",
+   "omni_native_recovery_trial",
+   "branch_integration_review",
+   "exact_head_technical_verification_2026_11_22",
+   "planar_vfx_color_integration_2026_11_22",
+   "exact_head_followup_20261122",
+   "existing_scipy_branch_port_20261122",
+   "browser_gate_repair_20261122",
+   "current_synthetic_trial_and_body_audit_20261122",
+   "historical_checkpoint_archive",
+   "g1_native_timeline_observation_20261124",
+   "g1_indexed_omni_asset_observation_20261125",
+   "g1_source_current_save_noop_20261125",
+   "body_verified_route_checkpoint_20261125",
+   "integration_batch_20261125",
+   "branch_audit_20261125",
+   "g1_super_vl_retained_20261125",
+   "source_candidates_20261125",
+   "latest_integrated_verification_20261125"
+  ],
+  "policy": "Exact prior fields remain in immutable reachable Git source. Retrieve by key as needed. No negative evidence or owner requirement revoked. This is a current typed index, not a duplicate historical diary."
+ },
+ "owner_delta_20261126": {
+  "scope": "whole A–L studio; no mandatory video-first serial gate",
+  "runtime": "compatible replaceable Brain via executable capability discovery, typed native actions, state and feedback, no runtime Markdown/manual creative prompt pack",
+  "acceptance": "unchanged; distinguish transport instructions and user intent from engineered creative scripts"
+ },
+ "latest_installed_artifact_audit": {
+  "head": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
+  "merge_test_commit": "7ae3747e800dfb9b830fd078627db70d80d7f7c7",
+  "exact_equal_tree": "3e50bef8f8c02d987dbaa5f118d5f4515153f55a",
+  "installed": {
+   "run": 45870260276,
+   "artifact": 15143422540,
+   "zip_sha256": "8849f64710815d87975175ab2b3d7d1d15a84114d8d24ee792133038094c39e3",
+   "tests_run": 1743,
+   "pass": 1713,
+   "skip": 30,
+   "failed": 0,
+   "manifest_verified": 24,
+   "physical_mp4_full_decode": 3,
+   "sqlite_integrity_pass": 2
+  },
+  "unified": {
+   "run": 45870259932,
+   "artifact": 15142442764,
+   "zip_sha256": "5fb10712b0915be50439562a5c9f56894f153bbc83cb9ab6c2024df889296b4d",
+   "manifest_verified": 16,
+   "physical_mp4_full_decode": 4,
+   "scripted": true
+  },
+  "native": 45870260347,
+  "source_gate": 45870260362,
+  "brain": 45870259833,
+  "actual_model_jobs_skipped": [
+   140083604936,
+   140083534559
+  ],
+  "independent_professional_acceptance": false
+ },
+ "owner_delta_20261127": {
+  "assessment_source": "5b9efc497717f81e63c26c14ff621af58201bc57",
+  "assessment_path": "project-brain/EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md",
+  "assessment_blob": "e2247fe926a01ff3a44343d873f94653aa360528",
+  "scope": "owner approved engineering approach; documentation first then execution; full A-L",
+  "strategy": "outcome-first, isolate critical uncertainties, deterministic host coordination without artistic substitutions, staged verification, targeted archival reconciliation on verified baseline",
+  "retirement": "NOT_READY_FOR_DELETE",
+  "consent": "unchanged synthetic-only bounded policy",
+  "proof": "no gate accepted by documentation"
+ },
+ "critical_path_coordination_20261127": {
+  "baseline": "c02c2d0b6989eed4b0a9e7232ba79c2e18012221",
+  "source_blobs": {
+   "studio_next/native_render_evidence.py": "bf734855f314bf0d992ed11ba86bab6012f1ccda",
+   "studio_next/native_creative_control.py": "aa6709dc61f8c83f904f747fa3050bce61ae4527",
+   "studio_next/native_creative_audit.py": "72c7be04bf3562ef96531cd0c70fe7f589732e28",
+   "studio_next/body_editor_mcp.py": "ecaaceea4883cde93724f68cd7812a6f7a9e0ee9",
+   "studio_next/test_body_editor_mcp.py": "42beba2ac3c0fd655c715487f3605e5a013564de",
+   "studio_next/test_native_creative_control.py": "56c1de9049586333b553bea8d867ede8622925c2"
+  },
+  "causal_gap": "Existing model-selected AV window delivered source-bound frames and numeric PCM but strict pair gate credited only separate frame/audio calls.",
+  "matched_control": {
+   "decision_turns": 10,
+   "native_calls": 9
+  },
+  "matched_candidate": {
+   "decision_turns": 8,
+   "native_calls": 7
+  },
+  "scope": "Scripted identical evidence fixture only; 20% fewer decision turns, not measured neural speed/cost or artistic quality.",
+  "red": "Combined full coverage exhausted budget on baseline; separate route passed.",
+  "green": "Both routes accepted technical pair, partial/overstated coverage rejected; altered receipt values refused by auditor.",
+  "local": {
+   "eligible_tests": 201,
+   "passed": 201,
+   "limitations": "Broader runs had missing MCP SDK (3) and repository-only scripts (2); not full suite. Added real decoder MCP comparison awaiting CI."
+  },
+  "acceptance": {
+   "professional": false,
+   "genuine_model": false,
+   "exact_source_ci": "29/29 workflows SUCCESS at f676146e7a95da42fd39eb62d72154e2bce1af54; actual model jobs skipped"
+  },
+  "guard": "Existing grants, model-selected action, frame separation, verified duration, actual PCM and hash binding; no semantic listening or approval inferred. No new provider spend.",
+  "next": "Baseline physical parity passed. Qualify provider/model and run comparable genuine synthetic trial only within exact-source, one-use consent; no available dispatch action in current connector.",
+  "physical_mcp_parity": {
+   "run": 45894468630,
+   "jobs": [
+    140164828950,
+    140164829134,
+    140164829172
+   ],
+   "result": "SUCCESS on Python 3.13/3.12/3.11; real SDK + independent FFmpeg + source-bound negatives; not neural"
+  }
+ },
+ "critical_path_timed_feedback_20261127": {
+  "baseline": "f676146e7a95da42fd39eb62d72154e2bce1af54",
+  "source_blobs": {
+   "studio_next/native_creative_control.py": "8445235d5b213d36d36fba51e0e05e69bd623aab",
+   "studio_next/test_native_creative_control.py": "56cd5068850e12a04a9027cbcb565953c4a4c8bf"
+  },
+  "causal_gap": "Source-derived counterexample: a single still plus full numeric audio hid remaining separated timed-picture requirement from the indexed model frontier. This is an interface gap, not proof that it caused any historical trial failure.",
+  "correction": "Retain generic still evidence; report separated source-bound timed sample coverage independently and keep the already-granted timed read selectable. The pair acceptance gate, native writes, authorization and artistic judgment are unchanged.",
+  "local": {
+   "red": "Source-derived isolated method reproduction: still incorrectly counted as timed readiness; assertion failed.",
+   "green": "5/5 scoped Python excerpt tests passed, including narrow/invalid/mismatched samples, combined window, failed read and write revocation.",
+   "limitations": "No repository checkout in current runtime; connector-only source access and no GitHub DNS. Full integrated controller regression and actual CI pending."
+  },
+  "acceptance": {
+   "exact_source_ci": "24/29 SUCCESS; 5 FAILURE at d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
+   "genuine_model": false,
+   "professional": false
+  },
+  "next": "Verify exact candidate CI. Only after stable baseline, qualify actual model/provider and creative interface; no connector dispatch.",
+  "hosted_regression": {
+   "source": "d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
+   "success": 24,
+   "failure": 5,
+   "runs": [
+    45926146560,
+    45926146497,
+    45926146559,
+    45926146423,
+    45926146408
+   ],
+   "observed": "test_indexed_same_time_av_comparison_keeps_verified_native_reader_visible: already_comparable and invalidated_by_write expected TIMED_FRAMES absent, actual present; Python 3.11–3.13 and shared suites.",
+   "diagnosis": "Older pair fixture uses abbreviated image hashes, stricter readiness requires 64-character digests. Source-supported candidate explanation; write invalidation needs independent reproduction. Not a proven root cause.",
+   "genuine_model": false,
+   "professional": false
+  },
+  "fixture_correction": {
+   "parent": "5023d44e125c60ce895de35493b8c953c53cb98c",
+   "source_blobs": {
+    "studio_next/test_native_render_evidence.py": "0d8c5070ca933a8b5d696a5fcd1f41e62a4dd668",
+    "studio_next/test_native_creative_control.py": "2350a20114e9555dcccff9fe816c23b8b5e157b8"
+   },
+   "cause": "Shared old pair fixture used one-character hashes; invalidation injected add_text_clip absent from fixture write grants. Source-derived isolated current-evidence reproduction: two original assertions fail; realistic hash and admitted update_text_clip ACK pass both. No production validation relaxed.",
+   "verification": "Exact parent 385534021c47efdecf70685e5f54095ea37e3d2d 29/29 CI SUCCESS (actual model jobs skipped); revision and Omni Python 3.11–3.13 passed; source apt missing ffmpeg recovered on targeted unchanged-source retry. Actual controller RED/GREEN 11 tests; previous broader run 222 run/216 pass/6 environment import errors, no assertions failed. Details PR #356 comment 7208810798.",
+   "next": "Baseline technical regression closed; no genuine model or professional acceptance."
+  }
+ },
+ "critical_path_delivery_affordance_20261127": {
+  "baseline": "385534021c47efdecf70685e5f54095ea37e3d2d",
+  "source_blobs": {
+   "studio_next/native_creative_control.py": "7e72f643708623936e617d59360382c7fa5df10e",
+   "studio_next/test_native_creative_control.py": "63bc3c1ac42bed39d91bcc501dd14a3270a7672e"
+  },
+  "negative": {
+   "real_run": 45731089541,
+   "artifact": 15078171115,
+   "sha256": "47c46e631c1cd6e691199d906a3c4ab4c5e1134573ad049f335b61fd328c35f0",
+   "facts": "88 events, 37 decision turns, 14 searches, 2 stale source refusals, save at turn 31, search again at 32, zero exports. Exact causal contribution of visibility not established."
+  },
+  "correction": "Expose one already-granted source-bound save/export/verify affordance from positive live clip count, current save and latest captured render. No automatic native action, grant or artistic choice; current destination evidence stops repeated verify visibility.",
+  "matched_scripted": {
+   "baseline_delivery_decisions": 6,
+   "candidate_delivery_decisions": 3,
+   "identical_native_call_sequence": true,
+   "red": "4-turn baseline executed save and render but exhausted before verify",
+   "green": "Matched controller and auditor fixture passed, including missing/empty project, capture disabled, invalidated evidence, malformed capture, wrong grant and later edit."
+  },
+  "local": {
+   "run": 223,
+   "pass": 217,
+   "assertion_failures": 0,
+   "environment_import_errors": 6,
+   "limitations": "Reconstructed exact parent blobs from installed wheel; no complete checkout, MCP SDK or repository-only scripts. Actual local model/provider absent."
+  },
+  "acceptance": {
+   "exact_candidate_ci": "29/29 SUCCESS at fce6049bbee21ad65a3421e383a862644d1aa364; genuine indexed trial FAIL (see indexed_trial)",
+   "genuine_model": false,
+   "professional": false
+  },
+  "next": "Both single arms failed final completion. Direct mode removed 17 searches and reached transient reviewed pair, with 2.23x reported tokens and less wall time. Do not infer statistically proven architecture preference. Inspect completion/revision handoff and stale filename correction; no paid blind rerun.",
+  "parent_installed_artifact": {
+   "run": 45932518653,
+   "artifact": 15169717251,
+   "source_commit": "f4fb523f0c4c0334cb2e8f514092c3d74093318e",
+   "tree_equivalent_to": "385534021c47efdecf70685e5f54095ea37e3d2d",
+   "sha256": "4130f18bdbda3cbf91262384a144e4f6360394983e1625f978756e0bfcc62f87",
+   "manifest_verified": 24,
+   "tests": {
+    "run": 1757,
+    "passed": 1727,
+    "skipped": 30,
+    "failed": 0
+   },
+   "physical_decode": "Full mixed:57 frames 320x480 4.75s AAC stereo 48k; 2D:33 frames 320x480 2.75s AAC stereo; 3D:24 frames 256x256 2s video-only; full FFmpeg decode successful. Scripted physical proof only."
+  },
+  "indexed_trial": {
+   "run": 45934918405,
+   "source": "c5d5de094f6d61e181b5c10088b47cf68d646a19",
+   "revoked": "1096550254f2e5c59c621880d3de171eec0716f8",
+   "artifact": 15171390542,
+   "sha256": "c1f880a29113a4ffa967deebf66a7be7544f51b7110986bdb5fec2f510ddde86",
+   "status": "FAILED: turn_budget_exhausted, no second export/pair",
+   "events": 117,
+   "turns": 48,
+   "searches": 17,
+   "reported_tokens": 589619,
+   "search_tokens": 212272,
+   "model_ms": 1026490.065,
+   "native_mcp_ms": 1925.473,
+   "write_acks": 11,
+   "export_verified": 1,
+   "first_export_sha": "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
+   "receipt": "ZIP CRC+SHA match; independent ffprobe and full FFmpeg decode 640x360 H264 24fps 144 frames/6s AAC; saved native source SHA verified; no rendered-original pixel proof, semantic listening or quality approval."
+  },
+  "direct_trial": {
+   "run": 45937037913,
+   "source": "e4abbd93c6aa82a3593e1014dd069fac05d68f23",
+   "revoked": "9d27019f0a8b2e0aecd29ad954cc4cbc51322807",
+   "same_runtime_parent": "fce6049bbee21ad65a3421e383a862644d1aa364",
+   "request": "ZX7_SUPER_VL_G1_DIRECT_CATALOG_20261127",
+   "status": "FAILED terminal turn_budget_exhausted; transient pair passed then revoked by later model edit",
+   "scope": "Same source/model/brief/48-turn budget; only existing full vs indexed catalog route changes. Whole-interface comparison, not single-factor internal ablation or repeated controlled trials.",
+   "artifact": 15171327555,
+   "sha256": "438d92a0b030ace86723a61aafc03b8cf91618d80207eb2e283601e8fcd0c684",
+   "events": 135,
+   "turns": 48,
+   "searches": 0,
+   "reported_tokens": 1315967,
+   "reported_prompt_tokens": 1251098,
+   "reported_completion_tokens": 64869,
+   "model_ms": 578863.636,
+   "native_mcp_ms": 3390.493,
+   "write_acks": 14,
+   "export_verified": 2,
+   "export_shas": [
+    "9da3574b0244e54cfbc9131d3f61482f2a132e7106a93721b22f49c411f8afbd",
+    "31391ea2abd493e461b3d597cb97c611b9dbe9e89c00c3a04d34c08bed3c8cd7"
+   ],
+   "saved_render_shas": [
+    "29d6785bd0dee6e0c3288a4730f555b1734190e596a79cf65b121d0007b9b893",
+    "8ff5dc05b4bcae9256b87d98825606a6c0afbdefe63820fb6b37a5e97b600561"
+   ],
+   "prefix_observation": "Actual pair comparator returns both exports after turn 41/seq 118, and None after turn 42/seq 120 acknowledged text edit; final two exports rejected output_exists; no automatic replay. Exact retained render-time autosave hashes match. Independent ffprobe and full decode both six-second 640x360 H264 24fps 144 frames, 79/144 RGB frames differ, identical decoded AAC PCM, RMS 0.05555946. No final model finish, semantic hearing, independent quality or rendered-original pixels proof."
+  },
+  "checkpoint_followup": {
+   "observed": "Direct model received turn index, not configured remaining turn budget; at turn 42 six decisions remained after actual prefix pair readiness.",
+   "change": "Expose host-verified current-required-evidence boolean and exact max/remaining decisions; compute missing evidence once, preserve independent finish/revise choice, later-write invalidation and actual grants.",
+   "red": "Missing decision_turn_budget KeyError",
+   "green": "Model fixture chooses additional edit after readiness; evidence revoked, reverified, independently finishes. 215 affected run/210 pass/5 missing MCP and repo script import errors; zero assertion failures.",
+   "acceptance": "Local protocol only; genuine benefit unverified, no new paid inference."
+  }
+ },
+ "reused_archived_scope_20261127": {
+  "research": "cea19dadc38cccb212e9d37331ca1869d200b724",
+  "scheduler": "633348babde51ba037bf1917fe1f051bd2515aae",
+  "source": "Existing exact 8 blobs; matching unchanged parent blobs, no reimplementation. Add 3 read-only public metadata providers and explicit source choice, preserve network/rights gates; truthful scheduler state label.",
+  "local": "Scheduler RED assertion true vs false; GREEN 17/17. Research RED provider kwarg unsupported; exact four production + test blobs match. 63 affected tests: 58 pass, 4 SDK skips, 1 no-display error, targeted desktop Xvfb rerun passes (59 distinct passed). Real public endpoints/SDK and CI pending.",
+  "acceptance": "candidate, not full public web, domain or release acceptance",
+  "live_followup": {
+   "run": 45937275501,
+   "observed": "Cleveland success; NASA empty because all three live Apollo IDs have spaces; Europe PMC runner request failed, independent same-query HTTP 200 JSON returned; runner cause not proven.",
+   "correction": "Allow bounded interior ASCII spaces in NASA ID and quote URL segment; reject path and control characters. Exact RED→GREEN; 71 run/67 pass/4 optional SDK skips.",
+   "physical_oracle": "Four synthetic aligned, offset, sound-only, picture-only controls; known target detects brief red event missed by equal-count uniform samples; FFmpeg decoded PNG and audio bins verified; no neural or artistic acceptance.",
+   "native_ci_negative": "45937275794 job 140303602801 Microsoft apt repository HTTP 403 before tests; not a source regression.",
+   "acceptance": "Exact new head live verification pending.",
+   "latest_live": {
+    "run": 45937892821,
+    "initial": "30/30 offline research; NASA live 3 reference leads; EPMC timeout",
+    "diagnostic": 45938105014,
+    "diagnostic_result": "Exact query HTTP 200 in 2.733s, 3 accepted records; p53 control timed out. Intermittent transport, not proven parser defect.",
+    "retry": "SUCCESS attempt 2, unchanged source"
+   },
+   "repeated_transport": {
+    "run": 45938988502,
+    "job": 140308669885,
+    "result": "Europe PMC failed again; earlier exact same query succeeded independently and on unchanged-source live retry.",
+    "correction": "One additional same-URL public GET only for exact Europe PMC metadata endpoint on direct/wrapped TimeoutError; 10s socket timeout per attempt, no redirect/status/JSON/other provider/loopback retry.",
+    "verification": "RED: recovery missing, attempts 1 instead of 2; GREEN direct/wrapped timeouts, persistent timeout terminal, other errors single attempt. 31 tests run/27 pass/4 local MCP skips. Real live CI pending."
+   }
+  }
+ },
+ "self_contained_source_custody_20261127": {
+  "baseline": "4e2c4338841e77f601443cfc55f986c53437b183",
+  "baseline_ci_observed": {
+   "success": 27,
+   "in_progress": 2
+  },
+  "red": "Actual HLS file containing only a separate TS reference accepted as MP4, MP3 and FLAC custody; delivery and timeline probes also accepted. All five assertions failed independently.",
+  "fix": "Restrict self-contained video input demuxers to MOV/Matroska/WebM families and local file/pipe protocols at probe, full decode, timeline render and frame/audio readers; MP3/FLAC ingest uses matching demuxer. No remote/playlist imports inferred. Does not replace OS sandbox or solve all decoder vulnerabilities.",
+  "green": "82/82 affected tests, real HLS refused before custody publication, no object/attestation, actual MP4/MOV/MKV/WebM/MP3/FLAC positive controls and extensionless video CAS.",
+  "status": "local exact tested blob candidate; hosted verification pending",
+  "followup_reference": {
+   "red": "HLS within authorized reference directory decoded outside-root TS file",
+   "green": "Shared demuxer restriction across reference probe, visual and audio decode; all 6 reference tests passed; no OS-sandbox claim."
+  },
+  "hosted_observed": {
+   "source": "78d68dca27ff37fe077ce556c7fddae0430fd888",
+   "counts": {
+    "in_progress": 15,
+    "success": 13,
+    "failure": 1
+   }
+  },
+  "followup_staged_ingest": {
+   "baseline": "ec4af1176fc9cd91d18b5e0dd7ef1051b6784f9a",
+   "red": "Exact SVG source replaced by same-sized invalid bytes immediately after genuine parser validation; old ingest attested the replacement digest.",
+   "green": "Copy to private same-filesystem stage, check source FD stability, validate and hash the same staged bytes before no-replace CAS publication; rehash after validation, always clean stage. Reproduced race now retains validated original; replacement has no attestation.",
+   "combined_tests": {
+    "run": 92,
+    "passed": 88,
+    "skipped": 4,
+    "failures": 0
+   },
+   "source_blob": "4a882a8205fc9911e2de8bb8ca51e552e46448f4",
+   "test_blob": "efaf60371e81203ca93758566e4990f348f1f3d9",
+   "limits": "Local regression; no broad OS sandbox or external adversary guarantee. Exact new hosted CI pending."
+  }
+ },
+ "perception_and_exact_lookup_20261127": {
+  "parent": "21bac3469fe6d87c630fd66178f5c17796b3810e",
+  "previous_exact_head_ci": {
+   "success": 28,
+   "failure": 1,
+   "failed_run": 45939750087,
+   "failed_job": 140311086464,
+   "reason": "Europe PMC repeated timeout after bounded retry; 31 offline research tests passed. Do not weaken live gate or rerun blindly."
+  },
+  "visual": {
+   "model": "NVIDIA Super VL",
+   "source": "95eb692104bc88d042f7203a90ea6b9121b6f4f6",
+   "script_blob": "74e302d369fa1709a0ddfe6b7ecbf593dabd07df",
+   "run": 45941783748,
+   "job": 140317496319,
+   "artifact": 15173003314,
+   "sha256": "fa09a74be694c973e9b55e4f3c7aa85970adc5e1203c0fa422e2735b13ac28df",
+   "retired_trigger": "eea64016d32165400a576a5dacea88f0ef706891",
+   "passed": 5,
+   "cases": 5,
+   "reported_tokens": 15047,
+   "model_wall_ms": 29442.041,
+   "independent": "ZIP SHA/CRC; five full MP4 decodes; 15 PNG hashes and independent RGB equality; numeric audio peaks and case oracle verified. Aligned, offset, sound-only, neither, picture-only typed observations.",
+   "limits": "Basic sampled visual and numeric audio-bin recognition only; no continuous motion, semantic listening, full artistic or G1 acceptance."
+  },
+  "raw_audio": {
+   "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+   "source": "aa8c21526f6f12dab636f61ef5becfb59b3fd5db",
+   "script_blob": "1ce7960163fc918db11978d9082a58ac0407b6f4",
+   "run": 45942171828,
+   "job": 140318717014,
+   "artifact": 15173153626,
+   "sha256": "8c1540adbf8787325ac077d1c3c9d1d29fed8aed7d19b09e4b1f4b49524144c6",
+   "retired_trigger": "e0fc18741813bccd12ac1daab9e16006e226adce",
+   "offline_tests_passed": 47,
+   "passed": 1,
+   "cases": 4,
+   "reported_tokens": 4351,
+   "model_wall_ms": 4375.409,
+   "expected_hz": [
+    [
+     880,
+     440
+    ],
+    [
+     0,
+     0
+    ],
+    [
+     440,
+     880
+    ],
+    [
+     440,
+     440
+    ]
+   ],
+   "observations": [
+    "rising",
+    "silent then high/rising",
+    "rising",
+    "rising"
+   ],
+   "independent": "ZIP SHA/CRC; all four full MP4 decodes; source and WAV receipt hashes; independent 16kHz mono 2s PCM byte-identical to retained WAV, FFT verifies pitch and silence. Typed transport succeeded; wrong model reports remain failure.",
+   "limits": "Single four-case calibration at this model and prompt; no proven semantic hearing, no cause attribution between service internals/model. No blind retry."
+  },
+  "index": {
+   "hypothesis": "17 indexed searches returned 101 name occurrences, 23 distinct, 78 repeats. Exact already-granted IDs can reduce discovery ambiguity without full schema dump. Genuine efficiency not yet measured.",
+   "source_blobs": {
+    "studio_next/capability_fabric.py": "8dd3cac29c9308f4970b64480b2c4ee2c5e187e9",
+    "studio_next/native_creative_control.py": "7b343d1100a4cf9c92bc492aa2d9bdcf25c6888c",
+    "studio_next/test_capability_fabric.py": "39f5f44f181d91670f76c1476ef48f7ae90c36b4",
+    "studio_next/test_native_creative_control.py": "c014d18b96d8f3c64aa5cdb290772d0e2ee27a50"
+   },
+   "change": "Complete or absent retrieval-only exact ID index, <=48 operations, <=4096 serialized bytes, queryable <=160 byte IDs; no new schema, grant or dispatch. Large catalog unchanged.",
+   "red": "Missing exact_lookup_index and model context field",
+   "green": "Three focused tests passed including large catalog no dump; unselected invoke blocked; exact lookup collision qualification and bounds tested.",
+   "local": {
+    "run": 250,
+    "passed": 243,
+    "environment_errors": 7,
+    "assertion_failures": 0,
+    "limits": "Reconstructed exact parent blobs; absent MCP SDK, repository scripts and example config; no full checkout."
+   },
+   "hosted": {
+    "head": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
+    "counts": {
+     "success": 28,
+     "in_progress": 1
+    },
+    "installed": {
+     "run": 45942606959,
+     "artifact": 15174550542,
+     "sha256": "47d53ab4716c683965ba41832323d8a9815234097facb64d53b0c9851788e788",
+     "merge_commit": "10afc0a827195f3d7e5d3ae90a3d271af1ee87a4",
+     "exact_tree_equivalence": true,
+     "manifest_verified": 24,
+     "tests_run": 1775,
+     "passed": 1745,
+     "skipped": 30,
+     "failures": 0
+    },
+    "native_conflict": "Installed cross-process job 140320939079 initially refused stale add_assets_to_timeline at commit boundary; targeted unchanged-source retry successful. No proof exact cause; no safety relaxation."
+   },
+   "genuine_model_benefit": false
+  },
+  "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality.",
+  "speech": {
+   "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+   "run": 45944055906,
+   "job": 140324606233,
+   "source": "b282fd85606c38b87be2411833f092fe628da6a3",
+   "script_blob": "5a3ea4893b1a2364386996329ba02bae54a5d444",
+   "retired_trigger": "b0afff228fbf84f32a18e03252ec3bec59ee75e5",
+   "artifact": 15174256003,
+   "sha256": "a71c16e0191a302d53ff091b8a154bb3f27b8b09786fea99a3362d32af6c2352",
+   "passed": 4,
+   "cases": 4,
+   "reported_tokens": 3785,
+   "model_wall_ms": 5219.613,
+   "observations": [
+    "silver moon",
+    "",
+    "paper boat",
+    "winter rain"
+   ],
+   "independent": "ZIP CRC/SHA verified, four complete physical MP4 decodes and WAV+PCM hashes match; independent 16kHz mono decode byte-identical. Silence RMS zero.",
+   "limits": "Short English synthetic speech/silence discrimination only. Prior pitch failure stands; no general musical or artistic competence inferred."
+  }
+ },
+ "compositional_measurement_20261127": {
+  "parent": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
+  "source_blobs": {
+   "studio_next/capability_fabric.py": "4ee3423709bd317966801ef4309307d2df7e972b",
+   "studio_next/test_capability_fabric.py": "5c17c3ca6ce275369720099791770ac7bbdce29d",
+   "studio_next/body_creative_session.py": "d8c12239fc94a539c59c5d12f29e7c3b6a5bcc6a",
+   "studio_next/test_body_creative_session.py": "917a7b3717f8abf74dfa958222397c40767e2215"
+  },
+  "negative": "On exact installed baseline (four targeted tests): persisted owner fact was forged by adapter mutating context; legacy/known pending decision measurement absent; failed model call measurement absent; actual installed 77-grant profile had no exact lookup index because 48 limit too low. Two failures and three errors reproduced.",
+  "correction": "Deep-copy model context and returned intent. Persist model-call wall time and bounded provider-reported usage with pending intent, preserve receipt on resume, measure dispatch separately, failed inference cannot inherit prior usage. Raise existing complete-or-absent retrieval count cap to 96; retain 4096-byte/160-byte ID bounds, no new dispatch grant.",
+  "local": "Exact installed wheel from #15174550542; exact parent hashes and editor.example.json hash checked; recovered candidate GREEN 74/74 body creative session, picture selection, durable graph, fabric, media vault tests; actual FFmpeg fixture renders. Not an independent model or creative acceptance.",
+  "acceptance": "Exact 3320ba88 hosted 28 success/1 in progress at observation; actual compositional model comparator still unrun.",
+  "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
+ },
+ "compositional_configuration_guard_20261127": {
+  "parent": "3320ba88cee133f26947098ce34f775a36657329",
+  "source_blobs": {
+   "studio_next/body_creative_session.py": "52e2234780caa9c05b0dcb10925212c253ddadf3",
+   "studio_next/test_body_creative_session.py": "2ddb931f3d241eb226158aeabf620a857a741537"
+  },
+  "negative": "Exact installed parent reproduced four resume configuration mismatch failures (sampling, timeout, max_tokens, image upload consent), one mid-call mutation dispatch, and one legacy pending decision dispatch without original configuration evidence. Equivalent reordered sampling control passes.",
+  "correction": "Persist canonical digest of configured sampling, timeout, response/token limits and adapter image/original-audio upload permissions; match original session before inference and before dispatch. No raw configuration or credentials persisted. Legacy active session without receipt is blocked, existing facts/pending intent retained; terminal sessions remain readable.",
+  "local": {
+   "run": 94,
+   "passed": 94,
+   "skipped": 0,
+   "failures": 0,
+   "environment": "Exact installed wheel, candidate two blobs, exact native editor example config; Python 3.13, real FFmpeg synthetic fixtures. No full native checkout or genuine inference."
+  },
+  "limits": "Host configuration continuity, not proof of model weights, external provider behavior, professional acceptance, or protection from a malicious in-process adapter. No expanded grants.",
+  "installed_parent": {
+   "run": 45945182492,
+   "artifact": 15174368688,
+   "sha256": "aa657722d44cf725d9539ea4b0699f67c0a72f7a7b776dc6e57905722cb999ac",
+   "tested_merge": "5457fd39482f8266bfb366bbf1443bf4853bc871",
+   "exact_tree_equivalence": true,
+   "manifest_verified": 24,
+   "tests_run": 1778,
+   "passed": 1748,
+   "skipped": 30,
+   "failures": 0,
+   "local_decode": "Complete three MP4s: mixed H264 320x480 57 frames/4.75s with AAC stereo; 2D 320x480 33 frames/2.75s with AAC stereo; 3D 256x256 24 frames/2s picture-only."
+  },
+  "hosted_parent": {
+   "success": 28,
+   "in_progress": 1,
+   "mlt_run": 45945182260
+  },
+  "active_indexed_retest": {
+   "run": 45945314825,
+   "job": 140328553996,
+   "source": "a5399047915a2a4061e0a3fe2e1798d0eb77039e",
+   "one_use_trigger_retired": "62b3c17ef5d5d61aec46591ef0e014d13ef1de7d",
+   "observed": "Terminal FAILED; inspect latest indexed_checkpoint_retest_20261127."
+  },
+  "acceptance": "Candidate affected tests passed; exact hosted candidate pending. G1-G4 remain open."
+ },
+ "indexed_checkpoint_retest_20261127": {
+  "run": 45945314825,
+  "job": 140328553996,
+  "source": "a5399047915a2a4061e0a3fe2e1798d0eb77039e",
+  "trial_parent": "3320ba88cee133f26947098ce34f775a36657329",
+  "retired_trigger": "62b3c17ef5d5d61aec46591ef0e014d13ef1de7d",
+  "artifact": 15174959264,
+  "artifact_sha256": "d7a5b31fb4241726e484d3183c98467227301fde3139a4bbfb2ca03e37f55c83",
+  "result": "FAILED_TURN_BUDGET_EXHAUSTED",
+  "turns": 48,
+  "reported_usage_turns": 47,
+  "reported_total_tokens": 547741,
+  "measured_model_wall_ms": 1255093.74,
+  "searches": 17,
+  "search_reported_tokens": 178911,
+  "search_wall_ms": 407203.779,
+  "model_write_receipts": 13,
+  "verified_export_receipts": 2,
+  "distinct_exports": 1,
+  "export_sha256": "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
+  "independent_decode": "Both ZIP entries byte-identical: 144 RGB frames, 640x360 H.264, 24/1 fps, 6s, stereo AAC 44100Hz; full RGB and PCM streams byte-identical locally. Original staged/native source SHAs agree. All saved project SHA receipts matched retained autosaves; first had 2 original clips; second only adds an empty video track; final adds two editable animated text clips at turns 41/42, saved 43, never re-exported. Prior model-selected samples 1/3/5 vs 0/2/4 seconds; full numeric audio read each. Original picture source correlation 0.9990, RGB MAE 2.635 at matched frame indices, no black frames; structural native source verifier explicitly does not attest render pixel provenance, preserve that limit.",
+  "failed_events": "Turns 7, 14 and 44 stale identity safe rejection; 45/46 host preconditions project_open/project_assets_available unknown; turn 31 truncated tool response; 17 search events, empty results at 36/38/39. No pair, no neural semantic hearing, no professional acceptance. Scope digest denotes project path+timeline ID, not content identity; actual full decode proves duplication.",
+  "comparison": "Prior indexed #45934918405 48 turns/17 searches/589619 reported tokens/1 output; latest 48/17/547741/2 paths but 1 digest. No causal efficiency or artistic win; direct arm had 2 distinct physical outputs but failed terminal acceptance."
+ },
+ "indexed_recovery_frontier_20261127": {
+  "parent": "fd648e50d41cf17ef68815db5e42b683bae1e239",
+  "source_blobs": {
+   "studio_next/native_creative_control.py": "7d2980233ec180e6966336381072fdd4f66caa63",
+   "studio_next/test_native_creative_control.py": "e01da471962884aeb20fad737b8bd3c8ab69b143"
+  },
+  "negative": "Exact installed source: stale bridge rejection clears project identity; indexed recovery get_project not selectable even if granted; model-chosen direct recovery rejected as unsearched. RED one error/one assertion failure. No-grant/invalid-schema controls pass.",
+  "correction": "Prioritize only actual installed granted READ get_project with valid empty inputs in indexed frontier after model identity invalidation; disappear after successful valid read. Provider sees exact contract. No automatic dispatch, grant expansion, cache trust or write replay.",
+  "local": {
+   "run": 266,
+   "passed": 260,
+   "environment_errors": 6,
+   "assertion_failures": 0,
+   "limits": "Exact installed controller/test source checked; missing repository scripts and optional MCP SDK. Four focused controls GREEN; not physical or neural acceptance."
+  },
+  "parent_ci": {
+   "success": 25,
+   "in_progress": 4,
+   "original_failed_job": 140335168274,
+   "run": 45947254008,
+   "diagnosis": "HTTP403 recovered, checksum Electron and Vite build succeeded; later silent build-step preflight failed, exact predicate unconfirmed. One targeted same-source non-model rerun requested; do not label pass."
+  },
+  "next": "Complete parent hosted gates without cancelling; integrate this tested candidate and validate exact-source gates. Investigate the no-content second render and uncompleted saved edit; compare matched compositional/direct routes only after evidence and within valid scope. No replay of spent trial."
+ },
+ "indexed_duplicate_feedback_20261127": {
+  "parent": "eb565a7a3da256532d89b6b2eff6bc1edd82b919",
+  "source_blobs": {
+   "studio_next/native_creative_control.py": "c85094fefa0d1cbcde696ed2e7a7f271d46208b9",
+   "studio_next/test_native_creative_control.py": "a53f4416d0cc03cce19bc1828e75f9bca3181cc5",
+   "studio_next/native_render_evidence.py": "965f03986d55493fed8c16620222d6ca1c4d8429",
+   "studio_next/test_native_render_evidence.py": "3ad14cfa04ddb30e6b531e8f9b7dab938b67616e"
+  },
+  "negative": "Real trial duplicate export at turn 33 not explicitly identified against prior fully reviewed same-scope bytes. Existing pair gate refused completion. RED two tests, three missing contract errors.",
+  "correction": "Reuse existing scoped, invalidation-aware pair state to report current verified export matching prior reviewed bytes. Does not count new perception, suppress reads, choose edits, grant completion or infer equivalence of different encodings.",
+  "verification": "Two focused tests GREEN, controls for distinct/absent verification, unrelated scope, absent prior complete A/V review, failed read and later write. Replay of original journal shows true immediately after verify turn 33 and false after new write turn 41; pair remains absent. Affected suite 254 run/249 pass/5 missing scripts or MCP imports/zero assertion failures.",
+  "installed_parent": {
+   "head": "fd648e50d41cf17ef68815db5e42b683bae1e239",
+   "run": 45947254432,
+   "artifact": 15176330121,
+   "zip_sha256": "c90d80223d18a751256774c89246542429ea9f8bb201052689749d165573892c",
+   "tested_merge": "0b62e26f6300ac654df43d9cd7b06752fe06ce35",
+   "tree": "04e4b2c9c72b3054ac2538e7609fb94642da3b6c",
+   "local_manifest": 24,
+   "tests": 1781,
+   "passed": 1751,
+   "skipped": 30,
+   "failed": 0,
+   "local_decode": "Three complete H264 exports: mixed 320x480/57 frames/4.75s stereo AAC 48kHz; 2D 320x480/33 frames/2.75s stereo AAC 48kHz; 3D 256x256/24 frames/2s video only. Exact installed controller/session source and test blobs match parent.",
+   "hosted": {
+    "success": 29
+   },
+   "loss_aware_rerun": "SUCCESS",
+   "mlt": 45947253893
+  },
+  "next": "Advance coherent tested candidate without cancelling parent verification. Actual neural improvement, human co-edit and professional acceptance remain unproved; no new inference or grant."
+ },
+ "coedit_host_observation_boundary_20261127": {
+  "parent": "013ef94d610b63078d39cd38878051367cb6f150",
+  "source_blobs": {
+   "studio_next/capability_mcp_session.py": "b4fa08d78eb0580cf85f43faa8126f8b1b49b5b6",
+   "studio_next/native_creative_control.py": "eae2274264981af5565a8fdcce42d92e153ac2f8",
+   "studio_next/test_native_revision_fence.py": "0018ff84670b529786e67d3829781fcd71e73ee7"
+  },
+  "reproduction": "Exact installed source (unchanged gateway/test base, controller 013ef94 blob verified). Actual production Python controller/gateway with source-shaped deterministic renderer: manual edit position 99 after model's timeline observation, before its selected set_clip_style write. Host-only full timeline preflight renewed model epoch and stale position 40 was committed. RED both single and combined routes. No actual human field claim.",
+  "correction": "Separate host-only READ from model-visible gateway call, preserve same live admission, permissions, request identity, source lock and shared budget. Controller mechanical clip/placement preflight uses host-only route. No host-only write, revision promotion, hidden retries or novel grant. Fresh model-visible read remains required; canonical model-visible bootstrap/postwrite reconciliation unchanged.",
+  "verification": "Both routes GREEN: stale write rejected before native dispatch, simulated human position 99 preserved, fresh model-selected replan position 100 committed once. Additional controls: no ungranted tools or writes via host-only route; host-only get_project/full timeline cannot mint or renew model revision. 288 affected tests, 284 pass, 4 missing-checkout file/import errors, zero assertion failures. Candidate hosted/native GUI acceptance still unverified.",
+  "parent_ci": {
+   "observed": {
+    "in_progress": 2,
+    "success": 26,
+    "failure": 1
+   },
+   "physical_job_first": 140341368353,
+   "first_failure": "Native Electron image-sequence regression log reached original defect reproduction then timed out (124); exact lifecycle predicate unknown.",
+   "retry_job": 140343995262,
+   "retry_failure": "Before GUI tests, Microsoft apt InRelease HTTP 403, exit 100. Separate infra failure; no further blind rerun.",
+   "workflow": 45949362927,
+   "remaining": [
+    {
+     "id": 45949362994,
+     "name": "ZX7 MLT Editorial Native Research and Fidelity Gate",
+     "status": "in_progress",
+     "conclusion": null
+    },
+    {
+     "id": 45949362965,
+     "name": "ZX7 BODY — Installed Package, Desktop and Physical Crash Proof",
+     "status": "in_progress",
+     "conclusion": null
+    },
+    {
+     "id": 45949362927,
+     "name": "ZX7 BODY — Genuine Native Editor MCP A/V, Export and Visual Evidence",
+     "status": "completed",
+     "conclusion": "failure"
+    }
+   ]
+  },
+  "scoped_g1_retest": {
+   "run": 45950462408,
+   "job": 140344855257,
+   "parent": "013ef94d610b63078d39cd38878051367cb6f150",
+   "trial": "e979730bb06ca9e8d7d50d3f689feabb0f2a9597",
+   "retired": "8035aa15c424db5d7361a94172a76b15de85e931",
+   "branch": "trial/g1-super-vl-indexed-recovery-20261127",
+   "request": "ZX7_SUPER_VL_G1_INDEXED_RECOVERY_20261127",
+   "scope": "2026-11-22 owner standing 48-turn synthetic-only G1 permission; exact prior Super VL model, indexed catalog and unchanged brief; test two integrated causal corrections. No private media, broader paid scope or replay. Trigger retired by forward commit restoring source tree. Actual inference step running at observation, not result."
+  },
+  "next": "Preserve running exact-source installed/MLT gates; integrate candidate on stable ref after terminal parent status, verify full hosted matrix and physical native co-edit. Inspect bounded trial artifact on terminal result before any further inference. Do not count fixture human race as real human study or G1-G4 acceptance."
+ }
 }

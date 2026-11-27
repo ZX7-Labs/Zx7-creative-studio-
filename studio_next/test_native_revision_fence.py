@@ -218,6 +218,125 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
             "native_identity_model_observation_required")
         self.assertEqual(self.renderer.writes, 1)
 
+    async def test_host_only_reads_never_grant_or_renew_model_revision(self):
+        from studio_next.capability_gateway import CapabilityExecutionError
+        from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
+        for combined in (False, True):
+            with self.subTest(combined=combined):
+                brain = (CombinedCapabilityMcpSession(self.gateway, "editor",
+                            require_model_native_observation_for=("editor",)) if combined else
+                         CapabilityGatewayMcpSession(self.gateway, "editor",
+                            require_model_native_observation=True))
+                before = self.renderer.writes
+                payload = {"clipId":"clip-A","text":"New independent direction"}
+                for name, args in (("update_text_clip",payload),("unknown_tool",{})):
+                    count = len(self.renderer.calls)
+                    with self.assertRaises(CapabilityExecutionError):
+                        await brain.call_host_read(name,args)
+                    self.assertEqual(len(self.renderer.calls),count)
+                self.assertFalse((await brain.call_host_read("get_project",{})).is_error)
+                self.assertFalse((await brain.call_host_read("get_timeline",{
+                    "includeClips":True,"limit":1000})).is_error)
+                denied = await brain.call_tool("update_text_clip",payload)
+                self.assertEqual(host_pre_dispatch_rejection(denied,"update_text_clip",payload),
+                                 "native_identity_model_observation_required")
+                await brain.call_tool("get_project",{})
+                self.renderer.human_gui_edit("Manual edit after model observation")
+                self.renderer.publish()
+                await brain.call_host_read("get_project",{})
+                await brain.call_host_read("get_timeline",{"includeClips":True,"limit":1000})
+                stale = await brain.call_tool("update_text_clip",payload)
+                self.assertEqual(host_pre_dispatch_rejection(stale,"update_text_clip",payload),
+                                 "native_identity_model_observation_stale")
+                self.assertEqual(self.renderer.writes,before)
+                self.assertEqual(self.renderer.clip_text,"Manual edit after model observation")
+                await brain.call_tool("get_project",{})
+                self.assertFalse((await brain.call_tool("update_text_clip",payload)).is_error)
+                self.assertEqual(self.renderer.writes,before+1)
+                self.renderer.publish()
+
+    async def test_controller_clip_style_preflight_cannot_refresh_stale_model_epoch(self):
+        """A post-decision host read must not authorize a previously stale edit."""
+        from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
+
+        class StyleRenderer(RendererAndDebouncedSnapshot):
+            def __init__(self):
+                super().__init__()
+                self.style_x = 0
+                self.tools.append(SimpleNamespace(name="set_clip_style",
+                    description="Native clip style", input_schema={"type":"object",
+                    "properties":{"clipId":{"type":"string"},
+                                  "positionX":{"type":"number"},
+                                  "previewOnly":{"type":"boolean"}},
+                    "required":["clipId","positionX","previewOnly"]}))
+
+            async def call_tool(self, name, args):
+                if name == "set_clip_style":
+                    self.calls.append((name, dict(args)))
+                    if args.get("__zx7ExpectedRevision") != self.live_revision:
+                        return result("ZX7_STALE_NATIVE_REVISION", error=True)
+                    self.style_x = args["positionX"]
+                    self.live_counter += 1
+                    self.writes += 1
+                    self.publish()
+                    return result({"success":True,"clipCount":1})
+                observed = await super().call_tool(name, args)
+                if name == "get_timeline":
+                    value = json.loads(observed.content[0].text)
+                    value["clips"][0]["positionX"] = self.style_x
+                    return result(value)
+                return observed
+
+        for combined in (False, True):
+            with self.subTest(combined=combined):
+                renderer = StyleRenderer()
+                grants = {**GRANTS, "set_clip_style":"write"}
+                reader = NativeEditorIdentityReader(renderer, grants, require_live_revision=True)
+                policy = {"reader":reader, "rules":{"set_clip_style":{"/clipId":"clips"}},
+                          "fence":{"set_clip_style":self.policy["fence"]["update_text_clip"]}}
+                gateway = CapabilityGateway({"editor":(renderer,grants,{},None,{},policy)})
+                await gateway.refresh()
+                brain = (CombinedCapabilityMcpSession(gateway, "editor",
+                            require_model_native_observation_for=("editor",)) if combined else
+                         CapabilityGatewayMcpSession(gateway, "editor",
+                            require_model_native_observation=True))
+
+                class InterleavingModel(ScriptedModel):
+                    def decide(self, context):
+                        if len(self.observed) == 1:
+                            # Real source epoch changes AFTER the first model
+                            # observation but BEFORE the style preflight.
+                            renderer.human_gui_edit("Human changes the clip")
+                            renderer.style_x = 99
+                            renderer.publish()
+                        if len(self.observed) == 2:
+                            self.style_after_stale_decision = renderer.style_x
+                            self.writes_after_stale_decision = renderer.writes
+                        return super().decide(context)
+
+                model = InterleavingModel([
+                    decision("invoke",tool="get_timeline",inputs={"includeClips":True}),
+                    decision("invoke",tool="set_clip_style",inputs={"clipId":"clip-A",
+                        "positionX":40,"previewOnly":False}),
+                    decision("invoke",tool="get_project",inputs={}),
+                    decision("invoke",tool="get_timeline",inputs={"includeClips":True}),
+                    decision("invoke",tool="set_clip_style",inputs={"clipId":"clip-A",
+                        "positionX":100,"previewOnly":False}),
+                    decision("finish",summary="Technical co-edit fixture only"),
+                ])
+                outcome = await NativeCreativeControl(brain, model, max_turns=6,
+                    host_tool_access=grants, host_pre_dispatch_rejections=True).run(
+                    "Respect human positioning and choose native style changes")
+                self.assertEqual(model.style_after_stale_decision,99)
+                self.assertEqual(model.writes_after_stale_decision,0)
+                self.assertEqual(renderer.style_x,100)
+                self.assertEqual(renderer.writes,1)
+                self.assertTrue(any(e.get("kind")=="host_tool_rejected_before_dispatch" and
+                    e.get("tool")=="set_clip_style" and
+                    e.get("rejection_code")=="native_identity_model_observation_stale"
+                    for e in outcome["events"]))
+                self.assertEqual(outcome["status"],"model_finished_unverified")
+
     async def test_gui_edit_after_model_observation_is_refused_before_native_dispatch(self):
         model_view = CapabilityGatewayMcpSession(
             self.gateway, "editor", require_model_native_observation=True)
