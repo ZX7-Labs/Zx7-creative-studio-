@@ -53,6 +53,7 @@ _SOURCE_FIELDS={
     "body.color_lut":("plan",),
     "body.full_decode":("source",),
     "body.loudness":("plan",),
+    "body.subtitle_delivery":("plan",),
     "body.review":("plan",),
     "body.temporal_evidence":("plan",),
     "body.review_data":("bundle",),

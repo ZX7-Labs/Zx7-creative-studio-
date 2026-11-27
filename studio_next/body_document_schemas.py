@@ -186,6 +186,12 @@ _SCHEMAS = {
         "timecodes_seconds": array(TIME, minItems=1, maxItems=24),
         "audio_windows_seconds": array(PAIR, maxItems=24)})),
     "body.loudness": ("plan", obj({"media": SOURCE})),
+    "body.subtitle_delivery": ("plan", obj({"media": SOURCE,
+        "tracks": array(obj({"language": {"type": "string", "pattern": "[a-z]{3}"},
+            "default": {"type": "boolean"}, "cues": array(obj({
+                "start_ms": number(0,86400000,integer=True),
+                "end_ms": number(1,86400000,integer=True), "text": TEXT}),
+                minItems=1,maxItems=10000)}),minItems=1,maxItems=8)})),
     "body.color_lut": ("plan", obj({"media": SOURCE,
         "color_transform": obj({"kind": choice("display_referred_3d_lut"),
             "input_color_space": choice("bt709"), "output_color_space": choice("bt709"),

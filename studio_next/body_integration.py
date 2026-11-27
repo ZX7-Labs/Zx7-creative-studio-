@@ -59,6 +59,7 @@ from .body_timeline_revision import render_editorial_revision
 from .body_owned_edit import render_verified_owned_edit,validate_owned_edit
 from .production_qc import full_decode_inspection
 from .body_loudness import inspect_original_loudness
+from .body_subtitles import render_subtitle_delivery
 from .body_observation import produce_review_bundle,verify_review_bundle
 from .body_temporal_evidence import (
     observe_every_original_frame,verify_full_temporal_evidence)
@@ -259,6 +260,7 @@ def _trusted_body_revision(tool_id, *, revision_inputs=None):
         "body.reference_graph":["reference_observatory.py","reference_evidence_tools.py"],
         "body.full_decode":["production_qc.py","delivery_audit.py"],
         "body.loudness":["body_loudness.py","media_vault.py","composite_mix.py"],
+        "body.subtitle_delivery":["body_subtitles.py","media_vault.py","composite_mix.py","edit_timeline.py"],
         "body.review":["body_observation.py","production_qc.py","media_vault.py"],
         "body.temporal_evidence":["body_temporal_evidence.py","composite_mix.py","precision_retime.py","body_observation.py","production_qc.py","media_vault.py"],
         "body.review_data":["body_review_access.py","body_observation.py"],
@@ -311,6 +313,7 @@ def _trusted_body_revision(tool_id, *, revision_inputs=None):
         "body.reference_graph":["ffmpeg","ffprobe"],
         "body.full_decode":["ffmpeg","ffprobe"],
         "body.loudness":["ffmpeg","ffprobe"],
+        "body.subtitle_delivery":["ffmpeg","ffprobe"],
         "body.review":["ffmpeg","ffprobe"],
         "body.temporal_evidence":["ffmpeg","ffprobe"],
         "body.review_data":[],
@@ -748,6 +751,12 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             lambda staged:extract_verified_review_frame(
                 archive,inputs["bundle_sha256"],root,inputs["frame_index"],staged))
 
+    def subtitle_delivery(inputs):
+        plan=_path_within(root,inputs["plan"],exists=True)
+        dest=_body_output(root,inputs["out"],allowed=(".mp4",".mov"))
+        return _commit_actual_body_output(dest,
+            lambda staged:render_subtitle_delivery(plan,root,vault.root,staged))
+
     def physical_audio_loudness(inputs):
         original=_path_within(root,inputs["plan"],exists=True)
         return inspect_original_loudness(original,root,vault.root)
@@ -1002,6 +1011,9 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Read-only native FFmpeg EBU R128 measurement of original rights-cleared movie, no forced mastering targets",
         "read",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
         ["plan"],physical_audio_loudness)
+    add("body.subtitle_delivery","original editable multilingual timed-text delivery",
+        "Add explicitly authored plain-text millisecond cues with one chosen default as selectable native mov_text tracks to a licensed MP4/MOV; verify exact original A/V packets, full decoded picture/sound and decoded cue times/text. No transcription or translation.",
+        "write",video_io,["plan","out"],subtitle_delivery)
     add("body.reference_graph","physically study owner-authorized picture and sound reference rhythm",
         "Reused source-bound FFmpeg editing grammar: actual frame differences, color, timed PCM energy and candidate cuts; never a quality score or licensed import",
         "read",video_io,["source"],reference_graph)

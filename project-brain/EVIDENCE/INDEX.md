@@ -628,3 +628,121 @@ Exact value from prior ledger blob `566c8d86dd1097e88fa4e3d2f5686ea2c37c4701` re
   }
 }
 ```
+
+
+## 2026-11-27 — native Field F terminal proof and Field G timed-text delivery
+
+{
+  "field_f": {
+    "run": 46004334436,
+    "job": 140523578984,
+    "source": "d2bbcfbf106d02e1a4ca60514e2a8c51daaf2233",
+    "retired": "383cb74eaeae9900792cc418141eb8069e45d362",
+    "conclusion": "success",
+    "artifact": 15200411017,
+    "zip_sha256": "f90e4b1f1885b05c2e53d3daba0b6a49d08a7150f219918be6cd29af1c60ff3b",
+    "manifest_verified": 4,
+    "full_decode_verified": true,
+    "native_blender_exr_ocio_luma_oracle": true,
+    "output_sha256": "5fc1620cf70022476b33622d203fc352638cf593e7f689b8c9aa534748375850",
+    "original_exr_zip_sha256": "825ae36622e52d201fe7c6d9458313abb77459443b9c6caf951712e099956251",
+    "actual": "96x64, 2 frames at 12 fps, ProRes HQ yuv422p10le, Rec.2020/PQ, both frames limited range verified locally. Actual native Blender/EXR/OCIO pipeline passed hosted; no calibrated monitor or professional acceptance."
+  },
+  "field_g": {
+    "parent": "ec0b8a4bd9bd9d2cc0aad612225b169b56344092",
+    "domain": "G with F crossover",
+    "outcome": "New typed body.subtitle_delivery instrument: explicit multilingual plain-text millisecond cues -> real selectable native MOV/MP4 timed-text tracks, source picture and every audio track preserved by encoded packet/timestamp/side-data and decoded A/V equality. Original media rights and atomic publication reused. No caption text or artistic decision authored by host.",
+    "source_blobs": {
+      "studio_next/body_subtitles.py": "28e3db1fb1aa7b1eb02e19545374abd481ebf47d",
+      "studio_next/test_body_subtitles.py": "0e4cc7c53375e0002a9bb68798ef421d0a39c9a9",
+      "studio_next/body_integration.py": "940d31d5bcba0222229bc997d83b6b5c93998ff1",
+      "studio_next/body_document_schemas.py": "f0ffbd6adc8915d3c33d1bb45f63dcc578aca9f4",
+      "studio_next/body_materials.py": "e5a40e621e89d147fbd95f203ae652aac1196198",
+      "studio_next/creative_tool_registry.py": "84613a873aff66ab2c17b35a38ebbc836cccd611",
+      "studio_next/test_body_shared_revision.py": "ecbf9a21109fe5e95fa946f0c5bd31bd2679b71f"
+    },
+    "baseline": {
+      "head": "f2da4f904981ccb56a4f4b4acbc7405158734c9c",
+      "hosted": {
+        "success": 28,
+        "failure": 1
+      },
+      "research": 46003188695,
+      "installed": {
+        "run": 46003189228,
+        "artifact": 15201666345,
+        "zip_sha256": "3192528cd444cdca5f20b947e93f520388c9fe1a8942ab717f94c2d1a57ad6bb",
+        "merge": "aa75ed4f2f8bd3516ee9bdf107f7cbc7026c212e",
+        "exact_tree": "623e09102f0bf5e8207fe293dcfef7e273613cda",
+        "tests_run": 1790,
+        "pass": 1760,
+        "skip": 30,
+        "fail": 0,
+        "manifest": 24,
+        "full_decodes": 3,
+        "crc_verified": true
+      },
+      "placement": {
+        "run": 46003188906,
+        "job": 140519767636,
+        "actual_native_gateway_placement_recovery": true,
+        "fixture_only": true
+      }
+    },
+    "negative": "RED two Unknown tool errors on actual native source. Native QuickTime silently marked lone subtitle default despite explicit disposition 0; observed on actual F HDR master. Refuse zero or multiple defaults instead of choosing. Fault-injected actual AAC reencode and changed text both rejected before publication. Invalid overlaps, duration, markup, missing rights and preexisting subtitles rejected; no overwrite.",
+    "verification": {
+      "focused": 5,
+      "affected": 15,
+      "pass": 15,
+      "fail": 0,
+      "local": "Actual H264 24000/1001 160x96 film with two AAC tracks 48k/44.1k; selectable English/Hindi UTF8 text and exact millisecond cue roundtrip; independently equal decoded video and both float64 PCM streams. Real ProRes HQ PQ 10bit MOV silent source passes, original color signaling and source hashes preserved. Earlier broader local run interrupted after 24 completed passing tests; not a full suite.",
+      "cross_field": {
+        "source_artifact": 15200411017,
+        "source_sha256": "5fc1620cf70022476b33622d203fc352638cf593e7f689b8c9aa534748375850",
+        "captioned_sha256": "96ab6885b18dedbf6b90d085cef486b0d66c59cfcc328345b4c2c027bb8472b1",
+        "actual": "Local real hosted HDR master remux with authored text 0-150ms; same 2 picture frames, PQ/Rec2020 tags, no fabricated audio."
+      },
+      "limitations": "One zero-origin picture, optional multiple audio; same MP4/MOV container, no preexisting non-AV streams or chapters; 1-8 tracks, one explicit default, plain text only, bounded author plan. No automatic transcription, translation, style, accessibility, GUI editing proof or independent Field G acceptance. Exact combined hosted suite pending."
+    },
+    "next": "Integrate F+G coherent increment on stable branch with exact lease. Advance other A-L missing capabilities while hosted runs; preserve genuine creative and independent professional acceptance."
+  }
+}
+
+### Retained historical indexed-duplicate-feedback-20261127
+
+Exact structured value from prior ledger blob `38959fe180502cacba095f8d49f17868a91821e7` retained to respect ledger cap.
+
+```json
+{
+  "parent": "eb565a7a3da256532d89b6b2eff6bc1edd82b919",
+  "source_blobs": {
+    "studio_next/native_creative_control.py": "c85094fefa0d1cbcde696ed2e7a7f271d46208b9",
+    "studio_next/test_native_creative_control.py": "a53f4416d0cc03cce19bc1828e75f9bca3181cc5",
+    "studio_next/native_render_evidence.py": "965f03986d55493fed8c16620222d6ca1c4d8429",
+    "studio_next/test_native_render_evidence.py": "3ad14cfa04ddb30e6b531e8f9b7dab938b67616e"
+  },
+  "negative": "Real trial duplicate export at turn 33 not explicitly identified against prior fully reviewed same-scope bytes. Existing pair gate refused completion. RED two tests, three missing contract errors.",
+  "correction": "Reuse existing scoped, invalidation-aware pair state to report current verified export matching prior reviewed bytes. Does not count new perception, suppress reads, choose edits, grant completion or infer equivalence of different encodings.",
+  "verification": "Two focused tests GREEN, controls for distinct/absent verification, unrelated scope, absent prior complete A/V review, failed read and later write. Replay of original journal shows true immediately after verify turn 33 and false after new write turn 41; pair remains absent. Affected suite 254 run/249 pass/5 missing scripts or MCP imports/zero assertion failures.",
+  "installed_parent": {
+    "head": "fd648e50d41cf17ef68815db5e42b683bae1e239",
+    "run": 45947254432,
+    "artifact": 15176330121,
+    "zip_sha256": "c90d80223d18a751256774c89246542429ea9f8bb201052689749d165573892c",
+    "tested_merge": "0b62e26f6300ac654df43d9cd7b06752fe06ce35",
+    "tree": "04e4b2c9c72b3054ac2538e7609fb94642da3b6c",
+    "local_manifest": 24,
+    "tests": 1781,
+    "passed": 1751,
+    "skipped": 30,
+    "failed": 0,
+    "local_decode": "Three complete H264 exports: mixed 320x480/57 frames/4.75s stereo AAC 48kHz; 2D 320x480/33 frames/2.75s stereo AAC 48kHz; 3D 256x256/24 frames/2s video only. Exact installed controller/session source and test blobs match parent.",
+    "hosted": {
+      "success": 29
+    },
+    "loss_aware_rerun": "SUCCESS",
+    "mlt": 45947253893
+  },
+  "next": "Advance coherent tested candidate without cancelling parent verification. Actual neural improvement, human co-edit and professional acceptance remain unproved; no new inference or grant."
+}
+```

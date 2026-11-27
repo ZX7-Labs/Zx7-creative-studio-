@@ -12,7 +12,7 @@ SEALED_RENDER_TOOLS=(
     "body.retime","body.sequence_cuts","body.timeline_revision",
     "body.otio_owned_export","body.otio_owned_import",
     "body.composite_mix","body.film_finish","body.color_lut",
-    "body.loudness"
+    "body.loudness","body.subtitle_delivery"
 )
 COMPLETE_DECODE_RENDER_TOOLS=(
     "body.render_edit_owned","body.retime","body.sequence_cuts",
