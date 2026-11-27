@@ -1,0 +1,53 @@
+name: ZX7 — bounded Europe PMC runner transport diagnosis
+on:
+  push:
+    branches: [diagnostics/europe-pmc-live-transport-20261127]
+    paths: ['.github/workflows/diagnose-europe-pmc-live.yml']
+permissions:
+  contents: read
+jobs:
+  public-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Admit exact diagnostic source
+        run: |
+          test "$(git rev-parse HEAD^)" = "4e2c4338841e77f601443cfc55f986c53437b183"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/diagnose-europe-pmc-live.yml"
+      - name: Public anonymous transport and parser diagnosis
+        run: |
+          python - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor
+          from time import monotonic
+          import json, urllib.request, urllib.parse, urllib.error
+          from studio_next.creative_research import CreativeResearch, _NoRedirect
+          def probe(label, query, result_type, timeout):
+              start = monotonic()
+              url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?" + urllib.parse.urlencode({
+                  "query":query,"pageSize":3,"resultType":result_type,"format":"json"})
+              try:
+                  opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
+                  req = urllib.request.Request(url, headers={"User-Agent":"ZX7-BODY-CreativeResearch/0.1 (https://github.com/ZX7-Labs/Zx7-creative-studio-; metadata-only)","Accept":"application/json"})
+                  with opener.open(req, timeout=timeout) as response:
+                      raw = response.read(1_000_001)
+                      assert len(raw) <= 1_000_000
+                      records = json.loads(raw)["resultList"]["result"]
+                      assert isinstance(records, list)
+                      print(label, "HTTP", response.status, "bytes", len(raw), "records", len(records), "elapsed_ms", round((monotonic()-start)*1000), flush=True)
+                      if result_type == "core":
+                          research = CreativeResearch(lambda requested: json.loads(raw) if requested == url else (_ for _ in ()).throw(ValueError("Unexpected URL")))
+                          result = research.studies(query=query, limit=3, provider="europe_pmc")
+                          print(label, "parsed_reference_count", len(result["results"]), flush=True)
+              except Exception as exc:
+                  reason = getattr(exc, "reason", None)
+                  print(label, "FAILED", type(exc).__name__, "reason_type", type(reason).__name__, "http_status", getattr(exc,"code",None), "elapsed_ms", round((monotonic()-start)*1000), flush=True)
+          # Two bounded requests; exact CI query versus documented p53 control.
+          with ThreadPoolExecutor(max_workers=2) as pool:
+              for future in (pool.submit(probe,"exact_core","visual attention","core",25),
+                             pool.submit(probe,"documented_control","p53","lite",10)):
+                  future.result()
+          PY
