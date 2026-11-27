@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import json
 import math
+import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -92,6 +94,8 @@ class NativeSkinProof(unittest.TestCase):
             result=run_body_project({"project":{"creative_intent":"Native rig topology and skin control"},"shots":[{"id":"rig","purpose":"Technical control probe"}],"tool_graph":graph},root)
             self.assertEqual(result["status"],"all_tool_results_verified",result)
             first=verify_motion_bundle(root/"original.zxmotion");second=verify_motion_bundle(root/"revision.zxmotion")
+            topology=next(a["result"] for a in first["native"]["actions"] if a["op"]=="define_armature_bones")
+            self.assertEqual({b["name"]:b["parent"] for b in topology["bones"]},{"Root":None,"Tip":"Root"})
             self.assertEqual(second["parent_bundle_sha256"],digest(root/"original.zxmotion"))
             script=root/"observe.py"
             script.write_text('''import bpy,json,sys\nfrom pathlib import Path\nargs=sys.argv[sys.argv.index("--")+1:]\nbpy.ops.wm.open_mainfile(filepath=args[0],load_ui=False,use_scripts=False)\nrig=bpy.data.objects["Rig"];mesh=bpy.data.objects["Character"]\nassert rig.type=="ARMATURE" and rig.data.bones["Tip"].parent.name=="Root" and rig.data.bones["Tip"].use_connect\nassert len(mesh.vertex_groups)==1 and mesh.vertex_groups[0].name=="Tip" and mesh.modifiers[0].object==rig\nframes=[]\nfor frame in (1,5):\n bpy.context.scene.frame_set(frame)\n ev=mesh.evaluated_get(bpy.context.evaluated_depsgraph_get());m=ev.to_mesh()\n frames.append([list(ev.matrix_world@v.co) for v in m.vertices]);ev.to_mesh_clear()\nPath(args[1]).write_text(json.dumps(frames))\n''')
@@ -103,6 +107,18 @@ class NativeSkinProof(unittest.TestCase):
                 self.assertEqual(proc.returncode,0,proc.stdout+proc.stderr)
                 frames=json.loads(output.read_text());rest=[[-.25,1,0],[.25,1,0],[.25,2,0],[-.25,2,0]]
                 expected=[rest,[[-sign*(y-1),1+sign*x,z] for x,y,z in rest]]
+                self.assertEqual(len(frames),len(expected))
                 for actual,wanted in zip(frames,expected):
+                    self.assertEqual(len(actual),len(wanted))
                     for a,b in zip(actual,wanted):
+                        self.assertEqual(len(a),len(b))
                         for x,y in zip(a,b):self.assertAlmostEqual(x,y,places=5)
+            evidence=os.environ.get("ZX7_ARMATURE_EVIDENCE_DIR")
+            if evidence:
+                dest=Path(evidence);dest.mkdir(parents=True,exist_ok=False)
+                for name in ("original.json","revision.json","original.zxmotion","revision.zxmotion",
+                             "original-observed.json","revision-observed.json"):
+                    shutil.copyfile(root/name,dest/name)
+                (dest/"manifest.json").write_text(json.dumps({"kind":"native_armature_engineering_control",
+                    "actual_native_skin_revision_verified":True,"genuine_model_artistry_verified":False,
+                    "independent_professional_review":False,"files":{p.name:digest(p) for p in dest.iterdir()}},indent=2)+"\n")
