@@ -63,6 +63,7 @@ def _publish_restored_directory_exclusively(staged,target):
 _PRIVATE_RENDER_PREFIXES=(
     ".zx7-owned-sources-",
     ".zx7-media-review-",
+    ".zx7-subtitle-",
     ".zx7-original-exr-render-",
     ".zx7-scene-seal-",
     ".zx7-temporal-",

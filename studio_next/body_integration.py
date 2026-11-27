@@ -1071,7 +1071,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "write",bool(shutil.which("blender") and video_io),
         ["scene_json","out"],render3d)
     add("body.motion_project","native Blender motion-design project and RNA controls",
-        "Isolated native .blend transactions: discover installed properties/enums, create/edit geometry, text, materials, nodes, cameras and animation; "
+        "Isolated native .blend transactions: discover installed properties/enums, create/edit geometry, text, materials, nodes, cameras, armature rest bones, skin weights and pose animation; "
         "save/reopen immutable packed projects and render authored original frames. Blender 4.5+ required; no full-studio quality certification.",
         "write",motion_runtime_ready(),["plan","out"],native_motion)
     add("body.motion_export","deliver actual native motion project renders",
