@@ -2084,6 +2084,102 @@ async def exercise(options):
     (fixture / "receipt.json").write_text(json.dumps(receipt, indent=2))
     print(json.dumps(receipt, indent=2))
     if scene_source:
+        # A native project copy preserves timeline/clip IDs. Switching between
+        # two such real documents must not renew the Brain's write epoch merely
+        # because a complete timeline read reports identical object identities.
+        # Only generated fixture media is copied; the accepted original project
+        # is never opened for this additional edit.
+        from studio_next.native_editor_identity import pinned_native_editor_identity_policy
+        from studio_next.capability_gateway import CapabilityGateway
+        from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+        from studio_next.body_editor_client import host_pre_dispatch_rejection
+        source_doc_sha = digest(native_path)
+        copy_a, copy_b = (projects / name for name in (
+            "coedit-project-identity-a", "coedit-project-identity-b"))
+        for destination in (copy_a, copy_b):
+            shutil.copytree(project, destination, symlinks=True)
+            assert digest(destination / "project.comfystudio") == source_doc_sha
+        async with connected() as switch_session:
+            await call(switch_session, "open_project", {
+                "projectPath": str(copy_a), "previewOnly": False})
+            await wait(switch_session, lambda state:
+                (state.get("project") or {}).get("path") == str(copy_a) and
+                (state.get("currentTimeline") or {}).get("clipCount") == 3)
+            policy = pinned_native_editor_identity_policy(options.source, tools, switch_session)
+            assert policy and "update_shape_clip" in policy["fence"]
+            switch_gateway = CapabilityGateway({"editor": (
+                switch_session, tools, {}, None, {}, policy)})
+            await switch_gateway.refresh()
+            switch_brain = CapabilityGatewayMcpSession(
+                switch_gateway, "editor", require_model_native_observation=True)
+            model_project = await call(switch_brain, "get_project", {})
+            first_timeline = await call(switch_brain, "get_timeline", {
+                "includeClips": True, "limit": 1000})
+            assert first_timeline["clipLimitApplied"] is False
+            first_shape = next(c for c in first_timeline["clips"] if c["id"] == shape_id)
+            assert first_shape["shapeProperties"]["fillColor"].lower() == "#d34a77"
+            # External project selection, not a model-observed get_project.
+            await call(switch_session, "open_project", {
+                "projectPath": str(copy_b), "previewOnly": False})
+            switched = await wait(switch_session, lambda state:
+                (state.get("project") or {}).get("path") == str(copy_b) and
+                (state.get("currentTimeline") or {}).get("clipCount") == 3)
+            assert switched["currentTimeline"]["id"] == model_project["currentTimeline"]["id"]
+            second_timeline = await call(switch_brain, "get_timeline", {
+                "includeClips": True, "limit": 1000})
+            assert second_timeline["clipLimitApplied"] is False
+            assert second_timeline["id"] == first_timeline["id"]
+            assert {c["id"] for c in second_timeline["clips"]} == {
+                c["id"] for c in first_timeline["clips"]}
+            proposal = {"clipId": shape_id, "fillColor": "#2746df", "previewOnly": False}
+            denied = await switch_brain.call_tool("update_shape_clip", proposal)
+            assert host_pre_dispatch_rejection(
+                denied, "update_shape_clip", proposal
+            ) == "native_identity_model_observation_required"
+            assert not any(event.get("access") == "write" for event in switch_gateway.evidence())
+            unchanged = await call(switch_session, "get_timeline", {"includeClips": True})
+            assert next(c for c in unchanged["clips"] if c["id"] == shape_id)[
+                "shapeProperties"]["fillColor"].lower() == "#d34a77"
+            fresh = await call(switch_brain, "get_project", {})
+            assert fresh["project"]["path"] == str(copy_b)
+            applied = await call(switch_brain, "update_shape_clip", proposal)
+            assert applied.get("success") is True
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                actual = await call(switch_session, "get_timeline", {"includeClips": True})
+                if next(c for c in actual["clips"] if c["id"] == shape_id)[
+                        "shapeProperties"]["fillColor"].lower() == "#2746df":
+                    break
+                await asyncio.sleep(.15)
+            else:
+                raise AssertionError("Fresh project-observed native edit did not converge")
+            await call(switch_session, "save_project", {"previewOnly": False})
+        # Reopen the edited copy in a new actual native process. The accepted
+        # original and other copy must retain their independent shape state.
+        async with connected() as reopened_copy:
+            await call(reopened_copy, "open_project", {
+                "projectPath": str(copy_b), "previewOnly": False})
+            await wait(reopened_copy, lambda state:
+                (state.get("project") or {}).get("path") == str(copy_b) and
+                (state.get("currentTimeline") or {}).get("clipCount") == 3)
+            actual = await call(reopened_copy, "get_timeline", {"includeClips": True})
+            assert next(c for c in actual["clips"] if c["id"] == shape_id)[
+                "shapeProperties"]["fillColor"].lower() == "#2746df"
+        first_doc = json.loads((copy_a / "project.comfystudio").read_text(encoding="utf-8"))
+        first_saved_timeline = next(t for t in first_doc["timelines"] if t["id"] == first_timeline["id"])
+        assert next(c for c in first_saved_timeline["clips"] if c["id"] == shape_id)[
+            "shapeProperties"]["fillColor"].lower() == "#d34a77"
+        assert digest(native_path) == source_doc_sha
+        assert digest(original) == original_hash
+        print("ACTUAL_NATIVE_CROSS_PROJECT_OBSERVATION_FENCE " + json.dumps({
+            "two_real_native_copies_reuse_timeline_and_clip_ids": True,
+            "external_project_switch_then_complete_model_timeline_read": True,
+            "old_project_plan_refused_before_native_write": True,
+            "fresh_model_project_read_allows_native_edit": True,
+            "edited_copy_saved_and_reopened_in_new_process": True,
+            "other_copy_shape_and_original_document_and_media_preserved": True,
+            "genuine_human_operator_or_neural_creativity_attested": False,
+        }, sort_keys=True), flush=True)
         # Independent new Electron process, not an in-memory JSON fixture.
         async with connected() as session:
             await call(session, "open_project", {

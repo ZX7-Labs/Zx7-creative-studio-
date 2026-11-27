@@ -1490,3 +1490,12 @@ Previous full ledger and STATE retained at commit `573e952ccf1b9556fec8d56204ac7
  "green": "3/3 direct regression/control tests. 86/86 related fence/identity/gateway/reference tests. Wider 96 tests: 95 pass, one missing scripts.run_native_model_trial import in local installed-wheel overlay; no assertion failures. Exact source blobs match local tested files.",
  "limits": "Synthetic renderer/interleaving test, not real Electron project switch, independent human usability or creative acceptance. Cannot attribute historical G1 #46007258095 stale refusal to this defect; raw project revisions unavailable. Exact hosted candidate still pending."
 }
+
+### Actual native cross-project harness candidate (not yet executed)
+
+{
+ "path": "engines/velorn/mcp-e2e.py",
+ "blob": "a1343380d919c3e200d0eae735bfcd9460812056",
+ "scope": "Two actual copies of synthetic saved project under authorized root with identical timeline/clip IDs; external native open of second; model full timeline read cannot grant stale plan; no gateway write, unchanged shape; explicit new project read permits shape edit; save and fresh native reopen of edited copy; other copy shape and original document/media unchanged.",
+ "verification": "Locally parsed exact 96-line inserted fragment; Git blob of fragment matches remote patch. Full Electron physical test not run in this environment; hosted execution required."
+}

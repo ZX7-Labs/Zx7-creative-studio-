@@ -1365,12 +1365,10 @@
   "limits": "No measured genuine model turn/token savings, no semantic/creative/release acceptance, no new live model trial or private egress."
  },
  "parent_installed_and_atomic_diagnostics_20261127": {
+  "retained_in": "EVIDENCE/INDEX.md#2026-11-27--parent-installed-artifact-and-fail-closed-atomic-range-diagnostics",
+  "immutable_ledger_commit": "ff671ef62e62178409731207e280b03fd963d475",
+  "immutable_ledger_blob": "8c786d96a9d40210af45ef0d5315b22a2f57b2b1",
   "parent": "f036a1552af2b6080344e4e840c5b6d35727c207",
-  "observed_matrix": {
-   "success": 27,
-   "failure": 1,
-   "in_progress": 1
-  },
   "installed": {
    "run": 46023937134,
    "job": 140590354038,
@@ -1390,22 +1388,13 @@
    "exact_tree": "5b8fbed418a02e746243f6a763ffeebda0996d86",
    "limits": "Installed technical proof, no independent professional acceptance."
   },
-  "pending": {
-   "run": 46023937016,
-   "job": 140590479244,
-   "step": "Run every existing and new studio application contract on this exact branch"
-  },
   "atomic_range": {
    "failed_run": 46023936864,
    "failed_job": 140591531636,
-   "prior_success_run": 46007163085,
-   "prior_success_job": 140533459148,
-   "observed": "Vite build succeeded; silent post-build checks exit 1; previous exact guard passed. No exact failed command/cause established.",
    "workflow_blob": "da5b964e6ebb1e349c50200e9e73e4050d6a5b00",
-   "change": "Report missing index/helper, sandbox permission stage, actual version stdout, subprocess exit code and mismatch. Retain exact version and sandbox requirements; explicitly fail nonzero probe even if stdout matches.",
-   "local_verification": "bash -n and six shell fixture cases (missing index/helper, chmod/chown-stage refusal, nonzero version command, wrong version, exact positive). Not real Electron proof.",
    "limits": "No root-cause resolution or guard weakening claimed. Require actual hosted retry with diagnostics and native physical proof."
-  }
+  },
+  "note": "Earlier observed in-progress matrix superseded by terminal parent receipt; full exact prior record retained."
  },
  "parent_terminal_20261127": {
   "source": "f036a1552af2b6080344e4e840c5b6d35727c207",
@@ -1447,6 +1436,12 @@
    "studio_next/test_native_revision_fence.py": "4bd483449323eb77e33e5749805e26781521fe71"
   },
   "green": "3/3 direct regression/control tests. 86/86 related fence/identity/gateway/reference tests. Wider 96 tests: 95 pass, one missing scripts.run_native_model_trial import in local installed-wheel overlay; no assertion failures. Exact source blobs match local tested files.",
-  "limits": "Synthetic renderer/interleaving test, not real Electron project switch, independent human usability or creative acceptance. Cannot attribute historical G1 #46007258095 stale refusal to this defect; raw project revisions unavailable. Exact hosted candidate still pending."
+  "limits": "Synthetic renderer/interleaving test, not real Electron project switch, independent human usability or creative acceptance. Cannot attribute historical G1 #46007258095 stale refusal to this defect; raw project revisions unavailable. Exact hosted candidate still pending.",
+  "native_harness": {
+   "path": "engines/velorn/mcp-e2e.py",
+   "blob": "a1343380d919c3e200d0eae735bfcd9460812056",
+   "scope": "Two actual copies of synthetic saved project under authorized root with identical timeline/clip IDs; external native open of second; model full timeline read cannot grant stale plan; no gateway write, unchanged shape; explicit new project read permits shape edit; save and fresh native reopen of edited copy; other copy shape and original document/media unchanged.",
+   "verification": "Locally parsed exact 96-line inserted fragment; Git blob of fragment matches remote patch. Full Electron physical test not run in this environment; hosted execution required."
+  }
  }
 }
