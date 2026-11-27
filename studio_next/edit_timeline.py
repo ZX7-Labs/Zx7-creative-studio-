@@ -16,6 +16,12 @@ from pathlib import Path
 _ID = re.compile(r"^[a-zA-Z0-9_.-]+$")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
+# A content digest attests one self-contained movie, not a playlist or
+# manifest which can open unowned secondary sources. Apply before opening
+# each input, including content-addressed files with no filename extension.
+SELF_CONTAINED_VIDEO_INPUT = ("-protocol_whitelist", "file,pipe",
+                              "-format_whitelist", "mov,matroska,webm")
+
 
 def _require(x, message):
     if not x: raise ValueError(message)
@@ -69,7 +75,7 @@ def validate_edit(edit, root, *, check_sources=True):
 
 
 def probe_media(path):
-    raw=subprocess.check_output(["ffprobe","-v","error","-show_streams","-show_format",
+    raw=subprocess.check_output(["ffprobe","-v","error",*SELF_CONTAINED_VIDEO_INPUT,"-show_streams","-show_format",
                                   "-of","json",str(path)],timeout=45)
     data=json.loads(raw)
     videos=[x for x in data["streams"] if x.get("codec_type")=="video"]
@@ -99,7 +105,7 @@ def edit_ffmpeg_command(edit, root, dest, *, source_info):
         _require(isinstance(has_audio,bool),"Audio presence must be measured")
         if clip["audio"]=="preserve_source":
             _require(has_audio,clip["id"]+": cannot pretend narration exists")
-        argv+=["-i",str(path)]
+        argv+=[*SELF_CONTAINED_VIDEO_INPUT,"-i",str(path)]
         if fmt["framing"]=="fit":
             resizing=(f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
                       f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:"

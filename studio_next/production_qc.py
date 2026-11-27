@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 from .delivery_audit import _probe_details
+from .edit_timeline import SELF_CONTAINED_VIDEO_INPUT
 from .media_vault import sha256_file
 
 _MAX_VOLUME=re.compile(r"max_volume:\s*(-?(?:\d+(?:\.\d+)?|inf))\s*dB")
@@ -60,14 +61,14 @@ def full_decode_inspection(file,*,expected=None,runner=None,max_seconds=7200):
         errors.append("Physical film duration deviates from original director's edit")
     run=runner or subprocess.run
     command=["ffmpeg","-hide_banner","-loglevel","error","-xerror",
-             "-nostdin","-i",str(file),"-map","0:v","-map","0:a?",
+             "-nostdin",*SELF_CONTAINED_VIDEO_INPUT,"-i",str(file),"-map","0:v","-map","0:a?",
              "-f","null","-"]
     decoded=run(command,capture_output=True,text=True,timeout=max_seconds,check=False)
     if decoded.returncode!=0:
         errors.append("Actual complete video/audio stream failed physical decode")
     sound=None
     if source["audio_stream_present"]:
-        volume=run(["ffmpeg","-hide_banner","-nostdin","-i",str(file),
+        volume=run(["ffmpeg","-hide_banner","-nostdin",*SELF_CONTAINED_VIDEO_INPUT,"-i",str(file),
                 "-vn","-af","volumedetect","-f","null","-"],
                 capture_output=True,text=True,timeout=max_seconds,check=False)
         if volume.returncode!=0:

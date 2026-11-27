@@ -832,443 +832,14 @@
       "unmatched_object_variants": 585
     },
     "latest_review": {
-      "source": "dbc6257bfee830cb8e78a40732d04cd139f7863f",
-      "live_refs_compared": 478,
-      "only_canonical_ref_advanced": true,
-      "archive_variants": 1096,
-      "unmatched_at_archive": 585,
-      "source_variants_structurally_equivalent": 13,
-      "test_variants_structurally_equivalent": 5,
-      "structural_equivalence_is_not_semantic_acceptance": true,
-      "historical_catalog_source": "d6fffb40bb218f93dab9b3f5191666e82f1f0e0d",
-      "restored_commit": "dbc6257bfee830cb8e78a40732d04cd139f7863f",
-      "original_test_negative": "8 failed assertions across 3 tests of 8",
-      "focused_tests": {
-        "passed": 32,
-        "skipped": 33,
-        "failed": 0
-      },
-      "discovery_gateway": {
-        "passed": 88
-      },
-      "visual_research": {
-        "passed": 62,
-        "skipped": 3
-      },
-      "long_local_physical_suite": "timed out, not passed",
-      "markdown_baseline": {
-        "source": "b124d560e0920c76b3cc0d9c4d6cc1543d8ba28f",
-        "files": 35,
-        "relative_links": 278,
-        "broken": 0,
-        "unclosed_fences": 0,
-        "malformed_atx_headings": 0,
-        "leading_tabs_outside_fences": 0
-      },
-      "additional_reconciliation": {
-        "historical_tests_already_passed": [
-          "Crossref untrusted publication shape",
-          "versioned complete MCP discovery",
-          "partial versioned MCP catalog refusal"
-        ],
-        "direct_mcp_schema_negative": "Prior direct validator accepted undeclared fakePermission field; shared validator rejects it. Reused shared validator in direct server and restored 2 historical SDK integration tests (SDK absent locally).",
-        "local_combined": {
-          "passed": 64,
-          "skipped": 35,
-          "failed": 0
-        },
-        "exact_tested_code_blobs": [
-          {
-            "path": "studio_next/body_editor_mcp.py",
-            "sha": "d31091b83572685736ec75683247dbdf7b72e97a"
-          },
-          {
-            "path": "studio_next/test_body_editor_mcp.py",
-            "sha": "b2b0b900211cced840e23a8db0a1d49c9277d413"
-          }
-        ],
-        "doc_verification": {
-          "source": "a59e2486940324a9b8a2c12e5f8af2e8fbfbb60b",
-          "changed_markdown": 11,
-          "relative_links": 127,
-          "errors": 0,
-          "ledger_binding_verified": true
-        }
-      },
-      "admission_compatibility": {
-        "source": "458ace268dda80cdbecd00c77829d997c5db3492",
-        "failed_source_gate": 45866754019,
-        "failed_actual_native_gate": 45866754225,
-        "failed_unified_creative_gate": 45866753793,
-        "local_tests": {
-          "run": 302,
-          "passed": 267,
-          "skipped": 35,
-          "failed": 0
-        },
-        "local_sdk_unavailable": true,
-        "root_cause": "direct bridge knew older CAS tool subset only; strict top-level validation rejected host-injected token for newer source-pinned editor operations, and existing unscoped export codec alias. Shared exact native revision-tool policy and commit-intent semantics; preserve token on authorized commit, reject on other calls, keep preflight preview token-free. Explicit source-proven unscoped aliases codec/aspect/preset/size; owner-constrained closed schemas unchanged.",
-        "validated_blobs": [
-          "2ca0ad073c928370576e17ca93661871b778d40c",
-          "86dc9135676c4fec07b1d92567942a967250689d",
-          "3bab645284e3325900c31473699d752d85f98a70",
-          "ef478ec213deeba2b0bfe8c2b6edcac05b9234a7"
-        ],
-        "followup": {
-          "source": "fbdbfc3ce92dc042a15bec99cac2914a2c357ade",
-          "source_gate": 45869371030,
-          "source_gate_sdk_tests": 336,
-          "unified_installed_gate": 45869370859,
-          "project_brain_gate": 45869370774,
-          "physical_fixture_failure": 45869371013,
-          "fixture_blob": "1a98b443368dd6e5719a9ffe21ec02ee186fae2e",
-          "fixture_local_check": "Python compilation and diff whitespace pass; actual Electron retest pending",
-          "apt_failure_run": 45869371164,
-          "apt_retry": "targeted retry; final run failure is common E2E fixture, not apt"
-        }
-      },
-      "shared_discovery_archive": {
-        "base_source": "faa0164724f0e89543f0e0bf9a8b8c9255166f9b",
-        "source_variants": [
-          {
-            "variant": "8fe04689b2c2348cb7f3f1d755dd4092de706ae50afe3bc9a776cde726df41a1",
-            "historical_tip": "e3f8b057cf45eae767dce0433388fc8deac09f07",
-            "path": "studio_next/capability_fabric.py",
-            "status": "restored_bounded_full_description_index_and_revision"
-          },
-          {
-            "variant": "210ebed34db31107bd4ba23ba38e1f74a2c372d4c41db5075dadd40196d5b0b9",
-            "historical_tip": "e3f8b057cf45eae767dce0433388fc8deac09f07",
-            "path": "studio_next/test_capability_fabric.py",
-            "status": "historical_regression_replayed_RED_then_GREEN"
-          },
-          {
-            "variant": "f9862510472186eb0968bbdfc1d3276fa80bd1297774c013ac47f789e9cfbf39",
-            "path": "studio_next/body_motion_project.py",
-            "status": "superseded_by_same_exclusive_publication_plus_decode_clock_and_fsync",
-            "evidence": "current source diff and current physical test suite"
-          },
-          {
-            "variant": "7d84f85d9000a9ec6d07212ff5194eb45ffe9be116cb9aab8d42cdd783a5a732",
-            "path": "studio_next/test_body_motion_project.py",
-            "status": "current_tests_retain_and_strengthen_old_race_tests_with_actual_media"
-          },
-          {
-            "variant": "1d22bf7c7449d41d3d217d175cdaf4e53fb101000dcb43cb82ec8af014766b13",
-            "path": "studio_next/reference_observatory.py",
-            "status": "current_source_retains_old_behavior_adds_exact_sample_count"
-          },
-          {
-            "variant": "2565c58617609bf192430a179c51deb57434cc65abcc02dc7d9a17ae8402af70",
-            "path": "studio_next/test_reference_observatory.py",
-            "status": "current_tests_retain_old_and_add_linear_energy_regression"
-          },
-          {
-            "variant": "cfb97338734ece3665309aacfb17461ea6277675a85a3fabf5a9b657ea09ee2f",
-            "path": "studio_next/capability_reference_guard.py",
-            "status": "whole_file_AST_equal_except_comment"
-          },
-          {
-            "variant": "0dfac7c6bcb3137dab51fb6a573754f2574e98a704b29de235d0ef25c749f8fd",
-            "path": "studio_next/test_body_editor_catalog.py",
-            "status": "exact_worktree_bytes_already_restored"
-          },
-          {
-            "variant": "45498edcfc4031ac2e33a7768b1c5c1f2bdafbc3398cc132cf136cd4642fe8db",
-            "path": "studio_next/body_document_schemas.py",
-            "status": "gain_fields_present_with_pan"
-          },
-          {
-            "variant": "fdd1e8ac25b794784b5d7266cbe386da98759866c5ec15d70fb0f342663b9b60",
-            "path": "studio_next/body_document_schemas.py",
-            "status": "gap_color_implemented_as_separate_director_render_argument_not_duplicate_plan_field"
-          },
-          {
-            "variant": "3ca361055ba9e116bcd5ed9b4aaa4ef930d9d47fbb45ec233be20d714eea6fcc",
-            "path": "studio_next/body_document_schemas.py",
-            "status": "clip_grade_current"
-          },
-          {
-            "variant": "789449ca6b61c6eb1b5fd402fa623b89c3fa31f8b9836e63c593627c22ca372e",
-            "path": "studio_next/body_document_schemas.py",
-            "status": "zero_clip_picture_track_current"
-          }
-        ],
-        "historical_registry": "Do not revive separate LiveCapabilityRegistry; reuse gateway refresh lock, current future-tool discovery and failed-refresh preservation. Whole-source hot replacement not claimed.",
-        "new_defects": {
-          "search_result_mutation": "Returned readiness/effect lists aliased internal host snapshot; defensive copies",
-          "late_description_change": "Live invocation compares bounded discovery vocabulary as well as ABI and grants",
-          "concurrent_refresh": "Old slow tools/list could overwrite newer snapshot; serialize publication",
-          "sqlite_handles": "Archive backup/restore and service polling left raw sqlite handles open; close deterministically",
-          "sqlite_path": "URI-reserved workspace characters could back up an incorrect empty database; encode actual absolute file URI"
-        },
-        "red": {
-          "discovery_initial": "3 failures / 3",
-          "refresh": "1 failure and 1 already passing / 2",
-          "sqlite": "2 failures and 1 error / 3"
-        },
-        "green": {
-          "fabric_gateway_integration_catalog": {
-            "passed": 80,
-            "skipped": 0
-          },
-          "cross_domain": {
-            "run": 156,
-            "passed": 153,
-            "skipped": 3
-          },
-          "physical_selected": {
-            "passed": 37
-          },
-          "archive_service": {
-            "passed": 26
-          },
-          "new_exact_test_blobs": [
-            {
-              "path": "studio_next/capability_fabric.py",
-              "sha": "d78b2132dce40e9fdb8754f0c9bade37b03ae7a6"
-            },
-            {
-              "path": "studio_next/capability_gateway.py",
-              "sha": "9f22f157f5e9998a5f38648149209471ac40602a"
-            },
-            {
-              "path": "studio_next/test_capability_fabric.py",
-              "sha": "659780b0a9a9e45579de17bee91c1166eb9e1c1d"
-            },
-            {
-              "path": "studio_next/test_capability_gateway.py",
-              "sha": "839d5bc036d975438cb168afe2394e3721b8a144"
-            },
-            {
-              "path": "studio_next/body_archive.py",
-              "sha": "a18d19787943e1fa8cd64dbc7039cffc00820e7c"
-            },
-            {
-              "path": "studio_next/body_service.py",
-              "sha": "4a1f26912fb5463767da145dcc7f67445121e1c0"
-            },
-            {
-              "path": "studio_next/test_body_archive.py",
-              "sha": "de332061707afd5ad995a946147b3b7843246d20"
-            },
-            {
-              "path": "studio_next/test_body_service.py",
-              "sha": "7c4b17e8e09296829c60d73dded1a6e274379f99"
-            }
-          ]
-        },
-        "limits": "No SDK or MLT/Blender installed locally; artifact verification on preceding exact tree, new source requires full CI. Counts overlap where test groups include targeted tests; do not sum as unique tests. Structural/behavior subset not all-branch closure."
-      }
+      "historical_exact_source": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/4e2c4338841e77f601443cfc55f986c53437b183/project-brain/EXECUTION_LEDGER.json",
+      "field": "consolidation.latest_review",
+      "status": "Full detailed archive review retained at immutable parent; targeted reuse remains current."
     },
     "followup_source_review": {
-      "source": "13482c55b7f084910beca6c8413953d6d60f4b70",
-      "archive": "cb3121df28ec12da391dac42a4485c3c1bb83213",
-      "method": "Exact ordered full-file normalization of historical blob against current file, plus existing exact-head installed regression log.",
-      "variants": [
-        {
-          "variant": "0c44c44bbc89cd81d2d30a47df34d42f2db965cf3c9ba0bb65caa6521f2876bf",
-          "path": "studio_next/native_editor_asset_reader.py",
-          "historical_blob": "dc1c23cc2dab9e471a5d10e9996a7281938c3866",
-          "current_blob": "4c5ac4536d06198c371c6d73c190f5557a58a34b",
-          "status": "superseded_by_same_behavior_plus_strict_boolean_transport_status_validation",
-          "proof": "exact file equality outside one replaced transport-status block; two status compatibility/negative regressions pass installed job 140093334903"
-        },
-        {
-          "variant": "ecbfadc6fbb33f140db4edabe8ae865d7b3d9fe7feb7de995020a19d6af222ef",
-          "path": "studio_next/body_affordances.py",
-          "historical_blob": "e88ba436094f1d56696224d0b35ea3bfc366937e",
-          "current_blob": "8b0fbb06efc31f4f550491602370be80faeb7b91",
-          "status": "current_source_retains_old_affordance_behavior_with_explicit_permission_and_native_runner_admission",
-          "proof": "exact whole-file equality after five targeted text replacements; authenticated live preflight/no execution and denied rights tests pass installed job 140093334903"
-        }
-      ],
-      "pending_timeline_identity": {
-        "variant": "a4281045e49d6cd60e7400326615e4397d1acf3a0fba19827d8b07919d2b6693",
-        "historical_blob": "61d4f916b51020e98bc05a7a47edc5c09be327dd",
-        "current_owner": "studio_next/native_editor_identity.py",
-        "status": "restored_explicit_clip_track_path_coverage_exact_source_CI_passed",
-        "reason": "Existing pinned host reader and guard reused; nine operations covered by targeted mapping. Archived generic behavior not reintroduced, no blanket claim for every native reference kind.",
-        "candidate": {
-          "base": "caa5071dcb07f3165b2e2056ad64db079add53b3",
-          "source_blob": "6cfbd7b3412ea584ed7004393cf287f1679ffc23",
-          "test_blob": "af4ca64c2de8fa51319111d70a54bdcdc382ff6c",
-          "pinned_upstream": "b3c02adbd5c0779feb8abf34978299e9502cc0e7",
-          "upstream_electron_blob": "22693419834cd1f24515e1ce5a6ff5c1b7f45311",
-          "upstream_renderer_blob": "cf2d61167dd6a83e5e6266c065ecad0945b66fc1",
-          "archived_test_variant": "e0cb652f9be43d0208bfc40491b14b42ee0be930590d5a8938dcb029405c9983",
-          "missing_reference_paths_before": [
-            "update_caption_cues:/clipId",
-            "set_clip_label_color:/clipIds/*",
-            "select_clips:/clipId",
-            "select_clips:/clipIds/*",
-            "select_clips:/trackId",
-            "add_solid_color:/trackId",
-            "add_glsl_effect:/clipId",
-            "update_glsl_effect:/clipId",
-            "remove_glsl_effect:/clipId",
-            "add_dip_to_black:/clipIds/*",
-            "add_dip_to_black:/trackId",
-            "add_dip_to_black:/clipPairs/*/outClipId",
-            "add_dip_to_black:/clipPairs/*/inClipId",
-            "add_dip_to_black:/clipPairs/*/clipAId",
-            "add_dip_to_black:/clipPairs/*/clipBId",
-            "add_dip_to_black:/clipPairs/*/fromClipId",
-            "add_dip_to_black:/clipPairs/*/toClipId",
-            "add_dip_to_black:/clipPairs/*/firstClipId",
-            "add_dip_to_black:/clipPairs/*/secondClipId",
-            "add_dip_to_black:/pairs/*/outClipId",
-            "add_dip_to_black:/pairs/*/inClipId",
-            "add_dip_to_black:/pairs/*/clipAId",
-            "add_dip_to_black:/pairs/*/clipBId",
-            "add_dip_to_black:/pairs/*/fromClipId",
-            "add_dip_to_black:/pairs/*/toClipId",
-            "add_dip_to_black:/pairs/*/firstClipId",
-            "add_dip_to_black:/pairs/*/secondClipId",
-            "set_clip_style:/trackId"
-          ],
-          "missing_reference_paths_after": 0,
-          "proof_tier": "28 missing paths in source-map baseline; new runtime positive/negative coverage and mixed-label-batch no-dispatch regression passed; 29/29 exact-source CI; not runtime RED-before-fix",
-          "scope": "Explicit existing clip/track references on eight already-grantable tools and missing trackId on set_clip_style. Nested dip aliases sourced from actual renderer; no new grant, CAS or marker identity claim.",
-          "tests": [
-            "test_source_attested_explicit_clip_track_reference_coverage",
-            "test_partial_label_batch_refused_before_native_write"
-          ],
-          "verified_source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
-          "verified_jobs": [
-            140116242464,
-            140116243037,
-            140116240531,
-            140116348153
-          ]
-        }
-      },
-      "handoff_correction": {
-        "reported_candidate": "642565f1252f10caf65a1aa6f434672d25dcc3ba",
-        "actual_commit": "fix(release): preserve reviewed native project through clock-only autosave without accepting content drift",
-        "current_source_and_regression_present": true,
-        "marker_candidate_verified": false,
-        "action": "Do not replay the already present autosave fix or assume the reported SHA is a marker fix; recover marker candidate from exact object evidence or reproduce the actual marker gap before change."
-      },
-      "marker_identity_candidate": {
-        "source_candidate": "c7ebb91fa581765fc1dd46daa4fb871101947ee2",
-        "base": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
-        "source_blob": "fa6b415fef7adead4b34f94c85c920985942475d",
-        "test_blob": "dc998f540cd3ac6800b06545af95a1a21a55196c",
-        "node_test_blob": "e58ab3db9e0046f50dc3e5d4448715eb009f0ebc",
-        "upstream_snapshot_blob": "f0a182947efda52f7f017ab78303c06708a1e196",
-        "upstream_electron_blob": "22693419834cd1f24515e1ce5a6ff5c1b7f45311",
-        "upstream_renderer_blob": "cf2d61167dd6a83e5e6266c065ecad0945b66fc1",
-        "status": "exact_source_CI_passed_scoped_host_admission",
-        "scope": "Complete bounded marker inventory and existing-ID admission for removal and property updates; malformed marker receipt does not invalidate unrelated source reads. No native commit CAS or renderer race proof; native partial-target behavior separately characterized.",
-        "tests": [
-          "test_marker_inventory_requires_complete_counted_native_receipt",
-          "test_marker_edits_refuse_partial_targets_before_write",
-          "Pinned marker source exposes counted IDs and can otherwise dispatch a partial explicit batch"
-        ],
-        "verified_source": "5b9efc497717f81e63c26c14ff621af58201bc57",
-        "verified_jobs": [
-          140149056131,
-          140149056088,
-          140149056589,
-          140149056186
-        ]
-      },
-      "ordered_source_comparisons": {
-        "source": "134ea090d8c293b1c9867de219a8ad32c8d5cbad",
-        "method": "Ordered full-file line comparison of historical/current Git blobs; existing installed regression log on unchanged paths. Preserve intentional stronger behavior and changed API/format boundaries; not professional domain acceptance.",
-        "variants": [
-          {
-            "variant": "a88af279a0d55a2fad8f2c79f8e02cdc38914f9cd3927250a943cea4a2af5f41",
-            "path": "studio_next/registry.py",
-            "historical_blob": "adf332fc0101df864bd20eaf8fc81a5d4564f840",
-            "current_blob": "ca1c31681506a2dae805da8eecb8f5efde75623a",
-            "status": "retains_durable_admission_and_blocks_unsupported_access"
-          },
-          {
-            "variant": "4a94cfff411cf1aff5c3bd267181411b4c23a5a57092cf386ad3d7bc4c8355a2",
-            "path": "studio_next/body_signal.py",
-            "historical_blob": "26d9edadd44fe087a381f6a31ea42bc6374c4e63",
-            "current_blob": "4f661431555fd9c325820c8a636b9ac3c89c9c8c",
-            "status": "retains_DAG_admission_adds_immutable_plan_selection"
-          },
-          {
-            "variant": "ab5ad94104bc18a5f36cc2f3c8d72e722621fbd656c3208c75b894f69c157c6a",
-            "path": "studio_next/body_capability_adapter.py",
-            "historical_blob": "2a6b894cd903c828ff0b737e72b2542f49caa5d8",
-            "current_blob": "b7a055acbf24cf8ed156f808db80f8e4ef14056f",
-            "status": "retains_pre_journal_asset_guard_adds_bounded_reads_and_durable_publication"
-          },
-          {
-            "variant": "3348d577ae5a3d892b39f4c1d2e4575453b1d0af23f932c8583cf4d87365d6a3",
-            "path": "studio_next/body_capability_adapter.py",
-            "historical_blob": "4901e811413fadcbde1847ee0b702bfc7eeee495",
-            "current_blob": "b7a055acbf24cf8ed156f808db80f8e4ef14056f",
-            "status": "same_guard_and_current_read_only_discovery"
-          },
-          {
-            "variant": "ac69818b6957106959ee06c6f9bfbcfc9939d7383694556825fa7033c5b0351b",
-            "path": "studio_next/body_mlt_compare.py",
-            "historical_blob": "5bc61a48f5cf8eacd41d2cd62b379f3c86f1aa5e",
-            "current_blob": "a8abb8111ec35e5bb1c9f8148fdf2311f661f525",
-            "status": "retains_full_review_with_focus_all_and_adds_color_audio_semantics"
-          },
-          {
-            "variant": "90161ec7f9a1f3804bbec205d154e682537c6a56d76405a5f4fa810c029f75c1",
-            "path": "studio_next/body_mlt_linked_actions.py",
-            "historical_blob": "53452c4f56dea385c79eacd4a9e6b686181d1b05",
-            "current_blob": "92709b865af92a7a35306af9bd752772fec22d03",
-            "status": "retains_linked_time_actions_adds_native_placement_and_transform_mask_grade_tone"
-          },
-          {
-            "variant": "b790488935c2426c92030e854683449605214344d47aed90faf52ac113eb059f",
-            "path": "studio_next/reference_evidence_tools.py",
-            "historical_blob": "384698986e3e310dab2ff41d83513c5fc49d11e7",
-            "current_blob": "5983d2e40ba944620fa663a55fe26c83e762c8e3",
-            "status": "corrects_unphysical_arithmetic_dB_average_to_sample_weighted_linear_energy"
-          },
-          {
-            "variant": "a8ccdf30bfb1f7fd146c9fd02a6aa7d63ecc93ded46bc6b179a83e09c7063c51",
-            "path": "studio_next/body_editor_extract_guard.py",
-            "historical_blob": "a58a9f7cb4e1e7750b8e14a2837bc39eefb90f26",
-            "current_blob": "5ca7be83eb047ad7e962759bac687ee016a56026",
-            "status": "retains_guard_corrects_actual_nested_native_preview_envelope"
-          },
-          {
-            "variant": "57ce695897541157131e37364e9cc19d1b6f41a0c94aa728ac19bcfd8603fc4b",
-            "path": "studio_next/media_vault.py",
-            "historical_blob": "22aab948196a4c074cb74d88561a7e09a7d7bb16",
-            "current_blob": "53e8d642533668f561eaad1616f0b09a1b8cea31",
-            "status": "fixed_width_PCM_no_ffmpeg_dependency_optional_physical_crosscheck"
-          },
-          {
-            "variant": "eada02ace180c6185555debaaa553b6cbd0012c79f5df5e1b9568131769f3dde",
-            "path": "studio_next/media_vault.py",
-            "historical_blob": "aaf78fc1f53bdc91771063097ff1382a4c65f05f",
-            "current_blob": "53e8d642533668f561eaad1616f0b09a1b8cea31",
-            "status": "all_audio_video_stream_decode_and_safe_read_only_vault"
-          },
-          {
-            "variant": "04cf8522b996bf5d1268400ae1c7edb5ce3e5308d959585172817d000015b1cc",
-            "path": "studio_next/media_vault.py",
-            "historical_blob": "b06194e5606a4ced8add258f6df2b28d4aa17568",
-            "current_blob": "53e8d642533668f561eaad1616f0b09a1b8cea31",
-            "status": "strict_RIFF_extent_and_extensible_PCM_support"
-          }
-        ],
-        "evidence_jobs": [
-          140116240531,
-          140116348153,
-          140116243037
-        ],
-        "unresolved": "Legacy diagnostics/aptitude and research hub API were removed; not equivalent to current public research and local editor status without further review."
-      },
-      "unintegrated_candidates": {
-        "research": "cea19dadc38cccb212e9d37331ca1869d200b724",
-        "scheduler_evidence": "633348babde51ba037bf1917fe1f051bd2515aae",
-        "receipt": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356#issuecomment-7202611663",
-        "status": "Exact blobs reused in next coherent integration (see reused_archived_scope_20261127); CI pending; prior unintegrated state retained in Git history."
-      }
+      "historical_exact_source": "https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/4e2c4338841e77f601443cfc55f986c53437b183/project-brain/EXECUTION_LEDGER.json",
+      "field": "consolidation.followup_source_review",
+      "status": "Full detailed archive review retained at immutable parent; targeted reuse remains current."
     }
   },
   "history": {
@@ -1478,7 +1049,7 @@
       "genuine_model": false,
       "professional": false
     },
-    "next": "Inspect direct arm raw journal/artifacts. Compare technical success and token/time/failure rates against indexed arm; do not promote artistic or semantic competence or automatically rerun. Full G2/G3/G4 open.",
+    "next": "Both single arms failed final completion. Direct mode removed 17 searches and reached transient reviewed pair, with 2.23x reported tokens and less wall time. Do not infer statistically proven architecture preference. Inspect completion/revision handoff and stale filename correction; no paid blind rerun.",
     "parent_installed_artifact": {
       "run": 45932518653,
       "artifact": 15169717251,
@@ -1519,8 +1090,29 @@
       "revoked": "9d27019f0a8b2e0aecd29ad954cc4cbc51322807",
       "same_runtime_parent": "fce6049bbee21ad65a3421e383a862644d1aa364",
       "request": "ZX7_SUPER_VL_G1_DIRECT_CATALOG_20261127",
-      "status": "RUNNING",
-      "scope": "Same source/model/brief/48-turn budget; only existing full vs indexed catalog route changes. Whole-interface comparison, not single-factor internal ablation or repeated controlled trials."
+      "status": "FAILED terminal turn_budget_exhausted; transient pair passed then revoked by later model edit",
+      "scope": "Same source/model/brief/48-turn budget; only existing full vs indexed catalog route changes. Whole-interface comparison, not single-factor internal ablation or repeated controlled trials.",
+      "artifact": 15171327555,
+      "sha256": "438d92a0b030ace86723a61aafc03b8cf91618d80207eb2e283601e8fcd0c684",
+      "events": 135,
+      "turns": 48,
+      "searches": 0,
+      "reported_tokens": 1315967,
+      "reported_prompt_tokens": 1251098,
+      "reported_completion_tokens": 64869,
+      "model_ms": 578863.636,
+      "native_mcp_ms": 3390.493,
+      "write_acks": 14,
+      "export_verified": 2,
+      "export_shas": [
+        "9da3574b0244e54cfbc9131d3f61482f2a132e7106a93721b22f49c411f8afbd",
+        "31391ea2abd493e461b3d597cb97c611b9dbe9e89c00c3a04d34c08bed3c8cd7"
+      ],
+      "saved_render_shas": [
+        "29d6785bd0dee6e0c3288a4730f555b1734190e596a79cf65b121d0007b9b893",
+        "8ff5dc05b4bcae9256b87d98825606a6c0afbdefe63820fb6b37a5e97b600561"
+      ],
+      "prefix_observation": "Actual pair comparator returns both exports after turn 41/seq 118, and None after turn 42/seq 120 acknowledged text edit; final two exports rejected output_exists; no automatic replay. Exact retained render-time autosave hashes match. Independent ffprobe and full decode both six-second 640x360 H264 24fps 144 frames, 79/144 RGB frames differ, identical decoded AAC PCM, RMS 0.05555946. No final model finish, semantic hearing, independent quality or rendered-original pixels proof."
     }
   },
   "reused_archived_scope_20261127": {
@@ -1535,7 +1127,25 @@
       "correction": "Allow bounded interior ASCII spaces in NASA ID and quote URL segment; reject path and control characters. Exact RED→GREEN; 71 run/67 pass/4 optional SDK skips.",
       "physical_oracle": "Four synthetic aligned, offset, sound-only, picture-only controls; known target detects brief red event missed by equal-count uniform samples; FFmpeg decoded PNG and audio bins verified; no neural or artistic acceptance.",
       "native_ci_negative": "45937275794 job 140303602801 Microsoft apt repository HTTP 403 before tests; not a source regression.",
-      "acceptance": "Exact new head live verification pending."
+      "acceptance": "Exact new head live verification pending.",
+      "latest_live": {
+        "run": 45937892821,
+        "initial": "30/30 offline research; NASA live 3 reference leads; EPMC timeout",
+        "diagnostic": 45938105014,
+        "diagnostic_result": "Exact query HTTP 200 in 2.733s, 3 accepted records; p53 control timed out. Intermittent transport, not proven parser defect.",
+        "retry": "SUCCESS attempt 2, unchanged source"
+      }
     }
+  },
+  "self_contained_source_custody_20261127": {
+    "baseline": "4e2c4338841e77f601443cfc55f986c53437b183",
+    "baseline_ci_observed": {
+      "success": 27,
+      "in_progress": 2
+    },
+    "red": "Actual HLS file containing only a separate TS reference accepted as MP4, MP3 and FLAC custody; delivery and timeline probes also accepted. All five assertions failed independently.",
+    "fix": "Restrict self-contained video input demuxers to MOV/Matroska/WebM families and local file/pipe protocols at probe, full decode, timeline render and frame/audio readers; MP3/FLAC ingest uses matching demuxer. No remote/playlist imports inferred. Does not replace OS sandbox or solve all decoder vulnerabilities.",
+    "green": "82/82 affected tests, real HLS refused before custody publication, no object/attestation, actual MP4/MOV/MKV/WebM/MP3/FLAC positive controls and extensionless video CAS.",
+    "status": "local exact tested blob candidate; hosted verification pending"
   }
 }

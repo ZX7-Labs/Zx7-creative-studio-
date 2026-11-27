@@ -20,6 +20,7 @@ from .body_editor_client import EditorAccessError
 from .body_editor_policy import EditorPathPolicy
 from .body_editor_export import _no_path_symlinks, VIDEO_EXTENSIONS
 from .delivery_audit import _probe_details
+from .edit_timeline import SELF_CONTAINED_VIDEO_INPUT
 from .media_vault import sha256_file
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -74,7 +75,7 @@ def observe_verified_export_audio_timeline(
     if start_seconds + duration_seconds > details["duration_seconds"] + 0.000001:
         raise ValueError("Audio timeline interval exceeds measured video")
     argv = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
-            "-protocol_whitelist", "file,pipe,crypto",
+            *SELF_CONTAINED_VIDEO_INPUT,
             "-ss", format(start_seconds, ".9f"), "-i", str(source),
             "-map", "0:a:0", "-t", format(duration_seconds, ".9f"),
             "-vn", "-ac", "1", "-ar", str(_RATE), "-c:a", "pcm_s16le",

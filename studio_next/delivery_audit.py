@@ -14,14 +14,14 @@ import math
 import subprocess
 from pathlib import Path
 
-from .edit_timeline import probe_media
+from .edit_timeline import probe_media, SELF_CONTAINED_VIDEO_INPUT
 
 
 def _probe_details(movie):
     movie=Path(movie)
     if not movie.is_file() or movie.stat().st_size<512:
         raise ValueError("No physical encoded audiovisual deliverable")
-    raw=subprocess.check_output(["ffprobe","-v","error","-show_streams",
+    raw=subprocess.check_output(["ffprobe","-v","error",*SELF_CONTAINED_VIDEO_INPUT,"-show_streams",
         "-show_format","-of","json",str(movie)],timeout=60)
     info=json.loads(raw)
     videos=[s for s in info.get("streams",[]) if s.get("codec_type")=="video"]
@@ -81,7 +81,7 @@ def audit_delivered_movie(movie,*,output=None,expected=None,
         path=Path(output)/"review-frames"/f"frame-{idx:04d}.png"
         path.parent.mkdir(parents=True,exist_ok=True)
         subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
-                        "-ss",str(stamp),"-i",str(video),
+                        *SELF_CONTAINED_VIDEO_INPUT,"-ss",str(stamp),"-i",str(video),
                         "-frames:v","1",str(path)],
                        check=True,timeout=120)
         if not path.is_file() or path.stat().st_size<100:

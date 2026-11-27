@@ -36,12 +36,13 @@ def verify_media_container(path,mime):
         if shutil.which("ffprobe") is None:
             raise MediaCustodyError("Real video decoder not installed; refuse unverifiable source")
         from .delivery_audit import _probe_details
+        from .edit_timeline import SELF_CONTAINED_VIDEO_INPUT
         import subprocess
         try:
             observed=_probe_details(path)
             decoded=subprocess.run([
                 "ffmpeg","-hide_banner","-loglevel","error","-nostdin",
-                "-xerror","-i",str(path),"-map","0:v",
+                "-xerror",*SELF_CONTAINED_VIDEO_INPUT,"-i",str(path),"-map","0:v",
                 "-map","0:a?","-f","null","-"],
                 capture_output=True,timeout=3600,check=False)
             if decoded.returncode!=0:
@@ -283,8 +284,11 @@ def verify_media_container(path,mime):
                 "Not a physically decoded and verified native 32f EXR bundle") from exc
     elif mime in ("audio/mpeg","audio/flac"):
         import subprocess
+        # Do not let a reference-only playlist confer custody of its targets.
+        audio_input=("-protocol_whitelist","file,pipe","-format_whitelist",
+                     "mp3" if mime=="audio/mpeg" else "flac")
         try:
-            data=json.loads(subprocess.check_output(["ffprobe","-v","error",
+            data=json.loads(subprocess.check_output(["ffprobe","-v","error",*audio_input,
                   "-show_entries","stream=codec_type","-of","json",str(path)],timeout=60))
         except (OSError,ValueError,subprocess.SubprocessError) as exc:
             raise MediaCustodyError("Claimed audio does not contain a decodable stream") from exc
@@ -292,7 +296,7 @@ def verify_media_container(path,mime):
             raise MediaCustodyError("No original decoded source sound")
         decoded=subprocess.run([
             "ffmpeg","-hide_banner","-loglevel","error","-nostdin",
-            "-xerror","-i",str(path),"-map","0:a:0",
+            "-xerror",*audio_input,"-i",str(path),"-map","0:a:0",
             "-f","null","-"],capture_output=True,timeout=3600,check=False)
         if decoded.returncode!=0:
             raise MediaCustodyError("Original compressed sound failed full decoder")
