@@ -59,10 +59,18 @@ def execute(job,output,base=None):
         from studio_next.body_motion_project import validate_armature_bones
         validate_armature_bones(bones)
         layer=bpy.context.view_layer
-        if (not isinstance(obj,bpy.types.Object) or obj.type!="ARMATURE" or
-            obj.library or obj.data.library or obj.data.users!=1 or len(obj.data.bones) or
-            layer.objects.get(obj.name)!=obj or bpy.context.mode!="OBJECT"):
-            raise ValueError("Bone definition requires an empty local single-user armature in the active view layer and object mode")
+        if not isinstance(obj,bpy.types.Object) or obj.type!="ARMATURE":
+            raise ValueError("Bone definition target must be a native armature object")
+        if obj.library or obj.data.library or obj.data.users!=1 or len(obj.data.bones):
+            raise ValueError("Bone definition requires empty local single-user armature data")
+        if bpy.context.mode!="OBJECT":
+            raise ValueError("Bone definition requires native object mode")
+        # Linking a new object via RNA schedules a dependency graph update.
+        # Synchronize the actual layer before checking membership or entering
+        # edit mode; never permit edits to an object from another view layer.
+        layer.update()
+        if layer.objects.get(obj.name)!=obj:
+            raise ValueError("Bone definition target is not in the active view layer")
         selected=list(bpy.context.selected_objects);active=layer.objects.active
         try:
             for item in selected:item.select_set(False)
