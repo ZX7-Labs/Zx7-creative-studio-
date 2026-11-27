@@ -1418,7 +1418,7 @@
       "genuine_model": false,
       "professional": false
     },
-    "next": "Reproduce shared timed-reader frontier regression; reconcile current timed coverage and reviewed-pair invalidation without weakening either. Focused and affected tests, then stable physical baseline. Qualify provider/model independently; matched genuine trial within existing consent and dispatch access.",
+    "next": "Verify exact candidate CI. Only after stable baseline, qualify actual model/provider and creative interface; no connector dispatch.",
     "hosted_regression": {
       "source": "d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
       "success": 24,
@@ -1434,6 +1434,16 @@
       "diagnosis": "Older pair fixture uses abbreviated image hashes, stricter readiness requires 64-character digests. Source-supported candidate explanation; write invalidation needs independent reproduction. Not a proven root cause.",
       "genuine_model": false,
       "professional": false
+    },
+    "fixture_correction": {
+      "parent": "5023d44e125c60ce895de35493b8c953c53cb98c",
+      "source_blobs": {
+        "studio_next/test_native_render_evidence.py": "0d8c5070ca933a8b5d696a5fcd1f41e62a4dd668",
+        "studio_next/test_native_creative_control.py": "2350a20114e9555dcccff9fe816c23b8b5e157b8"
+      },
+      "cause": "Shared old pair fixture used one-character hashes; invalidation injected add_text_clip absent from fixture write grants. Source-derived isolated current-evidence reproduction: two original assertions fail; realistic hash and admitted update_text_clip ACK pass both. No production validation relaxed.",
+      "verification": "2/2 isolated excerpt checks passed after fixture correction; full controller and native CI pending. Added distinct assertions for separated coverage, common-time comparison and current evidence revocation. No full checkout in container.",
+      "next": "Verify exact candidate CI. Only after stable baseline, qualify actual model/provider and creative interface; no connector dispatch."
     }
   }
 }

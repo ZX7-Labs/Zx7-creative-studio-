@@ -1051,7 +1051,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     events[7]["native_av_review"] = [0.5, 4.5]
                 if scenario == "invalidated_by_write":
                     events.append({
-                        "kind": "native_tool_result", "tool": "add_text_clip",
+                        "kind": "native_tool_result", "tool": "update_text_clip",
                         "host_application_write_acknowledged": True})
                 session = FakeSession()
                 session.tools.extend([
@@ -1077,6 +1077,14 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     progress.get("previous_source_review_seconds_for_matching_frames"),
                     [1, 4] if expected else None)
+                # A disjoint time set is still separated timed evidence; only
+                # common-time comparison is pending. An admitted later write
+                # invalidates both current verification and timed readiness.
+                self.assertFalse(progress["verified_export_still_needs_separated_timed_frames"])
+                evidence = control._current_export_evidence()
+                expected_current = set() if scenario == "invalidated_by_write" else {"b" * 64}
+                self.assertEqual(evidence["current_verified"], expected_current)
+                self.assertEqual(evidence["current_timed_frames"], expected_current)
                 self.assertEqual(TIMED_FRAMES in context["selectable_native_tools"],
                                  expected)
                 self.assertEqual(

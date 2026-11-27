@@ -25,8 +25,8 @@ class ReviewedAVPairTests(unittest.TestCase):
                      native_av_review=[0, 6], native_av_pcm_sha256="c" * 64),
             ]
 
-        return (render("before", "a" * 64, ["a", "b"]) +
-                [write("update_text_clip")] + render("after", "b" * 64, ["d", "b"]))
+        return (render("before", "a" * 64, ["a" * 64, "b" * 64]) +
+                [write("update_text_clip")] + render("after", "b" * 64, ["d" * 64, "b" * 64]))
 
     def test_container_only_change_does_not_prove_audiovisual_revision(self):
         events = self.events()
@@ -36,7 +36,7 @@ class ReviewedAVPairTests(unittest.TestCase):
         self.assertIsNotNone(reviewed_render_pair(events, revisions))
 
         events[7]["native_av_review"] = [0.5, 3.5]
-        events[7]["image_sha256"] = ["e", "f"]
+        events[7]["image_sha256"] = ["e" * 64, "f" * 64]
         self.assertIsNone(reviewed_render_pair(events, revisions, audiovisual=True))
 
         events[8]["native_av_pcm_sha256"] = "d" * 64
