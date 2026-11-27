@@ -8,6 +8,7 @@ custody or automatic footage import.
 from __future__ import annotations
 
 import re
+from urllib.parse import quote
 
 from .creative_research import (
     _check, _plain, _public_https, _request_params, CreativeResearchError,
@@ -32,12 +33,12 @@ def nasa_video_references(fetch_json, query, limit):
         info=item["data"][0]
         identity=info.get("nasa_id")
         if (not isinstance(identity,str) or
-                not re.fullmatch(r"[A-Za-z0-9_-]{1,120}",identity) or
+                not re.fullmatch(r"[A-Za-z0-9_-](?:[A-Za-z0-9_ -]{0,118}[A-Za-z0-9_-])?",identity) or
                 info.get("media_type")!="video"):
             continue
         found.append({
             "title":_plain(info.get("title"),180) or identity,
-            "source_page":"https://images.nasa.gov/details/"+identity,
+            "source_page":"https://images.nasa.gov/details/"+quote(identity,safe=""),
             "reference_type":"archival_video",
             "rights_status":"unreviewed_government_or_third_party",
             "source_reuse_not_authorized":True,

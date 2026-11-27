@@ -104,6 +104,31 @@ class CreativeResearchTests(unittest.TestCase):
         self.assertEqual(parse_qs(urlsplit(calls[0]).query,
                                   keep_blank_values=True)["cc0"], [""])
 
+    def test_nasa_live_ids_with_spaces_are_encoded_as_safe_reference_paths(self):
+        provider = FakePublicAPIs()
+        valid = ("NDTV000908_Apollo_Digest_Series_Spacecraft for Apollo",
+                 "Official Celebration of Apollo 17 50th Anniversary",
+                 "al worden_fixed")
+        invalid = ("../private", "a/b", "a%2fb", "a?b", "a#b", "a\\b",
+                   " a", "a ", "a\nb", "a" * 121)
+        provider.response = {"collection": {"items": [
+            {"data": [{"nasa_id": ident, "media_type": "video"}]}
+            for ident in valid + invalid]}}
+        # Provider limits apply before filtering, so test malformed IDs separately.
+        research = CreativeResearch(provider)
+        result = research.web(query="Apollo", limit=3, provider="nasa_archive")
+        self.assertEqual([r["source_page"] for r in result["results"]], [
+            "https://images.nasa.gov/details/NDTV000908_Apollo_Digest_Series_Spacecraft%20for%20Apollo",
+            "https://images.nasa.gov/details/Official%20Celebration%20of%20Apollo%2017%2050th%20Anniversary",
+            "https://images.nasa.gov/details/al%20worden_fixed"])
+        self.assertTrue(all(r["source_reuse_not_authorized"] and
+                            r["model_has_not_watched_video"] for r in result["results"]))
+        self.assertFalse(result["import_authorized"])
+        provider.response["collection"]["items"] = provider.response["collection"]["items"][3:]
+        self.assertEqual(research.web(query="Apollo", limit=12,
+                                     provider="nasa_archive")["results"], [])
+        self.assertEqual(len(provider.calls), 2)
+
     def test_explicit_source_selection_rejects_unavailable_or_wrong_media_before_network(self):
         provider = FakePublicAPIs()
         research = CreativeResearch(provider)

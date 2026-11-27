@@ -1528,6 +1528,14 @@
     "scheduler": "633348babde51ba037bf1917fe1f051bd2515aae",
     "source": "Existing exact 8 blobs; matching unchanged parent blobs, no reimplementation. Add 3 read-only public metadata providers and explicit source choice, preserve network/rights gates; truthful scheduler state label.",
     "local": "Scheduler RED assertion true vs false; GREEN 17/17. Research RED provider kwarg unsupported; exact four production + test blobs match. 63 affected tests: 58 pass, 4 SDK skips, 1 no-display error, targeted desktop Xvfb rerun passes (59 distinct passed). Real public endpoints/SDK and CI pending.",
-    "acceptance": "candidate, not full public web, domain or release acceptance"
+    "acceptance": "candidate, not full public web, domain or release acceptance",
+    "live_followup": {
+      "run": 45937275501,
+      "observed": "Cleveland success; NASA empty because all three live Apollo IDs have spaces; Europe PMC runner request failed, independent same-query HTTP 200 JSON returned; runner cause not proven.",
+      "correction": "Allow bounded interior ASCII spaces in NASA ID and quote URL segment; reject path and control characters. Exact RED→GREEN; 71 run/67 pass/4 optional SDK skips.",
+      "physical_oracle": "Four synthetic aligned, offset, sound-only, picture-only controls; known target detects brief red event missed by equal-count uniform samples; FFmpeg decoded PNG and audio bins verified; no neural or artistic acceptance.",
+      "native_ci_negative": "45937275794 job 140303602801 Microsoft apt repository HTTP 403 before tests; not a source regression.",
+      "acceptance": "Exact new head live verification pending."
+    }
   }
 }
