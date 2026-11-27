@@ -1792,6 +1792,10 @@ class NativeCreativeControl:
                                   "trusted_machine_fact": "project_open",
                                   "host_observed_value": False,
                                   "no_native_dispatch": True})
+            # Session-local, bounded model-authored history, never a receipt.
+            # Stateless adapters consume media once; later metadata/native reads
+            # must not erase what the model itself said when it received it.
+            media_rationales: dict[str, dict] = {}
             for turn in range(self.max_turns):
                 # Real Qwen trial #42420526258: 17 searches, an empty
                 # host-confirmed project, no source import, then a rejected
@@ -2292,6 +2296,28 @@ class NativeCreativeControl:
                 if show_tool_hints:
                     context["host_declared_tool_hints"] = tool_hints
                     show_tool_hints = False
+                if media_rationales:
+                    context["historical_model_media_rationales"] = media_rationales
+                # Capture trusted provenance before _infer consumes its media.
+                # Do not retain media bytes or repeat an external media upload.
+                sensory_binding = None
+                if self._last_images:
+                    sensory_binding = ("picture", {
+                        "image_sha256": list(self._last_hashes),
+                        "native_picture_origin": self._last_image_provenance,
+                    })
+                    previous = next((event for event in reversed(self.events)
+                                     if event.get("kind") == "native_tool_result"), {})
+                    if previous.get("image_sha256") == self._last_hashes:
+                        sensory_binding[1]["observation_sequence"] = previous.get("sequence")
+                        for key in (AV_REVIEW_FIELD, AV_WINDOW_AUDIO_FIELD):
+                            if key in previous:
+                                sensory_binding[1][key] = copy.deepcopy(previous[key])
+                        for key in ("observed_export_sha256", "body_picture_source_sha256"):
+                            if _digest(previous.get(key)):
+                                sensory_binding[1][key] = previous[key]
+                elif self._last_audio and self._last_audio_evidence is not None:
+                    sensory_binding = ("audio", copy.deepcopy(self._last_audio_evidence))
                 model_started = time.monotonic_ns()
                 inference_had_media = bool(self._last_images or self._last_audio)
                 try:
@@ -2367,6 +2393,20 @@ class NativeCreativeControl:
                 # project-state observation available to the small model.
                 # A new successful native call replaces this text below.
                 action, args = decision["action"], decision["arguments"]
+                if sensory_binding is not None:
+                    modality, binding = sensory_binding
+                    reason_bytes = decision["reason"].encode("utf-8")
+                    # Keep one historical rationale per actual modality. This
+                    # is the model's unverified text, not semantic evidence,
+                    # current state, a validated native input or a new grant.
+                    media_rationales[modality] = {
+                        **binding, "decision_turn": turn, "action": action,
+                        **({"tool": args["tool"]} if "tool" in args else {}),
+                        "reason": reason_bytes[:512].decode("utf-8", errors="ignore"),
+                        "reason_truncated": len(reason_bytes) > 512,
+                        "host_verified_semantics": False,
+                        "current_native_state_or_tool_authority": False,
+                    }
                 if action != "search":
                     # Describing a schema, inspecting state or choosing any
                     # non-search action ends the metadata-only streak.

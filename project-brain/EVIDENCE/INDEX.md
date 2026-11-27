@@ -1473,3 +1473,89 @@ Previous full ledger and STATE retained at commit `573e952ccf1b9556fec8d56204ac7
  "candidate": "cd6858ec3989b498def8e121b3c95c69cfbeb72a",
  "decision": "Parent matrix terminal; integrate cumulative candidate via non-force expected-head update. No merge into main or independent acceptance."
 }
+
+## 2026-11-27 — integrated baseline and media-decision continuity
+
+Exact previous mutable ledger: [4b6e0334](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/4b6e033419b516afdf407ca9c4120b647d7e9c2d/project-brain/EXECUTION_LEDGER.json), blob `d1024297f857229c442e6bc0060287b293d99fb9`; previous checkpoints preserved verbatim there.
+
+{
+ "verified_baseline": {
+  "source": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
+  "observed_date": "2026-11-27",
+  "checks_observed": 29,
+  "counts": {
+   "success": 29
+  },
+  "merge_test_commit": "0d07189cac81399e34233649276450abe9e7558c",
+  "exact_equal_tree": "19d6758f79ce08f6b653eb38b7cf5e07bd42e508",
+  "actual_model_jobs_skipped": [
+   140613310423,
+   140614128627
+  ],
+  "installed": {
+   "run": 46030660749,
+   "job": 140613304824,
+   "tests_run": 1819,
+   "pass": 1787,
+   "skip": 32,
+   "failed": 0,
+   "errors": 0,
+   "independent_ci_job": 140622810383,
+   "artifact": 15215895554,
+   "zip_sha256": "f8a6810ba8a9b1dc12146c480a40cb6b3adbb9a555fb9afadfdfd9f185e8137a",
+   "local_crc_ok": true,
+   "manifest_verified": 24,
+   "physical_mp4_full_decode": 3,
+   "local_redownload_verified": true
+  },
+  "mlt": {
+   "run": 46030660842,
+   "job": 140613305267,
+   "tests_run": 1819,
+   "pass": 1817,
+   "skip": 2,
+   "failed": 0,
+   "additional_separate_test_runs": [
+    52,
+    26
+   ]
+  },
+  "atomic_range": {
+   "run": 46030660837,
+   "job": 140613651638,
+   "physical_native_pass": true,
+   "exact_electron_version": "45.2.3",
+   "prior_failure_run": 46023936864,
+   "prior_failure_root_cause": "Unknown exact failing post-Vite command; current diagnostics succeeded, no causal claim."
+  },
+  "creativity_release_accepted": false,
+  "previous_exact_ledger_commit": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
+  "previous_exact_ledger_blob": "d1024297f857229c442e6bc0060287b293d99fb9"
+ },
+ "new_candidate": {
+  "baseline": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
+  "actual_trial_run": 46007258095,
+  "artifact": 15203767091,
+  "observed": "Turn 25 combined A/V; turn 26 model chose get_timeline with 98-byte reason, journal retains only hash; turn 27–36 search burst. Exact controller consumed media on one decision and omitted model-authored rationale thereafter. Structural loss reproduced, causal contribution to neural failure unproven.",
+  "correction": "One ephemeral bounded historical model-authored rationale per actual picture or audio input; at most 512 UTF-8 bytes per reason, explicit truncation, source/media digests and available observation timing. No new media dispatch, raw-media replay, persisted reason, new grant or semantic claim. Existing validators and acceptance gates unchanged.",
+  "candidate_blobs": {
+   "studio_next/native_creative_control.py": "66bad8d2e6e2f25062b9f3c3ed03ffadd8a518fd",
+   "studio_next/test_native_creative_control.py": "522ca8ed31ef65482200341a19218c2d5aa77e1b",
+   "studio_next/test_native_audio_model_input.py": "0a126ad580467a2f6eb97c0444dd13eab896aff4"
+  },
+  "local": {
+   "red": 2,
+   "green": 2,
+   "run": 197,
+   "pass": 192,
+   "errors": 5,
+   "assertion_failures": 0,
+   "environment_errors": [
+    "2 missing repository scripts imports",
+    "3 missing mcp dependency"
+   ],
+   "scope": "Exact verified installed wheel overlay, no native or neural retest"
+  },
+  "next": "Require exact candidate source/native checks, then a bounded discriminating matched creative trial only if justified and under existing synthetic consent. Measure post-observation decisions, distinct physically verified revised export, original source custody and cost, not just memory availability. No acceptance change."
+ }
+}

@@ -2976,6 +2976,58 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 await NativeCreativeControl(FakeSession(), ScriptedModel([]),
                     receipt_path=receipt).run("Never overwrite receipts")
 
+    async def test_media_decision_rationale_survives_metadata_without_persisting(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"fixture"
+        sha = hashlib.sha256(png).hexdigest()
+        export = "a" * 64
+        private = "MODEL-PRIVATE-OBSERVATION: " + "é" * 600
+        session = FakeSession()
+        async def call(name, inputs):
+            session.calls.append((name, inputs))
+            if name == "zx7_verify_native_export":
+                payload = {"physical_export_verified": True,
+                           "native_export_sha256": export}
+            elif name == "zx7_observe_verified_export_frame":
+                payload = {"export_sha256": export, "png_sha256": sha}
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(payload)),
+                    SimpleNamespace(type="image", mime_type="image/png",
+                                    data=base64.b64encode(png).decode())])
+            else:
+                payload = {"success": True, "clips": []}
+            return SimpleNamespace(is_error=False, content=[
+                SimpleNamespace(type="text", text=json.dumps(payload))])
+        session.call_tool = call
+        model = ScriptedModel([
+            decision("invoke", tool="zx7_verify_native_export", inputs={}),
+            decision("invoke", tool="zx7_observe_verified_export_frame", inputs={}),
+            {**decision("invoke", tool="get_timeline", inputs={}), "reason": private},
+            decision("describe", tool="update_text_clip"),
+            decision("finish", summary="Not independently assessed"),
+        ])
+        with tempfile.TemporaryDirectory() as root:
+            journal = Path(root) / "private.jsonl"
+            result = await NativeCreativeControl(session, model, max_turns=5,
+                receipt_path=journal).run("Review then inspect an editable timeline")
+            self.assertNotIn("historical_model_media_rationales", model.observed[0])
+            self.assertEqual(len(model.images_observed), 1)
+            for ctx in model.observed[-2:]:
+                note = ctx["historical_model_media_rationales"]["picture"]
+                self.assertEqual(note["decision_turn"], 2)
+                self.assertEqual(note["image_sha256"], [sha])
+                self.assertEqual(note["observed_export_sha256"], export)
+                self.assertEqual(note["action"], "invoke")
+                self.assertEqual(note["tool"], "get_timeline")
+                self.assertTrue(note["reason_truncated"])
+                self.assertTrue(note["reason"].startswith("MODEL-PRIVATE-OBSERVATION"))
+                self.assertLessEqual(len(note["reason"].encode("utf-8")), 512)
+                self.assertFalse(note["host_verified_semantics"])
+                self.assertFalse(note["current_native_state_or_tool_authority"])
+            self.assertNotIn("MODEL-PRIVATE-OBSERVATION", journal.read_text())
+            self.assertNotIn("MODEL-PRIVATE-OBSERVATION", json.dumps(result))
+            self.assertEqual(len(session.calls), 3)
+            self.assertFalse(result["artistic_quality_independently_approved"])
+
     async def test_actual_source_bound_frame_reaches_visual_model_only_if_hash_matches(self):
         png = b"\x89PNG\r\n\x1a\n" + b"fixture"
         sha = hashlib.sha256(png).hexdigest()
