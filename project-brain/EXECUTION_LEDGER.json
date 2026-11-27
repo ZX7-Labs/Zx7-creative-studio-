@@ -1172,6 +1172,20 @@
         "success": 13,
         "failure": 1
       }
+    },
+    "followup_staged_ingest": {
+      "baseline": "ec4af1176fc9cd91d18b5e0dd7ef1051b6784f9a",
+      "red": "Exact SVG source replaced by same-sized invalid bytes immediately after genuine parser validation; old ingest attested the replacement digest.",
+      "green": "Copy to private same-filesystem stage, check source FD stability, validate and hash the same staged bytes before no-replace CAS publication; rehash after validation, always clean stage. Reproduced race now retains validated original; replacement has no attestation.",
+      "combined_tests": {
+        "run": 92,
+        "passed": 88,
+        "skipped": 4,
+        "failures": 0
+      },
+      "source_blob": "4a882a8205fc9911e2de8bb8ca51e552e46448f4",
+      "test_blob": "efaf60371e81203ca93758566e4990f348f1f3d9",
+      "limits": "Local regression; no broad OS sandbox or external adversary guarantee. Exact new hosted CI pending."
     }
   }
 }

@@ -383,20 +383,31 @@ class MediaVault:
         path=Path(source)
         if not path.is_file() or path.stat().st_size==0:
             raise MediaCustodyError("Asset has no actual file bytes")
-        size=path.stat().st_size
-        verify_media_container(path,mime)
-        digest=sha256_file(path)
-        dest=self._loc(digest)
-        dest.parent.mkdir(parents=True,exist_ok=True)
-        if dest.is_symlink():
-            raise MediaCustodyError("Content-addressed creative media may not be a symlink")
-        if not dest.is_file():
-            fd,tmp=tempfile.mkstemp(prefix="."+digest[:10]+"-",dir=dest.parent)
-            try:
-                with os.fdopen(fd,"wb") as handle, path.open("rb") as stream:
-                    shutil.copyfileobj(stream,handle,1024*1024)
-                    handle.flush();os.fsync(handle.fileno())
-                if sha256_file(tmp)!=digest:raise MediaCustodyError("Source changed while ingesting")
+        if self.objects.is_symlink():
+            raise MediaCustodyError("Source vault cannot use an external linked object directory")
+        # Validate the private staged snapshot, never a mutable upload path
+        # that can be replaced between physical decoding and CAS publication.
+        fd,tmp=tempfile.mkstemp(prefix=".ingest-",dir=self.objects)
+        try:
+            with os.fdopen(fd,"wb") as handle, path.open("rb") as stream:
+                before=os.fstat(stream.fileno())
+                shutil.copyfileobj(stream,handle,1024*1024)
+                handle.flush();os.fsync(handle.fileno())
+                after=os.fstat(stream.fileno())
+            size=Path(tmp).stat().st_size
+            if not size or size!=before.st_size or (
+                    before.st_size,before.st_mtime_ns,before.st_ctime_ns)!= (
+                    after.st_size,after.st_mtime_ns,after.st_ctime_ns):
+                raise MediaCustodyError("Source changed while ingesting")
+            digest=sha256_file(tmp)
+            verify_media_container(tmp,mime)
+            if sha256_file(tmp)!=digest:
+                raise MediaCustodyError("Staged media changed during physical verification")
+            dest=self._loc(digest)
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            if dest.is_symlink():
+                raise MediaCustodyError("Content-addressed creative media may not be a symlink")
+            if not dest.is_file():
                 try:
                     os.link(tmp,dest)
                 except FileExistsError:
@@ -405,12 +416,12 @@ class MediaVault:
                     if dest.is_symlink() or not dest.is_file() or sha256_file(dest)!=digest:
                         raise MediaCustodyError(
                             "Another publisher placed different bytes in immutable MediaVault")
-            finally:
-                if os.path.exists(tmp):os.unlink(tmp)
-        elif sha256_file(dest)!=digest:
-            raise MediaCustodyError("Previously saved media content is corrupted")
-        if dest.stat().st_size!=size:
-            raise MediaCustodyError("Mismatch in bytes of durable creative media")
+            elif sha256_file(dest)!=digest:
+                raise MediaCustodyError("Previously saved media content is corrupted")
+            if dest.stat().st_size!=size:
+                raise MediaCustodyError("Mismatch in bytes of durable creative media")
+        finally:
+            Path(tmp).unlink(missing_ok=True)
         attestation={
             "rights":rights,"source_type":source_type,"source_id":source_id,
             "evidence":evidence,"owner_or_generator":owner_or_generator,

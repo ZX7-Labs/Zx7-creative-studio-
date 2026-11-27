@@ -27,10 +27,11 @@
 - Source-custody regression: real HLS reference playlist falsely admitted under three A/V MIME declarations and two video probes. Shared local self-contained decoder restrictions; actual RED→GREEN and 82/82 affected tests. No broader decoder sandbox claim; exact candidate CI pending.
 - Completion handoff: expose actual decision maximum/remaining budget and current technical-evidence checkpoint; model still independently chooses finish/revise, all source/grant/invalidation rules unchanged. RED missing budget → GREEN, controller/audit suite 215 run/210 pass/5 local missing-module errors (zero assertion failures). No real retest or neural acceptance.
 - Reference graph actual authorized-root escape via HLS linked outside synthetic file reproduced and refused using existing self-contained input policy; reference tests 6/6. Europe PMC intermittent timeout recurred [live #45938988502](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45938988502); one bounded same-URL timeout-only retry, no authority expansion or hidden provider fallback. Research 31 run/27 pass/4 MCP skips. Parent `78d68dca27ff` CI observed {"in_progress":15,"success":13,"failure":1}.
+- Staged ingest custody: actual post-validation upload replacement falsely attested invalid same-length SVG bytes. RED→GREEN: private copy before verification, source FD stability, hash before/after validation, atomic no-replace publish, stage cleanup. Combined affected tests 92 run/88 pass/4 MCP skips, zero failures. Exact hosted CI pending. No general OS sandbox claim.
 - **Next executable outcome:** verify exact new candidate with full hosted gates, then test a causal model-selected completion/perception/control hypothesis only within explicit bounded authorization; preserve failed direct/indexed evidence, real human coedit and independent professional acceptance gates. No paid blind retries or full-draft merge.
 
 ## Update protocol
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md) preserves exact receipts and negative history. [Document map](../docs/DOCUMENT_MAP.md), [decisions](DECISIONS.md), [risks](RISKS.md) have separate roles. Refresh live refs before acting; no third status page.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=529a90248f9edec2381a561d30b0ae2756218544` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=c9741019a2d3aa346ed6965bda25a9b49d24a368` (Git content ID, not security attestation).

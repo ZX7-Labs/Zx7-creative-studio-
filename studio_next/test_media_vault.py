@@ -125,6 +125,32 @@ class MediaVaultProductionTests(unittest.TestCase):
             with self.assertRaises(MediaCustodyError):
                 restarted.checkout(ref["asset_id"],ref["attestation_id"],target)
 
+    def test_ingest_attests_only_the_bytes_physically_validated(self):
+        from studio_next import media_vault
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            source=root/"original.svg"
+            source.write_text('<svg xmlns="http://www.w3.org/2000/svg"><rect width="8" height="8" fill="red"/></svg>')
+            original=source.read_bytes()
+            original_digest=media_vault.sha256_file(source)
+            invalid=b"X"*len(original)
+            vault=MediaVault(root/"vault")
+            native_verify=media_vault.verify_media_container
+            def replace_upload_after_decode(path,mime):
+                result=native_verify(path,mime)
+                source.write_bytes(invalid)
+                return result
+            with patch.object(media_vault,"verify_media_container",
+                              side_effect=replace_upload_after_decode):
+                proof=vault.ingest(source,mime="image/svg+xml",rights="owner_supplied",
+                    source_type="owner_upload",source_id="original-image",
+                    evidence="Owner original",owner_or_generator="owner")
+            self.assertEqual(proof["asset_id"],original_digest)
+            self.assertEqual(Path(vault.inspect(original_digest)["path"]).read_bytes(),original)
+            with self.assertRaises(MediaCustodyError):
+                vault.inspect(media_vault.sha256_file(source))
+            self.assertFalse(list(vault.objects.glob(".ingest-*")))
+
     def test_competing_immutable_vault_cas_is_not_overwritten(self):
         from studio_next import media_vault
         with tempfile.TemporaryDirectory() as d:
