@@ -1334,16 +1334,10 @@
    "commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
    "tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
    "matrix_at_observation": {
-    "success": 28,
-    "in_progress": 1
+    "success": 29
    },
-   "remaining": [
-    {
-     "id": 46044220019,
-     "name": "ZX7 MLT Editorial Native Research and Fidelity Gate"
-    }
-   ],
-   "note": "Previous exact 29/29 baseline remains separately verified. Do not cancel parent MLT full run before it becomes terminal."
+   "remaining": [],
+   "note": "All 29 exact parent hosted workflows success; actual model trials skipped on regular CI. Separate matched G1 run tracked."
   }
  },
  "field_g_selected_audio_finish_20261127": {
@@ -1396,10 +1390,18 @@
   "errors": 0,
   "independent_artifact_checks": "ZIP SHA/CRC, 24/24 manifest hashes/sizes, 3/3 full physical MP4 A/V decodes, all three sensory-continuity source/test wheel Git blob IDs exact. No genuine model or independent artistic acceptance.",
   "matrix": {
-   "success": 28,
-   "in_progress": 1
+   "success": 29
   },
   "mlt_run": 46044220019,
-  "fresh_candidate_overlay": "Exact installed wheel from this run with nine candidate source/test blobs; 70 run, 66 pass, four optional OpenEXR skipped, exit 0. No fresh hosted or EXR acceptance."
+  "fresh_candidate_overlay": "Exact installed wheel from this run with nine candidate source/test blobs; 70 run, 66 pass, four optional OpenEXR skipped, exit 0. No fresh hosted or EXR acceptance.",
+  "mlt": {
+   "run": 46044220019,
+   "tests_run": 1821,
+   "passed": 1819,
+   "skipped": 2,
+   "failed": 0,
+   "errors": 0,
+   "exact_merge": "809c304d2ecbfce490805d0bfcf78bf9a958e345"
+  }
  }
 }
