@@ -32,6 +32,10 @@ The complete creative studio is the target, not a video editor. Connect a compat
 
 Owner accepts the independent [engineering assessment](EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md) and directs canonical documentation alignment first, then execution to actual completion. Preserve full A–L, original quality and consent. Supersede the 26 November exhaustive consolidation-before-any-product-critical-work sequencing only: preserve exact archive and targeted behavior reconciliation, but once a safe reproducible canonical technical baseline exists, do not block measured critical-path work on unrelated historical variants. Branch retirement remains blocked pending separate review and owner decision. Scope preservation does not require simultaneous work on every domain. Continuous activity is not progress; use the existing blueprint's outcome gates and evidence-driven method. No additional spend, private egress or launch authorization.
 
+## Owner clarification — 27 November 2026: durable continuation
+
+Owner directs the independent audit's engineering correction to persist across chats and actual implementation. Preserve full A–L, quality and verified native foundations; no scratch rewrite. Priorities: efficient expressive Brain–BODY interaction, separate proof of model competence/perception/creative revision, and coherent evidence-backed integration. Blueprint §8 governs experiments; proposed interfaces are not proven superiority. Continue ZX7 authorizes resumption of routine work within existing consent, not new spend, private egress, destructive actions or launch.
+
 ## Hard acceptance gates
 
 1. Genuine model independently chooses nontrivial original work from a natural-language brief without engineer-written creative action scripts; actual typed native tools and original-rights media are used.

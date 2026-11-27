@@ -1,5 +1,9 @@
 # Fresh-session resume
 
+Owner shorthand: **Continue ZX7**.
+
 ```text
-Continue ZX7-Labs/Zx7-creative-studio- from AGENTS.md and the canonical workstream in project-brain/STATE.md. Read BRIEF and relevant ledger/blueprint sections; verify live source, branch evidence and CI. Follow owner priority, preserve A–L and negative evidence, do not duplicate completed work, and update STATE + ledger together. Never infer independent acceptance or deletion safety from green CI or ancestry alone.
+Continue ZX7-Labs/Zx7-creative-studio- from the live head of draft PR #356 (canonical workstream), not stale main. Read AGENTS.md, BRIEF, STATE and relevant ledger/blueprint sections. Verify live refs and evidence; execute the highest-value unblocked acceptance dependency using outcome-first engineering, without repeating completed work. Preserve A–L, native foundations, consent and negative evidence; update STATE + ledger atomically. Do not restart planning, infer professional acceptance from CI or bypass authorization. Report actual blockers and verified outcomes.
 ```
+
+If the canonical workstream changes, follow the latest verified STATE/owner direction rather than this historical PR identifier.

@@ -2,7 +2,7 @@
   "schema_version": "zx7.execution-ledger.v1",
   "purpose": "Typed, source-linked snapshot of what is built, physically verified, actually failed, and still unaccepted. NOT raw action log, not a new planning spec, not automatic live status.",
   "snapshot": {
-    "observed_utc": "2026-11-26",
+    "observed_utc": "2026-11-27",
     "github_main_at_audit": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
     "notes": "Live canonical integration is newer than main. Other legacy snapshot inventory numbers are retained only in the immutable full ledger; current branch audit is consolidation."
   },
@@ -1414,10 +1414,26 @@
       "limitations": "No repository checkout in current runtime; connector-only source access and no GitHub DNS. Full integrated controller regression and actual CI pending."
     },
     "acceptance": {
-      "exact_source_ci": "PENDING",
+      "exact_source_ci": "24/29 SUCCESS; 5 FAILURE at d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
       "genuine_model": false,
       "professional": false
     },
-    "next": "Verify exact-source CI and scripted controller regression before any genuine trial. Actual local/NVIDIA jobs on baseline skipped; no dispatch action available. Do not merge draft or bypass one-use consent. No new paid spend or private egress."
+    "next": "Reproduce shared timed-reader frontier regression; reconcile current timed coverage and reviewed-pair invalidation without weakening either. Focused and affected tests, then stable physical baseline. Qualify provider/model independently; matched genuine trial within existing consent and dispatch access.",
+    "hosted_regression": {
+      "source": "d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
+      "success": 24,
+      "failure": 5,
+      "runs": [
+        45926146560,
+        45926146497,
+        45926146559,
+        45926146423,
+        45926146408
+      ],
+      "observed": "test_indexed_same_time_av_comparison_keeps_verified_native_reader_visible: already_comparable and invalidated_by_write expected TIMED_FRAMES absent, actual present; Python 3.11–3.13 and shared suites.",
+      "diagnosis": "Older pair fixture uses abbreviated image hashes, stricter readiness requires 64-character digests. Source-supported candidate explanation; write invalidation needs independent reproduction. Not a proven root cause.",
+      "genuine_model": false,
+      "professional": false
+    }
   }
 }
