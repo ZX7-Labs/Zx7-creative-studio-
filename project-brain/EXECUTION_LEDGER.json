@@ -1434,5 +1434,19 @@
   },
   "candidate": "cd6858ec3989b498def8e121b3c95c69cfbeb72a",
   "decision": "Parent matrix terminal; integrate cumulative candidate via non-force expected-head update. No merge into main or independent acceptance."
+ },
+ "cross_project_observation_fence_20261127": {
+  "base": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
+  "gate": "G1-HUMAN",
+  "cause": "Complete timeline read can renew model write epoch after switching to a different source project with same timeline and clip IDs. The prior wrapper binds timeline ID but not project identity.",
+  "red": "Exact source-backed host protocol fixture: switch project path retaining IDs; complete model-selected timeline read; old planned update incorrectly accepted (expected native_identity_model_observation_required, got None).",
+  "fix": "Carry existing _project_state hashed source identity internally in fenced native reader; anchor it only on model-visible get_project and require same identity across full timeline bracket before renewing revision. New project requires explicit model-selected project read. No extra native calls, no raw path egress, unchanged final source CAS.",
+  "code_blobs": {
+   "studio_next/capability_mcp_session.py": "99fded07497032eb9b1110fdf0c9f0e768b816da",
+   "studio_next/native_editor_identity.py": "0ac116f64188528cfb34b72b726ea944210fedcc",
+   "studio_next/test_native_revision_fence.py": "4bd483449323eb77e33e5749805e26781521fe71"
+  },
+  "green": "3/3 direct regression/control tests. 86/86 related fence/identity/gateway/reference tests. Wider 96 tests: 95 pass, one missing scripts.run_native_model_trial import in local installed-wheel overlay; no assertion failures. Exact source blobs match local tested files.",
+  "limits": "Synthetic renderer/interleaving test, not real Electron project switch, independent human usability or creative acceptance. Cannot attribute historical G1 #46007258095 stale refusal to this defect; raw project revisions unavailable. Exact hosted candidate still pending."
  }
 }

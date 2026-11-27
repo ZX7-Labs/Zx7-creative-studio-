@@ -63,6 +63,7 @@ class CapabilityGatewayMcpSession:
         self._require_model_native_observation = require_model_native_observation
         self._model_observed_native_revision = None
         self._model_has_observed_project = False
+        self._model_observed_project_identity = None
         self._model_observed_timeline_id = None
         if gateway._attempt_store is not None and host_request_id_allocator is None:
             raise CapabilityExecutionError(
@@ -174,6 +175,7 @@ class CapabilityGatewayMcpSession:
         if observe_native_revision and name == "get_project":
             self._model_observed_native_revision = None
             self._model_has_observed_project = False
+            self._model_observed_project_identity = None
             self._model_observed_timeline_id = None
         # A Brain may inspect the *complete* active timeline immediately after
         # an acknowledged native edit. The older session required another
@@ -255,6 +257,7 @@ class CapabilityGatewayMcpSession:
                         all(33 <= ord(char) <= 126 for char in live)):
                     self._model_observed_native_revision = live
                     self._model_has_observed_project = True
+                    self._model_observed_project_identity = source[0]
                     self._model_observed_timeline_id = source[1]
             except (TypeError, ValueError):
                 pass
@@ -265,6 +268,9 @@ class CapabilityGatewayMcpSession:
                 actual = _read_json_result(result["native_result"])
                 source_version = before_timeline["__zx7_live_revision"]
                 if (before_timeline == after_timeline and
+                        self._model_observed_project_identity is not None and
+                        before_timeline.get("__zx7_project_identity") ==
+                        self._model_observed_project_identity and
                         type(source_version) is str and
                         38 <= len(source_version) <= 80 and
                         actual.get("id") == self._model_observed_timeline_id and

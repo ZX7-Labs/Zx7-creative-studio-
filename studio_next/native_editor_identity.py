@@ -284,6 +284,8 @@ class NativeEditorIdentityReader:
                     inventory["markers"] = {"ids": marker_ids, "complete": True}
         if live_revision is not None:
             inventory["__zx7_live_revision"] = live_revision
+            # Internal source identity, never a path or model-provided ID.
+            inventory["__zx7_project_identity"] = before[0]
         return inventory
 
 

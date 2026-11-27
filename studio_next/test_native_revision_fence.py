@@ -281,6 +281,40 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
         self.assertEqual(self.renderer.writes, 2)
         self.assertEqual(self.renderer.clip_text, "Second model-chosen title")
 
+    async def test_complete_timeline_cannot_renew_write_across_project_switch_reusing_ids(self):
+        """A duplicate project's clip IDs do not authorize edits to that project."""
+        original_call = self.renderer.call_tool
+        switched = False
+
+        async def call(name, args):
+            response = await original_call(name, args)
+            if switched and name == "get_project":
+                payload = json.loads(response.content[0].text)
+                payload["project"]["path"] = "/private/duplicate-project"
+                return result(payload)
+            return response
+
+        self.renderer.call_tool = call
+        brain = CapabilityGatewayMcpSession(
+            self.gateway, "editor", require_model_native_observation=True)
+        self.assertFalse((await brain.call_tool("get_project", {})).is_error)
+        switched = True
+        self.renderer.human_gui_edit("Other project's untouched title")
+        self.renderer.publish()
+        self.assertFalse((await brain.call_tool("get_timeline", {
+            "includeClips": True})).is_error)
+        proposed = {"clipId": "clip-A", "text": "Old project's planned title"}
+        refused = await brain.call_tool("update_text_clip", proposed)
+        self.assertEqual(host_pre_dispatch_rejection(
+            refused, "update_text_clip", proposed),
+            "native_identity_model_observation_required")
+        self.assertEqual(self.renderer.writes, 0)
+        self.assertEqual(self.renderer.clip_text, "Other project's untouched title")
+        self.assertFalse((await brain.call_tool("get_project", {})).is_error)
+        self.assertFalse((await brain.call_tool("update_text_clip", {
+            "clipId": "clip-A", "text": "Freshly observed project edit"})).is_error)
+        self.assertEqual(self.renderer.writes, 1)
+
     async def test_timeline_observation_does_not_override_later_human_edit(self):
         """Current native IDs are NOT a waiver of last-mile human revision CAS."""
         brain = CapabilityGatewayMcpSession(
