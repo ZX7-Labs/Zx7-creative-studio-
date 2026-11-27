@@ -349,6 +349,11 @@ class MediaVault:
               PRIMARY KEY(digest,attestation_id),
               FOREIGN KEY(digest) REFERENCES blobs(digest))""")
             db.execute("CREATE INDEX IF NOT EXISTS attested_digest ON attestations(digest)")
+            db.execute("""CREATE TABLE IF NOT EXISTS withdrawn_attestations(
+              digest TEXT NOT NULL, attestation_id TEXT NOT NULL,
+              reason TEXT NOT NULL, withdrawn_at REAL NOT NULL,
+              PRIMARY KEY(digest,attestation_id),
+              FOREIGN KEY(digest,attestation_id) REFERENCES attestations(digest,attestation_id))""")
 
     def _connect(self):
         if self.db.is_symlink():
@@ -438,9 +443,46 @@ class MediaVault:
                        (digest,size,mime,time.time()))
             db.execute("INSERT OR IGNORE INTO attestations VALUES(?,?,?,?,?,?,?,?)",
                  (digest,att_id,rights,source_type,source_id,evidence,owner_or_generator,time.time()))
+            self._require_not_withdrawn(db,digest,att_id)
             db.execute("COMMIT")
         return {"asset_id":digest,"attestation_id":att_id,"mime":mime,
                 "rights":rights,"size_bytes":size,"verified_bytes":True}
+
+    @staticmethod
+    def _require_not_withdrawn(db,digest,attestation_id):
+        if db.execute("SELECT 1 FROM withdrawn_attestations WHERE digest=? AND attestation_id=?",
+                      (digest,attestation_id)).fetchone() is not None:
+            raise MediaCustodyError("Exact original rights attestation has been withdrawn")
+
+    def withdraw_attestation(self,digest,attestation_id,*,reason):
+        """Owner-side, irreversible denial of this exact future vault admission.
+
+        Keep original bytes and prior evidence. No claim to delete existing
+        copies, invalidate historical exports or revoke independent grants.
+        Caller must be trusted and coordinate active native work.
+        """
+        self._loc(digest)
+        if not isinstance(attestation_id,str) or not _DIGEST.fullmatch(attestation_id):
+            raise MediaCustodyError("Exact original rights attestation identity required")
+        if (not isinstance(reason,str) or not reason.strip() or len(reason.encode("utf-8"))>2048):
+            raise MediaCustodyError("Explicit bounded owner withdrawal reason required")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM attestations WHERE digest=? AND attestation_id=?",
+                          (digest,attestation_id)).fetchone() is None:
+                raise MediaCustodyError("Unknown original rights attestation")
+            db.execute("INSERT OR IGNORE INTO withdrawn_attestations VALUES(?,?,?,?)",
+                       (digest,attestation_id,reason,time.time()))
+            recorded=db.execute("SELECT reason,withdrawn_at FROM withdrawn_attestations WHERE digest=? AND attestation_id=?",
+                                (digest,attestation_id)).fetchone()
+            if recorded[0]!=reason:
+                raise MediaCustodyError("Withdrawal history cannot be rewritten")
+            db.execute("COMMIT")
+        return {"asset_id":digest,"attestation_id":attestation_id,"withdrawn":True,
+                "reason":recorded[0],"withdrawn_at":recorded[1],
+                "scope":"current_vault_exact_attestation_future_admissions",
+                "historical_copies_deleted":False,"previous_backups_updated":False,
+                "independent_grants_revoked":False}
 
     def inspect(self,digest,*,attestation_id=None):
         path=self._loc(digest)
@@ -448,9 +490,10 @@ class MediaVault:
             blob=db.execute("SELECT size_bytes,mime FROM blobs WHERE digest=?",(digest,)).fetchone()
             if blob is None:raise MediaCustodyError("Unknown media reference")
             if attestation_id is None:
-                rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=?",
+                rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations a WHERE digest=? AND NOT EXISTS (SELECT 1 FROM withdrawn_attestations w WHERE w.digest=a.digest AND w.attestation_id=a.attestation_id)",
                               (digest,)).fetchall()
             else:
+                self._require_not_withdrawn(db,digest,attestation_id)
                 rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=? AND attestation_id=?",
                                (digest,attestation_id)).fetchall()
         if not rows or path.is_symlink() or not path.is_file() or path.stat().st_size!=blob[0] or sha256_file(path)!=digest:
@@ -477,8 +520,14 @@ class MediaVault:
             if sha256_file(stage)!=digest:
                 raise MediaCustodyError(
                     "Copied creative media differs from immutable source")
+            # Serialize the final exclusive checkout link with withdrawal.
+            # Withdrawal after this transaction cannot recall an earlier copy.
             self.inspect(digest,attestation_id=attestation_id)
-            os.link(stage,dest)
+            with self._connect() as db:
+                db.execute("BEGIN IMMEDIATE")
+                self._require_not_withdrawn(db,digest,attestation_id)
+                os.link(stage,dest)
+                db.execute("COMMIT")
         finally:
             Path(stage).unlink(missing_ok=True)
         return record

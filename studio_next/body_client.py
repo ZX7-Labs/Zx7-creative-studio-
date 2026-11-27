@@ -126,6 +126,12 @@ class ZX7BodyClient:
             pause(poll_seconds)
         raise TimeoutError("Original production job still in progress; saved work preserved")
 
+    def withdraw_attestation(self,workspace_id,asset_id,attestation_id,*,reason):
+        if not isinstance(workspace_id,str) or not _ID.fullmatch(workspace_id):
+            raise ValueError("Invalid original project identity")
+        return self.request_json("POST",f"/v1/workspaces/{workspace_id}/rights/withdraw",
+            {"asset_id":asset_id,"attestation_id":attestation_id,"reason":reason})
+
     def upload(self,workspace_id,source,*,source_id,rights_evidence,mime):
         if not _ID.fullmatch(workspace_id):
             raise ValueError("Invalid destination project")
@@ -227,6 +233,8 @@ def main(argv=None):
     p=modes.add_parser("wait");p.add_argument("job_id");p.add_argument("--seconds",type=float,default=3600)
     p=modes.add_parser("artifacts");p.add_argument("job_id")
     p=modes.add_parser("download");p.add_argument("job_id");p.add_argument("source");p.add_argument("--out",required=True)
+    p=modes.add_parser("withdraw-rights",help="Withdraw exact future vault admission; retain historical bytes and backups")
+    p.add_argument("asset_id");p.add_argument("attestation_id");p.add_argument("--workspace",required=True);p.add_argument("--reason",required=True)
     p=modes.add_parser("upload");p.add_argument("source");p.add_argument("--workspace",required=True)
     p.add_argument("--source-id",required=True);p.add_argument("--rights-evidence",required=True)
     p.add_argument("--mime",required=True)
@@ -242,6 +250,7 @@ def main(argv=None):
     elif args.command=="wait":result=client.wait(args.job_id,max_seconds=args.seconds)
     elif args.command=="artifacts":result=client.artifacts(args.job_id)
     elif args.command=="download":result=client.download(args.job_id,args.source,args.out)
+    elif args.command=="withdraw-rights":result=client.withdraw_attestation(args.workspace,args.asset_id,args.attestation_id,reason=args.reason)
     else:result=client.upload(args.workspace,args.source,
         source_id=args.source_id,rights_evidence=args.rights_evidence,mime=args.mime)
     print(json.dumps(result,ensure_ascii=False,indent=2))

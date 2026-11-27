@@ -746,3 +746,254 @@ Exact structured value from prior ledger blob `38959fe180502cacba095f8d49f17868a
   "next": "Advance coherent tested candidate without cancelling parent verification. Actual neural improvement, human co-edit and professional acceptance remain unproved; no new inference or grant."
 }
 ```
+
+
+## 2026-11-27 — native armature, exact owner rights withdrawal, genuine G1 retest
+
+```json
+{
+ "field_e": {
+  "scope": "Field E: explicit native armature bone authoring in existing Blender .zxmotion transaction, plus real skinning and pose revision using existing RNA operations; no new renderer or arbitrary operator execution.",
+  "candidate": "d46131754ed2576b7f09e263522165f3dda06ce8",
+  "blobs": {
+   "studio_next/body_motion_project.py": "5a33401f16b4af21aa64a63363de13ca16e83e18",
+   "studio_next/body_motion_worker.py": "850523ada879d7c827768b15cd9ff1493e72d017",
+   "studio_next/test_body_armature.py": "1ca90c42444d4738408a3f6da95f2e490b678e63",
+   "studio_next/body_integration.py": "dbb71f802b8d3ca93361d617120c8b55f8d6853d"
+  },
+  "validation": "1..1024 authored bones; finite rest coordinates, nonzero length, exact UTF-8 name, unique, acyclic known hierarchy, connected endpoints. Empty local single-user armature, synchronized active view layer; preserve selection/active state, check actual created hierarchy and rest coordinates. No autonomous authored weights or pose.",
+  "negative": [
+   {
+    "run": 46008340382,
+    "job": 140537109338,
+    "result": "checkout failed before tests: missing HEAD^; fetch-depth corrected",
+    "source": "dab4407f60de18b30de9091aef5c4575a43e17b5",
+    "retired": "4d9dbcc24ff6c009209066320d7f5f749072c6b6"
+   },
+   {
+    "run": 46008559626,
+    "job": 140537849055,
+    "result": "26 pass/1 failure, native object after link not yet visible to eligibility check; explicit view_layer.update(), retain all guards",
+    "source": "6a18bb48cec0ee52d47c45b3c7a25375deb9c317",
+    "retired": "a23e58aeb4c474f6a40e77c01e081ee0e0e3cebe"
+   }
+  ],
+  "actual": {
+   "run": 46009156855,
+   "job": 140539900861,
+   "source": "4a7f9b506d03d25347c62a6486cb69ab40379525",
+   "retired": "4b7040e67ae5860129bd94908403f40572f08ac4",
+   "artifact": 15202706426,
+   "sha256": "f584513694b543388f5d7ef0a84d986e99062cd090cbdf0beed8c382837c5a08",
+   "crc": "PASS",
+   "manifest": "6/6 verified",
+   "blender": "4.5.16 LTS",
+   "original_bundle": "9a755ab96883410e0a0534b14ea9abc3a032233688e09e4d35883f3456a039d3",
+   "child_bundle": "44e29e7a8bb7ec355719cfe19ede9101ee076631ea6a862030b53f60b37c82e4",
+   "original_blend": "2cf9c8d22873ce54698cfba649f912747b04d07e390f03e38a38865148df8d78",
+   "child_blend": "9b1f579d114a4af24258104ce16731030fb95b3cf61c54b5a49425c9d4b2f174",
+   "reopen": "independent native process confirms Root/Tip hierarchy, full Tip skin weights, modifier, evaluated geometry and parent digest; frame 5 original x=-1 vs revised x=1; independent maximum numeric error 1.1920928955078125e-7"
+  },
+  "archive_fix": {
+   "studio_next/body_archive.py": "d298beba7a4362c61cf0cb673accad14591257be",
+   "studio_next/test_body_archive.py": "e9fb27997fe068b737dfed90596b83aa77b1c871",
+   "scope": "Exclude subtitle staging prefix .zx7-subtitle- from archive"
+  },
+  "limits": "Not full rigging, IK, character animation, rendering, artistic control, neural or professional acceptance."
+ },
+ "field_a": {
+  "scope": "Field A: irreversible exact-attestation withdrawal for future admissions in the current vault, via owner-authenticated quiescent service and zx7-client withdraw-rights. Existing SQLite authority, no separate registry, no model write grant.",
+  "blobs": {
+   "studio_next/media_vault.py": "b35fee6f64eb6a0efe4c8571c3ef152e969c81c4",
+   "studio_next/body_materials.py": "61a26f66b9f66b2b8b58c2a320eebe5a65943732",
+   "studio_next/body_service.py": "44b47388f428d1693acd1b3b5baf4ad3b722bc41",
+   "studio_next/body_client.py": "8404e65b625f9b07dea2e8bcbdd286c111f474f0",
+   "studio_next/test_body_rights_withdrawal.py": "48f74f04d9e36b42384b9dea04a7551dad15d50b"
+  },
+  "negative": "Missing withdrawal and legacy material fingerprint reproduced. Checkout withdrawal after last inspect denied at final transactional publish. Initial restore test wrong path denied as designed; corrected test restores exact original path.",
+  "proof": "62/62 local affected tests, including actual FFmpeg native subtitle delivery, withdrawn fresh and cached graph admission denied, prior delivered bytes unchanged; exact reingest refused, independent active grant retained, immutable reason/time, post-withdrawal backup/restore retains tombstone, unauthorized owner HTTP 401, active workspace job denied, idle owner success.",
+  "route": "POST /v1/workspaces/{workspace_id}/rights/withdraw",
+  "limits": "No recall of historical exports, raw/non-attested paths, derivative propagation, other independent grants, externally copied media, or pre-withdrawal backups; no complete license/professional acceptance. Hosted combined proof pending. Additional broader local material suite timed out before terminal result; no pass claimed."
+ },
+ "g1": {
+  "run": 46007258095,
+  "job": 140533444321,
+  "source": "c29c135f96bf6d25658b3fd830245c907119ea2c",
+  "parent": "f2da4f90",
+  "retired": "68235047091de0a0312c6bdd1b65a8c34d8a596b",
+  "request": "ZX7_SUPER_VL_G1_WIRE_PLACEMENT_20261127",
+  "authority": "Prior bounded owner consent, exact synthetic brief and grant profile, no private media or expanded grant, 48-turn Super VL",
+  "status": "in_progress observed after native pinned editor build; no acceptance inferred; inspect final evidence without blind replay"
+ }
+}
+```
+
+
+## Preserved exact receipt coedit_host_observation_boundary_20261127
+
+```json
+{
+ "parent": "013ef94d610b63078d39cd38878051367cb6f150",
+ "source_blobs": {
+  "studio_next/capability_mcp_session.py": "b4fa08d78eb0580cf85f43faa8126f8b1b49b5b6",
+  "studio_next/native_creative_control.py": "eae2274264981af5565a8fdcce42d92e153ac2f8",
+  "studio_next/test_native_revision_fence.py": "0018ff84670b529786e67d3829781fcd71e73ee7"
+ },
+ "reproduction": "Exact installed source (unchanged gateway/test base, controller 013ef94 blob verified). Actual production Python controller/gateway with source-shaped deterministic renderer: manual edit position 99 after model's timeline observation, before its selected set_clip_style write. Host-only full timeline preflight renewed model epoch and stale position 40 was committed. RED both single and combined routes. No actual human field claim.",
+ "correction": "Separate host-only READ from model-visible gateway call, preserve same live admission, permissions, request identity, source lock and shared budget. Controller mechanical clip/placement preflight uses host-only route. No host-only write, revision promotion, hidden retries or novel grant. Fresh model-visible read remains required; canonical model-visible bootstrap/postwrite reconciliation unchanged.",
+ "verification": "Both routes GREEN: stale write rejected before native dispatch, simulated human position 99 preserved, fresh model-selected replan position 100 committed once. Additional controls: no ungranted tools or writes via host-only route; host-only get_project/full timeline cannot mint or renew model revision. 288 affected tests, 284 pass, 4 missing-checkout file/import errors, zero assertion failures. Candidate hosted/native GUI acceptance still unverified.",
+ "parent_ci": {
+  "observed": {
+   "in_progress": 2,
+   "success": 26,
+   "failure": 1
+  },
+  "physical_job_first": 140341368353,
+  "first_failure": "Native Electron image-sequence regression log reached original defect reproduction then timed out (124); exact lifecycle predicate unknown.",
+  "retry_job": 140343995262,
+  "retry_failure": "Before GUI tests, Microsoft apt InRelease HTTP 403, exit 100. Separate infra failure; no further blind rerun.",
+  "workflow": 45949362927,
+  "remaining": [
+   {
+    "id": 45949362994,
+    "name": "ZX7 MLT Editorial Native Research and Fidelity Gate",
+    "status": "in_progress",
+    "conclusion": null
+   },
+   {
+    "id": 45949362965,
+    "name": "ZX7 BODY — Installed Package, Desktop and Physical Crash Proof",
+    "status": "in_progress",
+    "conclusion": null
+   },
+   {
+    "id": 45949362927,
+    "name": "ZX7 BODY — Genuine Native Editor MCP A/V, Export and Visual Evidence",
+    "status": "completed",
+    "conclusion": "failure"
+   }
+  ],
+  "terminal": {
+   "success": 28,
+   "failure": 1
+  }
+ },
+ "scoped_g1_retest": {
+  "run": 45950462408,
+  "job": 140344855257,
+  "parent": "013ef94d610b63078d39cd38878051367cb6f150",
+  "trial": "e979730bb06ca9e8d7d50d3f689feabb0f2a9597",
+  "retired": "8035aa15c424db5d7361a94172a76b15de85e931",
+  "branch": "trial/g1-super-vl-indexed-recovery-20261127",
+  "request": "ZX7_SUPER_VL_G1_INDEXED_RECOVERY_20261127",
+  "scope": "2026-11-22 owner standing 48-turn synthetic-only G1 permission; exact prior Super VL model, indexed catalog and unchanged brief; test two integrated causal corrections. No private media, broader paid scope or replay. Trigger retired by forward commit restoring source tree. Actual inference step running at observation, not result.",
+  "terminal": {
+   "conclusion": "failure",
+   "artifact": 15177080510,
+   "zip_sha256": "2d509a766a1b20ff11fa93c11aaf2c0ca9a29951db9fe5d13d5e78b2b003c5f6",
+   "zip_entries": 15,
+   "crc_verified": true,
+   "decisions": 7,
+   "provider_reported_tokens": 56792,
+   "model_wall_ms": 297095.356,
+   "native_wall_ms": 369.79,
+   "searches": 1,
+   "write_acknowledgments": 3,
+   "exports": 0,
+   "saved": "One original six-second video clip; native/staged original hash ea0737ff253bdecd3d730701e6700b04ded8a024eed7715f561a76174f76084d matches; no imported/placed audio.",
+   "events": "Turn 3 stale refused, turn 4 fresh get_project, turn 5 search, turn 6 add_asset_to_timeline error classified uncertain and halted.",
+   "error_digest": "fdece17a19f0ad9ca8123912e3805daa7620565d17e71c38f824137a4e222a00",
+   "diagnosis": "Exact digest of canonical wire list containing fixed placement_plan_unconfirmed BODY message (no timeline edit submitted). Wire/public revision-token digest mismatch reproduced against exact source. Actual raw receipt metadata absent from journal; underlying reason placement preview failed remains unresolved.",
+   "independent_acceptance": false
+  }
+ },
+ "next": "Integrate coedit and verified wire refusal correction after terminal parent gates; retain desktop failure; exact-head SDK/native/physical and genuine human acceptance still required."
+}
+```
+
+
+## Preserved exact receipt wire_bound_bridge_refusal_20261127
+
+```json
+{
+ "parent": "013ef94d610b63078d39cd38878051367cb6f150",
+ "coedit_parent": "c2b75bd84107a2099301ada1676a937d9a5228c7",
+ "source_blobs": {
+  "studio_next/capability_gateway.py": "7e44a7900df27e48ed9dcf2ad7cf2abb1fb84640",
+  "studio_next/capability_attempts.py": "113344a25313cfa7c7f7316b414a924d89622669",
+  "studio_next/capability_mcp_session.py": "9b370bac2c7ab68bbcd84ce108bfeb80ae394bd4",
+  "studio_next/native_editor_session.py": "5d62c23f5cfec852e1c1b00ce84ad3cc6798bbd6",
+  "studio_next/studio_mcp.py": "58675290fcd37c889fe4739e8a2ecdc143c8787c",
+  "studio_next/test_body_editor_mcp.py": "e95dbbee21f3699caf01ccbd76f5522b4f443a0f",
+  "studio_next/test_native_revision_fence.py": "e74c5fd1ecc811a168c9c0bd3b028d23fb27d9e1",
+  "studio_next/test_capability_attempts.py": "12747f59c6c7cbc8b740bd9af83d2c705ecbf2ab"
+ },
+ "installed_parent": {
+  "run": 45949362965,
+  "artifact": 15177330866,
+  "zip_sha256": "42a30178998882537bd8579ee523b2b1438ec1f037a3032c46c7f6db20fd1cf9",
+  "tests_run": 1784,
+  "pass": 1754,
+  "skip": 30,
+  "failed": 0,
+  "manifest_verified": 24,
+  "physical_mp4_full_decode": 3,
+  "exact_equal_tree": "abf2171f93b095e31775a4f73fcdafa4c9e0d846",
+  "merge_test_commit": "678bdd5a2d1527f8a343acf87159305ac45372ac",
+  "crc_verified": true,
+  "local_wheel_source_hashes_verified": true,
+  "hosted": {
+   "success": 28,
+   "failure": 1
+  }
+ },
+ "reproduction": "Four assertion failures on original behavior: exact trusted wire refusal falsely uncertain in both routes, forged public-input receipts falsely accepted. Underlying preview reason not proven.",
+ "correction": "Explicit trusted local editor source only; strict error and exact augmented wire digest, immutable expected input snapshot; gateway rebinds verified refusal to public input, preserves prior observed epoch; strips reserved untrusted metadata. Durable terminal host_rejected_no_native_write distinct from conflict/uncertainty; migrate V1/V2 without losing attempts, preserve no replay. No grant expansion, auto retry, or acceptance relaxation.",
+ "verification": {
+  "focused": "Seven refusal controls GREEN plus stale human edit after safe refusal; physical SQLite V2 migration and replay prevention GREEN.",
+  "run": 325,
+  "pass": 286,
+  "skip": 36,
+  "errors": 3,
+  "assertion_failures": 0,
+  "limitations": "Optional MCP SDK unavailable locally (36 skips including new real HTTP/SDK test); three missing checkout script imports. Hosted SDK and native evidence pending."
+ },
+ "next": "Verify exact-head CI and real SDK bridge; diagnose desktop physical test separately; continue critical-path genuine creation/revision/human coedit then matched routes/A-L independent acceptance. No repeat of spent trigger and no further inference before corrected evidence.",
+ "independent_acceptance": false,
+ "hosted_followup": {
+  "observed": {
+   "success": 25,
+   "in_progress": 3,
+   "failure": 1
+  },
+  "real_sdk": {
+   "run": 45952719717,
+   "job": 140352046550,
+   "passed": [
+    "test_cas_placement_preflight_receipt_survives_actual_sdk_gateway",
+    "test_wire_bound_placement_refusal_is_not_an_uncertain_write",
+    "test_controller_clip_style_preflight_cannot_refresh_stale_model_epoch",
+    "test_revision_schema_migration_preserves_uncertain_and_confirmed_intents"
+   ],
+   "limits": "Real HTTP/MCP SDK bridge; source pin fixture. 346-test SDK group and 271-test gateway group completed; not actual human study."
+  },
+  "desktop": {
+   "run": 45952719679,
+   "job": 140352046121,
+   "conclusion": "success",
+   "previous_failed_parent": 45949362927
+  },
+  "research": {
+   "run": 45952719864,
+   "job": 140352046589,
+   "conclusion": "failure",
+   "detail": "17 of 18 live provider/language checks passed; Europe PMC unavailable or invalid JSON, underlying transport cause not logged. Existing same-URL timeout retry only, no blind rerun."
+  },
+  "running": [
+   45952719857,
+   45952719639,
+   45952719866
+  ]
+ }
+}
+```
