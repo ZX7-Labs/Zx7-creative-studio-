@@ -325,6 +325,26 @@ class CapabilityFabric:
             result["terms_are_search_hints_not_execution_grants"] = True
         return result
 
+    def exact_lookup_index(self):
+        """For a small catalog, expose identities for exact retrieval, not calls.
+
+        The list is complete or absent; no arbitrarily truncated operation
+        identity, schema, untrusted description, or execution grant is sent.
+        Large or non-queryable catalogs retain ordinary indexed discovery.
+        """
+        if self.count > 48:
+            return None
+        identities = sorted(self._records)
+        if any(identity != identity.strip() or len(identity.encode("utf-8")) > 160
+               for identity in identities):
+            return None
+        index = {"revision": self.revision, "operation_ids": identities,
+                 "retrieval_only_not_execution_grant": True,
+                 "query": "Use an exact operation_id as the search query; select a returned tool before invoking."}
+        if len(json.dumps(index).encode("utf-8")) > 4096:
+            return None
+        return index
+
     def search(self, query: str, *, limit: int = 6):
         if (not isinstance(query, str) or not query.strip() or
                 len(query.encode("utf-8")) > 160 or

@@ -1581,6 +1581,8 @@ class NativeCreativeControl:
                             self._host_preconditions, self._host_possible_effects)})
             if self.catalog_mode == "indexed":
                 self._capabilities = self._machine_contracts
+        exact_lookup_index = (self._capabilities.exact_lookup_index()
+                              if self._capabilities is not None else None)
         tool_hints = _native_tool_hints(available) if self.catalog_mode == "full" else []
         show_tool_hints = self.catalog_mode == "full"
         # Same local-only schema family as the MCP host: preflight avoids
@@ -2031,6 +2033,8 @@ class NativeCreativeControl:
                             self._host_write_already_acknowledged(name)
                             for name in self._host_once_after_ack))
                         if self._capabilities is not None else None),
+                    **({"capability_exact_lookup_index": copy.deepcopy(exact_lookup_index)}
+                       if exact_lookup_index is not None else {}),
                     "last_capability_search_result": self._last_search_result,
                     "completion_does_not_certify_artistic_quality": True,
                     "required_completion_evidence": sorted(self.required_evidence),

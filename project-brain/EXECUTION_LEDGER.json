@@ -609,7 +609,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Use exact technical-green baseline. Inspect existing unified gateway/controller/verifier for a bounded source-linked G1/shared control bottleneck; predeclare matched control/candidate, negative evidence, success/failure, consent and stop boundary. Distinguish actual model-selected semantic observation from deterministic verifier samples. Recover relevant source regressions and evidence-critical defects only; no duplicate runner, arbitrary spend or branch deletion. Continue through genuine G1/G2/G3/G4 acceptance."
+    "next_action": "Verify exact candidate hosted gates; investigate audio competence separately from transport. Preserve model-independent verified acoustic facts as distinct from listening. No professional acceptance promotion, no blind paid rerun. Predeclare a matched bounded control/experiment before another necessary authorized model trial; G1 terminal and meaningful revision, actual human co-edit, held-out G2, A–L and release remain open."
   },
   "latest_ci_checkpoint": {
     "source": "5b9efc497717f81e63c26c14ff621af58201bc57",
@@ -1187,5 +1187,94 @@
       "test_blob": "efaf60371e81203ca93758566e4990f348f1f3d9",
       "limits": "Local regression; no broad OS sandbox or external adversary guarantee. Exact new hosted CI pending."
     }
+  },
+  "perception_and_exact_lookup_20261127": {
+    "parent": "21bac3469fe6d87c630fd66178f5c17796b3810e",
+    "previous_exact_head_ci": {
+      "success": 28,
+      "failure": 1,
+      "failed_run": 45939750087,
+      "failed_job": 140311086464,
+      "reason": "Europe PMC repeated timeout after bounded retry; 31 offline research tests passed. Do not weaken live gate or rerun blindly."
+    },
+    "visual": {
+      "model": "NVIDIA Super VL",
+      "source": "95eb692104bc88d042f7203a90ea6b9121b6f4f6",
+      "script_blob": "74e302d369fa1709a0ddfe6b7ecbf593dabd07df",
+      "run": 45941783748,
+      "job": 140317496319,
+      "artifact": 15173003314,
+      "sha256": "fa09a74be694c973e9b55e4f3c7aa85970adc5e1203c0fa422e2735b13ac28df",
+      "retired_trigger": "eea64016d32165400a576a5dacea88f0ef706891",
+      "passed": 5,
+      "cases": 5,
+      "reported_tokens": 15047,
+      "model_wall_ms": 29442.041,
+      "independent": "ZIP SHA/CRC; five full MP4 decodes; 15 PNG hashes and independent RGB equality; numeric audio peaks and case oracle verified. Aligned, offset, sound-only, neither, picture-only typed observations.",
+      "limits": "Basic sampled visual and numeric audio-bin recognition only; no continuous motion, semantic listening, full artistic or G1 acceptance."
+    },
+    "raw_audio": {
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "source": "aa8c21526f6f12dab636f61ef5becfb59b3fd5db",
+      "script_blob": "1ce7960163fc918db11978d9082a58ac0407b6f4",
+      "run": 45942171828,
+      "job": 140318717014,
+      "artifact": 15173153626,
+      "sha256": "8c1540adbf8787325ac077d1c3c9d1d29fed8aed7d19b09e4b1f4b49524144c6",
+      "retired_trigger": "e0fc18741813bccd12ac1daab9e16006e226adce",
+      "offline_tests_passed": 47,
+      "passed": 1,
+      "cases": 4,
+      "reported_tokens": 4351,
+      "model_wall_ms": 4375.409,
+      "expected_hz": [
+        [
+          880,
+          440
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          440,
+          880
+        ],
+        [
+          440,
+          440
+        ]
+      ],
+      "observations": [
+        "rising",
+        "silent then high/rising",
+        "rising",
+        "rising"
+      ],
+      "independent": "ZIP SHA/CRC; all four full MP4 decodes; source and WAV receipt hashes; independent 16kHz mono 2s PCM byte-identical to retained WAV, FFT verifies pitch and silence. Typed transport succeeded; wrong model reports remain failure.",
+      "limits": "Single four-case calibration at this model and prompt; no proven semantic hearing, no cause attribution between service internals/model. No blind retry."
+    },
+    "index": {
+      "hypothesis": "17 indexed searches returned 101 name occurrences, 23 distinct, 78 repeats. Exact already-granted IDs can reduce discovery ambiguity without full schema dump. Genuine efficiency not yet measured.",
+      "source_blobs": {
+        "studio_next/capability_fabric.py": "8dd3cac29c9308f4970b64480b2c4ee2c5e187e9",
+        "studio_next/native_creative_control.py": "7b343d1100a4cf9c92bc492aa2d9bdcf25c6888c",
+        "studio_next/test_capability_fabric.py": "39f5f44f181d91670f76c1476ef48f7ae90c36b4",
+        "studio_next/test_native_creative_control.py": "c014d18b96d8f3c64aa5cdb290772d0e2ee27a50"
+      },
+      "change": "Complete or absent retrieval-only exact ID index, <=48 operations, <=4096 serialized bytes, queryable <=160 byte IDs; no new schema, grant or dispatch. Large catalog unchanged.",
+      "red": "Missing exact_lookup_index and model context field",
+      "green": "Three focused tests passed including large catalog no dump; unselected invoke blocked; exact lookup collision qualification and bounds tested.",
+      "local": {
+        "run": 250,
+        "passed": 243,
+        "environment_errors": 7,
+        "assertion_failures": 0,
+        "limits": "Reconstructed exact parent blobs; absent MCP SDK, repository scripts and example config; no full checkout."
+      },
+      "hosted": "PENDING exact candidate",
+      "genuine_model_benefit": false
+    },
+    "next": "Verify exact candidate hosted gates; investigate audio competence separately from transport. Preserve model-independent verified acoustic facts as distinct from listening. No professional acceptance promotion, no blind paid rerun. Predeclare a matched bounded control/experiment before another necessary authorized model trial; G1 terminal and meaningful revision, actual human co-edit, held-out G2, A–L and release remain open."
   }
 }

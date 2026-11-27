@@ -4100,6 +4100,7 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(model.observed[0]["actual_granted_native_tools"], [])
             self.assertTrue(model.observed[0]["compact_tool_catalog"])
             self.assertNotIn("host_declared_tool_hints", model.observed[0])
+            self.assertNotIn("capability_exact_lookup_index", model.observed[0])
             self.assertEqual(model.observed[0]["capability_overview"]["operation_count"],
                              len(session.tools))
             search = model.observed[1]["last_capability_search_result"]
@@ -4113,6 +4114,32 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(audit_native_journal(
                 result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
             self.assertFalse(result["native_editing_capability_complete"])
+
+    async def test_small_exact_index_does_not_make_unselected_native_tool_invokable(self):
+        session = FakeSession()
+        grants = {"get_timeline": "read", "update_text_clip": "write"}
+        session.tools = [tool for tool in session.tools if tool.name in grants]
+        model = ScriptedModel([
+            decision("search", query="native/update_text_clip", limit=1),
+            decision("invoke", tool="update_text_clip", inputs={"clipId": "title"}),
+            decision("finish", summary="Metadata and protocol only"),
+        ])
+        result = await NativeCreativeControl(session, model, max_turns=3,
+            catalog_mode="indexed", host_tool_access=grants).run("Choose an exact native tool")
+        index = model.observed[0]["capability_exact_lookup_index"]
+        self.assertEqual(index["operation_ids"], ["native/get_timeline", "native/update_text_clip"])
+        self.assertIs(index["retrieval_only_not_execution_grant"], True)
+        self.assertNotIn("update_text_clip", model.observed[0]["selectable_native_tools"])
+        self.assertEqual(model.observed[1]["selectable_native_tools"], ["update_text_clip"])
+        self.assertEqual(session.calls, [("update_text_clip", {"clipId": "title"})])
+        self.assertEqual(result["status"], "model_finished_unverified")
+        blocked = FakeSession()
+        blocked.tools = [tool for tool in blocked.tools if tool.name in grants]
+        with self.assertRaises(NativeCreativeControlError):
+            await NativeCreativeControl(blocked, ScriptedModel([
+                decision("invoke", tool="update_text_clip", inputs={"clipId": "title"})]),
+                max_turns=1, catalog_mode="indexed", host_tool_access=grants).run("No metadata grant")
+        self.assertEqual(blocked.calls, [])
 
     async def test_indexed_brain_cannot_invoke_invented_or_ungranted_tools(self):
         session = FakeSession()

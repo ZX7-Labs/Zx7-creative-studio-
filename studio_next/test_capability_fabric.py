@@ -212,6 +212,31 @@ class CapabilityFabricTests(unittest.TestCase):
         self.assertEqual(fabric.overview().get("host_granted_action_prefixes"),
                          None)
 
+    def test_small_exact_lookup_index_is_complete_bounded_and_retrieval_only(self):
+        fabric = CapabilityFabric({
+            "video": ([tool("mask", "Native video mask"), tool("private_delete")],
+                      {"mask": "write"}),
+            "photo": ([tool("mask", "Native photo mask")], {"mask": "write"}),
+        })
+        index = fabric.exact_lookup_index()
+        self.assertEqual(index["operation_ids"], ["photo/mask", "video/mask"])
+        self.assertEqual(index["revision"], fabric.revision)
+        self.assertIs(index["retrieval_only_not_execution_grant"], True)
+        self.assertNotIn("private_delete", json.dumps(index))
+        self.assertNotIn("input_schema", json.dumps(index))
+        for identity in index["operation_ids"]:
+            self.assertEqual([m["id"] for m in fabric.search(identity, limit=1)["matches"]],
+                             [identity])
+        index["operation_ids"].append("invented/action")
+        self.assertNotIn("invented/action", fabric.exact_lookup_index()["operation_ids"])
+        for names in ([f"op_{i}" for i in range(49)],
+                      [f"op_{i}_" + "x"*100 for i in range(48)],
+                      ["界"*60], ["trailing_space "]):
+            with self.subTest(names=len(names)):
+                large = CapabilityFabric({"native": ([tool(n) for n in names],
+                    {n: "read" for n in names})})
+                self.assertIsNone(large.exact_lookup_index())
+
     def test_only_actual_installed_and_host_granted_apis_can_be_exposed(self):
         f = CapabilityFabric({
             "video": ([tool("open_project", "Open real native project"),
