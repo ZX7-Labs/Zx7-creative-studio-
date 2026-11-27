@@ -1,0 +1,70 @@
+name: ZX7 one-use G1 — isolated synthetic visual and timing perception calibration
+# Five observation-only calls, below the standing 48-turn synthetic G1 ceiling.
+# No native edits, owner files, raw WAV upload, release, or ordinary CI inference.
+on:
+  push:
+    branches: [trial/g1-super-vl-perception-calibration-20261127]
+    paths: ['.github/workflows/zx7-oneuse-super-vl-perception-calibration-20261127.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zx7-oneuse-g1-super-vl-perception-calibration-20261127
+  cancel-in-progress: false
+jobs:
+  synthetic-observation:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-super-vl-perception-calibration-20261127' && github.event.before == '21bac3469fe6d87c630fd66178f5c17796b3810e'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Admit exact source and scoped one-use request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/trial/g1-super-vl-perception-calibration-20261127"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "21bac3469fe6d87c630fd66178f5c17796b3810e"
+          expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-super-vl-perception-calibration-20261127.yml' 'research/nvidia-oneuse-super-vl-perception-calibration-20261127.json' 'research/g1_perception_calibration.py' | LC_ALL=C sort)"
+          actual="$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          test "$(git hash-object 'research/g1_perception_calibration.py')" = "74e302d369fa1709a0ddfe6b7ecbf593dabd07df"
+          git diff --check HEAD^ HEAD
+          python -m scripts.nvidia_av_trial_request 'research/nvidia-oneuse-super-vl-perception-calibration-20261127.json' --dispatch-request-id 'ZX7_SUPER_VL_G1_PERCEPTION_CALIBRATION_20261127'
+      - name: Prove current decoder, function transport and five physical controls without a credential
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg || ! command -v ffprobe; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          python -m pip install --no-cache-dir '.[editor,production]'
+          python -m unittest studio_next.test_nvidia_native_tool_model studio_next.test_body_editor_frame studio_next.test_body_editor_audio_timeline scripts.test_nvidia_av_trial_request -v
+          python -m research.g1_perception_calibration --out "$RUNNER_TEMP/zx7-perception-preflight"
+      - name: Five independent genuine typed observations from generated media only
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${NVIDIA_API_KEY:-}"
+          test "$(git hash-object 'research/g1_perception_calibration.py')" = "74e302d369fa1709a0ddfe6b7ecbf593dabd07df"
+          test "$(python -m scripts.nvidia_av_trial_request --print-model 'research/nvidia-oneuse-super-vl-perception-calibration-20261127.json' --dispatch-request-id 'ZX7_SUPER_VL_G1_PERCEPTION_CALIBRATION_20261127')" = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+          python -u -m research.g1_perception_calibration --out "$RUNNER_TEMP/zx7-perception-live" --execute
+      - name: Preserve generated controls, physical receipts and bounded scoring only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-g1-super-vl-perception-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/zx7-perception-live/evaluation.json
+            ${{ runner.temp }}/zx7-perception-live/outputs/*.mp4
+            ${{ runner.temp }}/zx7-perception-live/outputs/*.png
+            ${{ runner.temp }}/zx7-perception-preflight/evaluation.json
+          retention-days: 7
+          if-no-files-found: warn
