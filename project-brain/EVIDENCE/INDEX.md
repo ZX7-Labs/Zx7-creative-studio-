@@ -1559,3 +1559,84 @@ Exact previous mutable ledger: [4b6e0334](https://github.com/ZX7-Labs/Zx7-creati
   "next": "Require exact candidate source/native checks, then a bounded discriminating matched creative trial only if justified and under existing synthetic consent. Measure post-observation decisions, distinct physically verified revised export, original source custody and cost, not just memory availability. No acceptance change."
  }
 }
+
+
+## 27 Nov — sensory continuity trial, selected audio finish, precision source, derivative ancestry
+
+Exact parent: [2fab105621d36a05958fc5f8cd06ea7e49e1584e](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/2fab105621d36a05958fc5f8cd06ea7e49e1584e/project-brain/EXECUTION_LEDGER.json), prior ledger blob `a9d629c80ff18f460ecbdf3d54d01b239a97ac61`. Local code blobs match exact tested files. Synthetic rights reproduction: create 4x4 RGBA PNG (75,143,215,255), ingest as owner_upload; native visual source node and expression photo_r*.5 / photo_g / photo_b, rendered PNG; dependent body.asset_vault uses $node_output. Withdraw original grant, inspect original refused; checkout derived grant to fresh file succeeds. No legal conclusion. Full observation:
+
+```json
+{
+  "parent": {
+    "commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+    "tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
+    "matrix_at_observation": {
+      "in_progress": 2,
+      "success": 27
+    },
+    "remaining": [
+      {
+        "id": 46044219985,
+        "name": "ZX7 BODY — Installed Package, Desktop and Physical Crash Proof"
+      },
+      {
+        "id": 46044220019,
+        "name": "ZX7 MLT Editorial Native Research and Fidelity Gate"
+      }
+    ],
+    "note": "Previous exact 29/29 baseline remains separately verified. Do not cancel parent MLT full run before it becomes terminal."
+  },
+  "trial": {
+    "run_id": 46045586986,
+    "job_id": 140663907085,
+    "status": "in_progress",
+    "conclusion": null,
+    "source": "4719db96d6230c186064b4739d94e9be08e97fc0",
+    "trigger_retired_at": "87df7e5be744b72b08fdbbe41dc12897c678fdc9",
+    "request": "ZX7_SUPER_VL_G1_SENSORY_CONTINUITY_20261127",
+    "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "same_brief_grants_source_sampling": true,
+    "synthetic_only": true,
+    "raw_audio_upload": false,
+    "turn_ceiling": 48,
+    "baseline_run": 46007258095,
+    "hypothesis": "Matched cumulative search-cycle and sensory-rationale correction: post-observation search/decision counts, original custody, distinct revised physical export and costs. Not isolated causal attribution or semantic listening/professional acceptance. No retry; inspect terminal actual artifacts."
+  },
+  "audio": {
+    "observed": "Native audio-only finishing previously mapped only first video/audio and reencoded picture as 8-bit yuv420p. Real multitrack test RED. AAC reencode extended sample clock; loudnorm shifted timestamps; integer sample-index retime after verifying continuous zero-origin source fixes these without silently rebasing gaps.",
+    "correction": "Explicit audio_stream_index required with multiple programs. Existing film_finish, sealed CAS, select one audio stream in MP4; stream-copy all untouched video/audio/subtitle packets; shared physical proof extracted from subtitle delivery. Selected continuous audio trim/aresample and exact integer sample timebase, verify original logical and padded decoded sample counts and independent loudness before/after. Refuse unsupported clocks, other stream types, chapters/attachments, high precision/HDR or multitrack picture finishing rather than silently lose fidelity.",
+    "physical": "Actual 160x96 24000/1001 10-bit BT2020/PQ-tagged H264, English 48k + Hindi 44.1k mono AAC and mov_text. Exact untouched stream packet digests, timestamps and independent decoded A/V; original SHA unchanged. Selected gain -6 dB checked RMS, normalization -23 LUFS ±1 fixture; 132300 logical/133120 padded decoded samples. Ambiguous/nonexistent selection, gap/overlap, unsafe picture finishing refused without publication.",
+    "tests": {
+      "finishing": "7/7",
+      "neighboring": "48/48",
+      "revision": "16/16",
+      "combined_with_visual": "44/44 (overlapping tests, not additive)"
+    },
+    "limits": "MP4 targeted, not arbitrary container/stream/metadata/clock, formal general loudness compliance, professional mix, stems, calibrated HDR or semantic acceptance. Hosted candidate pending."
+  },
+  "visual": {
+    "observed": "Original high-depth PNG explicitly refused before PIL conversion; RED actual 16-bit image.",
+    "correction": "Native FFmpeg rgba64le decode into float32 with explicit sRGB declaration, bounded PNG chunk/metadata scan, exact byte length and existing linear transfer/associated alpha. Reject conflicting gamma/chromaticities, cICP/ICC/HDR metadata, duplicate/bad bounded chunks.",
+    "physical": "Independent actual RGBA16 source-codeword and float transfer oracle, adjacent one-codeword difference preserved through authored graph math and physical edited PNG; source SHA unchanged; conflicting gAMA and cICP rejected. Separate direct native decoder probe grayscale, RGB, grayscale+alpha, RGBA and tRNS exact.",
+    "tests": "33 run, 29 pass, 4 skipped (local OpenEXR unavailable); combined 44/44 pass including sound finishing and shared revision",
+    "limits": "Only explicitly declared sRGB-compatible 16-bit PNG input; no arbitrary color profile or wide gamut; existing SDR PNG/MOV delivery remains 8-bit; no new EXR-file or professional acceptance. Hosted candidate pending."
+  },
+  "provenance": {
+    "observed": "Actual local synthetic 4x4 owner PNG -> body.visual_graph expression photo_r*.5 -> body.asset_vault durable producer DAG all_tool_results_verified; derived bytes distinct, attestation generated_original/trusted_renderer with source_id only output SHA. After withdrawal of exact original attestation, original inspect refused but a fresh derived checkout succeeded.",
+    "source_sha": "6e722263e450ddca6c7af5f708440fc9622a09290b463b3f634a400b54710b0c",
+    "derived_attestation": "35ddd2849ceb76a73278bbe837525bacc74e336e40b8d7c28177078df8e18d0a",
+    "scope": "Missing explicit ancestor-grant provenance and dependency enforcement; not proof of unlawful use or revocation of independently granted derivative rights. Preserve history and independent owner grants. Require host-derived dependency receipts, versioned migration, exact ancestor policy and race/restart tests before broad rights propagation; no guessed legal semantics or claim of full withdrawal."
+  },
+  "blobs": {
+    "studio_next/film_finishing.py": "c94103c669c8b061b1c4909a0cdf08833b3abe74",
+    "studio_next/body_stream_custody.py": "bfb49bc313d2a3b0b1bf1ccb36f413502c8a692b",
+    "studio_next/body_subtitles.py": "d3370f473f7edb0c80b91476752cafa4761569b1",
+    "studio_next/body_document_schemas.py": "57136be91b9211a1dff48119d67c65a963badb79",
+    "studio_next/body_integration.py": "0d4f24d953fb9ec6e7ef4a2563cd0051ca30af77",
+    "studio_next/test_film_finishing.py": "ff221ab70593c35d0c06068c069fe566cc0b4df0",
+    "studio_next/body_visual_render.py": "38beba98b37d2be69ea8ba4358b8de10679025cd",
+    "studio_next/body_visual_contract.py": "9ca9ab93cf56a3ad7dd1768dd6c26cc22ba7a166",
+    "studio_next/test_body_visual_graph.py": "47de2d37bde8d7f1d42a0e39becf64bd0afb31ea"
+  }
+}
+```

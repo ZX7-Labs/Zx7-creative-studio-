@@ -143,6 +143,54 @@ class RealVisualGraphTests(unittest.TestCase):
             reverse["nodes"][0]["params"]["frame"]=4;hold=self.render(root,reverse,"hold")
             self.assertEqual(hold["rendered_frame_pixel_sha256"],[produced["rendered_frame_pixel_sha256"][4]]*8)
 
+    def test_native_16bit_srgb_source_retains_precision_before_authored_graph_math(self):
+        import struct
+        import zlib
+        import numpy as np
+        from PIL import Image
+        from studio_next.body_visual_render import SealedGraphSources
+        from studio_next.media_vault import MediaVault,sha256_file
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);file=root/"precision.png"
+            rgba=np.array([[[10000,30000,65535,65535],[10001,30001,12345,32769],
+                            [10002,30002,12346,32770],[65535,0,255,12345]]],dtype=">u2")
+            def chunk(kind,data):
+                return struct.pack(">I",len(data))+kind+data+struct.pack(">I",zlib.crc32(kind+data)&0xffffffff)
+            def write_png(path,metadata):
+                path.write_bytes(b"\x89PNG\r\n\x1a\n"+chunk(b"IHDR",struct.pack(">IIBBBBB",4,1,16,6,0,0,0))+
+                    metadata+chunk(b"IDAT",zlib.compress(b"\x00"+rgba.tobytes()))+chunk(b"IEND",b""))
+            write_png(file,chunk(b"sRGB",b"\x00"))
+            original=sha256_file(file);media=self.source(root,file,"image/png")
+            source={"id":"photo","op":"source","inputs":{},"params":{
+                "media":media,"kind":"image","color_space":"srgb","frame":0}}
+            graph=VisualGraph(plan([source],width=4,height=1))
+            private=root/"sealed";private.mkdir()
+            sources=SealedGraphSources(graph,root,MediaVault(root/"vault"),private)
+            actual=graph.frame(0,source_provider=sources)
+            # Independent transfer/association oracle from the actual 16-bit code words.
+            expected=rgba.astype(np.float64)/65535
+            expected[...,:3]=np.where(expected[...,:3]<=.04045,expected[...,:3]/12.92,
+                ((expected[...,:3]+.055)/1.055)**2.4)*expected[...,3:4]
+            np.testing.assert_allclose(actual,expected,rtol=2e-6,atol=1e-8)
+            self.assertNotEqual(float(actual[0,1,3]),float(actual[0,2,3]))
+            sources.verify()
+            # Amplify a one-code-word difference into visibly different output.
+            # An 8-bit conversion before graph evaluation cannot pass this oracle.
+            base=float(expected[0,0,0]);doc=plan([source,field("detail",
+                f"clamp((photo_r-{base:.12g})*100000,0,1)","0","0","1",inputs={"photo":"photo"})],width=4,height=1)
+            output=self.render(root,doc,"detail")
+            with Image.open(output["path"]) as image:
+                self.assertEqual(image.getpixel((0,0))[0],0)
+                self.assertGreater(image.getpixel((1,0))[0],100)
+            self.assertEqual(sha256_file(file),original)
+            for name,metadata in (("gamma",chunk(b"gAMA",struct.pack(">I",100000))),
+                                  ("cicp",chunk(b"cICP",bytes([9,16,0,1])))):
+                bad=root/(name+".png");write_png(bad,metadata)
+                source["params"]["media"]=self.source(root,bad,"image/png")
+                with self.assertRaisesRegex(ValueError,"16-bit PNG.*color"):
+                    self.render(root,plan([source],width=4,height=1),"bad-"+name)
+                self.assertFalse((root/("bad-"+name+".png")).exists())
+
     def test_photo_channel_edit_and_source_integrity(self):
         from PIL import Image
         with tempfile.TemporaryDirectory() as tmp:

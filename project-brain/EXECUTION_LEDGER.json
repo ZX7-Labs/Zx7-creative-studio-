@@ -30,7 +30,7 @@
    "id": "A",
    "slug": "truth_rights_provenance",
    "implementation": "scoped_foundations_present",
-   "technical_evidence": "Source custody plus exact owner attestation withdrawal blocks fresh/cached attested media admission, reingest and checkout; complete revocation propagation and professional acceptance open.",
+   "technical_evidence": "Source custody plus exact owner attestation withdrawal blocks fresh/cached attested media admission, reingest and checkout; complete revocation propagation and professional acceptance open. Actual derivative checkout after original withdrawal reproduced; ancestor binding and independent grant semantics remain open.",
    "independent_field_acceptance": "NOT_ACCEPTED",
    "owner_source_paths": [
     "media_vault.py",
@@ -82,7 +82,7 @@
    "id": "D",
    "slug": "2d_graphic_vector_photo_typography",
    "implementation": "scoped_foundations_present",
-   "technical_evidence": "Editable native animated cubic contour mask, independent alpha/geometry checks and actual PNG/MOV render; original preserved and excerpt exact; full creative field and professional acceptance unproven.",
+   "technical_evidence": "Editable native animated cubic contour mask, independent alpha/geometry checks and actual PNG/MOV render; original preserved and excerpt exact; full creative field and professional acceptance unproven. Local new sRGB16 source precision and real graph PNG verified; new hosted and float EXR proof pending.",
    "independent_field_acceptance": "NOT_ACCEPTED",
    "owner_source_paths": [
     "body_visual_graph.py",
@@ -116,7 +116,7 @@
    "id": "F",
    "slug": "color_hdr_mastering",
    "implementation": "scoped_foundations_present",
-   "technical_evidence": "Real native Blender EXR -> pinned ACES2 1000-nit-target Rec.2100 PQ/Rec.2020 10-bit ProRes picture proof, independent source/frame decode; calibrated HDR monitor, full HDR mastering/delivery and professional acceptance remain open.",
+   "technical_evidence": "Real native Blender EXR -> pinned ACES2 1000-nit-target Rec.2100 PQ/Rec.2020 10-bit ProRes picture proof, independent source/frame decode; calibrated HDR monitor, full HDR mastering/delivery and professional acceptance remain open. Local audio-only finishing preserves native 10-bit picture packets and decoded samples; not a new HDR mastering path.",
    "independent_field_acceptance": "NOT_ACCEPTED",
    "owner_source_paths": [
     "body_color_pipeline.py",
@@ -130,7 +130,7 @@
    "id": "G",
    "slug": "music_voice_sound_subtitles",
    "implementation": "scoped_foundations_present",
-   "technical_evidence": "5.1 and A/V source audio tested; native multilingual timed-text delivery preserves all verified source A/V and HDR; actual neural semantic listening, professional mix/voice/accessibility and field acceptance remain open. Local candidate: rights-attested alternate audio programs and standalone WAV/FLAC/MP3 loudness, true peak and exact sample-clock measurement with no reencode; hosted verification pending.",
+   "technical_evidence": "5.1 and A/V source audio tested; native multilingual timed-text delivery preserves all verified source A/V and HDR; actual neural semantic listening, professional mix/voice/accessibility and field acceptance remain open. Local candidate: rights-attested alternate audio programs and standalone WAV/FLAC/MP3 loudness, true peak and exact sample-clock measurement with no reencode; integrated hosted baseline passed. Local selected audio-only MP4 finishing preserves untouched 10-bit picture, alternate audio and timed text, exact selected clock and measured fixture loudness; new hosted verification pending.",
    "independent_field_acceptance": "NOT_ACCEPTED",
    "owner_source_paths": [
     "composite_mix.py",
@@ -1219,47 +1219,18 @@
   "limitations": "Finite sampled edge coverage, bounded contour complexity, no feather-specific UI, automatic tracking or independent field acceptance. Combined hosted proof pending."
  },
  "latest_integrated_fg_audit_20261127": {
-  "source": "66b4465baa1405197ff9c886b9e47c2e47d0e423",
-  "tree": "931492ce7b8d67abe7f772fa72c76ad38213e422",
-  "hosted": "29/29 success",
-  "installed_run": 46007162992,
-  "artifact": 15203156105,
-  "sha256": "962a8777a6be7b71db77435d55f8dccaa948253a64f2401bdcd97206a62d81e6",
-  "tested_merge": "0f07258bbfdadcc3b22b84fe8f0647ec8c5305dd",
-  "tree_equal": true,
-  "manifest": "24/24",
-  "full_decodes": 3,
-  "tests": {
-   "total": 1800,
-   "passed": 1769,
-   "skipped": 31,
-   "failed": 0
-  }
+  "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "blob": "a9d629c80ff18f460ecbdf3d54d01b239a97ac61",
+  "key": "latest_integrated_fg_audit_20261127",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "integrated_ade_failure_audit_20261127": {
-  "source": "fbb95665280c58e8550d1f703b221a83a3b7e52a",
-  "tree": "da6fece917fb55da5b89783b35234edac9c69978",
-  "hosted": "25/29 success; 4 failure terminal",
-  "common_failure": {
-   "source_run": 46010679696,
-   "installed_run": 46010679646,
-   "mlt_run": 46010679250,
-   "source_job": 140545074917,
-   "installed_job": 140545076483,
-   "mlt_job": 140545074025,
-   "test": "test_cgi_texture_source_bytes_are_in_actual_material_fingerprint",
-   "cause": "Legacy fixture fabricates x/y custody identifiers and arbitrary bytes; strict source custody correctly rejects it.",
-   "red": "Exact local reproduction with body_materials and media_vault blobs matching remote; Unsafe media content digest.",
-   "green": "16/16 local tests in test_cgi_tracking, test_body_materials and test_body_custody_graph; real PNG admission and digest change after explicit reattestation; reject mutated source under old receipt, forged IDs and withdrawn grant; physical planar A/V preserves native audio and color.",
-   "test_blob": "826d5ab8561aade98e54990c37057b84d1beceba",
-   "runtime_changed": false
-  },
-  "scene": {
-   "run": 46010679491,
-   "job": 140545307832,
-   "status": "failed after successful Vite build, exact subsequent failure cause unresolved; do not label infrastructure or source defect without evidence"
-  },
-  "limits": "Candidate hosted verification pending. No new domain acceptance. Last fully green integrated parent remains 66b4465b."
+  "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "blob": "a9d629c80ff18f460ecbdf3d54d01b239a97ac61",
+  "key": "integrated_ade_failure_audit_20261127",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "archived_receipts_20261127": {
   "immutable_ledger_commit": "573e952ccf1b9556fec8d56204ac749f30bc9cd8",
@@ -1291,139 +1262,32 @@
   }
  },
  "field_g_audio_program_audit_20261127": {
-  "parent": "f036a1552af2b6080344e4e840c5b6d35727c207",
-  "code_blobs": {
-   "studio_next/body_loudness.py": "bb6e38c7892fc643f8c1786d871ae38687f81a29",
-   "studio_next/body_document_schemas.py": "6855129674f56b41b05141e149a15fda17502c55",
-   "studio_next/body_integration.py": "55e14a4f22740bf0159c2cfc1d12e59a48f0066b",
-   "studio_next/test_body_loudness.py": "974bcb3762a5e65fca6efe6a16c2b8cdebe0e294",
-   "studio_next/test_body_shared_revision.py": "f6bd950cb001e2330f8250bbefd0c692cdecc39c"
-  },
-  "scope": "Read-only body.loudness explicitly selects one to eight audio stream ordinals, preserves default first-stream behavior and scalar contract, returns separately measured LUFS/LRA/true peak, actual decoded count/sample rate/channel count/language. WAV, FLAC and MP3 masters supported; no stem inference, semantic listening, normalization or professional acceptance.",
-  "negative": "Prior first-track-only contract cannot express alternate selections or standalone audio; local RED confirmed edit_timeline decoder-policy change left new loudness cache revision unchanged.",
-  "local_verification": "18/18 loudness/subtitles/materials/custody graph tests and 16/16 physical composite_mix tests. After cache dependency correction 11/11 shared-revision/loudness tests. Actual alternate AAC programs at 48k/44.1k with distinct gains and language tags, independent PCM sample count oracle, standalone PCM 57600 samples at 48k, FLAC and MP3 actual stereo decode counts, original SHA unchanged; invalid selection and withdrawn receipt refused. No hosted acceptance yet.",
-  "parent_hosted_observed": "25 success, 1 failure, 3 in progress; native atomic range #46023936864 failed in pinned Electron build after Vite/JS checks; exact subcommand unproven. Do not cancel active parent verification.",
-  "limits": "No private media/model use, no mix quality judgment, no calibrated professional acceptance. Existing source custody only; no expansion of grants."
+  "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "blob": "a9d629c80ff18f460ecbdf3d54d01b239a97ac61",
+  "key": "field_g_audio_program_audit_20261127",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "g1_alternating_metadata_search_feedback_20261127": {
-  "parent": "654c5b0275d87998d34a5181f5da35fd78f4cc82",
-  "code_blobs": {
-   "studio_next/native_creative_control.py": "11b3fc50aef57f244e55a7c7ffdbe4ab72462db0",
-   "studio_next/test_native_creative_control.py": "d42fc0fa3cdd3cbad77454f445e5bfb7014b6478"
-  },
-  "actual_trial": {
-   "run": 46007258095,
-   "artifact": 15203767091,
-   "searches": 21,
-   "distinct_query_hashes": 13,
-   "repeated_query_hash_turns": [
-    10,
-    14,
-    27,
-    30,
-    34,
-    35,
-    36,
-    40
-   ],
-   "reported_search_tokens": 271235,
-   "reported_repeated_hash_search_tokens": 113438,
-   "search_only_burst_turns": [
-    27,
-    36
-   ],
-   "reported_burst_tokens": 145163,
-   "qualification": "Hash repetition across whole session does not prove redundancy after a native action; query limit not recorded in old journal. Token sums are observed usage, not projected savings."
-  },
-  "cause": "Previous controller only flags consecutive identical query+limit+catalog revision; alternating same queries within uninterrupted metadata-only streak evade signal. RED exact local test KeyError for missing feedback.",
-  "correction": "Replace adjacent-only counter with bounded per-streak signature counts (max 128 decision turns); reset at non-search action, preserve exact query/limit/revision and grants, no automatic dispatch or artistic decision. Journal emits bounded repeat count telemetry, not acceptance.",
-  "verification": {
-   "targeted": "3/3 RED→GREEN alternating repeat, consecutive repeat and describe reset. No native calls, no invocation from empty result, journal structure valid.",
-   "combined": {
-    "run": 248,
-    "passed": 241,
-    "errors": 7,
-    "failures": 0,
-    "errors_due_to_missing_local_checkout_or_dependencies": [
-     "scripts.run_native_model_trial",
-     "engines/velorn/editor.example.json",
-     "mcp"
-    ],
-    "scope": "Wheel-based local overlay, not full checkout. Hosted exact source verification pending."
-   }
-  },
-  "limits": "No measured genuine model turn/token savings, no semantic/creative/release acceptance, no new live model trial or private egress."
+  "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "blob": "a9d629c80ff18f460ecbdf3d54d01b239a97ac61",
+  "key": "g1_alternating_metadata_search_feedback_20261127",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "parent_installed_and_atomic_diagnostics_20261127": {
-  "parent": "f036a1552af2b6080344e4e840c5b6d35727c207",
-  "observed_matrix": {
-   "success": 27,
-   "failure": 1,
-   "in_progress": 1
-  },
-  "installed": {
-   "run": 46023937134,
-   "job": 140590354038,
-   "independent_ci_job": 140600975851,
-   "artifact": 15212611150,
-   "sha256": "ce8a9462762794d03f9651ff086df02f5e9a9ead276c9ea74a9c16913689657e",
-   "local_crc_ok": true,
-   "manifest_matched": 24,
-   "manifest_total": 24,
-   "local_full_decodes": 3,
-   "tests_run": 1814,
-   "tests_passed": 1782,
-   "tests_skipped": 32,
-   "tests_failed": 0,
-   "tests_errors": 0,
-   "merge_source": "85b8e91dcf778ed5d0528e735ec77afd8a58a438",
-   "exact_tree": "5b8fbed418a02e746243f6a763ffeebda0996d86",
-   "limits": "Installed technical proof, no independent professional acceptance."
-  },
-  "pending": {
-   "run": 46023937016,
-   "job": 140590479244,
-   "step": "Run every existing and new studio application contract on this exact branch"
-  },
-  "atomic_range": {
-   "failed_run": 46023936864,
-   "failed_job": 140591531636,
-   "prior_success_run": 46007163085,
-   "prior_success_job": 140533459148,
-   "observed": "Vite build succeeded; silent post-build checks exit 1; previous exact guard passed. No exact failed command/cause established.",
-   "workflow_blob": "da5b964e6ebb1e349c50200e9e73e4050d6a5b00",
-   "change": "Report missing index/helper, sandbox permission stage, actual version stdout, subprocess exit code and mismatch. Retain exact version and sandbox requirements; explicitly fail nonzero probe even if stdout matches.",
-   "local_verification": "bash -n and six shell fixture cases (missing index/helper, chmod/chown-stage refusal, nonzero version command, wrong version, exact positive). Not real Electron proof.",
-   "limits": "No root-cause resolution or guard weakening claimed. Require actual hosted retry with diagnostics and native physical proof."
-  }
+  "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "blob": "a9d629c80ff18f460ecbdf3d54d01b239a97ac61",
+  "key": "parent_installed_and_atomic_diagnostics_20261127",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "parent_terminal_20261127": {
-  "source": "f036a1552af2b6080344e4e840c5b6d35727c207",
-  "matrix": {
-   "success": 28,
-   "failure": 1,
-   "in_progress": 0
-  },
-  "mlt": {
-   "run": 46023937016,
-   "job": 140590479244,
-   "tests_run": 1814,
-   "passed": 1812,
-   "skipped": 2,
-   "failed": 0,
-   "additional_separate_test_runs": [
-    52,
-    26
-   ],
-   "result": "success"
-  },
-  "remaining_failure": {
-   "run": 46023936864,
-   "job": 140591531636,
-   "stage": "post-Vite sandbox/version checks; exact failed subcommand unproven; diagnostic correction in candidate"
-  },
-  "candidate": "cd6858ec3989b498def8e121b3c95c69cfbeb72a",
-  "decision": "Parent matrix terminal; integrate cumulative candidate via non-force expected-head update. No merge into main or independent acceptance."
+  "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "blob": "a9d629c80ff18f460ecbdf3d54d01b239a97ac61",
+  "key": "parent_terminal_20261127",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "g1_sensory_decision_continuity_20261127": {
   "baseline": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
@@ -1449,6 +1313,77 @@
    ],
    "scope": "Exact verified installed wheel overlay, no native or neural retest"
   },
-  "next": "Require exact candidate source/native checks, then a bounded discriminating matched creative trial only if justified and under existing synthetic consent. Measure post-observation decisions, distinct physically verified revised export, original source custody and cost, not just memory availability. No acceptance change."
+  "next": "Require exact candidate source/native checks, then a bounded discriminating matched creative trial only if justified and under existing synthetic consent. Measure post-observation decisions, distinct physically verified revised export, original source custody and cost, not just memory availability. No acceptance change.",
+  "matched_retest": {
+   "run_id": 46045586986,
+   "job_id": 140663907085,
+   "status": "in_progress",
+   "conclusion": null,
+   "source": "4719db96d6230c186064b4739d94e9be08e97fc0",
+   "trigger_retired_at": "87df7e5be744b72b08fdbbe41dc12897c678fdc9",
+   "request": "ZX7_SUPER_VL_G1_SENSORY_CONTINUITY_20261127",
+   "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+   "same_brief_grants_source_sampling": true,
+   "synthetic_only": true,
+   "raw_audio_upload": false,
+   "turn_ceiling": 48,
+   "baseline_run": 46007258095,
+   "hypothesis": "Matched cumulative search-cycle and sensory-rationale correction: post-observation search/decision counts, original custody, distinct revised physical export and costs. Not isolated causal attribution or semantic listening/professional acceptance. No retry; inspect terminal actual artifacts."
+  },
+  "hosted_observation": {
+   "commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+   "tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
+   "matrix_at_observation": {
+    "in_progress": 2,
+    "success": 27
+   },
+   "remaining": [
+    {
+     "id": 46044219985,
+     "name": "ZX7 BODY — Installed Package, Desktop and Physical Crash Proof"
+    },
+    {
+     "id": 46044220019,
+     "name": "ZX7 MLT Editorial Native Research and Fidelity Gate"
+    }
+   ],
+   "note": "Previous exact 29/29 baseline remains separately verified. Do not cancel parent MLT full run before it becomes terminal."
+  }
+ },
+ "field_g_selected_audio_finish_20261127": {
+  "observed": "Native audio-only finishing previously mapped only first video/audio and reencoded picture as 8-bit yuv420p. Real multitrack test RED. AAC reencode extended sample clock; loudnorm shifted timestamps; integer sample-index retime after verifying continuous zero-origin source fixes these without silently rebasing gaps.",
+  "correction": "Explicit audio_stream_index required with multiple programs. Existing film_finish, sealed CAS, select one audio stream in MP4; stream-copy all untouched video/audio/subtitle packets; shared physical proof extracted from subtitle delivery. Selected continuous audio trim/aresample and exact integer sample timebase, verify original logical and padded decoded sample counts and independent loudness before/after. Refuse unsupported clocks, other stream types, chapters/attachments, high precision/HDR or multitrack picture finishing rather than silently lose fidelity.",
+  "physical": "Actual 160x96 24000/1001 10-bit BT2020/PQ-tagged H264, English 48k + Hindi 44.1k mono AAC and mov_text. Exact untouched stream packet digests, timestamps and independent decoded A/V; original SHA unchanged. Selected gain -6 dB checked RMS, normalization -23 LUFS ±1 fixture; 132300 logical/133120 padded decoded samples. Ambiguous/nonexistent selection, gap/overlap, unsafe picture finishing refused without publication.",
+  "tests": {
+   "finishing": "7/7",
+   "neighboring": "48/48",
+   "revision": "16/16",
+   "combined_with_visual": "44/44 (overlapping tests, not additive)"
+  },
+  "limits": "MP4 targeted, not arbitrary container/stream/metadata/clock, formal general loudness compliance, professional mix, stems, calibrated HDR or semantic acceptance. Hosted candidate pending."
+ },
+ "field_d_png16_source_20261127": {
+  "observed": "Original high-depth PNG explicitly refused before PIL conversion; RED actual 16-bit image.",
+  "correction": "Native FFmpeg rgba64le decode into float32 with explicit sRGB declaration, bounded PNG chunk/metadata scan, exact byte length and existing linear transfer/associated alpha. Reject conflicting gamma/chromaticities, cICP/ICC/HDR metadata, duplicate/bad bounded chunks.",
+  "physical": "Independent actual RGBA16 source-codeword and float transfer oracle, adjacent one-codeword difference preserved through authored graph math and physical edited PNG; source SHA unchanged; conflicting gAMA and cICP rejected. Separate direct native decoder probe grayscale, RGB, grayscale+alpha, RGBA and tRNS exact.",
+  "tests": "33 run, 29 pass, 4 skipped (local OpenEXR unavailable); combined 44/44 pass including sound finishing and shared revision",
+  "limits": "Only explicitly declared sRGB-compatible 16-bit PNG input; no arbitrary color profile or wide gamut; existing SDR PNG/MOV delivery remains 8-bit; no new EXR-file or professional acceptance. Hosted candidate pending."
+ },
+ "field_a_derivative_lineage_gap_20261127": {
+  "observed": "Actual local synthetic 4x4 owner PNG -> body.visual_graph expression photo_r*.5 -> body.asset_vault durable producer DAG all_tool_results_verified; derived bytes distinct, attestation generated_original/trusted_renderer with source_id only output SHA. After withdrawal of exact original attestation, original inspect refused but a fresh derived checkout succeeded.",
+  "source_sha": "6e722263e450ddca6c7af5f708440fc9622a09290b463b3f634a400b54710b0c",
+  "derived_attestation": "35ddd2849ceb76a73278bbe837525bacc74e336e40b8d7c28177078df8e18d0a",
+  "scope": "Missing explicit ancestor-grant provenance and dependency enforcement; not proof of unlawful use or revocation of independently granted derivative rights. Preserve history and independent owner grants. Require host-derived dependency receipts, versioned migration, exact ancestor policy and race/restart tests before broad rights propagation; no guessed legal semantics or claim of full withdrawal."
+ },
+ "physical_finishing_precision_candidate_blobs_20261127": {
+  "studio_next/film_finishing.py": "c94103c669c8b061b1c4909a0cdf08833b3abe74",
+  "studio_next/body_stream_custody.py": "bfb49bc313d2a3b0b1bf1ccb36f413502c8a692b",
+  "studio_next/body_subtitles.py": "d3370f473f7edb0c80b91476752cafa4761569b1",
+  "studio_next/body_document_schemas.py": "57136be91b9211a1dff48119d67c65a963badb79",
+  "studio_next/body_integration.py": "0d4f24d953fb9ec6e7ef4a2563cd0051ca30af77",
+  "studio_next/test_film_finishing.py": "ff221ab70593c35d0c06068c069fe566cc0b4df0",
+  "studio_next/body_visual_render.py": "38beba98b37d2be69ea8ba4358b8de10679025cd",
+  "studio_next/body_visual_contract.py": "9ca9ab93cf56a3ad7dd1768dd6c26cc22ba7a166",
+  "studio_next/test_body_visual_graph.py": "47de2d37bde8d7f1d42a0e39becf64bd0afb31ea"
  }
 }

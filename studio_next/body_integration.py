@@ -255,12 +255,12 @@ def _trusted_body_revision(tool_id, *, revision_inputs=None):
                              "body_pixel_math.py","body_animation.py","composite_mix.py","media_vault.py","production_qc.py"],
         "body.motion_project":["body_motion_project.py","body_motion_worker.py"],
         "body.motion_export":["body_motion_project.py","production_qc.py"],
-        "body.film_finish":["film_finishing.py","media_vault.py","composite_mix.py","production_qc.py"],
+        "body.film_finish":["film_finishing.py","body_stream_custody.py","body_loudness.py","edit_timeline.py","media_vault.py","composite_mix.py","production_qc.py"],
         "body.color_lut":["body_color_pipeline.py","media_vault.py","delivery_audit.py","composite_mix.py","production_qc.py"],
         "body.reference_graph":["reference_observatory.py","reference_evidence_tools.py"],
         "body.full_decode":["production_qc.py","delivery_audit.py"],
         "body.loudness":["body_loudness.py","media_vault.py","composite_mix.py","edit_timeline.py"],
-        "body.subtitle_delivery":["body_subtitles.py","media_vault.py","composite_mix.py","edit_timeline.py"],
+        "body.subtitle_delivery":["body_subtitles.py","body_stream_custody.py","media_vault.py","composite_mix.py","edit_timeline.py"],
         "body.review":["body_observation.py","production_qc.py","media_vault.py"],
         "body.temporal_evidence":["body_temporal_evidence.py","composite_mix.py","precision_retime.py","body_observation.py","production_qc.py","media_vault.py"],
         "body.review_data":["body_review_access.py","body_observation.py"],
@@ -1025,7 +1025,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Live FFmpeg exact BT.709 3D-CUBE transform; 8-bit viewing or 10-bit ProRes master",
         "write",video_io,["plan","out"],color_grade_movie)
     add("body.film_finish","measured film color grade and sound finishing",
-        "Local FFmpeg real picture operations and original audio loudness mastering",
+        "Local FFmpeg explicit picture operations; audio-only MP4 finishing of one selected soundtrack preserves other original stream packets, color precision, timing and decoded A/V",
         "write",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
         ["plan","out"],finish_movie)
     add("body.composite_mix","original timeline multilayer edit, licensed voices and audio mix",
@@ -1040,7 +1040,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "read",True,["plan"],read_authored_visual)
     add("body.visual_graph","editable native photo, motion graphic and VFX pixel graph",
         "Authored mathematical pixels, animated cubic path masks with explicit winding/holes, original-frame curves, inverse spatial sampling, convolution and alpha compositing; "
-        "float32 linear-sRGB internals, sealed sources, exact RGBA PNG/MOV or float32 EXR (requires OpenEXR 3.3+); separate editable audio",
+        "float32 linear-sRGB internals, sealed 8/16-bit sRGB PNG and float EXR sources, exact RGBA PNG/MOV or float32 EXR (requires OpenEXR 3.3+); separate editable audio",
         "write",bool(video_io and all(importlib.util.find_spec(name) is not None for name in ("numpy","PIL"))),
         ["plan","out"],render_visual)
     add("body.exr_checkpoint","durable original-frame 32float VFX render and exact verified resume",

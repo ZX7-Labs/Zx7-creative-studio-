@@ -38,7 +38,8 @@ def visual_graph_contract():
         "Remap x/y are inverse source coordinates. Curve endpoints hold; cubic slopes are value per original frame. "
         "Path masks have authored animated cubic control points in canvas pixels, implicit straight closure, explicit winding rule and inversion; preserve associated alpha. "
         "Frames are zero-based; time is seconds at rational fps. Native validation checks graph, math and host budgets. "
-        "Float32 linear-sRGB internals. exr32 exports preserve_float RGBA; EXR input requires linear_srgb and explicit alpha_mode, "
+        "Float32 linear-sRGB internals. Explicit sRGB 16-bit PNG source codes and alpha are preserved before graph math; unsupported color profiles are refused. "
+        "exr32 exports preserve_float RGBA; EXR input requires linear_srgb and explicit alpha_mode, "
         "optional RGBA channel names; data-window local coordinates. PNG/MOV export is 8-bit SDR with explicit clip_to_sdr. "
         "Original clock preserved; audio remains separate tracks.")
     return schema

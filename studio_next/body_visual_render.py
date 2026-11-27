@@ -28,6 +28,37 @@ def _probe(path):
     return streams[0]
 
 
+def _validate_png16_color(path):
+    """Admit only explicit sRGB-compatible high-depth PNG color metadata."""
+    size=path.stat().st_size
+    standard={b"gAMA":(45455,), b"cHRM":(31270,32900,64000,33000,30000,60000,15000,6000)}
+    seen=set()
+    with path.open("rb") as stream:
+        stream.seek(8)
+        for _ in range(65536):
+            header=stream.read(8)
+            if len(header)!=8:break
+            length=int.from_bytes(header[:4],"big");kind=header[4:]
+            if stream.tell()+length+4>size:break
+            if kind in (b"iCCP",b"cICP",b"mDCV",b"cLLI"):
+                raise ValueError("16-bit PNG requires supported sRGB color metadata; explicit profile conversion is unavailable")
+            if kind in standard or kind==b"sRGB":
+                if kind in seen:raise ValueError("16-bit PNG has duplicate color metadata")
+                seen.add(kind)
+                if kind==b"sRGB":
+                    if length!=1 or stream.read(1) not in (b"\x00",b"\x01",b"\x02",b"\x03"):
+                        raise ValueError("16-bit PNG has invalid sRGB color metadata")
+                else:
+                    values=standard[kind]
+                    if length!=4*len(values) or stream.read(length)!=b"".join(v.to_bytes(4,"big") for v in values):
+                        raise ValueError("16-bit PNG color metadata conflicts with explicit sRGB")
+                stream.seek(4,os.SEEK_CUR)
+            else:
+                stream.seek(length+4,os.SEEK_CUR)
+            if kind==b"IEND" and length==0 and stream.tell()==size:return
+    raise ValueError("16-bit PNG color metadata scan is incomplete or exceeds host bounds")
+
+
 class SealedGraphSources:
     def __init__(self,graph,root,vault,private):
         self.graph,self.root,self.vault,self.private=graph,root,vault,private
@@ -86,11 +117,16 @@ class SealedGraphSources:
     def _check_image(self,path):
         from PIL import Image
         with path.open("rb") as stream:header=stream.read(26)
-        if header.startswith(b"\x89PNG\r\n\x1a\n") and header[24] not in (1,2,4,8):
-            raise ValueError("Source PNG must have at most 8-bit channels")
+        png16=header.startswith(b"\x89PNG\r\n\x1a\n") and len(header)==26 and header[24]==16
         with Image.open(path) as image:
             if image.width*image.height>self.graph.budget.max_pixels:raise ValueError("Source image exceeds host pixel budget")
             if getattr(image,"n_frames",1)!=1:raise ValueError("Animated image needs explicit video conversion")
+            if png16:
+                if image.width*image.height*64>self.graph.budget.max_live_bytes:
+                    raise ValueError("16-bit PNG source decode exceeds host memory budget")
+                _validate_png16_color(path)
+                return image.width,image.height
+        return None
 
     def __call__(self,name,frame):
         import numpy as np
@@ -105,7 +141,17 @@ class SealedGraphSources:
             result=read_float_rgba(path,budget=self.graph.budget,alpha_mode=p["alpha_mode"],channels=p.get("channels"))
             self.last=(key,result)
             return result
-        self._check_image(path)
+        precision=self._check_image(path)
+        if precision is not None:
+            w,h=precision
+            raw=subprocess.check_output(["ffmpeg","-v","error","-xerror","-nostdin",
+                "-protocol_whitelist","file,pipe","-f","png_pipe","-i",str(path),
+                "-frames:v","1","-pix_fmt","rgba64le","-threads:v","1","-f","rawvideo","-"],timeout=120)
+            if len(raw)!=w*h*8:raise ValueError("16-bit PNG native decoder returned incomplete RGBA")
+            pixels=np.frombuffer(raw,dtype="<u2").reshape(h,w,4).astype(np.float32)/65535
+            pixels[...,:3]=to_linear(pixels[...,:3],"srgb")
+            result=associate(pixels);self.last=(key,result)
+            return result
         with Image.open(path) as image:
             rgba=image.convert("RGBA");icc=image.info.get("icc_profile")
             if icc:

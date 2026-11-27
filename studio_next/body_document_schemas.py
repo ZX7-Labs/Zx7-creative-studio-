@@ -207,7 +207,9 @@ _SCHEMAS = {
             obj({"kind": choice("sharpen"), "strength": number(-2,5)})]}),
         "audio_ops": array({"oneOf": [obj({"kind": choice("gain"), "db": number(-60,30)}),
             obj({"kind": choice("loudnorm"), "integrated_lufs": number(-70,-5),
-                 "true_peak_dbfs": number(-9,0), "loudness_range": number(1,30)})]})})})),
+                 "true_peak_dbfs": number(-9,0), "loudness_range": number(1,30)})]})})}, {
+        "audio_stream_index": {**number(0, integer=True),
+            "description": "Zero-based selected audio program; required for multitrack audio-only finishing."}})),
 }
 
 # The 2D instrument's drawing grammar is technical geometry, not a supplied
