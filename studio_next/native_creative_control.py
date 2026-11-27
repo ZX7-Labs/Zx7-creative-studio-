@@ -1328,6 +1328,7 @@ class NativeCreativeControl:
             "write_acknowledged": any_write,
             "post_review_write_acknowledged": post_review_write,
             "current_verified": current_verified,
+            "current_verified_destinations": set(by_destination),
             "current_frames": frames,
             "current_timed_frames": {
                 digest for dest, (digest, times) in timed_frames.items()
@@ -1361,6 +1362,37 @@ class NativeCreativeControl:
                 type(saved) is tuple and len(saved) in (2, 4) and
                 all(type(value) is str and value for value in saved[:2]) and
                 (len(saved) == 2 or all(_digest(value) for value in saved[2:])))
+
+    def _source_bound_delivery_affordance(self, evidence):
+        """Expose one existing mechanical delivery option, never execute it.
+
+        A model-selected save and captured render remain mandatory. Actual
+        creative action, output destination and verification choice belong to
+        the Brain; native grants and preflight still govern any dispatch.
+        """
+        if self.catalog_mode != "indexed" or self._capture_render_project is None:
+            return None
+        last = next((event for event in reversed(self.events)
+                     if event.get("kind") == "native_tool_result" and
+                     event.get("host_application_write_acknowledged") is True), {})
+        if last.get("tool") == RENDER_TOOL:
+            # No path guesses, stale snapshots or implicit repeat export.
+            if (not all(_digest(last.get(field)) for field in (
+                    DESTINATION_FIELD, SAVED_RENDER_FIELD,
+                    SAVED_RENDER_OPTIONS_FIELD, SAVED_RENDER_MEDIA_FIELD)) or
+                    last[DESTINATION_FIELD] in evidence["current_verified_destinations"]):
+                return None
+            tool, access = _VERIFIED_EXPORT_TOOL, "read"
+        else:
+            count = self._trusted_project_clip_count()
+            if self._project_presence != "present" or count is None or count <= 0:
+                return None
+            tool = RENDER_TOOL if self._source_bound_render_save_current() else "save_project"
+            access = "write"
+        if (tool in self.tools and self.host_tool_access.get(tool) == access and
+                not self._host_write_already_acknowledged(tool)):
+            return tool
+        return None
 
     def _missing_completion_evidence(self):
         """Require still-current export receipts, not superseded or failed reads."""
@@ -1784,6 +1816,10 @@ class NativeCreativeControl:
                                 "possibilities_not_creative_instructions": True,
                             }
                 export_evidence = self._current_export_evidence()
+                delivery_option = self._source_bound_delivery_affordance(export_evidence)
+                if delivery_option is not None:
+                    self._host_frontier_tools = [delivery_option] + [
+                        tool for tool in self._host_frontier_tools if tool != delivery_option]
                 # The last real 120B source-backed A/V trial sampled the
                 # first verified cut at 1/3/5s and the revised cut at
                 # 0.5/2.6/4.7s. Both physical films differed, but there was

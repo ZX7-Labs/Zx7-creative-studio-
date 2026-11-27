@@ -1442,8 +1442,57 @@
         "studio_next/test_native_creative_control.py": "2350a20114e9555dcccff9fe816c23b8b5e157b8"
       },
       "cause": "Shared old pair fixture used one-character hashes; invalidation injected add_text_clip absent from fixture write grants. Source-derived isolated current-evidence reproduction: two original assertions fail; realistic hash and admitted update_text_clip ACK pass both. No production validation relaxed.",
-      "verification": "2/2 isolated excerpt checks passed after fixture correction; full controller and native CI pending. Added distinct assertions for separated coverage, common-time comparison and current evidence revocation. No full checkout in container.",
-      "next": "Verify exact candidate CI. Only after stable baseline, qualify actual model/provider and creative interface; no connector dispatch."
+      "verification": "Exact parent 385534021c47efdecf70685e5f54095ea37e3d2d 29/29 CI SUCCESS (actual model jobs skipped); revision and Omni Python 3.11–3.13 passed; source apt missing ffmpeg recovered on targeted unchanged-source retry. Actual controller RED/GREEN 11 tests; previous broader run 222 run/216 pass/6 environment import errors, no assertions failed. Details PR #356 comment 7208810798.",
+      "next": "Baseline technical regression closed; no genuine model or professional acceptance."
+    }
+  },
+  "critical_path_delivery_affordance_20261127": {
+    "baseline": "385534021c47efdecf70685e5f54095ea37e3d2d",
+    "source_blobs": {
+      "studio_next/native_creative_control.py": "7e72f643708623936e617d59360382c7fa5df10e",
+      "studio_next/test_native_creative_control.py": "63bc3c1ac42bed39d91bcc501dd14a3270a7672e"
+    },
+    "negative": {
+      "real_run": 45731089541,
+      "artifact": 15078171115,
+      "sha256": "47c46e631c1cd6e691199d906a3c4ab4c5e1134573ad049f335b61fd328c35f0",
+      "facts": "88 events, 37 decision turns, 12 searches, 2 stale source refusals, save at turn 31, search again at 32, zero exports. Exact causal contribution of visibility not established."
+    },
+    "correction": "Expose one already-granted source-bound save/export/verify affordance from positive live clip count, current save and latest captured render. No automatic native action, grant or artistic choice; current destination evidence stops repeated verify visibility.",
+    "matched_scripted": {
+      "baseline_delivery_decisions": 6,
+      "candidate_delivery_decisions": 3,
+      "identical_native_call_sequence": true,
+      "red": "4-turn baseline executed save and render but exhausted before verify",
+      "green": "Matched controller and auditor fixture passed, including missing/empty project, capture disabled, invalidated evidence, malformed capture, wrong grant and later edit."
+    },
+    "local": {
+      "run": 223,
+      "pass": 217,
+      "assertion_failures": 0,
+      "environment_import_errors": 6,
+      "limitations": "Reconstructed exact parent blobs from installed wheel; no complete checkout, MCP SDK or repository-only scripts. Actual local model/provider absent."
+    },
+    "acceptance": {
+      "exact_candidate_ci": "PENDING",
+      "genuine_model": false,
+      "professional": false
+    },
+    "next": "Verify affected exact-head controller and native checks; separately qualify real provider/model and semantic perception using existing consent and exact-source one-use admission. Connector cannot dispatch new workflow; current NVIDIA credential lives in GitHub Actions, not local runtime; current main-only request denied. Do not bypass or replay. Preserve full A–L.",
+    "parent_installed_artifact": {
+      "run": 45932518653,
+      "artifact": 15169717251,
+      "source_commit": "f4fb523f0c4c0334cb2e8f514092c3d74093318e",
+      "tree_equivalent_to": "385534021c47efdecf70685e5f54095ea37e3d2d",
+      "sha256": "4130f18bdbda3cbf91262384a144e4f6360394983e1625f978756e0bfcc62f87",
+      "manifest_verified": 24,
+      "tests": {
+        "run": 1757,
+        "passed": 1727,
+        "skipped": 30,
+        "failed": 0
+      },
+      "physical_decode": "Full mixed:57 frames 320x480 4.75s AAC stereo 48k; 2D:33 frames 320x480 2.75s AAC stereo; 3D:24 frames 256x256 2s video-only; full FFmpeg decode successful. Scripted physical proof only."
     }
   }
 }

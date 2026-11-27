@@ -1980,6 +1980,139 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("export_timeline", [
             name for name, _ in refused.session.calls])
 
+    async def test_source_bound_delivery_frontier_avoids_mechanical_rediscovery(self):
+        """Real Super VL #45731089541 saved a native project, then searched
+        again for export. Keep only evidenced, granted delivery choices visible.
+        The matched fixture selects all operations; it does not prove creativity.
+        """
+        from studio_next.native_render_evidence import (
+            REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES, AUDIO_ENVELOPE,
+            DESTINATION_FIELD, SAVED_RENDER_FIELD, SAVED_RENDER_MEDIA_FIELD)
+        from studio_next.native_creative_audit import audit_native_journal
+        path = "/synthetic/delivery.mp4"
+
+        class DeliverySession(FakeSession):
+            def __init__(self, clip_count):
+                super().__init__()
+                self.clip_count = clip_count
+                self.tools.extend(SimpleNamespace(name=name, description=name,
+                    input_schema={"type": "object"}) for name in (
+                        "get_project", "save_project", "export_timeline",
+                        TIMED_FRAMES, AUDIO_ENVELOPE))
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "get_project":
+                    value = {"mcp": {"hasProject": True},
+                             "project": {"currentTimelineId": "film"},
+                             "currentTimeline": {"id": "film", "clipCount": self.clip_count}}
+                elif name == "save_project":
+                    value = {"success": True, "action": name,
+                             "result": {"project": {"path": "/synthetic/native", "modified": "t1"}}}
+                elif name == "export_timeline":
+                    value = {"success": True, "action": name, "projectPath": "/synthetic/native",
+                             "timeline": {"id": "film"}, "outputPath": arguments["outputPath"],
+                             "result": {"started": True, "outputPath": arguments["outputPath"]}}
+                elif name == "zx7_verify_native_export":
+                    value = {"physical_export_verified": True, "native_export_sha256": "a" * 64,
+                             "observation": {"duration_seconds": 6, "audio_present": True,
+                                             "full_picture_and_sound_decoder_completed": True}}
+                else:
+                    raise AssertionError("Unexpected dispatch " + name)
+                return SimpleNamespace(is_error=False, content=[
+                    SimpleNamespace(type="text", text=json.dumps(value))])
+
+        actions = [("save_project", {"previewOnly": False}),
+                   ("export_timeline", {"outputPath": path}),
+                   ("zx7_verify_native_export", {"path": path})]
+
+        class ChoosingModel(ScriptedModel):
+            requires_native_function_contracts = True
+            def __init__(self):
+                super().__init__([])
+                self.pending = list(actions)
+            def decide(self, context):
+                self.observed.append(context)
+                if not self.pending:
+                    return decision("search", query="unrelated creative technique")
+                name, args = self.pending[0]
+                if name not in context["selectable_native_tools"]:
+                    return decision("search", query=name, limit=1)
+                self.pending.pop(0)
+                return decision("invoke", tool=name, inputs=args)
+
+        def make_control(session, model, *, capture=True, turns=4):
+            grants = {t.name: ("write" if t.name in ("update_text_clip", "save_project",
+                "export_timeline") else "read") for t in session.tools}
+            return NativeCreativeControl(session, model, max_turns=turns, catalog_mode="indexed",
+                host_tool_access=grants, required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+                host_content_revision_tools=("update_text_clip",),
+                host_capture_render_project=(lambda *_: ("b" * 64, "c" * 64, "d" * 64)) if capture else None,
+                host_capture_saved_project_identity=(lambda *_: ("/synthetic/native", "t1",
+                    "e" * 64, "f" * 64)) if capture else None)
+
+        session, model = DeliverySession(2), ChoosingModel()
+        control = make_control(session, model)
+        result = await control.run("Choose your own native delivery")
+        # With ready choices the Brain needs exactly 3 decisions, no searches
+        # to discover already-installed delivery operations, and no hidden writes.
+        self.assertEqual([item for item in session.calls if item[0] != "get_project"], actions)
+        self.assertFalse(model.pending)
+        self.assertTrue(all(name in model.observed[i]["selectable_native_tools"]
+                            for i, (name, _) in enumerate(actions)))
+        self.assertTrue(all(name in {t["name"] for t in model.observed[i]["host_native_tool_contracts"]}
+                            for i, (name, _) in enumerate(actions)))
+        self.assertNotIn("zx7_verify_native_export", model.observed[3]["selectable_native_tools"])
+        self.assertEqual(sum(e["kind"] == "capability_searched" for e in result["events"]), 1)
+        self.assertEqual(result["status"], "turn_budget_exhausted")
+        self.assertTrue(audit_native_journal(result["events"],
+            host_tool_access=control.host_tool_access,
+            expected_required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+            host_content_revision_tools=("update_text_clip",))["journal_chain_structurally_valid"])
+        render = next(e for e in result["events"] if e.get("tool") == "export_timeline"
+                      and e["kind"] == "native_tool_result")
+        self.assertEqual(render[SAVED_RENDER_FIELD], "b" * 64)
+        self.assertEqual(render[SAVED_RENDER_MEDIA_FIELD], "d" * 64)
+        self.assertTrue(render[DESTINATION_FIELD])
+
+        # Matched control: disable only the new affordance, preserving identical
+        # model choices, schemas, native reads/writes, source capture and audit.
+        from unittest.mock import patch
+        baseline_session, baseline_model = DeliverySession(2), ChoosingModel()
+        with patch.object(NativeCreativeControl, "_source_bound_delivery_affordance", return_value=None):
+            baseline = await make_control(baseline_session, baseline_model, turns=7).run(
+                "Choose your own native delivery")
+        self.assertEqual(baseline_session.calls, session.calls)
+        self.assertFalse(baseline_model.pending)
+        self.assertEqual(sum(e["kind"] == "capability_searched" for e in baseline["events"]), 4)
+        self.assertEqual(len(baseline_model.observed) - len(model.observed), 3)
+        self.assertEqual(baseline["status"], result["status"])
+
+        # No stale verification offer, no grant widening, no invented capture.
+        control.events.append({"kind": "native_read_tool_reported_error",
+                               "tool": "zx7_verify_native_export", DESTINATION_FIELD: render[DESTINATION_FIELD]})
+        self.assertEqual(control._source_bound_delivery_affordance(control._current_export_evidence()),
+                         "zx7_verify_native_export")
+        control.host_tool_access["zx7_verify_native_export"] = "write"
+        self.assertIsNone(control._source_bound_delivery_affordance(control._current_export_evidence()))
+        control.host_tool_access["zx7_verify_native_export"] = "read"
+        render = next(e for e in control.events if e.get("tool") == "export_timeline"
+                      and e["kind"] == "native_tool_result")
+        render[SAVED_RENDER_MEDIA_FIELD] = "not-a-digest"
+        self.assertIsNone(control._source_bound_delivery_affordance(control._current_export_evidence()))
+        render[SAVED_RENDER_MEDIA_FIELD] = "d" * 64
+        control.events.append({"kind": "native_tool_result", "tool": "update_text_clip",
+                               "host_application_write_acknowledged": True})
+        self.assertEqual(control._source_bound_delivery_affordance(control._current_export_evidence()), "save_project")
+
+        for count, capture in ((0, True), (None, True), (2, False)):
+            with self.subTest(count=count, capture=capture):
+                other = DeliverySession(count)
+                brain = ScriptedModel([decision("search", query="unrelated")])
+                await make_control(other, brain, capture=capture, turns=1).run("Choose a creative method")
+                self.assertFalse(set(name for name, _ in actions) & set(brain.observed[0]["selectable_native_tools"]))
+                self.assertEqual(other.calls, [("get_project", {})])
+
     async def test_one_selected_full_av_window_replaces_two_reads_without_waiving_proof(self):
         """Matched controller/auditor fixture: same facts, fewer model calls.
 
