@@ -142,7 +142,20 @@ def _public_api_json(url):
     if (parsed.scheme != "https" or parsed.netloc != host or parsed.fragment or
             (host not in hosts and not wikimedia_api and not specialist_api)):
         raise CreativeResearchError("Research request is not an approved free API")
-    return _bounded_json_get(url)
+    try:
+        return _bounded_json_get(url)
+    except CreativeResearchError as exc:
+        # Observed Europe PMC public GETs time out intermittently. Retry only
+        # that approved metadata route once, with the same validated URL and
+        # bounded socket timeout. Do not retry HTTP denial, redirect, invalid
+        # JSON, other providers, or loopback; never silently switch sources.
+        cause = exc.__cause__
+        timeout = (isinstance(cause, TimeoutError) or
+                   (isinstance(cause, urllib.error.URLError) and
+                    isinstance(cause.reason, TimeoutError)))
+        if (host, parsed.path) != ("www.ebi.ac.uk", "/europepmc/webservices/rest/search") or not timeout:
+            raise
+        return _bounded_json_get(url)
 
 
 def _bounded_json_get(url):

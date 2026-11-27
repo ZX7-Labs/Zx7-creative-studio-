@@ -164,6 +164,48 @@ class CreativeResearchTests(unittest.TestCase):
         self.assertEqual([urlsplit(url).hostname for url in calls],
                          ["api.polyhaven.com", "ambientcg.com"])
 
+    def test_europe_pmc_timeout_get_has_one_bounded_same_url_retry(self):
+        from unittest.mock import MagicMock
+        from urllib.error import HTTPError, URLError
+        url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=attention"
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = b'{"resultList":{"result":[]}}'
+        response.__enter__.return_value = response
+        for initial in (TimeoutError("slow public API"), URLError(TimeoutError("slow"))):
+            with self.subTest(initial=type(initial).__name__):
+                opener = MagicMock()
+                opener.open.side_effect = [initial, response]
+                with patch("studio_next.creative_research.urllib.request.build_opener",
+                           return_value=opener):
+                    self.assertEqual(_public_api_json(url), {"resultList": {"result": []}})
+                self.assertEqual([call.args[0].full_url for call in opener.open.call_args_list],
+                                 [url, url])
+                self.assertEqual([call.kwargs["timeout"] for call in opener.open.call_args_list],
+                                 [10, 10])
+        # A persistently unavailable endpoint still fails closed after two attempts.
+        opener = MagicMock()
+        opener.open.side_effect = TimeoutError("still unavailable")
+        with patch("studio_next.creative_research.urllib.request.build_opener", return_value=opener):
+            with self.assertRaises(CreativeResearchError):
+                _public_api_json(url)
+        self.assertEqual(opener.open.call_count, 2)
+        # HTTP denial/redirect or invalid payload are not retryable transport timeouts.
+        for invalid in (HTTPError(url, 403, "denied", {}, None),
+                        HTTPError(url, 302, "redirect", {}, None), ValueError("invalid JSON")):
+            opener = MagicMock()
+            opener.open.side_effect = invalid
+            with patch("studio_next.creative_research.urllib.request.build_opener", return_value=opener):
+                with self.assertRaises(CreativeResearchError):
+                    _public_api_json(url)
+            self.assertEqual(opener.open.call_count, 1)
+        opener = MagicMock()
+        opener.open.side_effect = TimeoutError("unrelated endpoint")
+        with patch("studio_next.creative_research.urllib.request.build_opener", return_value=opener):
+            with self.assertRaises(CreativeResearchError):
+                _public_api_json("https://images-api.nasa.gov/search?q=moon")
+        self.assertEqual(opener.open.call_count, 1)
+
     def test_restored_research_providers_allow_only_exact_metadata_paths(self):
         allowed = (
             "https://openaccess-api.clevelandart.org/api/artworks/?q=light",

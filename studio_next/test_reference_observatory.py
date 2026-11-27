@@ -13,6 +13,22 @@ from studio_next.reference_evidence_tools import inspect_authorized_reference
 
 
 class ReferenceObservatoryTests(unittest.TestCase):
+    def test_reference_manifest_cannot_observe_ungranted_secondary_media(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            allowed = root / "authorized"
+            allowed.mkdir()
+            segment = root / "outside.ts"
+            subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-f", "lavfi",
+                            "-i", "color=c=red:s=128x72:r=24:d=1",
+                            "-c:v", "libx264", "-f", "mpegts", str(segment)],
+                           check=True, timeout=40)
+            playlist = allowed / "reference.m3u8"
+            playlist.write_text("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n"
+                                "#EXTINF:1.0,\n../outside.ts\n#EXT-X-ENDLIST\n")
+            with self.assertRaises(ReferenceObservationError):
+                inspect_authorized_reference(allowed, playlist.name)
+
     def test_real_decoded_cuts_and_audio(self):
         with tempfile.TemporaryDirectory() as temp:
             movie = Path(temp) / "film.mp4"

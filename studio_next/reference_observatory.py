@@ -16,6 +16,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from .edit_timeline import SELF_CONTAINED_VIDEO_INPUT
+
 
 class ReferenceObservationError(ValueError):
     """Reference unavailable, invalid, or outside host resource budget."""
@@ -34,7 +36,7 @@ def _local_source(value):
 def _probe(path):
     try:
         raw = subprocess.check_output([
-            "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe",
+            "ffprobe", "-v", "error", *SELF_CONTAINED_VIDEO_INPUT,
             "-show_entries", "format=duration:stream=codec_type,width,height",
             "-of", "json", str(path)], timeout=60)
         doc = json.loads(raw)
@@ -67,7 +69,7 @@ def _read_exact(pipe, count):
 def _decode_video(path, fps, max_samples):
     width, height = 96, 54
     frame_size = width * height * 3
-    args = ["ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe",
+    args = ["ffmpeg", "-nostdin", "-v", "error", *SELF_CONTAINED_VIDEO_INPUT,
             "-i", str(path), "-map", "0:v:0", "-an",
             "-vf", f"fps={fps},scale={width}:{height}:flags=fast_bilinear,format=rgb24",
             "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
@@ -115,7 +117,7 @@ def _decode_video(path, fps, max_samples):
 
 def _decode_audio(path, max_audio_seconds):
     rate = 8000
-    args = ["ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe",
+    args = ["ffmpeg", "-nostdin", "-v", "error", *SELF_CONTAINED_VIDEO_INPUT,
             "-i", str(path), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", str(rate),
             "-f", "f32le", "-acodec", "pcm_f32le", "pipe:1"]
     try:

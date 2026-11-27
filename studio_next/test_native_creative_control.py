@@ -801,6 +801,35 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                              host_tool_access=grants)["journal_chain_structurally_valid"])
         self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_remaining_budget_and_current_checkpoint_do_not_force_finish(self):
+        """A technically ready cut can be independently revised, never auto-finished."""
+        session = FakeSession()
+        grants = {tool.name: ("write" if tool.name == "update_text_clip" else "read")
+                  for tool in session.tools}
+        model = ScriptedModel([
+            decision("invoke", tool="update_text_clip", inputs={"clipId": "one"}),
+            decision("invoke", tool="zx7_verify_native_export", inputs={}),
+            decision("invoke", tool="update_text_clip", inputs={"clipId": "one", "text": "Revision"}),
+            decision("invoke", tool="zx7_verify_native_export", inputs={}),
+            decision("finish", summary="Technical fixture, not artistic approval"),
+        ])
+        required = ("native_write_acknowledged", "physical_export_verified")
+        result = await NativeCreativeControl(
+            session, model, host_tool_access=grants, required_evidence=required,
+            max_turns=5).run("Independently review and revise the original edit")
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertEqual([name for name, _ in session.calls], [
+            "update_text_clip", "zx7_verify_native_export", "update_text_clip",
+            "zx7_verify_native_export"])
+        for i, context in enumerate(model.observed):
+            self.assertEqual(context["decision_turn_budget"], {
+                "maximum": 5, "remaining_including_current": 5-i})
+            self.assertEqual(context["current_required_host_evidence_satisfied"], i in (2, 4))
+            self.assertEqual("finish" in context["available_actions"], i in (2, 4))
+            self.assertTrue(context["completion_does_not_certify_artistic_quality"])
+        self.assertEqual(model.observed[3]["missing_completion_evidence"], ["physical_export_verified"])
+        self.assertFalse(result["native_editing_capability_complete"])
+
     async def test_stale_export_cannot_certify_a_later_native_edit(self):
         from studio_next.native_creative_audit import audit_native_journal
         png = b"\x89PNG\r\n\x1a\n" + b"bounded-fixture"

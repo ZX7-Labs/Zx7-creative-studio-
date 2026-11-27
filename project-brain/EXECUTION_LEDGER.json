@@ -1113,6 +1113,13 @@
         "8ff5dc05b4bcae9256b87d98825606a6c0afbdefe63820fb6b37a5e97b600561"
       ],
       "prefix_observation": "Actual pair comparator returns both exports after turn 41/seq 118, and None after turn 42/seq 120 acknowledged text edit; final two exports rejected output_exists; no automatic replay. Exact retained render-time autosave hashes match. Independent ffprobe and full decode both six-second 640x360 H264 24fps 144 frames, 79/144 RGB frames differ, identical decoded AAC PCM, RMS 0.05555946. No final model finish, semantic hearing, independent quality or rendered-original pixels proof."
+    },
+    "checkpoint_followup": {
+      "observed": "Direct model received turn index, not configured remaining turn budget; at turn 42 six decisions remained after actual prefix pair readiness.",
+      "change": "Expose host-verified current-required-evidence boolean and exact max/remaining decisions; compute missing evidence once, preserve independent finish/revise choice, later-write invalidation and actual grants.",
+      "red": "Missing decision_turn_budget KeyError",
+      "green": "Model fixture chooses additional edit after readiness; evidence revoked, reverified, independently finishes. 215 affected run/210 pass/5 missing MCP and repo script import errors; zero assertion failures.",
+      "acceptance": "Local protocol only; genuine benefit unverified, no new paid inference."
     }
   },
   "reused_archived_scope_20261127": {
@@ -1134,6 +1141,13 @@
         "diagnostic": 45938105014,
         "diagnostic_result": "Exact query HTTP 200 in 2.733s, 3 accepted records; p53 control timed out. Intermittent transport, not proven parser defect.",
         "retry": "SUCCESS attempt 2, unchanged source"
+      },
+      "repeated_transport": {
+        "run": 45938988502,
+        "job": 140308669885,
+        "result": "Europe PMC failed again; earlier exact same query succeeded independently and on unchanged-source live retry.",
+        "correction": "One additional same-URL public GET only for exact Europe PMC metadata endpoint on direct/wrapped TimeoutError; 10s socket timeout per attempt, no redirect/status/JSON/other provider/loopback retry.",
+        "verification": "RED: recovery missing, attempts 1 instead of 2; GREEN direct/wrapped timeouts, persistent timeout terminal, other errors single attempt. 31 tests run/27 pass/4 local MCP skips. Real live CI pending."
       }
     }
   },
@@ -1146,6 +1160,18 @@
     "red": "Actual HLS file containing only a separate TS reference accepted as MP4, MP3 and FLAC custody; delivery and timeline probes also accepted. All five assertions failed independently.",
     "fix": "Restrict self-contained video input demuxers to MOV/Matroska/WebM families and local file/pipe protocols at probe, full decode, timeline render and frame/audio readers; MP3/FLAC ingest uses matching demuxer. No remote/playlist imports inferred. Does not replace OS sandbox or solve all decoder vulnerabilities.",
     "green": "82/82 affected tests, real HLS refused before custody publication, no object/attestation, actual MP4/MOV/MKV/WebM/MP3/FLAC positive controls and extensionless video CAS.",
-    "status": "local exact tested blob candidate; hosted verification pending"
+    "status": "local exact tested blob candidate; hosted verification pending",
+    "followup_reference": {
+      "red": "HLS within authorized reference directory decoded outside-root TS file",
+      "green": "Shared demuxer restriction across reference probe, visual and audio decode; all 6 reference tests passed; no OS-sandbox claim."
+    },
+    "hosted_observed": {
+      "source": "78d68dca27ff37fe077ce556c7fddae0430fd888",
+      "counts": {
+        "in_progress": 15,
+        "success": 13,
+        "failure": 1
+      }
+    }
   }
 }

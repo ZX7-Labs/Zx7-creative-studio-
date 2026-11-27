@@ -2000,6 +2000,7 @@ class NativeCreativeControl:
                     indexed_actions.append("describe")
                 if visible_selectable:
                     indexed_actions.append("invoke")
+                missing_completion = self._missing_completion_evidence()
                 context = {
                     "creative_brief": brief,
                     # Expose only actions that the exact current grammar
@@ -2009,7 +2010,7 @@ class NativeCreativeControl:
                         indexed_actions)
                         if self.catalog_mode == "indexed" else
                         ["discover", "describe", "invoke"]) +
-                        ([] if self._missing_completion_evidence() else ["finish"]),
+                        ([] if missing_completion else ["finish"]),
                     "actual_granted_native_tools": (
                         [] if self.catalog_mode == "indexed" else list(self.tools)),
                     "compact_tool_catalog": self.catalog_mode == "indexed",
@@ -2033,7 +2034,15 @@ class NativeCreativeControl:
                     "last_capability_search_result": self._last_search_result,
                     "completion_does_not_certify_artistic_quality": True,
                     "required_completion_evidence": sorted(self.required_evidence),
-                    "missing_completion_evidence": self._missing_completion_evidence(),
+                    "missing_completion_evidence": missing_completion,
+                    # Technical readiness is a current checkpoint, not art
+                    # approval or a host decision to stop. A further native
+                    # edit may revoke delivery proof. The Brain needs the
+                    # actual remaining decision budget to choose deliberately.
+                    "current_required_host_evidence_satisfied": (
+                        bool(self.required_evidence) and not missing_completion),
+                    "decision_turn_budget": {"maximum": self.max_turns,
+                        "remaining_including_current": self.max_turns - turn},
                     "audio_semantically_reviewed": False,
                     # Keep stable context first for local runtime prefix caching;
                     # this never caches decisions or replays native operations.
