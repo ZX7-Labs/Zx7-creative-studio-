@@ -1,0 +1,62 @@
+name: ZX7 Field E — One-use native armature and skin revision proof
+on:
+  push:
+    branches: [trial/field-e-native-armature-depth-20261127]
+    paths: ['.github/workflows/zx7-oneuse-field-e-armature-depth-20261127.yml']
+permissions:
+  contents: read
+jobs:
+  native-armature:
+    if: github.ref == 'refs/heads/trial/field-e-native-armature-depth-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing BODY and physical media dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg libx11-6 libxi6 libxrender1 libxfixes3 libxkbcommon0 libgl1 libsm6
+          python -m pip install --no-cache-dir '.[editor,production]' numpy Pillow
+      - name: Install exact native Blender 4.5 LTS and authenticate official archive bytes
+        run: |
+          set -euo pipefail
+          version=4.5.16
+          base="https://mirror.blender.org/release/Blender4.5"
+          temp="$RUNNER_TEMP/zx7-blender-lts"
+          mkdir -p "$temp"
+          curl --fail --location --retry 3 --connect-timeout 20 \
+            --output "$temp/blender-$version.sha256" "$base/blender-$version.sha256"
+          curl --fail --location --retry 3 --connect-timeout 20 \
+            --output "$temp/blender-$version-linux-x64.tar.xz" \
+            "$base/blender-$version-linux-x64.tar.xz"
+          checksum=$(awk -v file="blender-$version-linux-x64.tar.xz" \
+            '$2 == file || $2 == "*" file {print $1}' "$temp/blender-$version.sha256")
+          test "${#checksum}" = 64
+          printf '%s  %s\n' "$checksum" "$temp/blender-$version-linux-x64.tar.xz" \
+            | sha256sum --check --status
+          tar -xJf "$temp/blender-$version-linux-x64.tar.xz" -C "$temp"
+          binary="$temp/blender-$version-linux-x64/blender"
+          test -x "$binary"
+          test "$("$binary" --version | head -n 1)" = "Blender 4.5.16 LTS"
+          echo "$temp/blender-$version-linux-x64" >> "$GITHUB_PATH"
+      - name: Verify actual Blender armature, vertex weights, animation and immutable native revision
+        env:
+          ZX7_ARMATURE_EVIDENCE_DIR: output/armature-proof
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "91d78b514b71d4d6c3b5fb2ef957babee657dd1c"
+          test -z "${NVIDIA_API_KEY:-}"
+          python -c 'from studio_next.body_motion_project import motion_runtime_ready; assert motion_runtime_ready()'
+          python -m unittest studio_next.test_body_armature studio_next.test_body_motion_project studio_next.test_body_archive -v
+          test -s output/armature-proof/manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-native-armature-proof
+          path: output/armature-proof/
+          if-no-files-found: error
