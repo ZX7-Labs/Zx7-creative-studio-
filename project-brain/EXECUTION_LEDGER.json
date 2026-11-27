@@ -1329,7 +1329,50 @@
     "negative": "On exact installed baseline (four targeted tests): persisted owner fact was forged by adapter mutating context; legacy/known pending decision measurement absent; failed model call measurement absent; actual installed 77-grant profile had no exact lookup index because 48 limit too low. Two failures and three errors reproduced.",
     "correction": "Deep-copy model context and returned intent. Persist model-call wall time and bounded provider-reported usage with pending intent, preserve receipt on resume, measure dispatch separately, failed inference cannot inherit prior usage. Raise existing complete-or-absent retrieval count cap to 96; retain 4096-byte/160-byte ID bounds, no new dispatch grant.",
     "local": "Exact installed wheel from #15174550542; exact parent hashes and editor.example.json hash checked; recovered candidate GREEN 74/74 body creative session, picture selection, durable graph, fabric, media vault tests; actual FFmpeg fixture renders. Not an independent model or creative acceptance.",
-    "acceptance": "New exact head CI pending; actual compositional model comparator still unrun.",
+    "acceptance": "Exact 3320ba88 hosted 28 success/1 in progress at observation; actual compositional model comparator still unrun.",
     "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
+  },
+  "compositional_configuration_guard_20261127": {
+    "parent": "3320ba88cee133f26947098ce34f775a36657329",
+    "source_blobs": {
+      "studio_next/body_creative_session.py": "52e2234780caa9c05b0dcb10925212c253ddadf3",
+      "studio_next/test_body_creative_session.py": "2ddb931f3d241eb226158aeabf620a857a741537"
+    },
+    "negative": "Exact installed parent reproduced four resume configuration mismatch failures (sampling, timeout, max_tokens, image upload consent), one mid-call mutation dispatch, and one legacy pending decision dispatch without original configuration evidence. Equivalent reordered sampling control passes.",
+    "correction": "Persist canonical digest of configured sampling, timeout, response/token limits and adapter image/original-audio upload permissions; match original session before inference and before dispatch. No raw configuration or credentials persisted. Legacy active session without receipt is blocked, existing facts/pending intent retained; terminal sessions remain readable.",
+    "local": {
+      "run": 94,
+      "passed": 94,
+      "skipped": 0,
+      "failures": 0,
+      "environment": "Exact installed wheel, candidate two blobs, exact native editor example config; Python 3.13, real FFmpeg synthetic fixtures. No full native checkout or genuine inference."
+    },
+    "limits": "Host configuration continuity, not proof of model weights, external provider behavior, professional acceptance, or protection from a malicious in-process adapter. No expanded grants.",
+    "installed_parent": {
+      "run": 45945182492,
+      "artifact": 15174368688,
+      "sha256": "aa657722d44cf725d9539ea4b0699f67c0a72f7a7b776dc6e57905722cb999ac",
+      "tested_merge": "5457fd39482f8266bfb366bbf1443bf4853bc871",
+      "exact_tree_equivalence": true,
+      "manifest_verified": 24,
+      "tests_run": 1778,
+      "passed": 1748,
+      "skipped": 30,
+      "failures": 0,
+      "local_decode": "Complete three MP4s: mixed H264 320x480 57 frames/4.75s with AAC stereo; 2D 320x480 33 frames/2.75s with AAC stereo; 3D 256x256 24 frames/2s picture-only."
+    },
+    "hosted_parent": {
+      "success": 28,
+      "in_progress": 1,
+      "mlt_run": 45945182260
+    },
+    "active_indexed_retest": {
+      "run": 45945314825,
+      "job": 140328553996,
+      "source": "a5399047915a2a4061e0a3fe2e1798d0eb77039e",
+      "one_use_trigger_retired": "62b3c17ef5d5d61aec46591ef0e014d13ef1de7d",
+      "observed": "Native build and sandbox checks succeeded; genuine inference step 11 in progress; no terminal artifact or verdict yet. Do not replay."
+    },
+    "acceptance": "Candidate affected tests passed; exact hosted candidate pending. G1-G4 remain open."
   }
 }

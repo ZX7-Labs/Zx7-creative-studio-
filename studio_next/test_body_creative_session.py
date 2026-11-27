@@ -114,6 +114,99 @@ class SessionControlRegression(unittest.TestCase):
                     self.assertIsNone(result['pending_model_call'])
                 finally:manager.close();c.close()
 
+    def test_resume_rejects_changed_model_settings_and_media_permission(self):
+        from studio_next.body_creative_session import CreativeSessions
+        from studio_next.nvidia_model import NvidiaCreativeModel, NvidiaModelSettings
+        from unittest.mock import patch
+
+        class LocalFixture(LocalCreativeModel):
+            calls=0
+            def decide(self, context):
+                self.calls+=1
+                return {'action':'finish','arguments':{'summary':'Fixture only'},'reason':'Fixture only'}
+
+        class CloudFixture(NvidiaCreativeModel):
+            calls=0
+            def decide(self, context):
+                self.calls+=1
+                return {'action':'finish','arguments':{'summary':'Fixture only'},'reason':'Fixture only'}
+
+        controls = (
+            (LocalFixture(LocalModelSettings(sampling={'temperature':0.0})),
+             LocalFixture(LocalModelSettings(sampling={'temperature':1.0})), False),
+            (LocalFixture(LocalModelSettings(timeout_seconds=10)),
+             LocalFixture(LocalModelSettings(timeout_seconds=20)), False),
+            (CloudFixture(NvidiaModelSettings(max_tokens=1024)),
+             CloudFixture(NvidiaModelSettings(max_tokens=2048)), False),
+            (CloudFixture(allow_image_upload=False),
+             CloudFixture(allow_image_upload=True), False),
+            (LocalFixture(LocalModelSettings(sampling={'temperature':0.0,'seed':7})),
+             LocalFixture(LocalModelSettings(sampling={'seed':7,'temperature':0.0})), True),
+        )
+        for original, resumed, matches in controls:
+            with self.subTest(original=original.settings, matches=matches), tempfile.TemporaryDirectory() as root:
+                coordinator=LocalBodyCoordinator(root)
+                first=CreativeSessions(coordinator,original,max_turns=1)
+                try:
+                    with patch.object(first,'_queue'):
+                        created=first.create('film','Synthetic matched experiment',{})
+                    first.close()
+                    second=CreativeSessions(coordinator,resumed,max_turns=1)
+                    try:
+                        second.resume_pending();second.close()
+                        state=second.inspect(created['session_id'])
+                        self.assertEqual(state['status'],'model_finished' if matches else 'blocked')
+                        self.assertEqual(len(state['events']),1 if matches else 0)
+                        self.assertEqual(resumed.calls,1 if matches else 0)
+                        self.assertEqual(state['jobs'],[])
+                    finally:second.close()
+                finally:first.close();coordinator.close()
+
+    def test_legacy_active_session_without_configuration_receipt_is_preserved(self):
+        from studio_next.body_creative_session import CreativeSessions
+        from unittest.mock import patch
+        class NoInference:
+            def decide(self, context):
+                raise AssertionError('Unmatched legacy configuration must not infer')
+        with tempfile.TemporaryDirectory() as root:
+            coordinator=LocalBodyCoordinator(root)
+            manager=CreativeSessions(coordinator,NoInference(),max_turns=1)
+            try:
+                with patch.object(manager,'_queue'):
+                    created=manager.create('film','Synthetic legacy session',{'keep':'original fact'})
+                original=manager.inspect(created['session_id'])
+                original['model_identity'].pop('model_config_sha256',None)
+                original['pending']={'action':'finish','arguments':{'summary':'Original intent'},'reason':'Fixture only'}
+                manager._save(original)
+                manager.resume_pending();manager.close()
+                state=manager.inspect(created['session_id'])
+                self.assertEqual(state['status'],'blocked')
+                self.assertIn('Legacy session',state['error'])
+                self.assertEqual(state['pending'],original['pending'])
+                self.assertEqual(state['facts'],original['facts'])
+                self.assertEqual(state['events'],[])
+            finally:manager.close();coordinator.close()
+
+    def test_mid_session_model_config_drift_blocks_before_dispatch(self):
+        from studio_next.body_creative_session import CreativeSessions
+        class MutatingFixture(LocalCreativeModel):
+            def decide(self, context):
+                self.settings.sampling['temperature']=1.0
+                return {'action':'finish','arguments':{'summary':'Fixture only'},'reason':'Fixture only'}
+        with tempfile.TemporaryDirectory() as root:
+            coordinator=LocalBodyCoordinator(root)
+            manager=CreativeSessions(coordinator,MutatingFixture(
+                LocalModelSettings(sampling={'temperature':0.0})),max_turns=1)
+            try:
+                created=manager.create('film','Synthetic settings drift',{})
+                manager.close()
+                state=manager.inspect(created['session_id'])
+                self.assertEqual(state['status'],'blocked')
+                self.assertEqual(state['events'],[])
+                self.assertEqual(state['jobs'],[])
+                self.assertTrue(state['pending_model_call']['model_response_returned'])
+            finally:manager.close();coordinator.close()
+
     def test_failed_inference_retains_elapsed_but_not_stale_token_claim(self):
         from studio_next.body_creative_session import CreativeSessions
         class FailingAdapter:
