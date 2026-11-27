@@ -21,7 +21,8 @@ import zipfile
 from pathlib import Path
 
 from .contracts import ToolSpec
-from .creative_research import CreativeResearch, ASSET_RESEARCH_MEDIA
+from .creative_research import (CreativeResearch, ASSET_RESEARCH_MEDIA,
+                                ASSET_RESEARCH_PROVIDERS, STUDY_RESEARCH_PROVIDERS)
 from .registry import ToolCatalog
 from .edit_timeline import render_edit,_path_within
 from .editorial_interchange import export_editable_timeline
@@ -432,16 +433,20 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
          ["query", "media"],
          {"query": {"type": "string", "minLength": 1, "maxLength": 240},
           "media": {"type": "string", "enum": list(ASSET_RESEARCH_MEDIA)},
+          "provider": {"type": "string", "enum": list(ASSET_RESEARCH_PROVIDERS)},
           "limit": {"type": "integer", "minimum": 1, "maximum": 12}},
          lambda args: researcher.assets(query=args["query"],media=args["media"],
-                                       limit=args.get("limit", 8))),
+                                       limit=args.get("limit", 8),
+                                       **({"provider": args["provider"]} if "provider" in args else {}))),
         ("body.research_studies",
          "Search published scholarly metadata about storytelling, editing, "
          "attention and visual/auditory perception; title is not an audience finding.",
          ["query"],
          {"query": {"type": "string"},
+          "provider": {"type": "string", "enum": list(STUDY_RESEARCH_PROVIDERS)},
           "limit": {"type": "integer", "minimum": 1}},
-         lambda args: researcher.studies(query=args["query"], limit=args.get("limit", 8))),
+         lambda args: researcher.studies(query=args["query"], limit=args.get("limit", 8),
+                                        **({"provider": args["provider"]} if "provider" in args else {}))),
     ):
         catalog.register(
             ToolSpec(

@@ -23,6 +23,38 @@ def plan():
 
 
 class IndependentLocalCreativeServiceTests(unittest.TestCase):
+    def test_job_listing_is_durable_state_not_physical_execution_proof(self):
+        with tempfile.TemporaryDirectory() as root:
+            entered=threading.Event()
+            release=threading.Event()
+            def executor(ir,workspace):
+                entered.set()
+                if not release.wait(8):
+                    raise RuntimeError("Test did not release worker")
+                return {"status":"all_tool_results_verified","video_proven":False}
+            owner=LocalBodyCoordinator(root,execute=executor,workers=1)
+            try:
+                owner.submit(plan(),workspace_id="first-film",job_id="first")
+                self.assertTrue(entered.wait(4))
+                owner.submit(plan(),workspace_id="second-film",job_id="second")
+                listing=owner.list_jobs()
+                self.assertEqual({j["job_id"]:j["status"] for j in listing["jobs"]},
+                                 {"first":"running","second":"queued"})
+                self.assertIs(listing["status_is_physical_execution_evidence"],False)
+                self.assertIs(listing["status_is_observed_durable_job_state"],True)
+                release.set()
+                for _ in range(150):
+                    if all(j["status"]=="completed" for j in owner.list_jobs()["jobs"]):
+                        break
+                    time.sleep(.01)
+                listing=owner.list_jobs()
+                self.assertEqual({j["status"] for j in listing["jobs"]},{"completed"})
+                self.assertIs(listing["status_is_physical_execution_evidence"],False)
+                self.assertIs(listing["successful_jobs_do_not_automatically_prove_a_movie_exists"],True)
+            finally:
+                release.set()
+                owner.close()
+
     def test_real_job_queue_and_restart_do_not_rewrite_approved_art(self):
         with tempfile.TemporaryDirectory() as root:
             seen=[]

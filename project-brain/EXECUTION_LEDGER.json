@@ -1267,7 +1267,7 @@
         "research": "cea19dadc38cccb212e9d37331ca1869d200b724",
         "scheduler_evidence": "633348babde51ba037bf1917fe1f051bd2515aae",
         "receipt": "https://github.com/ZX7-Labs/Zx7-creative-studio-/pull/356#issuecomment-7202611663",
-        "status": "unreferenced candidates, not canonical or exact-head verified; prioritize if relevant to chosen workload; preserve original archive"
+        "status": "Exact blobs reused in next coherent integration (see reused_archived_scope_20261127); CI pending; prior unintegrated state retained in Git history."
       }
     }
   },
@@ -1456,7 +1456,7 @@
       "real_run": 45731089541,
       "artifact": 15078171115,
       "sha256": "47c46e631c1cd6e691199d906a3c4ab4c5e1134573ad049f335b61fd328c35f0",
-      "facts": "88 events, 37 decision turns, 12 searches, 2 stale source refusals, save at turn 31, search again at 32, zero exports. Exact causal contribution of visibility not established."
+      "facts": "88 events, 37 decision turns, 14 searches, 2 stale source refusals, save at turn 31, search again at 32, zero exports. Exact causal contribution of visibility not established."
     },
     "correction": "Expose one already-granted source-bound save/export/verify affordance from positive live clip count, current save and latest captured render. No automatic native action, grant or artistic choice; current destination evidence stops repeated verify visibility.",
     "matched_scripted": {
@@ -1474,11 +1474,11 @@
       "limitations": "Reconstructed exact parent blobs from installed wheel; no complete checkout, MCP SDK or repository-only scripts. Actual local model/provider absent."
     },
     "acceptance": {
-      "exact_candidate_ci": "PENDING",
+      "exact_candidate_ci": "29/29 SUCCESS at fce6049bbee21ad65a3421e383a862644d1aa364; genuine indexed trial FAIL (see indexed_trial)",
       "genuine_model": false,
       "professional": false
     },
-    "next": "Verify affected exact-head controller and native checks; separately qualify real provider/model and semantic perception using existing consent and exact-source one-use admission. Connector cannot dispatch new workflow; current NVIDIA credential lives in GitHub Actions, not local runtime; current main-only request denied. Do not bypass or replay. Preserve full A–L.",
+    "next": "Inspect direct arm raw journal/artifacts. Compare technical success and token/time/failure rates against indexed arm; do not promote artistic or semantic competence or automatically rerun. Full G2/G3/G4 open.",
     "parent_installed_artifact": {
       "run": 45932518653,
       "artifact": 15169717251,
@@ -1493,6 +1493,41 @@
         "failed": 0
       },
       "physical_decode": "Full mixed:57 frames 320x480 4.75s AAC stereo 48k; 2D:33 frames 320x480 2.75s AAC stereo; 3D:24 frames 256x256 2s video-only; full FFmpeg decode successful. Scripted physical proof only."
+    },
+    "indexed_trial": {
+      "run": 45934918405,
+      "source": "c5d5de094f6d61e181b5c10088b47cf68d646a19",
+      "revoked": "1096550254f2e5c59c621880d3de171eec0716f8",
+      "artifact": 15171390542,
+      "sha256": "c1f880a29113a4ffa967deebf66a7be7544f51b7110986bdb5fec2f510ddde86",
+      "status": "FAILED: turn_budget_exhausted, no second export/pair",
+      "events": 117,
+      "turns": 48,
+      "searches": 17,
+      "reported_tokens": 589619,
+      "search_tokens": 212272,
+      "model_ms": 1026490.065,
+      "native_mcp_ms": 1925.473,
+      "write_acks": 11,
+      "export_verified": 1,
+      "first_export_sha": "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
+      "receipt": "ZIP CRC+SHA match; independent ffprobe and full FFmpeg decode 640x360 H264 24fps 144 frames/6s AAC; saved native source SHA verified; no rendered-original pixel proof, semantic listening or quality approval."
+    },
+    "direct_trial": {
+      "run": 45937037913,
+      "source": "e4abbd93c6aa82a3593e1014dd069fac05d68f23",
+      "revoked": "9d27019f0a8b2e0aecd29ad954cc4cbc51322807",
+      "same_runtime_parent": "fce6049bbee21ad65a3421e383a862644d1aa364",
+      "request": "ZX7_SUPER_VL_G1_DIRECT_CATALOG_20261127",
+      "status": "RUNNING",
+      "scope": "Same source/model/brief/48-turn budget; only existing full vs indexed catalog route changes. Whole-interface comparison, not single-factor internal ablation or repeated controlled trials."
     }
+  },
+  "reused_archived_scope_20261127": {
+    "research": "cea19dadc38cccb212e9d37331ca1869d200b724",
+    "scheduler": "633348babde51ba037bf1917fe1f051bd2515aae",
+    "source": "Existing exact 8 blobs; matching unchanged parent blobs, no reimplementation. Add 3 read-only public metadata providers and explicit source choice, preserve network/rights gates; truthful scheduler state label.",
+    "local": "Scheduler RED assertion true vs false; GREEN 17/17. Research RED provider kwarg unsupported; exact four production + test blobs match. 63 affected tests: 58 pass, 4 SDK skips, 1 no-display error, targeted desktop Xvfb rerun passes (59 distinct passed). Real public endpoints/SDK and CI pending.",
+    "acceptance": "candidate, not full public web, domain or release acceptance"
   }
 }

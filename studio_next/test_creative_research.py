@@ -30,6 +30,160 @@ class FakePublicAPIs:
 
 
 class CreativeResearchTests(unittest.TestCase):
+
+    def test_archived_public_sources_are_reachable_without_asset_import(self):
+        calls = []
+        def fetch(url):
+            calls.append(url)
+            host = urlsplit(url).hostname
+            if host == "openaccess-api.clevelandart.org":
+                return {"data": [
+                    {"accession_number": "1923.1", "title": "Light",
+                     "share_license_status": "CC0",
+                     "images": {"web": {"url": "https://images.example.org/a.jpg"}}},
+                    {"accession_number": "1923.2", "title": "Restricted",
+                     "share_license_status": "Copyrighted",
+                     "images": {"web": {"url": "https://images.example.org/b.jpg"}}},
+                    {"accession_number": "1923.3", "share_license_status": "CC0",
+                     "images": {"web": {"url": "https://127.0.0.1/private"}}},
+                    {"accession_number": "../bad", "share_license_status": "CC0",
+                     "images": {"web": {"url": "https://images.example.org/c.jpg"}}},
+                ]}
+            if host == "images-api.nasa.gov":
+                return {"collection": {"items": [
+                    {"data": [{"nasa_id": "Apollo_16", "title": "Moon camera",
+                               "media_type": "video"}]},
+                    {"data": [{"nasa_id": "../private", "media_type": "video"}]},
+                    {"data": [{"nasa_id": "Photo", "media_type": "image"}]},
+                ]}}
+            if host == "www.ebi.ac.uk":
+                return {"resultList": {"result": [
+                    {"id": "123456", "source": "MED", "title": "Visual attention",
+                     "pubYear": "2024", "abstractText": "<b>Methods</b> " + "A"*2000},
+                    {"id": "..", "source": "MED", "title": "Malformed ID"},
+                    {"id": "bad/path", "source": "MED", "title": "Malformed ID"},
+                    {"id": "123", "source": "UNKNOWN", "title": "Unknown source"},
+                ]}}
+            self.fail("Unexpected provider or follow-up fetch: " + url)
+        research = CreativeResearch(fetch)
+        art = research.assets(query="public light", media="image", limit=5,
+                              provider="cleveland_museum")
+        self.assertEqual(art["provider"], "cleveland_museum")
+        self.assertEqual(len(art["results"]), 1)
+        self.assertEqual(art["results"][0]["source_page"],
+                         "https://www.clevelandart.org/art/1923.1")
+        self.assertEqual(art["results"][0]["declared_license"], "CC0")
+        self.assertEqual(art["results"][0]["rights_status"], "candidate_unverified")
+        self.assertFalse(art["rights_verified"])
+        self.assertFalse(art["import_authorized"])
+        video = research.web(query="public moon footage", limit=5,
+                             provider="nasa_archive")
+        self.assertEqual(video["provider"], "nasa_archive")
+        self.assertEqual(len(video["results"]), 1)
+        self.assertTrue(video["results"][0]["source_reuse_not_authorized"])
+        self.assertTrue(video["results"][0]["model_has_not_watched_video"])
+        self.assertNotIn("declared_license", video["results"][0])
+        self.assertTrue(video["result_content_untrusted"])
+        self.assertFalse(video["import_authorized"])
+        papers = research.studies(query="public visual attention", limit=5,
+                                  provider="europe_pmc")
+        self.assertEqual(papers["provider"], "europe_pmc")
+        self.assertEqual(len(papers["results"]), 1)
+        paper = papers["results"][0]
+        self.assertTrue(paper["abstract_is_unreviewed_source_text"])
+        self.assertFalse(paper["study_results_verified"])
+        self.assertFalse(paper["peer_review_independently_verified"])
+        self.assertLessEqual(len(paper["abstract_excerpt"]), 320)
+        self.assertTrue(paper["abstract_excerpt"].startswith("Methods"))
+        self.assertEqual([(urlsplit(url).hostname, urlsplit(url).path)
+                          for url in calls], [
+            ("openaccess-api.clevelandart.org", "/api/artworks/"),
+            ("images-api.nasa.gov", "/search"),
+            ("www.ebi.ac.uk", "/europepmc/webservices/rest/search"),
+        ])
+        self.assertEqual(parse_qs(urlsplit(calls[0]).query,
+                                  keep_blank_values=True)["cc0"], [""])
+
+    def test_explicit_source_selection_rejects_unavailable_or_wrong_media_before_network(self):
+        provider = FakePublicAPIs()
+        research = CreativeResearch(provider)
+        for call in (
+            lambda: research.assets(query="light", media="audio", provider="cleveland_museum"),
+            lambda: research.assets(query="light", media="image", provider="https://evil.test"),
+            lambda: research.assets(query="light", media="image", provider=[]),
+            lambda: research.studies(query="light", provider="unknown"),
+            lambda: research.web(query="light", provider="searxng"),
+            lambda: research.web(query="light", provider="nasa_archive", language="hi"),
+            lambda: research.web(query="light", provider="https://evil.test"),
+        ):
+            with self.assertRaises(CreativeResearchError):
+                call()
+        self.assertEqual(provider.calls, [])
+
+    def test_named_asset_provider_does_not_silently_fallback(self):
+        calls = []
+        def provider(url):
+            calls.append(url)
+            if urlsplit(url).hostname == "api.polyhaven.com":
+                raise CreativeResearchError("Unavailable")
+            return {"assets": [{"id": "Camera001", "title": "Camera"}]}
+        research = CreativeResearch(provider)
+        with self.assertRaises(CreativeResearchError):
+            research.assets(query="camera", media="3d", provider="poly_haven")
+        self.assertEqual([urlsplit(url).hostname for url in calls],
+                         ["api.polyhaven.com"])
+        result = research.assets(query="camera", media="3d", provider="ambientcg")
+        self.assertEqual(result["provider"], "ambientcg")
+        self.assertFalse(result["fallback_used"])
+        self.assertFalse(result["import_authorized"])
+        self.assertEqual([urlsplit(url).hostname for url in calls],
+                         ["api.polyhaven.com", "ambientcg.com"])
+
+    def test_restored_research_providers_allow_only_exact_metadata_paths(self):
+        allowed = (
+            "https://openaccess-api.clevelandart.org/api/artworks/?q=light",
+            "https://images-api.nasa.gov/search?q=moon",
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=attention",
+        )
+        with patch("studio_next.creative_research._bounded_json_get",
+                   return_value={}) as fetch:
+            for url in allowed:
+                self.assertEqual(_public_api_json(url), {})
+                for unsafe in (url.replace("https://", "http://"),
+                               url.replace("https://", "https://user@"),
+                               url.replace(urlsplit(url).hostname,
+                                           urlsplit(url).hostname + ".evil.test"),
+                               url.replace(urlsplit(url).hostname,
+                                           urlsplit(url).hostname + ":8443"),
+                               url.replace(urlsplit(url).path, "/private"),
+                               url + "#fragment"):
+                    with self.subTest(url=unsafe), self.assertRaises(CreativeResearchError):
+                        _public_api_json(unsafe)
+            self.assertEqual([call.args[0] for call in fetch.call_args_list],
+                             list(allowed))
+
+    def test_body_source_selection_preserves_explicit_network_grant(self):
+        provider = FakePublicAPIs()
+        provider.response = {"data": []}
+        with tempfile.TemporaryDirectory() as root:
+            catalog = body_catalog(root, research_client=CreativeResearch(provider))
+            args = {"query": "public light", "media": "image",
+                    "provider": "cleveland_museum"}
+            with self.assertRaises(PermissionError):
+                catalog.invoke("body.research_assets", args)
+            self.assertFalse(provider.calls)
+            result = catalog.invoke("body.research_assets", args,
+                                    allowed_access=frozenset({"network"}))
+            self.assertEqual(result["provider"], "cleveland_museum")
+            self.assertFalse(result["import_authorized"])
+            self.assertEqual(len(provider.calls), 1)
+            provider.response = {"resultList": {"result": []}}
+            papers = catalog.invoke("body.research_studies",
+                {"query": "public attention", "provider": "europe_pmc"},
+                allowed_access=frozenset({"network"}))
+            self.assertEqual(papers["provider"], "europe_pmc")
+            self.assertEqual(len(provider.calls), 2)
+
     def test_searxng_base_url_admits_only_explicit_loopback_service(self):
         self.assertIsNone(validate_searxng_url(None))
         self.assertEqual(validate_searxng_url("http://127.0.0.1:08080/"),
@@ -512,6 +666,39 @@ class CreativeResearchTests(unittest.TestCase):
 @unittest.skipUnless(importlib.util.find_spec("mcp") is not None,
                      "Optional research MCP SDK is not installed")
 class ResearchMCPTests(unittest.IsolatedAsyncioTestCase):
+
+    async def test_restored_reference_source_uses_existing_mcp_budget_and_schema(self):
+        from studio_next.creative_research_mcp import CreativeResearchMcpSession
+        provider = FakePublicAPIs()
+        provider.response = {"collection": {"items": [
+            {"data": [{"nasa_id": "Apollo_16", "title": "Moon",
+                       "media_type": "video"}]},
+        ]}}
+        session = CreativeResearchMcpSession(
+            allow_public_research=True, research_client=CreativeResearch(provider),
+            max_calls=1)
+        tools = {tool.name: tool for tool in (await session.list_tools()).tools}
+        for tool, choice in (("research_assets", "cleveland_museum"),
+                             ("research_studies", "europe_pmc"),
+                             ("research_web", "nasa_archive")):
+            self.assertIn(choice, tools[tool].input_schema["properties"]["provider"]["enum"])
+        invalid = await session.call_tool("research_web",
+            {"query": "moon", "provider": "https://evil.test"})
+        self.assertTrue(invalid.is_error)
+        self.assertEqual(provider.calls, [])
+        reply = await session.call_tool("research_web",
+            {"query": "moon", "provider": "nasa_archive"})
+        self.assertFalse(reply.is_error)
+        receipt = json.loads(reply.content[0].text)
+        self.assertEqual(receipt["provider"], "nasa_archive")
+        self.assertTrue(receipt["results"][0]["model_has_not_watched_video"])
+        self.assertFalse(receipt["import_authorized"])
+        denied = await session.call_tool("research_studies",
+            {"query": "public attention", "provider": "europe_pmc"})
+        self.assertEqual(json.loads(denied.content[0].text)["status"],
+                         "call_budget_exhausted")
+        self.assertEqual(len(provider.calls), 1)
+
     def test_host_network_permission_is_mandatory(self):
         from studio_next.creative_research_mcp import (
             create_research_server, CreativeResearchMcpSession)

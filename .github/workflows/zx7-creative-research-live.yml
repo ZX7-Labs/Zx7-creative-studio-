@@ -5,6 +5,7 @@ on:
     paths:
       - "studio_next/creative_research.py"
       - "studio_next/creative_research_3d.py"
+      - "studio_next/creative_research_sources.py"
       - "studio_next/body_integration.py"
       - "studio_next/creative_research_mcp.py"
       - "studio_next/test_creative_research.py"
@@ -66,6 +67,38 @@ jobs:
           except Exception as exc:
               print(f"REAL studies: FAILED {type(exc).__name__}: {exc}", flush=True)
               checks.append(("studies", False))
+          for provider, request in (
+              ("cleveland_museum", lambda: research.assets(
+                  query="landscape", media="image", limit=3, provider="cleveland_museum")),
+              ("nasa_archive", lambda: research.web(
+                  query="Apollo", limit=3, provider="nasa_archive")),
+              ("europe_pmc", lambda: research.studies(
+                  query="visual attention", limit=3, provider="europe_pmc")),
+          ):
+              try:
+                  result = request()
+                  assert result["provider"] == provider and result["results"]
+                  if provider == "cleveland_museum":
+                      assert not result["import_authorized"]
+                      assert all(item["declared_license"] == "CC0" and
+                                 item["rights_status"] == "candidate_unverified"
+                                 for item in result["results"])
+                  elif provider == "nasa_archive":
+                      assert not result["import_authorized"]
+                      assert all(item["source_reuse_not_authorized"] and
+                                 item["model_has_not_watched_video"]
+                                 for item in result["results"])
+                  else:
+                      assert all(item["abstract_is_unreviewed_source_text"] and
+                                 not item["study_results_verified"] and
+                                 not item["peer_review_independently_verified"]
+                                 for item in result["results"])
+                  print(f"REAL {provider}: {len(result['results'])} unverified reference leads",
+                        flush=True)
+                  checks.append((provider, True))
+              except Exception as exc:
+                  print(f"REAL {provider}: FAILED {type(exc).__name__}: {exc}", flush=True)
+                  checks.append((provider, False))
           for language, topic, edition in (
               ("en", "cinematography", "en"),
               ("hi", "चलचित्र", "hi"),
