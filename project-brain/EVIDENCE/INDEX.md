@@ -1442,3 +1442,34 @@ Previous full ledger and STATE retained at commit `573e952ccf1b9556fec8d56204ac7
   "limits": "No root-cause resolution or guard weakening claimed. Require actual hosted retry with diagnostics and native physical proof."
  }
 }
+
+## 2026-11-27 — exact parent terminal matrix
+
+{
+ "source": "f036a1552af2b6080344e4e840c5b6d35727c207",
+ "matrix": {
+  "success": 28,
+  "failure": 1,
+  "in_progress": 0
+ },
+ "mlt": {
+  "run": 46023937016,
+  "job": 140590479244,
+  "tests_run": 1814,
+  "passed": 1812,
+  "skipped": 2,
+  "failed": 0,
+  "additional_separate_test_runs": [
+   52,
+   26
+  ],
+  "result": "success"
+ },
+ "remaining_failure": {
+  "run": 46023936864,
+  "job": 140591531636,
+  "stage": "post-Vite sandbox/version checks; exact failed subcommand unproven; diagnostic correction in candidate"
+ },
+ "candidate": "cd6858ec3989b498def8e121b3c95c69cfbeb72a",
+ "decision": "Parent matrix terminal; integrate cumulative candidate via non-force expected-head update. No merge into main or independent acceptance."
+}
