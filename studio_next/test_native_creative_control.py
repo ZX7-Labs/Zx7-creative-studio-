@@ -4115,6 +4115,82 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
             self.assertFalse(result["native_editing_capability_complete"])
 
+    async def test_indexed_stale_identity_surfaces_only_granted_recovery_read(self):
+        """Retest #45945314825: stale rejection must not strand project recovery."""
+        from studio_next.body_editor_client import (
+            HOST_PRE_DISPATCH_META, native_input_digest)
+        from studio_next.native_creative_audit import audit_native_journal
+
+        class StaleSession(FakeSession):
+            async def call_tool(self, name, inputs):
+                self.calls.append((name, inputs))
+                if name == "update_text_clip":
+                    return SimpleNamespace(is_error=True, meta={
+                        HOST_PRE_DISPATCH_META: {
+                            "version": 1, "tool": name,
+                            "inputs_sha256": native_input_digest(inputs),
+                            "code": "native_identity_model_observation_stale",
+                        }}, content=[SimpleNamespace(
+                            type="text", text="Host rejected stale identity")])
+                self.assert_project_read(name)
+                return SimpleNamespace(is_error=False, content=[SimpleNamespace(
+                    type="text", text=json.dumps({"mcp": {"hasProject": True},
+                        "project": {"id": "existing-project", "assetCount": 1}}))])
+
+            @staticmethod
+            def assert_project_read(name):
+                if name != "get_project":
+                    raise AssertionError("Unexpected native dispatch")
+
+        class RecoveryModel(ScriptedModel):
+            requires_native_function_contracts = True
+
+        for granted, recover, valid_read_schema in (
+                (True, True, True), (True, False, True),
+                (False, False, True), (True, False, False)):
+            with self.subTest(granted=granted, recover=recover,
+                              valid_read_schema=valid_read_schema):
+                session = StaleSession()
+                grants = {"update_text_clip": "write"}
+                if granted:
+                    grants["get_project"] = "read"
+                    session.tools.append(SimpleNamespace(name="get_project",
+                        description="Inspect the current real project",
+                        input_schema=({"type": "object", "properties": {}}
+                            if valid_read_schema else {"type": "object",
+                                "properties": {"requiredContext": {"type": "string"}},
+                                "required": ["requiredContext"]})))
+                session.tools = [tool for tool in session.tools if tool.name in grants]
+                actions = [decision("search", query="update_text_clip", limit=1),
+                           decision("invoke", tool="update_text_clip",
+                                    inputs={"clipId": "title"})]
+                if recover:
+                    actions.append(decision("invoke", tool="get_project", inputs={}))
+                actions.append(decision("finish", summary="Technical recovery only"))
+                model = RecoveryModel(actions)
+                result = await NativeCreativeControl(session, model,
+                    max_turns=len(actions), catalog_mode="indexed",
+                    host_tool_access=grants, host_pre_dispatch_rejections=True
+                    ).run("Recover current native state without choosing an edit")
+                before, after = model.observed[0], model.observed[2]
+                self.assertNotIn("get_project", before["selectable_native_tools"])
+                offered = granted and valid_read_schema
+                self.assertEqual("get_project" in after["selectable_native_tools"], offered)
+                self.assertEqual("get_project" in {
+                    spec["name"] for spec in after["host_native_tool_contracts"]}, offered)
+                self.assertTrue(after["last_host_project_write_reconciliation"][
+                    "native_model_observation_invalidated"])
+                if recover:
+                    self.assertNotIn("get_project", model.observed[3]["selectable_native_tools"])
+                    self.assertIsNone(model.observed[3]["last_host_project_write_reconciliation"])
+                expected = (["get_project"] if offered else []) + ["update_text_clip"]
+                if recover:
+                    expected.append("get_project")
+                self.assertEqual([name for name, _ in session.calls], expected)
+                self.assertTrue(audit_native_journal(result["events"],
+                    host_tool_access=grants, host_pre_dispatch_rejections=True
+                    )["journal_chain_structurally_valid"])
+
     async def test_small_exact_index_does_not_make_unselected_native_tool_invokable(self):
         session = FakeSession()
         grants = {"get_timeline": "read", "update_text_clip": "write"}

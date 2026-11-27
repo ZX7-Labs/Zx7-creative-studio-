@@ -1945,6 +1945,20 @@ class NativeCreativeControl:
                     # observer; the Brain decides whether and when to listen.
                     insertion = 1 if audio_review_pending else 0
                     self._host_frontier_tools.insert(insertion, raw_audio_reader)
+                # A source-identity refusal invalidates the project snapshot.
+                # Expose the actual granted recovery READ even in indexed mode;
+                # otherwise the model can spend its remaining budget searching
+                # for a mechanical prerequisite or proposing stale writes.
+                # No READ is dispatched here, and no edit is retried or granted.
+                if (self.catalog_mode == "indexed" and
+                        self._project_presence == "unknown" and
+                        (self._post_write_state_warning or {}).get(
+                            "native_model_observation_invalidated") is True and
+                        self.host_tool_access.get("get_project") == "read" and
+                        "get_project" in validators and
+                        validators["get_project"].is_valid({})):
+                    self._host_frontier_tools = ["get_project"] + [
+                        tool for tool in self._host_frontier_tools if tool != "get_project"]
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
                 placement_validator = None
