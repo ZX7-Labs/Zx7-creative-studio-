@@ -1974,6 +1974,22 @@ class NativeCreativeControl:
                         validators["get_project"].is_valid({})):
                     self._host_frontier_tools = ["get_project"] + [
                         tool for tool in self._host_frontier_tools if tool != "get_project"]
+                # A confirmed source-pinned placement preflight denial is not
+                # a write, but the old placement inventory may be misleading.
+                # Make the real recovery READ contracts selectable without
+                # spending another discovery turn. Never dispatch a read here,
+                # choose an asset/track, or create a new grant.
+                if (self.catalog_mode == "indexed" and
+                        (self._last_preflight_feedback or {}).get(
+                            "rejection_code") == "placement_plan_unconfirmed"):
+                    recovery = [name for name, inputs in (
+                        ("get_project", {}),
+                        ("get_assets", {"limit": _MAX_PLACEMENT_ASSETS}),
+                        ("get_timeline", {"includeClips": False}))
+                        if self.host_tool_access.get(name) == "read" and
+                        name in validators and validators[name].is_valid(inputs)]
+                    self._host_frontier_tools = recovery + [
+                        name for name in self._host_frontier_tools if name not in recovery]
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
                 placement_validator = None
@@ -2840,6 +2856,14 @@ class NativeCreativeControl:
                                 "project_state_unknown": True,
                                 "must_inspect_native_project": True,
                             }
+                        if code == "placement_plan_unconfirmed":
+                            # Preserve the immutable journal and last write ACK,
+                            # not potentially stale source-selection hints.
+                            self._placement_observations.clear()
+                            for read_tool in ("get_assets", "get_timeline"):
+                                self._native_read_snapshots.pop(read_tool, None)
+                            self._last_native_texts = []
+                            self._last_native_preview_feedback = None
                         # The next call still requires a new MODEL decision.
                         self._last_preflight_feedback = {
                             "tool": native_name, "validation_keyword": "host_pre_dispatch",

@@ -4224,6 +4224,108 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     host_tool_access=grants, host_pre_dispatch_rejections=True
                     )["journal_chain_structurally_valid"])
 
+    async def test_confirmed_placement_refusal_refreshes_observations_and_offers_reads(self):
+        """A denied placement must not keep advertising a stale source inventory."""
+        from studio_next.body_editor_client import HOST_PRE_DISPATCH_META, native_input_digest
+        from studio_next.native_creative_audit import audit_native_journal
+        placement = "add_asset_to_timeline"
+
+        class PlacementSession(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.changed = False
+                self.tools = [
+                    SimpleNamespace(name="get_project", description="Read project",
+                        input_schema={"type": "object", "properties": {}}),
+                    SimpleNamespace(name="get_assets", description="Read imported assets",
+                        input_schema={"type": "object", "properties": {"limit": {"type": "integer"}}}),
+                    SimpleNamespace(name="get_timeline", description="Read timeline",
+                        input_schema={"type": "object", "properties": {"includeClips": {"type": "boolean"}}}),
+                    SimpleNamespace(name=placement, description="Place imported asset",
+                        input_schema={"type": "object", "properties": {
+                            "trackId": {"type": "string"}, "assetId": {"type": "string"},
+                            "previewOnly": {"type": "boolean"}}}),
+                ]
+
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                suffix = "new" if self.changed else "old"
+                if name == "get_project":
+                    payload = {"mcp": {"hasProject": True},
+                        "project": {"id": "existing", "assetCount": 1, "currentTimelineId": "current"},
+                        "currentTimeline": {"id": "current", "clipCount": 1}, "assetCount": 1}
+                elif name == "get_assets":
+                    payload = {"count": 1, "limitApplied": False, "assets": [
+                        {"id": "asset-" + suffix, "type": "video", "name": "Imported source"}]}
+                elif name == "get_timeline":
+                    payload = {"id": "current", "tracks": [{"id": "track-" + suffix,
+                        "name": "Picture", "type": "video", "locked": False}]}
+                elif name == placement:
+                    self.changed = True  # source changed independently; no edit by this call
+                    return SimpleNamespace(is_error=True, meta={HOST_PRE_DISPATCH_META: {
+                        "version": 1, "tool": name, "inputs_sha256": native_input_digest(arguments),
+                        "code": "placement_plan_unconfirmed"}}, content=[SimpleNamespace(
+                            type="text", text="Host confirmed no placement submitted")])
+                else:
+                    raise AssertionError(name)
+                return SimpleNamespace(is_error=False, content=[SimpleNamespace(
+                    type="text", text=json.dumps(payload))])
+
+        session = PlacementSession()
+        grants = {t.name: "write" if t.name == placement else "read" for t in session.tools}
+        model = ScriptedModel([
+            decision("search", query="get_project", limit=1),
+            decision("invoke", tool="get_project", inputs={}),
+            decision("search", query="get_timeline", limit=1),
+            decision("invoke", tool="get_timeline", inputs={"includeClips": False}),
+            decision("search", query=placement, limit=1),
+            decision("invoke", tool=placement, inputs={"trackId": "track-old",
+                "assetId": "asset-old", "previewOnly": False}),
+            decision("invoke", tool="get_assets", inputs={"limit": 1}),
+            decision("finish", summary="Technical recovery only"),
+        ])
+        model.requires_native_function_contracts = True
+        model.requires_indexed_native_function_contracts = True
+        result = await NativeCreativeControl(session, model, max_turns=8,
+            catalog_mode="indexed", host_tool_access=grants, host_pre_dispatch_rejections=True,
+            host_verified_top_level_preview_tools=(placement,)).run("Recover placement evidence")
+        before, after = model.observed[5:7]
+        self.assertEqual(before["native_placement_assets"]["assets"][0]["id"], "asset-old")
+        self.assertEqual(before["native_placement_tracks"]["tracks"][0]["id"], "track-old")
+        self.assertEqual(after["native_placement_assets"]["assets"][0]["id"], "asset-new")
+        self.assertEqual(after["native_placement_tracks"]["tracks"][0]["id"], "track-new")
+        self.assertNotIn("get_timeline", [r["tool"] for r in after["native_read_snapshot_cache"]])
+        self.assertTrue({"get_project", "get_assets", "get_timeline"}.issubset(after["selectable_native_tools"]))
+        self.assertEqual(len([name for name, _ in session.calls if name == placement]), 1)
+        self.assertIn(("get_assets", {"limit": 1}), session.calls)
+        self.assertEqual(result["status"], "model_finished_unverified")
+        self.assertTrue(audit_native_journal(result["events"], host_tool_access=grants,
+            host_pre_dispatch_rejections=True)["journal_chain_structurally_valid"])
+
+        # Same denial without asset/timeline READ grants must not invent them.
+        for invalid in (False, True):
+            with self.subTest(invalid_schema=invalid):
+                session = PlacementSession()
+                if invalid:
+                    for t in session.tools:
+                        if t.name in ("get_assets", "get_timeline"):
+                            t.input_schema = {"type": "object", "properties": {
+                                "privateRequired": {"type": "string"}}, "required": ["privateRequired"]}
+                else:
+                    session.tools = [t for t in session.tools if t.name in (placement, "get_project")]
+                grants = {t.name: "write" if t.name == placement else "read" for t in session.tools}
+                model = ScriptedModel([decision("search", query=placement, limit=1),
+                    decision("invoke", tool=placement, inputs={"previewOnly": False}),
+                    decision("finish", summary="Decline further reads")])
+                model.requires_native_function_contracts = True
+                result = await NativeCreativeControl(session, model, max_turns=3,
+                    catalog_mode="indexed", host_tool_access=grants,
+                    host_pre_dispatch_rejections=True).run("No authority expansion")
+                self.assertNotIn("get_assets", model.observed[2]["selectable_native_tools"])
+                self.assertNotIn("get_timeline", model.observed[2]["selectable_native_tools"])
+                self.assertEqual([n for n, _ in session.calls], ["get_project", placement])
+                self.assertEqual(result["status"], "model_finished_unverified")
+
     async def test_small_exact_index_does_not_make_unselected_native_tool_invokable(self):
         session = FakeSession()
         grants = {"get_timeline": "read", "update_text_clip": "write"}

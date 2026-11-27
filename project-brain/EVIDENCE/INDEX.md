@@ -328,3 +328,112 @@ Exact structured value moved from mutable ledger for bounded size; original blob
   }
 }
 ```
+
+
+## 2026-11-27 — placement refusal source observations and SDK verification
+
+{
+  "parent": "95d841a46af61e9b0c2beafdfd0971ad61e8474d",
+  "source_blobs": {
+    "studio_next/native_creative_control.py": "bf18e7b4bd1d6f9d6edf752379c49f92fdd3eab8",
+    "studio_next/test_native_creative_control.py": "e70e8ba5d66f5db1f78b1f76772fc2e99054a68d"
+  },
+  "negative": "Exact canonical source: after a trusted placement_plan_unconfirmed refusal, cached native asset/track selection still points at prior source. Independent RED controls: explicit model-selected get_assets recovery rejected as unsearched; decline further reads control still advertises asset-old instead of actual asset-new. Deterministic source-shaped fixture, not diagnosis of original native preview error.",
+  "correction": "Clear stale placement/read snapshots and prior result/preview text after confirmed no-write placement denial. Offer installed schema-valid granted get_project/get_assets/get_timeline in indexed recovery frontier; no added grant, automatic model action or placement retry. Existing bounded host reads refresh their own observations; preserve immutable journal/last acknowledged write.",
+  "local": {
+    "run": 272,
+    "pass": 269,
+    "errors": 3,
+    "assertion_failures": 0,
+    "limitations": "Three missing scripts.run_native_model_trial imports in installed-wheel-only environment. Focused GREEN with no-grant, invalid-schema and model-decline controls; no real neural or GUI acceptance."
+  },
+  "hosted_parent": {
+    "observed": {
+      "success": 25,
+      "in_progress": 3,
+      "failure": 1
+    },
+    "real_sdk": {
+      "run": 45952719717,
+      "job": 140352046550,
+      "passed": [
+        "test_cas_placement_preflight_receipt_survives_actual_sdk_gateway",
+        "test_wire_bound_placement_refusal_is_not_an_uncertain_write",
+        "test_controller_clip_style_preflight_cannot_refresh_stale_model_epoch",
+        "test_revision_schema_migration_preserves_uncertain_and_confirmed_intents"
+      ],
+      "limits": "Real HTTP/MCP SDK bridge; source pin fixture. 346-test SDK group and 271-test gateway group completed; not actual human study."
+    },
+    "desktop": {
+      "run": 45952719679,
+      "job": 140352046121,
+      "conclusion": "success",
+      "previous_failed_parent": 45949362927
+    },
+    "research": {
+      "run": 45952719864,
+      "job": 140352046589,
+      "conclusion": "failure",
+      "detail": "17 of 18 live provider/language checks passed; Europe PMC unavailable or invalid JSON, underlying transport cause not logged. Existing same-URL timeout retry only, no blind rerun."
+    },
+    "running": [
+      45952719857,
+      45952719639,
+      45952719866
+    ]
+  },
+  "next": "Preserve pending exact parent physical/installed/MLT gates, integrate this tested candidate with exact head lease after terminal. Review actual provider availability and native placement preview cause without guessing from redacted journal. Genuine G1, human coedit, G2, A-L professional and release acceptance remain open; no new model spend."
+}
+
+### Retained historical timed-feedback structured receipt
+
+Original ledger blob `fdfef087c1d7603731d2e96fab969f04cbff7e34`; exact original structured value retained below to preserve the bounded mutable ledger.
+
+```json
+{
+  "baseline": "f676146e7a95da42fd39eb62d72154e2bce1af54",
+  "source_blobs": {
+    "studio_next/native_creative_control.py": "8445235d5b213d36d36fba51e0e05e69bd623aab",
+    "studio_next/test_native_creative_control.py": "56cd5068850e12a04a9027cbcb565953c4a4c8bf"
+  },
+  "causal_gap": "Source-derived counterexample: a single still plus full numeric audio hid remaining separated timed-picture requirement from the indexed model frontier. This is an interface gap, not proof that it caused any historical trial failure.",
+  "correction": "Retain generic still evidence; report separated source-bound timed sample coverage independently and keep the already-granted timed read selectable. The pair acceptance gate, native writes, authorization and artistic judgment are unchanged.",
+  "local": {
+    "red": "Source-derived isolated method reproduction: still incorrectly counted as timed readiness; assertion failed.",
+    "green": "5/5 scoped Python excerpt tests passed, including narrow/invalid/mismatched samples, combined window, failed read and write revocation.",
+    "limitations": "No repository checkout in current runtime; connector-only source access and no GitHub DNS. Full integrated controller regression and actual CI pending."
+  },
+  "acceptance": {
+    "exact_source_ci": "24/29 SUCCESS; 5 FAILURE at d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
+    "genuine_model": false,
+    "professional": false
+  },
+  "next": "Verify exact candidate CI. Only after stable baseline, qualify actual model/provider and creative interface; no connector dispatch.",
+  "hosted_regression": {
+    "source": "d2ecb848f6f0df7734c9a2a94d1651789a6db0da",
+    "success": 24,
+    "failure": 5,
+    "runs": [
+      45926146560,
+      45926146497,
+      45926146559,
+      45926146423,
+      45926146408
+    ],
+    "observed": "test_indexed_same_time_av_comparison_keeps_verified_native_reader_visible: already_comparable and invalidated_by_write expected TIMED_FRAMES absent, actual present; Python 3.11–3.13 and shared suites.",
+    "diagnosis": "Older pair fixture uses abbreviated image hashes, stricter readiness requires 64-character digests. Source-supported candidate explanation; write invalidation needs independent reproduction. Not a proven root cause.",
+    "genuine_model": false,
+    "professional": false
+  },
+  "fixture_correction": {
+    "parent": "5023d44e125c60ce895de35493b8c953c53cb98c",
+    "source_blobs": {
+      "studio_next/test_native_render_evidence.py": "0d8c5070ca933a8b5d696a5fcd1f41e62a4dd668",
+      "studio_next/test_native_creative_control.py": "2350a20114e9555dcccff9fe816c23b8b5e157b8"
+    },
+    "cause": "Shared old pair fixture used one-character hashes; invalidation injected add_text_clip absent from fixture write grants. Source-derived isolated current-evidence reproduction: two original assertions fail; realistic hash and admitted update_text_clip ACK pass both. No production validation relaxed.",
+    "verification": "Exact parent 385534021c47efdecf70685e5f54095ea37e3d2d 29/29 CI SUCCESS (actual model jobs skipped); revision and Omni Python 3.11–3.13 passed; source apt missing ffmpeg recovered on targeted unchanged-source retry. Actual controller RED/GREEN 11 tests; previous broader run 222 run/216 pass/6 environment import errors, no assertions failed. Details PR #356 comment 7208810798.",
+    "next": "Baseline technical regression closed; no genuine model or professional acceptance."
+  }
+}
+```
