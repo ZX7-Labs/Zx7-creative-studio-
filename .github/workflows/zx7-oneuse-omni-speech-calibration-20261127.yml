@@ -1,0 +1,71 @@
+name: ZX7 one-use G1 — isolated synthetic raw-WAV speech competence calibration
+# Four observation-only calls, below the standing 48-turn synthetic G1 ceiling.
+# No native edits, owner files, release, or ordinary CI inference.
+on:
+  push:
+    branches: [trial/g1-omni-speech-calibration-20261127]
+    paths: ['.github/workflows/zx7-oneuse-omni-speech-calibration-20261127.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zx7-oneuse-g1-omni-speech-calibration-20261127
+  cancel-in-progress: false
+jobs:
+  synthetic-speech:
+    if: github.run_attempt == 1 && github.ref == 'refs/heads/trial/g1-omni-speech-calibration-20261127' && github.event.before == 'd48af496fa70a9208a94016fd5e4d7320d05d0e1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Admit exact source and scoped one-use request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/trial/g1-omni-speech-calibration-20261127"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "d48af496fa70a9208a94016fd5e4d7320d05d0e1"
+          expected="$(printf '%s\n' '.github/workflows/zx7-oneuse-omni-speech-calibration-20261127.yml' 'research/nvidia-oneuse-omni-speech-calibration-20261127.json' 'research/g1_speech_calibration.py' | LC_ALL=C sort)"
+          actual="$(git diff --name-only HEAD^ HEAD | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          test "$(git hash-object 'research/g1_speech_calibration.py')" = "5a3ea4893b1a2364386996329ba02bae54a5d444"
+          git diff --check HEAD^ HEAD
+          python -m scripts.nvidia_av_trial_request 'research/nvidia-oneuse-omni-speech-calibration-20261127.json' --dispatch-request-id 'ZX7_OMNI_G1_SPEECH_CALIBRATION_20261127'
+      - name: Prove current decoder, raw audio transport and four physical controls without a credential
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg || ! command -v ffprobe; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -hide_banner -filters 2>/dev/null | grep -w flite
+          python -m pip install --no-cache-dir '.[editor,production]'
+          python -m unittest studio_next.test_nvidia_native_tool_model studio_next.test_body_editor_audio studio_next.test_native_audio_model_input scripts.test_nvidia_av_trial_request -v
+          python -m research.g1_speech_calibration --out "$RUNNER_TEMP/zx7-speech-preflight"
+      - name: Four independent genuine typed observations from generated WAV only
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${NVIDIA_API_KEY:-}"
+          test "$(git hash-object 'research/g1_speech_calibration.py')" = "5a3ea4893b1a2364386996329ba02bae54a5d444"
+          test "$(python -m scripts.nvidia_av_trial_request --print-model 'research/nvidia-oneuse-omni-speech-calibration-20261127.json' --dispatch-request-id 'ZX7_OMNI_G1_SPEECH_CALIBRATION_20261127')" = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+          python -u -m research.g1_speech_calibration --out "$RUNNER_TEMP/zx7-speech-live" --execute
+      - name: Preserve generated controls, physical receipts and bounded scoring only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zx7-g1-omni-speech-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/zx7-speech-live/evaluation.json
+            ${{ runner.temp }}/zx7-speech-live/outputs/*.mp4
+            ${{ runner.temp }}/zx7-speech-live/outputs/*.wav
+            ${{ runner.temp }}/zx7-speech-preflight/evaluation.json
+          retention-days: 7
+          if-no-files-found: warn
