@@ -6990,6 +6990,41 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(audit_native_journal(
             outcome["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
 
+    async def test_alternating_metadata_search_cycle_reports_repeated_query_without_dispatch(self):
+        from studio_next.native_creative_audit import audit_native_journal
+        session = FakeSession()
+        grants = {tool.name: ("write" if tool.name == "update_text_clip" else "read")
+                  for tool in session.tools}
+        model = ScriptedModel([
+            decision("search", query="edit text", limit=3),
+            decision("search", query="unmatchableword", limit=3),
+            decision("search", query="edit text", limit=3),
+            decision("search", query="unmatchableword", limit=3),
+            decision("search", query="edit text", limit=3),
+            decision("describe", tool="update_text_clip"),
+            decision("search", query="edit text", limit=3),
+            decision("finish", summary="Metadata only"),
+        ])
+        result = await NativeCreativeControl(
+            session, model, max_turns=8, catalog_mode="indexed",
+            host_tool_access=grants).run("Inspect native capabilities")
+        for turn, count in ((3, 1), (4, 1), (5, 2)):
+            feedback = model.observed[turn]["last_capability_search_result"]
+            self.assertTrue(feedback["same_metadata_query_without_new_evidence"])
+            self.assertEqual(feedback["identical_query_repeat_count"], count)
+            self.assertTrue(feedback["no_native_edit_or_inspection_performed"])
+        self.assertFalse(model.observed[2]["last_capability_search_result"].get(
+            "same_metadata_query_without_new_evidence", False))
+        self.assertFalse(model.observed[7]["last_capability_search_result"].get(
+            "same_metadata_query_without_new_evidence", False))
+        self.assertEqual(model.observed[4]["selectable_native_tools"], [])
+        self.assertEqual(session.calls, [])
+        searches = [ev for ev in result["events"] if ev["kind"] == "capability_searched"]
+        self.assertEqual([ev["identical_query_repeat_count"] for ev in searches],
+                         [0, 0, 1, 1, 2, 0])
+        self.assertTrue(audit_native_journal(
+            result["events"], host_tool_access=grants)["journal_chain_structurally_valid"])
+
     async def test_intervening_model_describe_ends_identical_metadata_search_streak(self):
         session = FakeSession()
         grants = {tool.name: ("write" if tool.name == "update_text_clip" else "read")

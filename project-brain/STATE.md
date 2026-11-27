@@ -30,6 +30,9 @@
 - Field G audio program audit candidate: existing loudness instrument now reads explicitly selected alternate soundtracks and standalone PCM/FLAC/MP3 masters; separate native LUFS/LRA/true peak, actual decoded samples and rate; original rights/bytes preserved. Local 34/34 affected tests and final 11/11 shared revision/loudness checks, including RED→GREEN shared decoder policy cache invalidation. Exact candidate hosted verification pending; no semantic listening, normalized media, stem or independent acceptance.
 - Parent `f036a155` hosted at observation 25 successful/1 failed/3 running; [atomic range #46023936864](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/46023936864) failed in native Electron build (exact check not established). Canonical integrity passed; retain running parent checks.
 
+- G1 search-cycle candidate: actual trial 21 searches, 13 distinct query hashes, eight repeated-hash turns (not necessarily redundant after state changes); uninterrupted turns 27–36 used 145163 reported tokens. Exact RED→GREEN alternating search-only repetition feedback, 3/3 targeted tests; broad local overlay 241/248 passed, seven missing scripts/config/MCP dependency errors, no assertion failures. No automatic tool dispatch, no measured neural savings. Source blobs and exact limits in ledger. Hosted verification pending.
+- Parent `f036a155` latest observed 26 successful/1 failed/2 running. Native scene and MLT renderer now passed; atomic range failure still isolated only to silent post-Vite checks. Preserve installed and full MLT runs before canonical fast-forward.
+
 ## Next executable work
 
 G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 native/compositional/hybrid experiment, G3 A–L and G4 release all open. No independently accepted domain. Inspect candidate exact hosted matrix and diagnose scene launch failure from actual exit path; investigate decision-loop causes without blind paid replay. Advance independent missing A–L product capabilities in parallel. Preserve actual native editable revision, rights, security and professional assessment; never replace human acceptance with passing tests.
@@ -38,4 +41,4 @@ G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 native/co
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md) preserves exact receipts and negative history. Exact previous full ledger/STATE retained at [573e952c](https://github.com/ZX7-Labs/Zx7-creative-studio-/tree/573e952ccf1b9556fec8d56204ac749f30bc9cd8/project-brain), with archived receipts indexed; no lost records. [Document map](../docs/DOCUMENT_MAP.md), [decisions](DECISIONS.md), [risks](RISKS.md) have separate roles. Refresh live refs before acting; no third status page.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=db3de815162f871bf51ec4deb987c7aaf2fb5b5d` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=eca31de119cea5795c05a39afb88e1f94e28bb4a` (Git content ID, not security attestation).

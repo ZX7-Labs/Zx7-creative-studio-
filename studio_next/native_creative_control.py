@@ -1044,8 +1044,8 @@ class NativeCreativeControl:
         self._capabilities = None
         self._machine_contracts = None
         self._last_search_result = None
-        self._previous_search_signature = None
-        self._identical_search_repetitions = 0
+        # At most max_turns (128) exact query identities per metadata streak.
+        self._search_streak_counts: dict[tuple[str, int, str], int] = {}
         self._selectable_tools: list[str] = []
         # On a tied lexical search, show a bounded *inspectable-only*
         # set of actual host grants. A model must explicitly describe
@@ -2368,11 +2368,9 @@ class NativeCreativeControl:
                 # A new successful native call replaces this text below.
                 action, args = decision["action"], decision["arguments"]
                 if action != "search":
-                    # Only consecutive duplicate metadata searches are
-                    # redundant. Describing a schema, inspecting real state,
-                    # or taking any other model action ends this streak.
-                    self._previous_search_signature = None
-                    self._identical_search_repetitions = 0
+                    # Describing a schema, inspecting state or choosing any
+                    # non-search action ends the metadata-only streak.
+                    self._search_streak_counts.clear()
                 if action == "finish":
                     missing = self._missing_completion_evidence()
                     if missing:
@@ -2402,17 +2400,16 @@ class NativeCreativeControl:
                     # events. Do NOT choose or invoke a tool on its behalf.
                     signature = (args["query"], args.get("limit", 6),
                                  self._capabilities.revision)
-                    if signature == self._previous_search_signature:
-                        self._identical_search_repetitions += 1
-                    else:
-                        self._identical_search_repetitions = 0
-                    self._previous_search_signature = signature
+                    # Genuine trial #46007258095 alternated identical queries
+                    # with other searches. An adjacent-only check missed them.
+                    repetitions = self._search_streak_counts.get(signature, 0)
+                    self._search_streak_counts[signature] = repetitions + 1
                     self._last_search_result = self._capabilities.search(
                         args["query"], limit=args.get("limit", 6))
-                    if self._identical_search_repetitions:
+                    if repetitions:
                         self._last_search_result["same_metadata_query_without_new_evidence"] = True
                         self._last_search_result["identical_query_repeat_count"] = min(
-                            self._identical_search_repetitions, 100)
+                            repetitions, 100)
                         self._last_search_result["no_native_edit_or_inspection_performed"] = True
                     # Only tool identities from actual discovery enter the
                     # model-facing result. Host grant map is authoritative.
@@ -2474,6 +2471,7 @@ class NativeCreativeControl:
                                   "query_sha256": hashlib.sha256(
                                       args["query"].encode("utf-8")).hexdigest(),
                                   "catalog_revision": self._capabilities.revision,
+                                  "identical_query_repeat_count": min(repetitions, 100),
                                   "result_tool_names": [
                                       match["tool"] for match in
                                       self._last_search_result["matches"]],
@@ -3523,8 +3521,7 @@ class NativeCreativeControl:
                     # native write is selected or retried on its behalf.
                     self._inspectable_tied_candidates = []
                     self._last_search_result = None
-                    self._previous_search_signature = None
-                    self._identical_search_repetitions = 0
+                    self._search_streak_counts.clear()
                 if (reobserve_project and
                         self.host_tool_access is not None and
                         self.host_tool_access.get("get_project") == "read" and

@@ -1314,5 +1314,54 @@
   "local_verification": "18/18 loudness/subtitles/materials/custody graph tests and 16/16 physical composite_mix tests. After cache dependency correction 11/11 shared-revision/loudness tests. Actual alternate AAC programs at 48k/44.1k with distinct gains and language tags, independent PCM sample count oracle, standalone PCM 57600 samples at 48k, FLAC and MP3 actual stereo decode counts, original SHA unchanged; invalid selection and withdrawn receipt refused. No hosted acceptance yet.",
   "parent_hosted_observed": "25 success, 1 failure, 3 in progress; native atomic range #46023936864 failed in pinned Electron build after Vite/JS checks; exact subcommand unproven. Do not cancel active parent verification.",
   "limits": "No private media/model use, no mix quality judgment, no calibrated professional acceptance. Existing source custody only; no expansion of grants."
+ },
+ "g1_alternating_metadata_search_feedback_20261127": {
+  "parent": "654c5b0275d87998d34a5181f5da35fd78f4cc82",
+  "code_blobs": {
+   "studio_next/native_creative_control.py": "11b3fc50aef57f244e55a7c7ffdbe4ab72462db0",
+   "studio_next/test_native_creative_control.py": "d42fc0fa3cdd3cbad77454f445e5bfb7014b6478"
+  },
+  "actual_trial": {
+   "run": 46007258095,
+   "artifact": 15203767091,
+   "searches": 21,
+   "distinct_query_hashes": 13,
+   "repeated_query_hash_turns": [
+    10,
+    14,
+    27,
+    30,
+    34,
+    35,
+    36,
+    40
+   ],
+   "reported_search_tokens": 271235,
+   "reported_repeated_hash_search_tokens": 113438,
+   "search_only_burst_turns": [
+    27,
+    36
+   ],
+   "reported_burst_tokens": 145163,
+   "qualification": "Hash repetition across whole session does not prove redundancy after a native action; query limit not recorded in old journal. Token sums are observed usage, not projected savings."
+  },
+  "cause": "Previous controller only flags consecutive identical query+limit+catalog revision; alternating same queries within uninterrupted metadata-only streak evade signal. RED exact local test KeyError for missing feedback.",
+  "correction": "Replace adjacent-only counter with bounded per-streak signature counts (max 128 decision turns); reset at non-search action, preserve exact query/limit/revision and grants, no automatic dispatch or artistic decision. Journal emits bounded repeat count telemetry, not acceptance.",
+  "verification": {
+   "targeted": "3/3 RED→GREEN alternating repeat, consecutive repeat and describe reset. No native calls, no invocation from empty result, journal structure valid.",
+   "combined": {
+    "run": 248,
+    "passed": 241,
+    "errors": 7,
+    "failures": 0,
+    "errors_due_to_missing_local_checkout_or_dependencies": [
+     "scripts.run_native_model_trial",
+     "engines/velorn/editor.example.json",
+     "mcp"
+    ],
+    "scope": "Wheel-based local overlay, not full checkout. Hosted exact source verification pending."
+   }
+  },
+  "limits": "No measured genuine model turn/token savings, no semantic/creative/release acceptance, no new live model trial or private egress."
  }
 }
