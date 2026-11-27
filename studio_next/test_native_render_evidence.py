@@ -100,6 +100,27 @@ class ReviewedAVPairTests(unittest.TestCase):
                             "native_export_destination_sha256": "after"}]
         self.assertIsNone(reviewed_av_reference_frame_times(failed, {"update_text_clip"}))
 
+    def test_duplicate_verified_revision_is_a_fact_not_a_new_review(self):
+        from studio_next.native_render_evidence import reviewed_av_duplicate_export
+        events = self.events()
+        # Failed real trial #45945314825: separate destination, identical
+        # bytes after a native write. Report the identity before another read.
+        events[6]["independently_verified_export_sha256"] = "a" * 64
+        prior = events[:7]
+        revisions = {"update_text_clip"}
+        self.assertTrue(reviewed_av_duplicate_export(prior, revisions))
+        self.assertIsNone(reviewed_render_pair(prior, revisions, audiovisual=True))
+        self.assertFalse(reviewed_av_duplicate_export(prior[:6], revisions))
+        self.assertFalse(reviewed_av_duplicate_export(self.events()[:7], revisions))
+        for changed in (
+            [e for i, e in enumerate(prior) if i != 3],
+            [dict(e, native_export_timeline_sha256="other") if i == 5 else e
+             for i, e in enumerate(prior)],
+            prior + [dict(prior[-1], kind="native_read_tool_reported_error")],
+            prior + [dict(prior[4])],
+        ):
+            self.assertFalse(reviewed_av_duplicate_export(changed, revisions))
+
     def test_a_failed_later_audio_read_revokes_a_previously_complete_pair(self):
         events = self.events()
         events.append({**events[-1], "kind": "native_read_tool_reported_error"})

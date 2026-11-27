@@ -272,6 +272,22 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
     return pair
 
 
+def reviewed_av_duplicate_export(events, revision_tools):
+    """Report a current separately rendered file with prior reviewed bytes.
+
+    Reuse the same scoped, invalidation-aware evidence as the pair gate.
+    This is byte equality, not a new observation, creative revision, or
+    claim that all perceptually identical encodings have equal hashes.
+    """
+    pair, before, rendered, verified = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=True)
+    if pair is not None or before is None or before[3] is None:
+        return False
+    scope, prior_dest, prior_digest, _ = before
+    return any(dest != prior_dest and digest == prior_digest and
+               rendered.get(dest) == scope for dest, digest in verified.items())
+
+
 def reviewed_av_reference_frame_times(events, revision_tools):
     """Return exact prior-model-observed times for *another* verified A/V cut.
 

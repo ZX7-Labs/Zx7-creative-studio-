@@ -36,7 +36,8 @@ from .native_render_evidence import (
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
     SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
-    reviewed_av_reference_frame_times, valid_av_review_values, av_window_audio_values,
+    reviewed_av_duplicate_export, reviewed_av_reference_frame_times,
+    valid_av_review_values, av_window_audio_values,
 )
 
 
@@ -2139,6 +2140,11 @@ class NativeCreativeControl:
                             export_evidence["current_verified_output_count"],
                         "same_export_reverification_count":
                             export_evidence["same_export_reverification_count"],
+                        # Separate destinations can contain identical bytes.
+                        # A new render ACK is not a distinct reviewed cut.
+                        "current_av_export_matches_prior_reviewed_bytes": (
+                            self._requires_av_review and reviewed_av_duplicate_export(
+                                self.events, self.host_content_revision_tools)),
                         "verified_export_still_needs_model_visible_frame": (
                             bool(export_evidence["current_verified"]) and
                             not bool(export_evidence["current_frames"]) and

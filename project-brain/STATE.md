@@ -9,7 +9,7 @@
 
 ## Latest verified technical checkpoint
 
-- Latest installed exact parent `3320ba88cee133f26947098ce34f775a36657329`: [installed run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45945182492) 1,778 run / 1,748 pass / 30 skip / zero fail. Local ZIP SHA/CRC, 24/24 manifest entries, wheel blob matches and three complete physical decodes verified; [evidence](EVIDENCE/INDEX.md). 28/29 hosted workflows successful; [MLT](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45945182260) still executing at observation. Earlier exact `5b9efc497717f81e63c26c14ff621af58201bc57` 29/29 technical baseline remains in ledger; no creative acceptance.
+- Latest installed exact parent `fd648e50d41cf17ef68815db5e42b683bae1e239`: [installed run](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45947254432) 1,781 run / 1,751 pass / 30 skip / zero fail. Artifact #15176330121 local SHA/CRC, 24/24 manifest, exact wheel source hashes, three complete physical decodes. Tested merge `0b62e26f` tree equals parent. Hosted {"success":28,"in_progress":1}; same-source loss-aware retry passed. Earlier proofs remain in ledger. No professional acceptance.
 
 ## Consolidation and next outcome
 
@@ -36,10 +36,11 @@
 - Compositional configuration continuity: exact installed parent RED six mismatches; candidate GREEN 94/94 affected tests and actual synthetic renders. Match configured generation/transport limits and upload permissions before model calls and dispatch; legacy active sessions without receipt block with original intent/facts preserved. No new grant or inferred model competence. Candidate hosted CI pending.
 - [Indexed retest #45945314825](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45945314825) FAILED: 48 turns/17 searches/547,741 reported tokens, 2 conforming six-second 640×360 exports but one identical SHA and decoded A/V. Original project copies verified; second snapshot only adds empty track, later two animated text clips saved but never rendered. Source sample times mismatch; no semantic sound or independent creative acceptance. Artifact #15174959264 locally SHA/CRC/full decode verified; trigger retired. Details in ledger.
 - Indexed stale identity recovery: exact source RED one assertion failure/one error; GREEN four controls and 260/266 broader tests (six missing scripts/MCP imports). Existing valid granted get_project read selectable immediately after stale refusal, removed after fresh valid read; no auto-read or write. Candidate hosted verification pending. Parent technical gates observed 25 success/4 running incl. same-source targeted loss-aware retry; original failed after Vite build, exact cause unknown.
-- **Next executable outcome:** finish exact-source technical gates without repeated cancellation. Preserve actual failed trial; resolve mechanical recovery and no-content revision/delivery gaps, then compare measured routes within authorized scope. Human coedit, professional and A–L acceptance still open.
+- Duplicate A/V feedback: actual trial's turn 33 duplicate now explicitly reported from prior fully reviewed same-scope bytes; invalidated by later real edit at turn 41 in original journal replay. RED 3 missing-contract errors → GREEN two tests; broader 249/254 pass, five missing environment imports. No read suppression, automatic edit or relaxed gate. Exact hosted verification pending.
+- **Next executable outcome:** finish parent verification, integrate both tested corrections, then validate exact-head and genuine creative route with authorized scope. Human coedit, G2 matched comparison, A–L professional and release acceptance remain open.
 
 ## Update protocol
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md) preserves exact receipts and negative history. [Document map](../docs/DOCUMENT_MAP.md), [decisions](DECISIONS.md), [risks](RISKS.md) have separate roles. Refresh live refs before acting; no third status page.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=340eafd875530195feb609b10913c1acf501c83f` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=d49ffc86ed34debd8e1adad056bf0293b5df896c` (Git content ID, not security attestation).

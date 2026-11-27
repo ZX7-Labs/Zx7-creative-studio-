@@ -1396,7 +1396,7 @@
     "distinct_exports": 1,
     "export_sha256": "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
     "independent_decode": "Both ZIP entries byte-identical: 144 RGB frames, 640x360 H.264, 24/1 fps, 6s, stereo AAC 44100Hz; full RGB and PCM streams byte-identical locally. Original staged/native source SHAs agree. All saved project SHA receipts matched retained autosaves; first had 2 original clips; second only adds an empty video track; final adds two editable animated text clips at turns 41/42, saved 43, never re-exported. Prior model-selected samples 1/3/5 vs 0/2/4 seconds; full numeric audio read each. Original picture source correlation 0.9990, RGB MAE 2.635 at matched frame indices, no black frames; structural native source verifier explicitly does not attest render pixel provenance, preserve that limit.",
-    "failed_events": "Turn 14 and 44 stale identity safe rejection; 45/46 host preconditions project_open/project_assets_available unknown; turn 31 truncated tool response; 17 search events, empty results at 36/38/39. No pair, no neural semantic hearing, no professional acceptance. Scope digest denotes project path+timeline ID, not content identity; actual full decode proves duplication.",
+    "failed_events": "Turns 7, 14 and 44 stale identity safe rejection; 45/46 host preconditions project_open/project_assets_available unknown; turn 31 truncated tool response; 17 search events, empty results at 36/38/39. No pair, no neural semantic hearing, no professional acceptance. Scope digest denotes project path+timeline ID, not content identity; actual full decode proves duplication.",
     "comparison": "Prior indexed #45934918405 48 turns/17 searches/589619 reported tokens/1 output; latest 48/17/547741/2 paths but 1 digest. No causal efficiency or artistic win; direct arm had 2 distinct physical outputs but failed terminal acceptance."
   },
   "indexed_recovery_frontier_20261127": {
@@ -1422,5 +1422,38 @@
       "diagnosis": "HTTP403 recovered, checksum Electron and Vite build succeeded; later silent build-step preflight failed, exact predicate unconfirmed. One targeted same-source non-model rerun requested; do not label pass."
     },
     "next": "Complete parent hosted gates without cancelling; integrate this tested candidate and validate exact-source gates. Investigate the no-content second render and uncompleted saved edit; compare matched compositional/direct routes only after evidence and within valid scope. No replay of spent trial."
+  },
+  "indexed_duplicate_feedback_20261127": {
+    "parent": "eb565a7a3da256532d89b6b2eff6bc1edd82b919",
+    "source_blobs": {
+      "studio_next/native_creative_control.py": "c85094fefa0d1cbcde696ed2e7a7f271d46208b9",
+      "studio_next/test_native_creative_control.py": "a53f4416d0cc03cce19bc1828e75f9bca3181cc5",
+      "studio_next/native_render_evidence.py": "965f03986d55493fed8c16620222d6ca1c4d8429",
+      "studio_next/test_native_render_evidence.py": "3ad14cfa04ddb30e6b531e8f9b7dab938b67616e"
+    },
+    "negative": "Real trial duplicate export at turn 33 not explicitly identified against prior fully reviewed same-scope bytes. Existing pair gate refused completion. RED two tests, three missing contract errors.",
+    "correction": "Reuse existing scoped, invalidation-aware pair state to report current verified export matching prior reviewed bytes. Does not count new perception, suppress reads, choose edits, grant completion or infer equivalence of different encodings.",
+    "verification": "Two focused tests GREEN, controls for distinct/absent verification, unrelated scope, absent prior complete A/V review, failed read and later write. Replay of original journal shows true immediately after verify turn 33 and false after new write turn 41; pair remains absent. Affected suite 254 run/249 pass/5 missing scripts or MCP imports/zero assertion failures.",
+    "installed_parent": {
+      "head": "fd648e50d41cf17ef68815db5e42b683bae1e239",
+      "run": 45947254432,
+      "artifact": 15176330121,
+      "zip_sha256": "c90d80223d18a751256774c89246542429ea9f8bb201052689749d165573892c",
+      "tested_merge": "0b62e26f6300ac654df43d9cd7b06752fe06ce35",
+      "tree": "04e4b2c9c72b3054ac2538e7609fb94642da3b6c",
+      "local_manifest": 24,
+      "tests": 1781,
+      "passed": 1751,
+      "skipped": 30,
+      "failed": 0,
+      "local_decode": "Three complete H264 exports: mixed 320x480/57 frames/4.75s stereo AAC 48kHz; 2D 320x480/33 frames/2.75s stereo AAC 48kHz; 3D 256x256/24 frames/2s video only. Exact installed controller/session source and test blobs match parent.",
+      "hosted": {
+        "success": 28,
+        "in_progress": 1
+      },
+      "loss_aware_rerun": "SUCCESS",
+      "mlt": 45947253893
+    },
+    "next": "Advance coherent tested candidate without cancelling parent verification. Actual neural improvement, human co-edit and professional acceptance remain unproved; no new inference or grant."
   }
 }

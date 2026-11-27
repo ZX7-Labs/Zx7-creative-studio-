@@ -1061,6 +1061,39 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                                          AUDIO_ENVELOPE} for call in session.calls))
         self.assertNotIn("/private/", json.dumps(result["events"]))
 
+    async def test_duplicate_verified_revision_feedback_does_not_grant_completion(self):
+        from studio_next.native_render_evidence import (
+            AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, TIMED_FRAMES)
+        from studio_next.test_native_render_evidence import ReviewedAVPairTests
+        for duplicate in (True, False):
+            with self.subTest(duplicate=duplicate):
+                events = ReviewedAVPairTests().events()[:7]
+                if duplicate:
+                    events[6]["independently_verified_export_sha256"] = "a" * 64
+                session = FakeSession()
+                session.tools.extend(SimpleNamespace(name=name,
+                    description="Existing granted native operation",
+                    input_schema={"type": "object", "properties": {}})
+                    for name in ("export_timeline", TIMED_FRAMES, AUDIO_ENVELOPE))
+                grants = {tool.name: ("write" if tool.name in
+                    {"export_timeline", "update_text_clip"} else "read")
+                    for tool in session.tools}
+                model = ScriptedModel([decision("search", query="unrelated native action")])
+                control = NativeCreativeControl(session, model, max_turns=1,
+                    catalog_mode="indexed", host_tool_access=grants,
+                    host_content_revision_tools=("update_text_clip",),
+                    required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR))
+                control.events.extend(events)
+                control._verified_exports.update(("a" * 64, "b" * 64))
+                await control.run("Choose your own next creative action")
+                context = model.observed[0]
+                progress = context["host_verified_execution_progress"]
+                self.assertEqual(progress["current_av_export_matches_prior_reviewed_bytes"],
+                                 duplicate)
+                self.assertIn(REVIEWED_AV_PAIR, context["missing_completion_evidence"])
+                self.assertIn(TIMED_FRAMES, context["selectable_native_tools"])
+                self.assertEqual(session.calls, [])
+
     async def test_indexed_same_time_av_comparison_keeps_verified_native_reader_visible(self):
         """Failed real 120B G1 had two physically verified, already-observed
         cuts at incompatible times. The indexed Brain must be able to choose
