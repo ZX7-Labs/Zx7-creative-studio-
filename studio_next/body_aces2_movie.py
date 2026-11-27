@@ -1,10 +1,11 @@
 """Physically transform every owned Blender float32 frame via pinned OCIO ACES2.
 
 An independently decoded source-owned EXR bundle is converted from explicitly
-declared associated scene-linear CG Rec.709 to a real 16-bit RGB per-frame SDR
-display raster, then to fully decoded 10-bit ProRes YUV422. An artist must
-separately provide sound. This is not an HDR film master, a universal camera
-input transform, animation retimer, true artistic quality judge or render farm.
+declared associated scene-linear CG Rec.709 to a real 16-bit RGB per-frame
+display raster, then to fully decoded 10-bit ProRes YUV422. An explicit Rec.2100 PQ
+ACES2 view also supports a 1000-nit-target Rec.2020 HDR picture master.
+An artist separately supplies sound. No calibrated-monitor, HDR10 static
+metadata, universal camera transform or independent artistic certification.
 """
 from __future__ import annotations
 
@@ -18,13 +19,66 @@ import zipfile
 from pathlib import Path
 
 from .body_aces2_preview import (
-    _physical_config,_float_channels,SOURCE_COLOR,DISPLAY,VIEW,
+    _physical_config,_float_channels,SOURCE_COLOR,DISPLAY,VIEW,HDR_DISPLAY,HDR_VIEW,
     _MAX_EXR_FRAME_BYTES)
 from .body_exr_passes import verify_exr_bundle
 from .media_vault import MediaVault,sha256_file
 from .production_qc import full_decode_inspection
 
 _MAX_TOTAL_PIXELS=2000000
+
+
+def _encode_display_movie(rgb_path,movie,width,height,count,fps,*,display,view):
+    """Encode an already display-transformed RGB48 sequence without relighting it."""
+    if (display,view)==(DISPLAY,VIEW):
+        matrix,primaries,transfer="bt709","bt709","iec61966-2-1"
+    elif (display,view)==(HDR_DISPLAY,HDR_VIEW):
+        matrix,primaries,transfer="bt2020nc","bt2020","smpte2084"
+    else:
+        raise ValueError("Unsupported pinned ACES2 display/view pair")
+    scale_matrix="bt2020" if matrix=="bt2020nc" else matrix
+    filters=f"scale=in_range=full:out_range=limited:out_color_matrix={scale_matrix},format=yuv422p10le"
+    filters+=f",setparams=range=limited:color_primaries={primaries}:color_trc={transfer}:colorspace={matrix}"
+    cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-n",
+         "-f","rawvideo","-pixel_format","rgb48le",
+         "-video_size",f"{width}x{height}","-framerate",str(fps),
+         "-i",str(rgb_path),"-an",
+         "-vf",filters,
+         "-c:v","prores_ks","-profile:v","3",
+         "-pix_fmt","yuv422p10le","-color_range","tv",
+         "-color_primaries",primaries,"-color_trc",transfer,
+         "-colorspace",matrix,"-movflags","+write_colr"]
+    if (display,view)==(HDR_DISPLAY,HDR_VIEW):
+        # ProRes encoders may omit these frame-header fields even when MOV
+        # colr is requested. Both actual coded frames and container must agree.
+        cmd.extend(["-bsf:v","prores_metadata=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc"])
+    cmd.append(str(movie))
+    proc=subprocess.run(cmd,capture_output=True,text=True,timeout=1200)
+    if proc.returncode!=0:
+        raise RuntimeError("Real native ACES2 ProRes encode failed: "+proc.stderr[-1200:])
+    probe=subprocess.run(["ffprobe","-v","error","-count_frames",
+          "-select_streams","v:0","-show_entries",
+          "stream=codec_name,pix_fmt,nb_read_frames,r_frame_rate,color_space,color_primaries,color_transfer,color_range",
+          "-of","json",str(movie)],capture_output=True,text=True,timeout=60,check=True)
+    coded=json.loads(probe.stdout)["streams"][0]
+    if (coded.get("codec_name")!="prores" or coded.get("pix_fmt")!="yuv422p10le" or
+            coded.get("nb_read_frames")!=str(count) or
+            coded.get("r_frame_rate") not in (str(fps),str(fps)+"/1")):
+        raise ValueError("A real source frame or 10bit ProRes color stage was lost")
+    if (display,view)==(HDR_DISPLAY,HDR_VIEW):
+        expected={"color_space":matrix,"color_primaries":primaries,"color_transfer":transfer}
+        if any(coded.get(key)!=value for key,value in expected.items()):
+            raise ValueError("Encoded HDR picture lost actual Rec.2100 PQ color signaling")
+        frames=json.loads(subprocess.check_output(["ffprobe","-v","error","-select_streams","v:0",
+            "-show_frames","-show_entries","frame=color_range,color_space,color_primaries,color_transfer",
+            "-of","json",str(movie)],timeout=1200))["frames"]
+        # MOV stream-level range is not always emitted for ProRes. Verify the
+        # decoded frames instead of inferring limited range from a missing tag.
+        if len(frames)!=count or any(any(frame.get(k)!=v for k,v in
+                {**expected,"color_range":"tv"}.items()) for frame in frames):
+            raise ValueError("A decoded HDR frame lost PQ, Rec.2020 or limited-range signaling")
+        coded["color_range"]="tv"
+    return coded
 
 
 def render_aces2_scene_movie(plan_file,workspace,vault_root,output):
@@ -53,8 +107,9 @@ def render_aces2_scene_movie(plan_file,workspace,vault_root,output):
         raise ValueError("Missing trusted original VFX source identity")
     if (job["source_color_space"]!=SOURCE_COLOR or
             job["alpha_association"]!="associated_scene_linear" or
-            job["display"]!=DISPLAY or job["view"]!=VIEW):
-        raise ValueError("Only pinned ACES2 SDR original CG display transform accepted")
+            (job["display"],job["view"]) not in ((DISPLAY,VIEW),(HDR_DISPLAY,HDR_VIEW))):
+        raise ValueError("Only pinned ACES2 SDR or Rec.2100 PQ original CG display transform accepted")
+    hdr=(job["display"],job["view"])==(HDR_DISPLAY,HDR_VIEW)
     backdrop=job["scene_linear_background_rgb"]
     if (not isinstance(backdrop,list) or len(backdrop)!=3 or
             any(type(v) not in (int,float) or not math.isfinite(v)
@@ -65,7 +120,7 @@ def render_aces2_scene_movie(plan_file,workspace,vault_root,output):
                            attestation_id=source["attestation_id"])
     if observed["mime"]!="application/x-zx7-exr-bundle":
         raise ValueError("Only real graph-licensed 32f original EXR frames may be graded")
-    processor,ocio_version,ocio_config_hash=_physical_config()
+    processor,ocio_version,ocio_config_hash=_physical_config(job["display"],job["view"])
     dest.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".zx7-aces2-movie-",dir=root) as temp:
         private=Path(temp)
@@ -116,7 +171,7 @@ def render_aces2_scene_movie(plan_file,workspace,vault_root,output):
                         result=rgb if produced is None else produced
                         if len(result)!=3 or any(not math.isfinite(float(x))
                                                  for x in result):
-                            raise ValueError("Real ACES2 created invalid SDR RGB")
+                            raise ValueError("Real ACES2 created invalid display RGB")
                         mapped[pixel]=result
                     # From actual OCIO float pixels, preserve more than eight
                     # bits before FFmpeg's 10-bit ProRes 422 quantization.
@@ -127,32 +182,9 @@ def render_aces2_scene_movie(plan_file,workspace,vault_root,output):
             expected_raw=width*height*count*6
             if rgb_path.stat().st_size!=expected_raw:
                 raise ValueError("Scene RGB48 raster lost real pixel data")
-        movie=private/"verified-aces2-sdr-scene.mov"
-        cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-n",
-             "-f","rawvideo","-pixel_format","rgb48le",
-             "-video_size",f"{width}x{height}","-framerate",str(fps),
-             "-i",str(rgb_path),"-an",
-             "-vf","scale=in_range=full:out_range=limited:out_color_matrix=bt709,format=yuv422p10le",
-             "-c:v","prores_ks","-profile:v","3",
-             "-pix_fmt","yuv422p10le","-color_range","tv",
-             "-color_primaries","bt709","-color_trc","iec61966-2-1",
-             "-colorspace","bt709","-movflags","+write_colr",str(movie)]
-        proc=subprocess.run(cmd,capture_output=True,text=True,timeout=1200)
-        if proc.returncode!=0:
-            raise RuntimeError("Real native ACES2 ProRes encode failed: "+
-                               proc.stderr[-1200:])
-        probe=subprocess.run(["ffprobe","-v","error","-count_frames",
-              "-select_streams","v:0","-show_entries",
-              "stream=codec_name,pix_fmt,nb_read_frames,r_frame_rate",
-              "-of","json",str(movie)],
-              capture_output=True,text=True,timeout=60,check=True)
-        coded=json.loads(probe.stdout)["streams"][0]
-        if (coded.get("codec_name")!="prores" or
-                coded.get("pix_fmt")!="yuv422p10le" or
-                coded.get("nb_read_frames")!=str(count) or
-                coded.get("r_frame_rate") not in (
-                    str(fps),str(fps)+"/1")):
-            raise ValueError("A real source frame or 10bit ProRes color stage was lost")
+        movie=private/"verified-aces2-display-scene.mov"
+        coded=_encode_display_movie(rgb_path,movie,width,height,count,fps,
+                                    display=job["display"],view=job["view"])
         qa=full_decode_inspection(movie,expected={
             "width":width,"height":height,
             "duration_seconds":count/fps,"require_audio":False})
@@ -173,7 +205,11 @@ def render_aces2_scene_movie(plan_file,workspace,vault_root,output):
             "bytes":dest.stat().st_size,"source_exr_sha256":source["asset_id"],
             "original_frames":count,"fps":fps,
             "real_ocio_config_sha256":ocio_config_hash,
-            "actual_10bit_prores_sdr_scene":True,
+            "actual_10bit_prores_sdr_scene":not hdr,
+            "actual_10bit_prores_rec2100_pq_scene":hdr,
+            "actual_display":job["display"],"actual_view":job["view"],
+            "decoded_color_signaling":{key:coded.get(key) for key in
+                ("color_space","color_primaries","color_transfer","color_range","pix_fmt")},
             "source_soundtrack_intentionally_absent":True,
             "real_original_aces2_frame_transform":True,
             "hdr_master_or_full_professional_grade_certified":False,

@@ -1048,134 +1048,9 @@
   }
  },
  "perception_and_exact_lookup_20261127": {
-  "parent": "21bac3469fe6d87c630fd66178f5c17796b3810e",
-  "previous_exact_head_ci": {
-   "success": 28,
-   "failure": 1,
-   "failed_run": 45939750087,
-   "failed_job": 140311086464,
-   "reason": "Europe PMC repeated timeout after bounded retry; 31 offline research tests passed. Do not weaken live gate or rerun blindly."
-  },
-  "visual": {
-   "model": "NVIDIA Super VL",
-   "source": "95eb692104bc88d042f7203a90ea6b9121b6f4f6",
-   "script_blob": "74e302d369fa1709a0ddfe6b7ecbf593dabd07df",
-   "run": 45941783748,
-   "job": 140317496319,
-   "artifact": 15173003314,
-   "sha256": "fa09a74be694c973e9b55e4f3c7aa85970adc5e1203c0fa422e2735b13ac28df",
-   "retired_trigger": "eea64016d32165400a576a5dacea88f0ef706891",
-   "passed": 5,
-   "cases": 5,
-   "reported_tokens": 15047,
-   "model_wall_ms": 29442.041,
-   "independent": "ZIP SHA/CRC; five full MP4 decodes; 15 PNG hashes and independent RGB equality; numeric audio peaks and case oracle verified. Aligned, offset, sound-only, neither, picture-only typed observations.",
-   "limits": "Basic sampled visual and numeric audio-bin recognition only; no continuous motion, semantic listening, full artistic or G1 acceptance."
-  },
-  "raw_audio": {
-   "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-   "source": "aa8c21526f6f12dab636f61ef5becfb59b3fd5db",
-   "script_blob": "1ce7960163fc918db11978d9082a58ac0407b6f4",
-   "run": 45942171828,
-   "job": 140318717014,
-   "artifact": 15173153626,
-   "sha256": "8c1540adbf8787325ac077d1c3c9d1d29fed8aed7d19b09e4b1f4b49524144c6",
-   "retired_trigger": "e0fc18741813bccd12ac1daab9e16006e226adce",
-   "offline_tests_passed": 47,
-   "passed": 1,
-   "cases": 4,
-   "reported_tokens": 4351,
-   "model_wall_ms": 4375.409,
-   "expected_hz": [
-    [
-     880,
-     440
-    ],
-    [
-     0,
-     0
-    ],
-    [
-     440,
-     880
-    ],
-    [
-     440,
-     440
-    ]
-   ],
-   "observations": [
-    "rising",
-    "silent then high/rising",
-    "rising",
-    "rising"
-   ],
-   "independent": "ZIP SHA/CRC; all four full MP4 decodes; source and WAV receipt hashes; independent 16kHz mono 2s PCM byte-identical to retained WAV, FFT verifies pitch and silence. Typed transport succeeded; wrong model reports remain failure.",
-   "limits": "Single four-case calibration at this model and prompt; no proven semantic hearing, no cause attribution between service internals/model. No blind retry."
-  },
-  "index": {
-   "hypothesis": "17 indexed searches returned 101 name occurrences, 23 distinct, 78 repeats. Exact already-granted IDs can reduce discovery ambiguity without full schema dump. Genuine efficiency not yet measured.",
-   "source_blobs": {
-    "studio_next/capability_fabric.py": "8dd3cac29c9308f4970b64480b2c4ee2c5e187e9",
-    "studio_next/native_creative_control.py": "7b343d1100a4cf9c92bc492aa2d9bdcf25c6888c",
-    "studio_next/test_capability_fabric.py": "39f5f44f181d91670f76c1476ef48f7ae90c36b4",
-    "studio_next/test_native_creative_control.py": "c014d18b96d8f3c64aa5cdb290772d0e2ee27a50"
-   },
-   "change": "Complete or absent retrieval-only exact ID index, <=48 operations, <=4096 serialized bytes, queryable <=160 byte IDs; no new schema, grant or dispatch. Large catalog unchanged.",
-   "red": "Missing exact_lookup_index and model context field",
-   "green": "Three focused tests passed including large catalog no dump; unselected invoke blocked; exact lookup collision qualification and bounds tested.",
-   "local": {
-    "run": 250,
-    "passed": 243,
-    "environment_errors": 7,
-    "assertion_failures": 0,
-    "limits": "Reconstructed exact parent blobs; absent MCP SDK, repository scripts and example config; no full checkout."
-   },
-   "hosted": {
-    "head": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
-    "counts": {
-     "success": 28,
-     "in_progress": 1
-    },
-    "installed": {
-     "run": 45942606959,
-     "artifact": 15174550542,
-     "sha256": "47d53ab4716c683965ba41832323d8a9815234097facb64d53b0c9851788e788",
-     "merge_commit": "10afc0a827195f3d7e5d3ae90a3d271af1ee87a4",
-     "exact_tree_equivalence": true,
-     "manifest_verified": 24,
-     "tests_run": 1775,
-     "passed": 1745,
-     "skipped": 30,
-     "failures": 0
-    },
-    "native_conflict": "Installed cross-process job 140320939079 initially refused stale add_assets_to_timeline at commit boundary; targeted unchanged-source retry successful. No proof exact cause; no safety relaxation."
-   },
-   "genuine_model_benefit": false
-  },
-  "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality.",
-  "speech": {
-   "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-   "run": 45944055906,
-   "job": 140324606233,
-   "source": "b282fd85606c38b87be2411833f092fe628da6a3",
-   "script_blob": "5a3ea4893b1a2364386996329ba02bae54a5d444",
-   "retired_trigger": "b0afff228fbf84f32a18e03252ec3bec59ee75e5",
-   "artifact": 15174256003,
-   "sha256": "a71c16e0191a302d53ff091b8a154bb3f27b8b09786fea99a3362d32af6c2352",
-   "passed": 4,
-   "cases": 4,
-   "reported_tokens": 3785,
-   "model_wall_ms": 5219.613,
-   "observations": [
-    "silver moon",
-    "",
-    "paper boat",
-    "winter rain"
-   ],
-   "independent": "ZIP CRC/SHA verified, four complete physical MP4 decodes and WAV+PCM hashes match; independent 16kHz mono decode byte-identical. Silence RMS zero.",
-   "limits": "Short English synthetic speech/silence discrimination only. Prior pitch failure stands; no general musical or artistic competence inferred."
-  }
+  "retained_in": "EVIDENCE/INDEX.md#retained-historical-perception-and-exact-lookup-structured-receipt",
+  "original_ledger_blob": "566c8d86dd1097e88fa4e3d2f5686ea2c37c4701",
+  "summary": "Visual calibration passed basic sampled/numeric tasks; raw audio pitch failed, speech calibration passed only short synthetic English. Exact lookup correction retained, no professional semantic acceptance."
  },
  "compositional_measurement_20261127": {
   "parent": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
@@ -1527,5 +1402,52 @@
    "blob": "739a9aa118a82fe8382d350be78e1282c4288c21",
    "scope": "Extend existing native source-pinned Electron integration, only editorial source. Two invalid placements through model-facing trusted gateway, verify public receipt and no native clip, actual imported asset/project read, existing valid placement applied once. Inspect gateway write states and real clip count. Scripted technical proof, not genuine model or human. New async block syntax checked locally; full physical execution pending hosted."
   }
+ },
+ "field_f_hdr_picture_20261127": {
+  "parent": "f2da4f904981ccb56a4f4b4acbc7405158734c9c",
+  "domain": "F",
+  "outcome": "Extend existing real owner EXR-to-ProRes instrument to explicitly selected ACES2 Rec.2100 PQ 1000-nit-target Rec.2020 picture delivery, keeping SDR and separate audio. New capability, no second renderer, no model-specific behavior or preset art.",
+  "upstream": {
+   "url": "https://github.com/AcademySoftwareFoundation/OpenColorIO/blob/v2.5.0/src/OpenColorIO/builtinconfigs/configs/cg-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio",
+   "blob": "6abfcf9cd10dad204d519725d9925239aca767e0",
+   "display": "Rec.2100-PQ - Display",
+   "view": "ACES 2.0 - HDR 1000 nits (Rec.2020)"
+  },
+  "source_blobs": {
+   "studio_next/body_aces2_movie.py": "f70058d92f5e4451fb34931a56ebc85cbd2e9ed9",
+   "studio_next/body_aces2_preview.py": "d1fe5750b4b09241f6a08ee0f025643a7fd7a967",
+   "studio_next/body_document_schemas.py": "73c0109531af349c63107819cfdc53194c256f47",
+   "studio_next/body_integration.py": "5865097bcce2705274a32db97757e8958c6e7a06",
+   "studio_next/test_body_aces2_movie.py": "a704e2067f1272493d05f6ed0a49f276d538bee2"
+  },
+  "negative_controls": "Initial RED: missing codec route; actual FFmpeg 7.1.5 rejects bt2020nc scale enum (bt2020 required), then encoder omitted stream primaries/PQ despite requested tags. Frame-header bitstream filter alone did not fix MOV stream. SDR raw codec also omitted primaries on this version. Correct fixed allowlisted scale matrix, setparams per-frame color and range, HDR ProRes metadata and independent stream+every-frame validation. Wrong display/view pairs rejected before encoding.",
+  "local": {
+   "focused": 4,
+   "focused_pass": 4,
+   "affected_run": 24,
+   "pass": 15,
+   "skip": 9,
+   "fail": 0,
+   "actual": "Three-frame 96x32 12fps 10-bit ProRes422 HQ; actual decoded ST2084 grayscale patches 0/1/10/100/400/1000 nits target (code-value oracle tolerance 3) and independently calculated Rec.2020 chroma (tolerance 4), all native frame tags; SDR real 2-frame decode and schema controls passed.",
+   "limits": "No OpenEXR/OCIO/Blender stack in local runtime; package install unavailable. New native EXR->ACES2 PQ->ProRes test uses actual native Blender, original source rights and separate processor/luma oracle; hosted proof not yet run. Existing 2M total-pixel session bound, picture only, no calibrated monitor/HDR10 static metadata or independent field acceptance."
+  },
+  "previous_parent": {
+   "head": "95d841a46af61e9b0c2beafdfd0971ad61e8474d",
+   "hosted": {
+    "success": 28,
+    "failure": 1
+   },
+   "failure": "Europe PMC live research",
+   "artifact": 15178505885,
+   "zip_sha256": "17aa042a3f071296a7529bc908d386d7a2badb769f41d1788155cccaff3a591f",
+   "manifest": 24,
+   "tests_run": 1789,
+   "pass": 1759,
+   "skip": 30,
+   "fail": 0,
+   "full_decodes": 3,
+   "merge_tree": "a0bf1439258f05c66b696e9bc5b776f87b4813ca"
+  },
+  "next": "Run isolated real native stack physical proof of new field capability without cancelling active canonical hosted gates. Integrate verified capability with exact branch lease when stable. Continue independent A-L capabilities, preserve G1 actual creative and human acceptance; no new paid model, no claim F accepted."
  }
 }

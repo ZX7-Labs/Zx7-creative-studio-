@@ -1036,8 +1036,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "write",bool(shutil.which("blender") and
                       importlib.util.find_spec("OpenEXR") is not None),
         ["scene_json","out"],render_checkpointed_exr)
-    add("body.aces2_movie","actual owned ACES2 scene-linear EXR to 10bit SDR movie",
-        "Every licensed native RGBA frame receives pinned OCIO2.5 ACES2 view on 16-bit RGB and real ProRes422 10bit encoding; SDR VFX review without audio, not HDR or aesthetic certification",
+    add("body.aces2_movie","actual owned ACES2 scene-linear EXR to 10bit SDR or PQ HDR movie",
+        "Every licensed native RGBA frame receives the selected pinned OCIO2.5 ACES2 view and 16-bit RGB to real ProRes422 10bit encoding; SDR or Rec.2100 PQ / 1000-nit-target Rec.2020 HDR picture, no soundtrack or independent mastering-monitor or artistic certification",
         "write",bool(shutil.which("ffmpeg") and shutil.which("ffprobe") and
                      importlib.util.find_spec("OpenEXR") and
                      importlib.util.find_spec("PyOpenColorIO") and

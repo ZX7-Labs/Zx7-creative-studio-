@@ -368,7 +368,9 @@ _SCHEMAS["body.planar_insert"]=("plan",obj({"media":SOURCE,"overlay":SOURCE,
 _ACES={"source":SOURCE,"source_color_space":choice("Linear Rec.709 (sRGB)"),
     "alpha_association":choice("associated_scene_linear"),"scene_linear_background_rgb":_RGB,
     "display":choice("sRGB - Display"),"view":choice("ACES 2.0 - SDR 100 nits (Rec.709)")}
-_SCHEMAS["body.aces2_movie"]=("plan",obj(_ACES))
+_SCHEMAS["body.aces2_movie"]=("plan",{"oneOf":[obj(_ACES),obj({**_ACES,
+    "display":choice("Rec.2100-PQ - Display"),
+    "view":choice("ACES 2.0 - HDR 1000 nits (Rec.2020)")})]})
 _SCHEMAS["body.aces2_preview"]=("plan",obj({**_ACES,"frame_index":SIZE}))
 _INDEX=number(0,integer=True)
 _DELTA=number(-2000000,2000000,integer=True)
