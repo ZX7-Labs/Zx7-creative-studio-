@@ -546,12 +546,53 @@ async def exercise(options):
         assert missing.is_error, missing
         assert missing.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
         assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
+        # Exercise the same trusted gateway path used by the Brain, not only
+        # the raw bridge receipt. The editor is the real source-pinned writer.
+        placement_session = session
+        if editorial_source:
+            from studio_next.native_editor_identity import pinned_native_editor_identity_policy
+            from studio_next.body_editor_client import host_pre_dispatch_rejection
+            placement_policy = pinned_native_editor_identity_policy(options.source, tools, session)
+            assert placement_policy and {"add_asset_to_timeline", "add_assets_to_timeline"}.issubset(
+                placement_policy["fence"])
+            placement_gateway = CapabilityGateway(
+                {"editor": (session, tools, {}, None, {}, placement_policy)},
+                trusted_pre_dispatch_sources=("editor",))
+            await placement_gateway.refresh()
+            placement_session = CapabilityGatewayMcpSession(placement_gateway, "editor",
+                require_model_native_observation=True)
+            await call(placement_session, "get_project")
+            for tool_name, proposal in (
+                    ("add_assets_to_timeline", {"assetNames": ["source.mp4", "not-imported.mp4"],
+                                                "previewOnly": False}),
+                    ("add_asset_to_timeline", {"assetName": "not-imported.mp4", "previewOnly": False})):
+                denied = await placement_session.call_tool(tool_name, proposal)
+                assert denied.is_error, denied
+                assert host_pre_dispatch_rejection(denied, tool_name, proposal) == "placement_plan_unconfirmed", denied
+                assert placement_gateway.evidence()[-1]["state"] == "host_rejected_no_native_write"
+            assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
+            # Independent fixture choices, not an automatic retry or a model.
+            # Observe the actual imported asset and project before the valid edit.
+            imported = await call(placement_session, "get_assets", {"limit": 100})
+            assert {item["name"] for item in imported["assets"]}.issuperset({"source.mp4", "tone.wav"})
+            await call(placement_session, "get_project")
         timeline = await call(session, "get_timeline", {"includeClips": False})
         picture_track = next(track["id"] for track in timeline["tracks"] if track["type"] == "video")
-        await call(session, "add_assets_to_timeline", {"assetNames": ["source.mp4"],
+        await call(placement_session, "add_assets_to_timeline", {"assetNames": ["source.mp4"],
             "trackStrategy": "singleTrack", "trackId": picture_track, "startSeconds": 0,
             "includeAudio": False, "previewOnly": False})
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 1)
+        if editorial_source:
+            writes = [event["state"] for event in placement_gateway.evidence() if event["access"] == "write"]
+            assert writes == ["host_rejected_no_native_write", "host_rejected_no_native_write",
+                              "host_reported_success_unverified"], writes
+            print("ACTUAL_NATIVE_GATEWAY_PLACEMENT_RECOVERY " + json.dumps({
+                "two_source_pinned_refusals_no_timeline_edit": True,
+                "fresh_native_asset_and_project_read": True,
+                "one_subsequent_model_facing_fixture_placement_ack": True,
+                "one_real_native_clip_observed": True,
+                "real_neural_or_artistic_proof": False,
+            }, sort_keys=True), flush=True)
         await call(session, "add_asset_to_timeline", {"assetName": "tone.wav", "startSeconds": 0, "previewOnly": False})
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 2)
         await call(session, "add_track", {"type": "video", "name": "Editable title", "previewOnly": False})

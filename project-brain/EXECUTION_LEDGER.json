@@ -1489,8 +1489,8 @@
   },
   "hosted_parent": {
    "observed": {
-    "success": 25,
-    "in_progress": 3,
+    "success": 26,
+    "in_progress": 2,
     "failure": 1
    },
    "real_sdk": {
@@ -1518,10 +1518,14 @@
    },
    "running": [
     45952719857,
-    45952719639,
-    45952719866
+    45952719639
    ]
   },
-  "next": "Preserve pending exact parent physical/installed/MLT gates, integrate this tested candidate with exact head lease after terminal. Review actual provider availability and native placement preview cause without guessing from redacted journal. Genuine G1, human coedit, G2, A-L professional and release acceptance remain open; no new model spend."
+  "next": "Preserve pending exact parent physical/installed/MLT gates, integrate this tested candidate with exact head lease after terminal. Review actual provider availability and native placement preview cause without guessing from redacted journal. Genuine G1, human coedit, G2, A-L professional and release acceptance remain open; no new model spend.",
+  "physical_fixture": {
+   "path": "engines/velorn/mcp-e2e.py",
+   "blob": "739a9aa118a82fe8382d350be78e1282c4288c21",
+   "scope": "Extend existing native source-pinned Electron integration, only editorial source. Two invalid placements through model-facing trusted gateway, verify public receipt and no native clip, actual imported asset/project read, existing valid placement applied once. Inspect gateway write states and real clip count. Scripted technical proof, not genuine model or human. New async block syntax checked locally; full physical execution pending hosted."
+  }
  }
 }

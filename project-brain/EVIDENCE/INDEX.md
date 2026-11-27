@@ -437,3 +437,6 @@ Original ledger blob `fdfef087c1d7603731d2e96fab969f04cbff7e34`; exact original 
   }
 }
 ```
+
+
+Physical recovery fixture source blob `739a9aa118a82fe8382d350be78e1282c4288c21`: two actual denied native source placements through model-facing trusted gateway, fresh asset/project reads, subsequent independently selected fixture placement on existing native timeline. Asserts no clip on denial and exactly one subsequent acknowledged write and observed clip. New async block syntax checked, actual Electron execution NOT yet run on candidate. Parent observed {"success":26,"in_progress":2,"failure":1}. No new inference.
