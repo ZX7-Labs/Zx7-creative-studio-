@@ -115,12 +115,21 @@ jobs:
           cd "$editor"
           bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
           npm run build
-          test -s dist/index.html
+          test -s dist/index.html || { echo 'Atomic range build: missing or empty dist/index.html' >&2; exit 1; }
           helper="$PWD/node_modules/electron/dist/chrome-sandbox"
-          test -f "$helper"
+          test -f "$helper" || { echo 'Atomic range build: missing Electron sandbox helper' >&2; exit 1; }
+          echo 'Atomic range build: configure root-owned setuid sandbox helper'
           sudo chown root:root -- "$helper"
           sudo chmod 4755 -- "$helper"
-          test "$(xvfb-run -a node_modules/electron/dist/electron --version)" = "v45.2.3"
+          echo 'Atomic range build: verify exact Electron executable under Xvfb'
+          if version=$(xvfb-run -a node_modules/electron/dist/electron --version); then
+            printf 'Electron version stdout: %q\n' "$version"
+          else
+            status=$?
+            printf 'Electron version probe failed (exit %s, stdout %q)\n' "$status" "$version" >&2
+            exit "$status"
+          fi
+          test "$version" = "v45.2.3" || { echo 'Atomic range build: unexpected Electron version' >&2; exit 1; }
       - name: Actual native linked A/V ripple, source revision refusal, reopen and decoded media
         run: |
           python -u engines/velorn/mcp-e2e.py \

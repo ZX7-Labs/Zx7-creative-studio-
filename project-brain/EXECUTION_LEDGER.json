@@ -1363,5 +1363,48 @@
    }
   },
   "limits": "No measured genuine model turn/token savings, no semantic/creative/release acceptance, no new live model trial or private egress."
+ },
+ "parent_installed_and_atomic_diagnostics_20261127": {
+  "parent": "f036a1552af2b6080344e4e840c5b6d35727c207",
+  "observed_matrix": {
+   "success": 27,
+   "failure": 1,
+   "in_progress": 1
+  },
+  "installed": {
+   "run": 46023937134,
+   "job": 140590354038,
+   "independent_ci_job": 140600975851,
+   "artifact": 15212611150,
+   "sha256": "ce8a9462762794d03f9651ff086df02f5e9a9ead276c9ea74a9c16913689657e",
+   "local_crc_ok": true,
+   "manifest_matched": 24,
+   "manifest_total": 24,
+   "local_full_decodes": 3,
+   "tests_run": 1814,
+   "tests_passed": 1782,
+   "tests_skipped": 32,
+   "tests_failed": 0,
+   "tests_errors": 0,
+   "merge_source": "85b8e91dcf778ed5d0528e735ec77afd8a58a438",
+   "exact_tree": "5b8fbed418a02e746243f6a763ffeebda0996d86",
+   "limits": "Installed technical proof, no independent professional acceptance."
+  },
+  "pending": {
+   "run": 46023937016,
+   "job": 140590479244,
+   "step": "Run every existing and new studio application contract on this exact branch"
+  },
+  "atomic_range": {
+   "failed_run": 46023936864,
+   "failed_job": 140591531636,
+   "prior_success_run": 46007163085,
+   "prior_success_job": 140533459148,
+   "observed": "Vite build succeeded; silent post-build checks exit 1; previous exact guard passed. No exact failed command/cause established.",
+   "workflow_blob": "da5b964e6ebb1e349c50200e9e73e4050d6a5b00",
+   "change": "Report missing index/helper, sandbox permission stage, actual version stdout, subprocess exit code and mismatch. Retain exact version and sandbox requirements; explicitly fail nonzero probe even if stdout matches.",
+   "local_verification": "bash -n and six shell fixture cases (missing index/helper, chmod/chown-stage refusal, nonzero version command, wrong version, exact positive). Not real Electron proof.",
+   "limits": "No root-cause resolution or guard weakening claimed. Require actual hosted retry with diagnostics and native physical proof."
+  }
  }
 }
