@@ -1039,7 +1039,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Read only an owner-owned source graph from private creative-graphs/, with SHA and complete authored node/curve data for new non-destructive revisions; no arbitrary owner JSON or executable file read",
         "read",True,["plan"],read_authored_visual)
     add("body.visual_graph","editable native photo, motion graphic and VFX pixel graph",
-        "Authored mathematical pixels, masks, original-frame curves, inverse spatial sampling, convolution and alpha compositing; "
+        "Authored mathematical pixels, animated cubic path masks with explicit winding/holes, original-frame curves, inverse spatial sampling, convolution and alpha compositing; "
         "float32 linear-sRGB internals, sealed sources, exact RGBA PNG/MOV or float32 EXR (requires OpenEXR 3.3+); separate editable audio",
         "write",bool(video_io and all(importlib.util.find_spec(name) is not None for name in ("numpy","PIL"))),
         ["plan","out"],render_visual)

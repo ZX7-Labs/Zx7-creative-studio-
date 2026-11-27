@@ -82,7 +82,7 @@
    "id": "D",
    "slug": "2d_graphic_vector_photo_typography",
    "implementation": "scoped_foundations_present",
-   "technical_evidence": "editable visual graph to native film tested; full typography/motion/masks craft unproved",
+   "technical_evidence": "Editable native animated cubic contour mask, independent alpha/geometry checks and actual PNG/MOV render; original preserved and excerpt exact; full creative field and professional acceptance unproven.",
    "independent_field_acceptance": "NOT_ACCEPTED",
    "owner_source_paths": [
     "body_visual_graph.py",
@@ -1420,5 +1420,36 @@
   "request": "ZX7_SUPER_VL_G1_WIRE_PLACEMENT_20261127",
   "authority": "Prior bounded owner consent, exact synthetic brief and grant profile, no private media or expanded grant, 48-turn Super VL",
   "status": "in_progress observed after native pinned editor build; no acceptance inferred; inspect final evidence without blind replay"
+ },
+ "field_d_path_mask_20261127": {
+  "scope": "Field D: existing editable visual graph path_mask primitive, animated cubic contours in original canvas pixels, straight closure, evenodd/nonzero fill, invert; multiply associated RGBA without flattening source. Not automatic segmentation/tracking or a professional UI.",
+  "source_blobs": {
+   "studio_next/body_visual_graph.py": "039a7ef29a76520ead6af1782028f1d5853f523e",
+   "studio_next/body_visual_contract.py": "0a7fc79f5525b65da82606396030e04a7e17072f",
+   "studio_next/body_integration.py": "ea625266c7cf88500ec6f52322c541bda484653a",
+   "studio_next/test_body_path_mask.py": "8522842a4561baba794e7dd210201504e4cdf348"
+  },
+  "controls": "512 authored segments, 4096 flattened edges, finite +/-1e6 coordinate, 1/32-pixel cubic deviation bound, half-open scanline winding, 8x8 subpixel samples, combined frame work budget; explicit remap for unequal source size.",
+  "red": "5 focused cases failed before new primitive existed.",
+  "green": "26/26 affected local tests incl 6 new independent geometry, coverage, holes, animation and immutable PNG revision; actual RGBA MOV 8 distinct frames, 3-frame excerpt exact pixel-hash equality. Source/contract/test remote hashes equal tested local blobs.",
+  "limitations": "Finite sampled edge coverage, bounded contour complexity, no feather-specific UI, automatic tracking or independent field acceptance. Combined hosted proof pending."
+ },
+ "latest_integrated_fg_audit_20261127": {
+  "source": "66b4465baa1405197ff9c886b9e47c2e47d0e423",
+  "tree": "931492ce7b8d67abe7f772fa72c76ad38213e422",
+  "hosted": "29/29 success",
+  "installed_run": 46007162992,
+  "artifact": 15203156105,
+  "sha256": "962a8777a6be7b71db77435d55f8dccaa948253a64f2401bdcd97206a62d81e6",
+  "tested_merge": "0f07258bbfdadcc3b22b84fe8f0647ec8c5305dd",
+  "tree_equal": true,
+  "manifest": "24/24",
+  "full_decodes": 3,
+  "tests": {
+   "total": 1800,
+   "passed": 1769,
+   "skipped": 31,
+   "failed": 0
+  }
  }
 }
