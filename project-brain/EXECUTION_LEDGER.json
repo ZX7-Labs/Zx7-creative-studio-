@@ -674,106 +674,6 @@
    "local_redownload_verified": false
   }
  },
- "latest_artifact_audit_20261126": {
-  "head": "642565f1252f10caf65a1aa6f434672d25dcc3ba",
-  "main": "716c226ab7cb24e5a662229d951bf7f8bc17a28f",
-  "workflow_success": 29,
-  "installed": {
-   "run": 45740635402,
-   "tests": 1736,
-   "pass": 1706,
-   "skip": 30,
-   "artifact": 15082046544,
-   "zip_sha256": "7b3182e3c55ba123c273e842f77e67e571f37a7946489d90e7ff0ffe5d9ea621",
-   "manifest_pass": 24,
-   "ffmpeg_decode_pass": 3
-  },
-  "mlt": {
-   "run": 45740635652,
-   "tests": 1736,
-   "pass": 1735,
-   "skip": 1
-  },
-  "electron": 45740635512,
-  "browser": 45740635468,
-  "model_jobs_skipped": [
-   45740635638,
-   45740635629
-  ],
-  "failed_real_runs": [
-   {
-    "run": 45738534918,
-    "artifact": 15081186723,
-    "zip_sha256": "3fa8af4f57d0e3a29ea8145bcfaf45c8427293e7eaefa30bb6c9ea68b652c43d",
-    "write_acks": 7,
-    "verified_exports": 0,
-    "terminal": "native_render_snapshot_failed"
-   },
-   {
-    "run": 45740294453,
-    "artifact": 15081337311,
-    "zip_sha256": "06cc972bfe825ce5d0fa280a2256593433f6e79ffe622d1303a402ddee286a11",
-    "write_acks": 6,
-    "verified_exports": 0,
-    "terminal": "stale identity cleared project snapshot; turn 23 preview rejected",
-    "correction": "Refuse source-bound image preview before dispatch without trusted project observation; model selects get_project; retain exact JPEG/identity validation.",
-    "regression": "added; execution pending"
-   }
-  ],
-  "acceptance": "G1/G1-HUMAN/G2/G3/G4 OPEN; no new cloud consent or independent acceptance"
- },
- "live_branch_ancestry_20261126": {
-  "status": "ALL_REF_SOURCE_COMPARISON_NOT_PRODUCT_ACCEPTANCE",
-  "baseline": "2b626445ecabd3a2837ac549a98ba9dcda94b96d",
-  "run": 45737776415,
-  "artifact": 15079562880,
-  "zip_sha256": "9af70a197570059aadbe4f8f726bb1bb1bfca2c9c508ca4366495f521825a468",
-  "refs": 472,
-  "snapshot_refs": 459,
-  "ancestor": 149,
-  "identical": 1,
-  "ahead_audit_only": 1,
-  "diverged": 321,
-  "unique_old_missing_code_sets": 17,
-  "old_stack_branches_same_7_path_set": 48,
-  "pr189_old_absent_names": 43,
-  "no_bulk_merge": true,
-  "evidence": "project-brain/EVIDENCE/2026-11-26-BRANCH-ANCESTRY-AND-NATIVE-SAVE-CUSTODY.md",
-  "current_refs": 478,
-  "additional_refs_compared": 6,
-  "followup_source": "642565f1252f10caf65a1aa6f434672d25dcc3ba"
- },
- "g1_autosave_custody_20261126": {
-  "status": "PHYSICAL_INSTALLED_PASS_GENUINE_MODEL_NOT_ACCEPTED",
-  "real_run": 45735804964,
-  "real_artifact": 15078888361,
-  "zip_sha256": "97fde7d322af5b09e5338313e0964d2c271e65776a395947cce8a5a9fe2e83a2",
-  "native_write_acks": 7,
-  "first_export_ack": true,
-  "verified_movie": false,
-  "three_real_autosaves_same_non_clock_content_sha": "14ba70dcfe274ee70cb865485ebb2b01e5a98b4e409e7eb8feb09ab21a36e6f1",
-  "exact_green": "94d33d6c5919b6af02c85783d0456b42455acb46",
-  "red_green_run": 45739025215,
-  "adjacent_pass": 185,
-  "preservation": "Only 2 editor modified clocks may change between real model save and render; all creative and original media SHA stay equal; save witnesses separate from native rendered-revision registry.",
-  "no_automatic_write_replay": true,
-  "full_g1": "NOT_ACCEPTED",
-  "physical_e2e_run": 45740635512
- },
- "g1_post_review_second_export_guard_20261125": {
-  "source": "61cce9a78b44986e282102260c421d0df6204685",
-  "real_negative_run": 45632856001,
-  "real_negative_artifact": 15033430161,
-  "source_event": "second export was model-selected and host-ACKed after verified first picture/audio, but before any post-review native content revision; capture did not attest a distinct saved native source",
-  "scope": "Strict reviewed A/V, after first physically verified, frame-and-full-audio-observed export; reject second committed export until model-selected content revision (no automatic edit or write retry).",
-  "red": "2998ddd22388d9882aa7b4e46d55754188cd20d6",
-  "green": "61cce9a78b44986e282102260c421d0df6204685",
-  "run": 45666106360,
-  "red_failure": 1,
-  "adjacent_green_tests": 193,
-  "real_model_retest": "NOT_RUN",
-  "professional_quality": "NOT_ACCEPTED"
- },
  "consolidation": {
   "owner_priority": "2026-11-26",
   "working_branch": "workstream/g1-existing-owner-project-av-snapshot-20261115",
@@ -926,131 +826,6 @@
   "retirement": "NOT_READY_FOR_DELETE",
   "consent": "unchanged synthetic-only bounded policy",
   "proof": "no gate accepted by documentation"
- },
- "critical_path_coordination_20261127": {
-  "baseline": "c02c2d0b6989eed4b0a9e7232ba79c2e18012221",
-  "source_blobs": {
-   "studio_next/native_render_evidence.py": "bf734855f314bf0d992ed11ba86bab6012f1ccda",
-   "studio_next/native_creative_control.py": "aa6709dc61f8c83f904f747fa3050bce61ae4527",
-   "studio_next/native_creative_audit.py": "72c7be04bf3562ef96531cd0c70fe7f589732e28",
-   "studio_next/body_editor_mcp.py": "ecaaceea4883cde93724f68cd7812a6f7a9e0ee9",
-   "studio_next/test_body_editor_mcp.py": "42beba2ac3c0fd655c715487f3605e5a013564de",
-   "studio_next/test_native_creative_control.py": "56c1de9049586333b553bea8d867ede8622925c2"
-  },
-  "causal_gap": "Existing model-selected AV window delivered source-bound frames and numeric PCM but strict pair gate credited only separate frame/audio calls.",
-  "matched_control": {
-   "decision_turns": 10,
-   "native_calls": 9
-  },
-  "matched_candidate": {
-   "decision_turns": 8,
-   "native_calls": 7
-  },
-  "scope": "Scripted identical evidence fixture only; 20% fewer decision turns, not measured neural speed/cost or artistic quality.",
-  "red": "Combined full coverage exhausted budget on baseline; separate route passed.",
-  "green": "Both routes accepted technical pair, partial/overstated coverage rejected; altered receipt values refused by auditor.",
-  "local": {
-   "eligible_tests": 201,
-   "passed": 201,
-   "limitations": "Broader runs had missing MCP SDK (3) and repository-only scripts (2); not full suite. Added real decoder MCP comparison awaiting CI."
-  },
-  "acceptance": {
-   "professional": false,
-   "genuine_model": false,
-   "exact_source_ci": "29/29 workflows SUCCESS at f676146e7a95da42fd39eb62d72154e2bce1af54; actual model jobs skipped"
-  },
-  "guard": "Existing grants, model-selected action, frame separation, verified duration, actual PCM and hash binding; no semantic listening or approval inferred. No new provider spend.",
-  "next": "Baseline physical parity passed. Qualify provider/model and run comparable genuine synthetic trial only within exact-source, one-use consent; no available dispatch action in current connector.",
-  "physical_mcp_parity": {
-   "run": 45894468630,
-   "jobs": [
-    140164828950,
-    140164829134,
-    140164829172
-   ],
-   "result": "SUCCESS on Python 3.13/3.12/3.11; real SDK + independent FFmpeg + source-bound negatives; not neural"
-  }
- },
- "critical_path_timed_feedback_20261127": {
-  "retained_in": "EVIDENCE/INDEX.md#retained-historical-timed-feedback-structured-receipt",
-  "original_ledger_blob": "fdfef087c1d7603731d2e96fab969f04cbff7e34",
-  "summary": "Source-bound timed picture readiness, original five failed workflows and fixture correction, full technical 29/29 on corrected baseline. Full historical record retained."
- },
- "critical_path_delivery_affordance_20261127": {
-  "retained_in": "EVIDENCE/INDEX.md#retained-historical-delivery-affordance-receipt",
-  "original_ledger_blob": "c823687f0d9e4b84341a5ebaf43a8eba2e6d53cd",
-  "summary": "Delivery readiness: scripted 6→3 decisions, same native calls, exact hosted 29/29; genuine indexed and direct trials failed acceptance. Full original structured receipt retained."
- },
- "reused_archived_scope_20261127": {
-  "research": "cea19dadc38cccb212e9d37331ca1869d200b724",
-  "scheduler": "633348babde51ba037bf1917fe1f051bd2515aae",
-  "source": "Existing exact 8 blobs; matching unchanged parent blobs, no reimplementation. Add 3 read-only public metadata providers and explicit source choice, preserve network/rights gates; truthful scheduler state label.",
-  "local": "Scheduler RED assertion true vs false; GREEN 17/17. Research RED provider kwarg unsupported; exact four production + test blobs match. 63 affected tests: 58 pass, 4 SDK skips, 1 no-display error, targeted desktop Xvfb rerun passes (59 distinct passed). Real public endpoints/SDK and CI pending.",
-  "acceptance": "candidate, not full public web, domain or release acceptance",
-  "live_followup": {
-   "run": 45937275501,
-   "observed": "Cleveland success; NASA empty because all three live Apollo IDs have spaces; Europe PMC runner request failed, independent same-query HTTP 200 JSON returned; runner cause not proven.",
-   "correction": "Allow bounded interior ASCII spaces in NASA ID and quote URL segment; reject path and control characters. Exact RED→GREEN; 71 run/67 pass/4 optional SDK skips.",
-   "physical_oracle": "Four synthetic aligned, offset, sound-only, picture-only controls; known target detects brief red event missed by equal-count uniform samples; FFmpeg decoded PNG and audio bins verified; no neural or artistic acceptance.",
-   "native_ci_negative": "45937275794 job 140303602801 Microsoft apt repository HTTP 403 before tests; not a source regression.",
-   "acceptance": "Exact new head live verification pending.",
-   "latest_live": {
-    "run": 45937892821,
-    "initial": "30/30 offline research; NASA live 3 reference leads; EPMC timeout",
-    "diagnostic": 45938105014,
-    "diagnostic_result": "Exact query HTTP 200 in 2.733s, 3 accepted records; p53 control timed out. Intermittent transport, not proven parser defect.",
-    "retry": "SUCCESS attempt 2, unchanged source"
-   },
-   "repeated_transport": {
-    "run": 45938988502,
-    "job": 140308669885,
-    "result": "Europe PMC failed again; earlier exact same query succeeded independently and on unchanged-source live retry.",
-    "correction": "One additional same-URL public GET only for exact Europe PMC metadata endpoint on direct/wrapped TimeoutError; 10s socket timeout per attempt, no redirect/status/JSON/other provider/loopback retry.",
-    "verification": "RED: recovery missing, attempts 1 instead of 2; GREEN direct/wrapped timeouts, persistent timeout terminal, other errors single attempt. 31 tests run/27 pass/4 local MCP skips. Real live CI pending."
-   }
-  }
- },
- "self_contained_source_custody_20261127": {
-  "baseline": "4e2c4338841e77f601443cfc55f986c53437b183",
-  "baseline_ci_observed": {
-   "success": 27,
-   "in_progress": 2
-  },
-  "red": "Actual HLS file containing only a separate TS reference accepted as MP4, MP3 and FLAC custody; delivery and timeline probes also accepted. All five assertions failed independently.",
-  "fix": "Restrict self-contained video input demuxers to MOV/Matroska/WebM families and local file/pipe protocols at probe, full decode, timeline render and frame/audio readers; MP3/FLAC ingest uses matching demuxer. No remote/playlist imports inferred. Does not replace OS sandbox or solve all decoder vulnerabilities.",
-  "green": "82/82 affected tests, real HLS refused before custody publication, no object/attestation, actual MP4/MOV/MKV/WebM/MP3/FLAC positive controls and extensionless video CAS.",
-  "status": "local exact tested blob candidate; hosted verification pending",
-  "followup_reference": {
-   "red": "HLS within authorized reference directory decoded outside-root TS file",
-   "green": "Shared demuxer restriction across reference probe, visual and audio decode; all 6 reference tests passed; no OS-sandbox claim."
-  },
-  "hosted_observed": {
-   "source": "78d68dca27ff37fe077ce556c7fddae0430fd888",
-   "counts": {
-    "in_progress": 15,
-    "success": 13,
-    "failure": 1
-   }
-  },
-  "followup_staged_ingest": {
-   "baseline": "ec4af1176fc9cd91d18b5e0dd7ef1051b6784f9a",
-   "red": "Exact SVG source replaced by same-sized invalid bytes immediately after genuine parser validation; old ingest attested the replacement digest.",
-   "green": "Copy to private same-filesystem stage, check source FD stability, validate and hash the same staged bytes before no-replace CAS publication; rehash after validation, always clean stage. Reproduced race now retains validated original; replacement has no attestation.",
-   "combined_tests": {
-    "run": 92,
-    "passed": 88,
-    "skipped": 4,
-    "failures": 0
-   },
-   "source_blob": "4a882a8205fc9911e2de8bb8ca51e552e46448f4",
-   "test_blob": "efaf60371e81203ca93758566e4990f348f1f3d9",
-   "limits": "Local regression; no broad OS sandbox or external adversary guarantee. Exact new hosted CI pending."
-  }
- },
- "perception_and_exact_lookup_20261127": {
-  "retained_in": "EVIDENCE/INDEX.md#retained-historical-perception-and-exact-lookup-structured-receipt",
-  "original_ledger_blob": "566c8d86dd1097e88fa4e3d2f5686ea2c37c4701",
-  "summary": "Visual calibration passed basic sampled/numeric tasks; raw audio pitch failed, speech calibration passed only short synthetic English. Exact lookup correction retained, no professional semantic acceptance."
  },
  "compositional_measurement_20261127": {
   "parent": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
@@ -1495,5 +1270,34 @@
    "status": "failed after successful Vite build, exact subsequent failure cause unresolved; do not label infrastructure or source defect without evidence"
   },
   "limits": "Candidate hosted verification pending. No new domain acceptance. Last fully green integrated parent remains 66b4465b."
+ },
+ "archived_receipts_20261127": {
+  "immutable_ledger_commit": "573e952ccf1b9556fec8d56204ac749f30bc9cd8",
+  "immutable_ledger_blob": "a3f932c068a89acd00567623f284fe14430035db",
+  "records": [
+   "latest_artifact_audit_20261126",
+   "live_branch_ancestry_20261126",
+   "g1_autosave_custody_20261126",
+   "g1_post_review_second_export_guard_20261125",
+   "critical_path_coordination_20261127",
+   "critical_path_timed_feedback_20261127",
+   "critical_path_delivery_affordance_20261127",
+   "reused_archived_scope_20261127",
+   "self_contained_source_custody_20261127",
+   "perception_and_exact_lookup_20261127"
+  ],
+  "evidence_section": "2026-11-27 — bounded working-checkpoint compaction",
+  "note": "Exact records retained in evidence index and immutable parent ledger; no acceptance change."
+ },
+ "working_checkpoint_integrity_20261127": {
+  "negative_run": 46023484152,
+  "negative_job": 140588789698,
+  "cause": "My previous update exceeded original STATE 14000-byte and EXECUTION_LEDGER 80000-byte limits; no runtime changes. Compact current checkpoint and preserve exact history; do not relax guard.",
+  "live_research_failure": {
+   "run": 46023484108,
+   "job": 140588789256,
+   "provider": "Europe PMC",
+   "status": "anonymous provider unavailable or invalid JSON; other hosted result(s) not inferred"
+  }
  }
 }
