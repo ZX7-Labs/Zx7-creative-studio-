@@ -121,7 +121,8 @@ async def run_attachment(args, prepared=None):
             bindings = {"editor": ((editor, grants, {}, None, {}, identity)
                                   if identity is not None else (editor, grants)),
                         "zx7": (body, body.trusted_grants)}
-            gateway = CapabilityGateway(bindings, session_budget=budget)
+            gateway = CapabilityGateway(bindings, session_budget=budget,
+                                        trusted_pre_dispatch_sources=("editor",))
             await gateway.refresh()
             view = CombinedCapabilityMcpSession(
                 gateway, *bindings, require_model_native_observation_for=(

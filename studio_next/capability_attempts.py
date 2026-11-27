@@ -28,6 +28,7 @@ _TERMINAL_STATES = frozenset({
     "host_reported_success_unverified",
     "write_uncertain_reconciliation_required",
     "native_conflict_rejected_no_write",
+    "host_rejected_no_native_write",
 })
 
 # Original on-disk schema is kept as an exact migration reference. A verified
@@ -45,12 +46,18 @@ _LEGACY_TABLE_SQL = """CREATE TABLE capability_attempts (
     admitted_ns INTEGER NOT NULL,
     settled_ns INTEGER
 )"""
-_CURRENT_TABLE_SQL = _LEGACY_TABLE_SQL.replace(
+_REVISION_TABLE_SQL = _LEGACY_TABLE_SQL.replace(
     "'write_uncertain_reconciliation_required'))",
     "'write_uncertain_reconciliation_required',\n"
     "        'native_conflict_rejected_no_write'))",
 )
-if _CURRENT_TABLE_SQL == _LEGACY_TABLE_SQL:
+_CURRENT_TABLE_SQL = _REVISION_TABLE_SQL.replace(
+    "'native_conflict_rejected_no_write'))",
+    "'native_conflict_rejected_no_write',\n"
+    "        'host_rejected_no_native_write'))",
+)
+if (_REVISION_TABLE_SQL == _LEGACY_TABLE_SQL or
+        _CURRENT_TABLE_SQL == _REVISION_TABLE_SQL):
     raise RuntimeError("Native journal schema transition is missing")
 
 
@@ -106,8 +113,9 @@ class CapabilityAttemptStore:
                     "AND name='capability_attempts'").fetchone()
                 if row is None:
                     db.execute(_CURRENT_TABLE_SQL)
-                elif (_normalized_schema_sql(row[0]) ==
-                      _normalized_schema_sql(_LEGACY_TABLE_SQL)):
+                elif _normalized_schema_sql(row[0]) in (
+                        _normalized_schema_sql(_LEGACY_TABLE_SQL),
+                        _normalized_schema_sql(_REVISION_TABLE_SQL)):
                     # Atomic forward-only migration: old intents survive
                     # exactly, including crash-window/uncertain writes.
                     # No queue, media, identity or payload is copied outside
@@ -263,7 +271,8 @@ class CapabilityAttemptStore:
                 catalog_revision,input_sha256,state,admitted_ns,settled_ns
                 FROM capability_attempts
                 WHERE (admitted_ns,request_id) > (?,?)
-                  AND state!='native_conflict_rejected_no_write'
+                  AND state NOT IN ('native_conflict_rejected_no_write',
+                                    'host_rejected_no_native_write')
                 ORDER BY admitted_ns,request_id LIMIT ?""",
                 (start_ns,start_request,limit+1)).fetchall()
         selected = rows[:limit]

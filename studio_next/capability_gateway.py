@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
 from .body_editor_mcp import native_admission_validator
+from .body_editor_client import host_pre_dispatch_rejection
 from .native_editor_identity import source_native_commit_intent as _source_native_commit_intent
 from .capability_attempts import CapabilityAttemptStore
 from .capability_reference_guard import (
@@ -107,7 +108,7 @@ class CapabilityGateway:
     """
 
     def __init__(self, bindings: Mapping, *, attempt_store=None,
-                 session_budget=None):
+                 session_budget=None, trusted_pre_dispatch_sources=()):
         if session_budget is not None and not isinstance(
                 session_budget, CapabilitySessionBudget):
             raise CapabilityExecutionError(
@@ -118,6 +119,13 @@ class CapabilityGateway:
         self._attempt_store = attempt_store
         if not isinstance(bindings, Mapping) or not 1 <= len(bindings) <= 256:
             raise CapabilityExecutionError("Connected host-bound source inventory is required")
+        # This is an explicit HOST trust decision about a connected bridge,
+        # not a grant inferred from a native tool or its returned metadata.
+        if (not isinstance(trusted_pre_dispatch_sources, (tuple, list, set, frozenset)) or
+                any(not isinstance(name, str) or name not in bindings
+                    for name in trusted_pre_dispatch_sources)):
+            raise CapabilityExecutionError("Invalid trusted pre-dispatch source scope")
+        self._trusted_pre_dispatch_sources = frozenset(trusted_pre_dispatch_sources)
         self._bindings = {}
         self._locks = {}
         for namespace, entry in bindings.items():
@@ -429,7 +437,9 @@ class CapabilityGateway:
             self._events.append(trace)
             try:
                 # One submission only; uncertain writes require reconciliation.
-                result = await session.call_tool(name, dispatch_inputs)
+                # Keep the exact receipt-binding payload independent of a
+                # local adapter's mutable argument object.
+                result = await session.call_tool(name, copy.deepcopy(dispatch_inputs))
             except BaseException as exc:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
@@ -454,7 +464,15 @@ class CapabilityGateway:
                     self._attempt_store.settle(
                         request_id=request_id, state=trace["state"])
                 raise
-            if failure:
+            rejection = (host_pre_dispatch_rejection(result, name, dispatch_inputs)
+                         if failure and record["access"] == "write" and
+                         namespace in self._trusted_pre_dispatch_sources else None)
+            if rejection is not None:
+                # The trusted bridge binds its denial to the exact wire call,
+                # including the host-injected revision. The model never sees
+                # that token. A matching public-only digest is insufficient.
+                trace["state"] = "host_rejected_no_native_write"
+            elif failure:
                 # A *source-pinned* synchronous renderer rejection is known
                 # to precede any native mutation. Without the strict exact
                 # receipt, an ordinary failed write remains uncertain.
@@ -474,4 +492,5 @@ class CapabilityGateway:
                 self._attempt_store.settle(
                     request_id=request_id, state=trace["state"])
             return {"state": trace["state"], "operation_id": operation_id,
-                    "native_result": result}
+                    "native_result": result,
+                    **({"host_pre_dispatch_code": rejection} if rejection is not None else {})}

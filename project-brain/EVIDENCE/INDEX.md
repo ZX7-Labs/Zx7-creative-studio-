@@ -145,3 +145,186 @@ Exact parent `fd648e50d41cf17ef68815db5e42b683bae1e239` completed 29/29 hosted w
 New [one-use bounded G1 trial #45950462408](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/45950462408), job 140344855257, exact synthetic-only child `e979730bb06ca9e8d7d50d3f689feabb0f2a9597`, parent `013ef94d610b63078d39cd38878051367cb6f150`, retired trigger `8035aa15c424db5d7361a94172a76b15de85e931` restores exact tree. Same 48-turn Super VL indexed trial to test both mechanical corrections, no private egress; actual inference running. No new result or replay.
 
 Coedit revision authority defect (source-shaped deterministic renderer, actual production Python gateway/controller): after model observed timeline, simulated human changed position to 99, host-only style target preflight refreshed model epoch; stale requested position 40 committed. RED both single and combined gateway. GREEN both after separate read-only host-preflight route; stale operation denied before dispatch, fresh independent decision position 100 accepted once. Direct host-only project/timeline read controls cannot mint/renew model revision or invoke ungranted/write tool. Affected 288 tests / 284 pass / 4 missing source-checkout files/imports / 0 assertion failures. Blobs {"studio_next/capability_mcp_session.py":"b4fa08d78eb0580cf85f43faa8126f8b1b49b5b6","studio_next/native_creative_control.py":"eae2274264981af5565a8fdcce42d92e153ac2f8","studio_next/test_native_revision_fence.py":"0018ff84670b529786e67d3829781fcd71e73ee7"}; not physical GUI, genuine human or creative acceptance. Ledger one-space indentation compacts whitespace only, retaining all previous evidence values and hard cap.
+
+
+## 2026-11-27 — terminal indexed trial and trusted wire refusal
+
+{
+  "trial": {
+    "conclusion": "failure",
+    "artifact": 15177080510,
+    "zip_sha256": "2d509a766a1b20ff11fa93c11aaf2c0ca9a29951db9fe5d13d5e78b2b003c5f6",
+    "zip_entries": 15,
+    "crc_verified": true,
+    "decisions": 7,
+    "provider_reported_tokens": 56792,
+    "model_wall_ms": 297095.356,
+    "native_wall_ms": 369.79,
+    "searches": 1,
+    "write_acknowledgments": 3,
+    "exports": 0,
+    "saved": "One original six-second video clip; native/staged original hash ea0737ff253bdecd3d730701e6700b04ded8a024eed7715f561a76174f76084d matches; no imported/placed audio.",
+    "events": "Turn 3 stale refused, turn 4 fresh get_project, turn 5 search, turn 6 add_asset_to_timeline error classified uncertain and halted.",
+    "error_digest": "fdece17a19f0ad9ca8123912e3805daa7620565d17e71c38f824137a4e222a00",
+    "diagnosis": "Exact digest of canonical wire list containing fixed placement_plan_unconfirmed BODY message (no timeline edit submitted). Wire/public revision-token digest mismatch reproduced against exact source. Actual raw receipt metadata absent from journal; underlying reason placement preview failed remains unresolved.",
+    "independent_acceptance": false
+  },
+  "wire": {
+    "parent": "013ef94d610b63078d39cd38878051367cb6f150",
+    "coedit_parent": "c2b75bd84107a2099301ada1676a937d9a5228c7",
+    "source_blobs": {
+      "studio_next/capability_gateway.py": "7e44a7900df27e48ed9dcf2ad7cf2abb1fb84640",
+      "studio_next/capability_attempts.py": "113344a25313cfa7c7f7316b414a924d89622669",
+      "studio_next/capability_mcp_session.py": "9b370bac2c7ab68bbcd84ce108bfeb80ae394bd4",
+      "studio_next/native_editor_session.py": "5d62c23f5cfec852e1c1b00ce84ad3cc6798bbd6",
+      "studio_next/studio_mcp.py": "58675290fcd37c889fe4739e8a2ecdc143c8787c",
+      "studio_next/test_body_editor_mcp.py": "e95dbbee21f3699caf01ccbd76f5522b4f443a0f",
+      "studio_next/test_native_revision_fence.py": "e74c5fd1ecc811a168c9c0bd3b028d23fb27d9e1",
+      "studio_next/test_capability_attempts.py": "12747f59c6c7cbc8b740bd9af83d2c705ecbf2ab"
+    },
+    "installed_parent": {
+      "run": 45949362965,
+      "artifact": 15177330866,
+      "zip_sha256": "42a30178998882537bd8579ee523b2b1438ec1f037a3032c46c7f6db20fd1cf9",
+      "tests_run": 1784,
+      "pass": 1754,
+      "skip": 30,
+      "failed": 0,
+      "manifest_verified": 24,
+      "physical_mp4_full_decode": 3,
+      "exact_equal_tree": "abf2171f93b095e31775a4f73fcdafa4c9e0d846",
+      "merge_test_commit": "678bdd5a2d1527f8a343acf87159305ac45372ac",
+      "crc_verified": true,
+      "local_wheel_source_hashes_verified": true,
+      "hosted": {
+        "success": 28,
+        "failure": 1
+      }
+    },
+    "reproduction": "Four assertion failures on original behavior: exact trusted wire refusal falsely uncertain in both routes, forged public-input receipts falsely accepted. Underlying preview reason not proven.",
+    "correction": "Explicit trusted local editor source only; strict error and exact augmented wire digest, immutable expected input snapshot; gateway rebinds verified refusal to public input, preserves prior observed epoch; strips reserved untrusted metadata. Durable terminal host_rejected_no_native_write distinct from conflict/uncertainty; migrate V1/V2 without losing attempts, preserve no replay. No grant expansion, auto retry, or acceptance relaxation.",
+    "verification": {
+      "focused": "Seven refusal controls GREEN plus stale human edit after safe refusal; physical SQLite V2 migration and replay prevention GREEN.",
+      "run": 325,
+      "pass": 286,
+      "skip": 36,
+      "errors": 3,
+      "assertion_failures": 0,
+      "limitations": "Optional MCP SDK unavailable locally (36 skips including new real HTTP/SDK test); three missing checkout script imports. Hosted SDK and native evidence pending."
+    },
+    "next": "Verify exact-head CI and real SDK bridge; diagnose desktop physical test separately; continue critical-path genuine creation/revision/human coedit then matched routes/A-L independent acceptance. No repeat of spent trigger and no further inference before corrected evidence.",
+    "independent_acceptance": false
+  }
+}
+
+### Retained historical delivery-affordance receipt
+
+Exact structured value moved from mutable ledger for bounded size; original blob `c823687f0d9e4b84341a5ebaf43a8eba2e6d53cd` remains available.
+
+```json
+{
+  "baseline": "385534021c47efdecf70685e5f54095ea37e3d2d",
+  "source_blobs": {
+    "studio_next/native_creative_control.py": "7e72f643708623936e617d59360382c7fa5df10e",
+    "studio_next/test_native_creative_control.py": "63bc3c1ac42bed39d91bcc501dd14a3270a7672e"
+  },
+  "negative": {
+    "real_run": 45731089541,
+    "artifact": 15078171115,
+    "sha256": "47c46e631c1cd6e691199d906a3c4ab4c5e1134573ad049f335b61fd328c35f0",
+    "facts": "88 events, 37 decision turns, 14 searches, 2 stale source refusals, save at turn 31, search again at 32, zero exports. Exact causal contribution of visibility not established."
+  },
+  "correction": "Expose one already-granted source-bound save/export/verify affordance from positive live clip count, current save and latest captured render. No automatic native action, grant or artistic choice; current destination evidence stops repeated verify visibility.",
+  "matched_scripted": {
+    "baseline_delivery_decisions": 6,
+    "candidate_delivery_decisions": 3,
+    "identical_native_call_sequence": true,
+    "red": "4-turn baseline executed save and render but exhausted before verify",
+    "green": "Matched controller and auditor fixture passed, including missing/empty project, capture disabled, invalidated evidence, malformed capture, wrong grant and later edit."
+  },
+  "local": {
+    "run": 223,
+    "pass": 217,
+    "assertion_failures": 0,
+    "environment_import_errors": 6,
+    "limitations": "Reconstructed exact parent blobs from installed wheel; no complete checkout, MCP SDK or repository-only scripts. Actual local model/provider absent."
+  },
+  "acceptance": {
+    "exact_candidate_ci": "29/29 SUCCESS at fce6049bbee21ad65a3421e383a862644d1aa364; genuine indexed trial FAIL (see indexed_trial)",
+    "genuine_model": false,
+    "professional": false
+  },
+  "next": "Both single arms failed final completion. Direct mode removed 17 searches and reached transient reviewed pair, with 2.23x reported tokens and less wall time. Do not infer statistically proven architecture preference. Inspect completion/revision handoff and stale filename correction; no paid blind rerun.",
+  "parent_installed_artifact": {
+    "run": 45932518653,
+    "artifact": 15169717251,
+    "source_commit": "f4fb523f0c4c0334cb2e8f514092c3d74093318e",
+    "tree_equivalent_to": "385534021c47efdecf70685e5f54095ea37e3d2d",
+    "sha256": "4130f18bdbda3cbf91262384a144e4f6360394983e1625f978756e0bfcc62f87",
+    "manifest_verified": 24,
+    "tests": {
+      "run": 1757,
+      "passed": 1727,
+      "skipped": 30,
+      "failed": 0
+    },
+    "physical_decode": "Full mixed:57 frames 320x480 4.75s AAC stereo 48k; 2D:33 frames 320x480 2.75s AAC stereo; 3D:24 frames 256x256 2s video-only; full FFmpeg decode successful. Scripted physical proof only."
+  },
+  "indexed_trial": {
+    "run": 45934918405,
+    "source": "c5d5de094f6d61e181b5c10088b47cf68d646a19",
+    "revoked": "1096550254f2e5c59c621880d3de171eec0716f8",
+    "artifact": 15171390542,
+    "sha256": "c1f880a29113a4ffa967deebf66a7be7544f51b7110986bdb5fec2f510ddde86",
+    "status": "FAILED: turn_budget_exhausted, no second export/pair",
+    "events": 117,
+    "turns": 48,
+    "searches": 17,
+    "reported_tokens": 589619,
+    "search_tokens": 212272,
+    "model_ms": 1026490.065,
+    "native_mcp_ms": 1925.473,
+    "write_acks": 11,
+    "export_verified": 1,
+    "first_export_sha": "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
+    "receipt": "ZIP CRC+SHA match; independent ffprobe and full FFmpeg decode 640x360 H264 24fps 144 frames/6s AAC; saved native source SHA verified; no rendered-original pixel proof, semantic listening or quality approval."
+  },
+  "direct_trial": {
+    "run": 45937037913,
+    "source": "e4abbd93c6aa82a3593e1014dd069fac05d68f23",
+    "revoked": "9d27019f0a8b2e0aecd29ad954cc4cbc51322807",
+    "same_runtime_parent": "fce6049bbee21ad65a3421e383a862644d1aa364",
+    "request": "ZX7_SUPER_VL_G1_DIRECT_CATALOG_20261127",
+    "status": "FAILED terminal turn_budget_exhausted; transient pair passed then revoked by later model edit",
+    "scope": "Same source/model/brief/48-turn budget; only existing full vs indexed catalog route changes. Whole-interface comparison, not single-factor internal ablation or repeated controlled trials.",
+    "artifact": 15171327555,
+    "sha256": "438d92a0b030ace86723a61aafc03b8cf91618d80207eb2e283601e8fcd0c684",
+    "events": 135,
+    "turns": 48,
+    "searches": 0,
+    "reported_tokens": 1315967,
+    "reported_prompt_tokens": 1251098,
+    "reported_completion_tokens": 64869,
+    "model_ms": 578863.636,
+    "native_mcp_ms": 3390.493,
+    "write_acks": 14,
+    "export_verified": 2,
+    "export_shas": [
+      "9da3574b0244e54cfbc9131d3f61482f2a132e7106a93721b22f49c411f8afbd",
+      "31391ea2abd493e461b3d597cb97c611b9dbe9e89c00c3a04d34c08bed3c8cd7"
+    ],
+    "saved_render_shas": [
+      "29d6785bd0dee6e0c3288a4730f555b1734190e596a79cf65b121d0007b9b893",
+      "8ff5dc05b4bcae9256b87d98825606a6c0afbdefe63820fb6b37a5e97b600561"
+    ],
+    "prefix_observation": "Actual pair comparator returns both exports after turn 41/seq 118, and None after turn 42/seq 120 acknowledged text edit; final two exports rejected output_exists; no automatic replay. Exact retained render-time autosave hashes match. Independent ffprobe and full decode both six-second 640x360 H264 24fps 144 frames, 79/144 RGB frames differ, identical decoded AAC PCM, RMS 0.05555946. No final model finish, semantic hearing, independent quality or rendered-original pixels proof."
+  },
+  "checkpoint_followup": {
+    "observed": "Direct model received turn index, not configured remaining turn budget; at turn 42 six decisions remained after actual prefix pair readiness.",
+    "change": "Expose host-verified current-required-evidence boolean and exact max/remaining decisions; compute missing evidence once, preserve independent finish/revise choice, later-write invalidation and actual grants.",
+    "red": "Missing decision_turn_budget KeyError",
+    "green": "Model fixture chooses additional edit after readiness; evidence revoked, reverified, independently finishes. 215 affected run/210 pass/5 missing MCP and repo script import errors; zero assertion failures.",
+    "acceptance": "Local protocol only; genuine benefit unverified, no new paid inference."
+  }
+}
+```

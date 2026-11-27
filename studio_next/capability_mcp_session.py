@@ -220,6 +220,19 @@ class CapabilityGatewayMcpSession:
                     "version": 1, "tool": name,
                     "inputs_sha256": native_input_digest(arguments),
                     "code": exc.code}})
+        if result["state"] == "host_rejected_no_native_write":
+            # The gateway verified the receipt against the exact dispatched
+            # wire input. Rebind to the public model input, never echo the CAS
+            # token. No native mutation occurred, so retain (not refresh) the
+            # prior observed epoch; live comparison still applies next call.
+            code = result["host_pre_dispatch_code"]
+            if observe_native_revision:
+                self._model_observed_native_revision = observed.get("model_observed_revision")
+            return SimpleNamespace(
+                is_error=True,
+                content=[SimpleNamespace(type="text", text=HOST_REJECTION_FEEDBACK[code])],
+                meta={HOST_PRE_DISPATCH_META: {"version": 1, "tool": name,
+                    "inputs_sha256": native_input_digest(arguments), "code": code}})
         if result["state"] == "native_conflict_rejected_no_write":
             code = "native_revision_changed_at_commit"
             return SimpleNamespace(
@@ -265,7 +278,23 @@ class CapabilityGatewayMcpSession:
                 # Malformed, incomplete, conflicting or stale read: retain
                 # the original no-dispatch gate until a new get_project.
                 pass
-        return result["native_result"]
+        # No source-controlled or mismatched receipt can create recovery
+        # authority in the Brain-facing view. Only the gateway-verified cases
+        # above mint these two reserved metadata keys.
+        native = result["native_result"]
+        reserved = {HOST_PRE_DISPATCH_META, HOST_NATIVE_REVISION_META}
+        if isinstance(native, dict):
+            native = {**native}
+            for key in ("meta", "_meta"):
+                if isinstance(native.get(key), dict):
+                    native[key] = {k: v for k, v in native[key].items() if k not in reserved}
+        else:
+            meta = getattr(native, "meta", None)
+            if isinstance(meta, dict) and reserved.intersection(meta):
+                native = SimpleNamespace(is_error=getattr(native, "is_error", None),
+                    content=getattr(native, "content", None),
+                    meta={k: v for k, v in meta.items() if k not in reserved})
+        return native
 
 
 class CombinedCapabilityMcpSession:

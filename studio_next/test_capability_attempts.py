@@ -297,6 +297,48 @@ class AttemptStoreTests(unittest.TestCase):
             reopened.settle(request_id="verified-no-write",
                             state="write_uncertain_reconciliation_required")
 
+    def test_revision_schema_migration_preserves_uncertain_and_confirmed_intents(self):
+        # Physical previous schema: native CAS rejection was supported before
+        # host pre-dispatch rejection gained its own durable terminal state.
+        previous = self.path.parent / "revision-attempts.sqlite3"
+        with sqlite3.connect(previous) as db:
+            db.execute("""CREATE TABLE capability_attempts (
+                request_id TEXT PRIMARY KEY,
+                operation_id TEXT NOT NULL,
+                catalog_revision TEXT NOT NULL,
+                input_sha256 TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN (
+                    'submitted_unconfirmed',
+                    'host_reported_success_unverified',
+                    'write_uncertain_reconciliation_required',
+                    'native_conflict_rejected_no_write')),
+                admitted_ns INTEGER NOT NULL,
+                settled_ns INTEGER
+            )""")
+            rows = [("old-uncertain", "editor/add_asset_to_timeline", REV, DIGEST,
+                     "write_uncertain_reconciliation_required", 50, 60),
+                    ("old-conflict", "editor/add_asset_to_timeline", REV, DIGEST,
+                     "native_conflict_rejected_no_write", 70, 80)]
+            db.executemany("INSERT INTO capability_attempts VALUES (?,?,?,?,?,?,?)", rows)
+        db.close()
+        previous.chmod(0o600)
+        store = CapabilityAttemptStore(previous)
+        for request, _, _, _, state, admitted, settled in rows:
+            actual = store.inspect(request)
+            self.assertEqual((actual["state"], actual["admitted_ns"], actual["settled_ns"]),
+                             (state, admitted, settled))
+        store.admit(request_id="new-host-denial", operation_id="editor/add_asset_to_timeline",
+                    catalog_revision=REV, input_sha256=DIGEST)
+        store.settle(request_id="new-host-denial", state="host_rejected_no_native_write")
+        reopened = CapabilityAttemptStore(previous)
+        self.assertEqual(reopened.inspect("new-host-denial")["state"],
+                         "host_rejected_no_native_write")
+        self.assertEqual([a["request_id"] for a in reopened.unverified_attempts()["attempts"]],
+                         ["old-uncertain"])
+        with self.assertRaises(CapabilityAttemptError):
+            reopened.admit(request_id="new-host-denial", operation_id="editor/add_asset_to_timeline",
+                           catalog_revision=REV, input_sha256=DIGEST)
+
     def test_one_way_settlement_and_secret_free_private_journal(self):
         self.reserve()
         self.store.settle(request_id="host-attempt-1",

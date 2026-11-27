@@ -464,7 +464,8 @@ async def run_native_session(args):
                 # Native editor and local BODY share the original host gateway,
                 # session budget and model view. No second writer or scheduler.
                 bindings["zx7"] = (installed_body, installed_body.trusted_grants)
-            gateway = CapabilityGateway(bindings, session_budget=budget)
+            gateway = CapabilityGateway(bindings, session_budget=budget,
+                                        trusted_pre_dispatch_sources=("editor",))
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
             model_observation_fence = bool(identity and identity.get("fence"))

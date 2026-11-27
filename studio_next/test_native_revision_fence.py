@@ -144,6 +144,104 @@ class NativeLiveRevisionAdmissionTests(IsolatedAsyncioTestCase):
         return await self.host_session.call_tool(
             "update_text_clip", {"clipId":"clip-A","text":text})
 
+    async def test_wire_bound_placement_refusal_is_not_an_uncertain_write(self):
+        """Genuine G1 #45950462408: host placement refusal after CAS injection.
+
+        The local bridge binds its receipt to exact wire args (including the private
+        revision token). Only the gateway that injected that token can bind
+        the receipt back to the model-selected input. Native errors and
+        untrusted/altered attestations must remain uncertain.
+        """
+        from studio_next.body_editor_client import (
+            HOST_PRE_DISPATCH_META, HOST_REJECTION_FEEDBACK, native_input_digest)
+        from studio_next.native_creative_audit import audit_native_journal
+        from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
+
+        tool = "add_asset_to_timeline"
+        proposal = {"trackId": "track-A", "previewOnly": False}
+        for trusted, receipt_mode, combined in (
+                (True, "wire", False), (True, "wire", True),
+                (False, "wire", False), (False, "public", True),
+                (True, "public", False), (True, "wrong", False),
+                (True, "missing", False)):
+            with self.subTest(trusted=trusted, receipt=receipt_mode, combined=combined):
+                renderer = RendererAndDebouncedSnapshot()
+                renderer.tools.append(SimpleNamespace(name=tool,
+                    description="Place an existing source in the timeline",
+                    input_schema={"type": "object", "properties": {
+                        "trackId": {"type": "string"},
+                        "previewOnly": {"type": "boolean"}}}))
+                grants = {**GRANTS, tool: "write"}
+                original_call = renderer.call_tool
+                async def call(name, args):
+                    if name != tool:
+                        return await original_call(name, args)
+                    renderer.calls.append((name, dict(args)))
+                    self.assertEqual(args["__zx7ExpectedRevision"], renderer.live_revision)
+                    response = result(HOST_REJECTION_FEEDBACK["placement_plan_unconfirmed"],
+                                      error=True)
+                    if receipt_mode != "missing":
+                        response.meta = {HOST_PRE_DISPATCH_META: {
+                            "version": 1, "tool": tool,
+                            "inputs_sha256": (native_input_digest(args) if receipt_mode == "wire"
+                                else native_input_digest(proposal) if receipt_mode == "public"
+                                else "f" * 64),
+                            "code": "placement_plan_unconfirmed"}}
+                    return response
+                renderer.call_tool = call
+                reader = NativeEditorIdentityReader(renderer, grants, require_live_revision=True)
+                policy = {"reader": reader, "rules": {tool: {"/trackId": "tracks"}},
+                          "fence": {tool: self.policy["fence"]["update_text_clip"]}}
+                with tempfile.TemporaryDirectory() as directory:
+                    store = CapabilityAttemptStore(Path(directory) / "attempts.sqlite3")
+                    gateway = CapabilityGateway({"editor": (
+                        renderer, grants, {}, None, {}, policy)}, attempt_store=None if combined else store,
+                        trusted_pre_dispatch_sources=("editor",) if trusted else ())
+                    await gateway.refresh()
+                    brain = (CombinedCapabilityMcpSession(gateway, "editor",
+                                require_model_native_observation_for=("editor",)) if combined else
+                             CapabilityGatewayMcpSession(gateway, "editor",
+                                require_model_native_observation=True,
+                                host_request_id_allocator=lambda _op: "placement-1"))
+                    model = ScriptedModel([
+                        decision("invoke", tool="get_project", inputs={}),
+                        decision("invoke", tool=tool, inputs=proposal),
+                        decision("finish", summary="No creative edit claimed"),
+                    ])
+                    outcome = await NativeCreativeControl(brain, model, max_turns=3,
+                        host_tool_access=grants, host_pre_dispatch_rejections=True).run(
+                        "Select and place a source; no automatic retry")
+                    safe = trusted and receipt_mode == "wire"
+                    self.assertEqual(outcome["status"], ("model_finished_unverified" if safe
+                        else "native_error_requires_state_reconciliation"))
+                    self.assertEqual(renderer.writes, 0)
+                    self.assertEqual(len([1 for name, _ in renderer.calls if name == tool]), 1)
+                    writes = [e for e in gateway.evidence() if e["access"] == "write"]
+                    expected = ("host_rejected_no_native_write" if safe else
+                                "write_uncertain_reconciliation_required")
+                    self.assertEqual(writes[0]["state"], expected)
+                    if not combined:
+                        self.assertEqual(store.inspect("placement-1")["state"], expected)
+                        self.assertEqual(len(store.unverified_attempts()["attempts"]), 0 if safe else 1)
+                        if not safe:
+                            await brain.call_tool("get_project", {})
+                        with self.assertRaises(CapabilityAttemptError):
+                            await brain.call_tool(tool, proposal)
+                    if safe:
+                        self.assertEqual(model.observed[-1]["last_rejected_native_action_feedback"][
+                            "rejection_code"], "placement_plan_unconfirmed")
+                        self.assertTrue(audit_native_journal(outcome["events"],
+                            host_tool_access=grants, host_pre_dispatch_rejections=True)[
+                                "journal_chain_structurally_valid"])
+                        if combined:
+                            renderer.human_gui_edit("Human edit after safe refusal")
+                            renderer.publish()
+                            stale = await brain.call_tool(tool, proposal)
+                            self.assertEqual(host_pre_dispatch_rejection(stale, tool, proposal),
+                                             "native_identity_model_observation_stale")
+                            self.assertEqual(len([1 for name, _ in renderer.calls if name == tool]), 1)
+                            self.assertEqual(renderer.clip_text, "Human edit after safe refusal")
+
     async def test_model_must_observe_native_project_before_first_protected_edit(self):
         model_view = CapabilityGatewayMcpSession(
             self.gateway, "editor", require_model_native_observation=True)

@@ -494,6 +494,48 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
 
         await self.with_session(check, native_source=source)
 
+    async def test_cas_placement_preflight_receipt_survives_actual_sdk_gateway(self):
+        """Use the real HTTP/SDK bridge and gateway; only source pin is a fixture."""
+        from unittest.mock import patch
+        from studio_next.body_editor_client import host_pre_dispatch_rejection
+        from studio_next.capability_gateway import CapabilityGateway
+        from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+        tool = "add_asset_to_timeline"
+        grants = {tool: "write"}
+        self.tools = [{"name": tool, "inputSchema": {"type": "object", "properties": {
+            "assetId": {"type": "string"}, "previewOnly": {"type": "boolean"}}}}]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools=grants)
+        public = {"assetId": "existing-video", "previewOnly": False}
+        revision = "12345678-1234-1234-1234-123456789abc:123"
+        policy = {"reader": lambda: {"assets": {"ids": ["existing-video"], "complete": True},
+                                    "__zx7_live_revision": revision},
+                  "rules": {tool: {"/assetId": "assets"}},
+                  "fence": {tool: {"inventory_key": "__zx7_live_revision",
+                      "argument_key": "__zx7ExpectedRevision",
+                      "rejected_code": "ZX7_STALE_NATIVE_REVISION"}}}
+        async def check(session):
+            self.native_fail = True
+            self.native_text = "No placeable asset matched fixture."
+            gateway = CapabilityGateway({"editor": (session, grants, {}, None, {}, policy)},
+                                        trusted_pre_dispatch_sources=("editor",))
+            await gateway.refresh()
+            view = CapabilityGatewayMcpSession(gateway, "editor")
+            refused = await view.call_tool(tool, public)
+            self.assertTrue(refused.is_error)
+            self.assertEqual(host_pre_dispatch_rejection(refused, tool, public),
+                             "placement_plan_unconfirmed")
+            self.assertEqual(gateway.evidence()[-1]["state"], "host_rejected_no_native_write")
+            self.assertEqual([r["params"]["arguments"] for r in self.requests
+                              if r["method"] == "tools/call"],
+                             [{**public, "previewOnly": True}])
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        with patch("studio_next.native_editor_diagnostics.native_content_diagnostics_source_verified",
+                   return_value=True), patch("studio_next.native_editor_identity.pinned_native_revision_tools",
+                   return_value=frozenset({tool})), patch(
+                       "studio_next.native_editor_source_pin.pinned_electron_asset_placement_previews",
+                       return_value=frozenset({tool})):
+            await self.with_session(check, native_source=source)
+
     async def test_rejected_export_path_can_be_corrected_without_replaying_a_write(self):
         """Real hosted runs spent turns on legitimate no-overwrite refusals.
 
@@ -548,7 +590,8 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
                 from studio_next.capability_session_budget import CapabilitySessionBudget
                 budget = CapabilitySessionBudget(max_calls=2, max_writes=2)
-                gateway = CapabilityGateway({"editor": (session, grants)}, session_budget=budget)
+                gateway = CapabilityGateway({"editor": (session, grants)}, session_budget=budget,
+                                            trusted_pre_dispatch_sources=("editor",))
                 await gateway.refresh()
                 admitted = CapabilityGatewayMcpSession(gateway, "editor")
                 outcome = await NativeCreativeControl(admitted, model, max_turns=3,
