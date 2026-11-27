@@ -1640,3 +1640,30 @@ Exact parent: [2fab105621d36a05958fc5f8cd06ea7e49e1584e](https://github.com/ZX7-
   }
 }
 ```
+
+
+### Continuity exact installed artifact audit and fresh integration overlay
+
+```json
+{
+  "source_commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "tested_merge": "809c304d2ecbfce490805d0bfcf78bf9a958e345",
+  "matching_tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
+  "run": 46044219985,
+  "artifact": 15222496646,
+  "sha256": "80f7e6b52b76c4cae872dede32c58b57d0faed7ee86cea9bd8b81c90386d0de1",
+  "tests_run": 1821,
+  "passed": 1789,
+  "skipped": 32,
+  "failed": 0,
+  "errors": 0,
+  "independent_artifact_checks": "ZIP SHA/CRC, 24/24 manifest hashes/sizes, 3/3 full physical MP4 A/V decodes, all three sensory-continuity source/test wheel Git blob IDs exact. No genuine model or independent artistic acceptance.",
+  "matrix": {
+    "success": 28,
+    "in_progress": 1
+  },
+  "mlt_run": 46044220019,
+  "fresh_candidate_overlay": "Exact installed wheel from this run with nine candidate source/test blobs; 70 run, 66 pass, four optional OpenEXR skipped, exit 0. No fresh hosted or EXR acceptance."
+}
+```
+Prior ancestry receipt `source_sha` field refers to **derived output** SHA, not original input SHA; corrected key in ledger. Prior complete receipt retained at `33b737021bb0900535bf9419949ebd9806879cac`.

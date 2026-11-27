@@ -1334,14 +1334,10 @@
    "commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
    "tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
    "matrix_at_observation": {
-    "in_progress": 2,
-    "success": 27
+    "success": 28,
+    "in_progress": 1
    },
    "remaining": [
-    {
-     "id": 46044219985,
-     "name": "ZX7 BODY — Installed Package, Desktop and Physical Crash Proof"
-    },
     {
      "id": 46044220019,
      "name": "ZX7 MLT Editorial Native Research and Fidelity Gate"
@@ -1371,9 +1367,9 @@
  },
  "field_a_derivative_lineage_gap_20261127": {
   "observed": "Actual local synthetic 4x4 owner PNG -> body.visual_graph expression photo_r*.5 -> body.asset_vault durable producer DAG all_tool_results_verified; derived bytes distinct, attestation generated_original/trusted_renderer with source_id only output SHA. After withdrawal of exact original attestation, original inspect refused but a fresh derived checkout succeeded.",
-  "source_sha": "6e722263e450ddca6c7af5f708440fc9622a09290b463b3f634a400b54710b0c",
   "derived_attestation": "35ddd2849ceb76a73278bbe837525bacc74e336e40b8d7c28177078df8e18d0a",
-  "scope": "Missing explicit ancestor-grant provenance and dependency enforcement; not proof of unlawful use or revocation of independently granted derivative rights. Preserve history and independent owner grants. Require host-derived dependency receipts, versioned migration, exact ancestor policy and race/restart tests before broad rights propagation; no guessed legal semantics or claim of full withdrawal."
+  "scope": "Missing explicit ancestor-grant provenance and dependency enforcement; not proof of unlawful use or revocation of independently granted derivative rights. Preserve history and independent owner grants. Require host-derived dependency receipts, versioned migration, exact ancestor policy and race/restart tests before broad rights propagation; no guessed legal semantics or claim of full withdrawal.",
+  "derived_sha": "6e722263e450ddca6c7af5f708440fc9622a09290b463b3f634a400b54710b0c"
  },
  "physical_finishing_precision_candidate_blobs_20261127": {
   "studio_next/film_finishing.py": "c94103c669c8b061b1c4909a0cdf08833b3abe74",
@@ -1385,5 +1381,25 @@
   "studio_next/body_visual_render.py": "38beba98b37d2be69ea8ba4358b8de10679025cd",
   "studio_next/body_visual_contract.py": "9ca9ab93cf56a3ad7dd1768dd6c26cc22ba7a166",
   "studio_next/test_body_visual_graph.py": "47de2d37bde8d7f1d42a0e39becf64bd0afb31ea"
+ },
+ "continuity_installed_audit_20261127": {
+  "source_commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
+  "tested_merge": "809c304d2ecbfce490805d0bfcf78bf9a958e345",
+  "matching_tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
+  "run": 46044219985,
+  "artifact": 15222496646,
+  "sha256": "80f7e6b52b76c4cae872dede32c58b57d0faed7ee86cea9bd8b81c90386d0de1",
+  "tests_run": 1821,
+  "passed": 1789,
+  "skipped": 32,
+  "failed": 0,
+  "errors": 0,
+  "independent_artifact_checks": "ZIP SHA/CRC, 24/24 manifest hashes/sizes, 3/3 full physical MP4 A/V decodes, all three sensory-continuity source/test wheel Git blob IDs exact. No genuine model or independent artistic acceptance.",
+  "matrix": {
+   "success": 28,
+   "in_progress": 1
+  },
+  "mlt_run": 46044220019,
+  "fresh_candidate_overlay": "Exact installed wheel from this run with nine candidate source/test blobs; 70 run, 66 pass, four optional OpenEXR skipped, exit 0. No fresh hosted or EXR acceptance."
  }
 }
