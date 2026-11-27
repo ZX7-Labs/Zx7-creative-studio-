@@ -185,6 +185,16 @@ class CapabilityFabricTests(unittest.TestCase):
                          None)
         self.assertEqual(fabric.search("import_asset_from_path")["matches"][0]["id"],
                          "native/import_asset_from_path")
+        # Actual installed audit #45942607052 observed all 77 grants.
+        # Keep the complete identity list usable with the existing 4KB cap;
+        # unlike full schemas, these identities only authorize retrieval.
+        index = fabric.exact_lookup_index()
+        self.assertIsNotNone(index)
+        self.assertEqual(index["operation_ids"], sorted("native/" + n for n in grants))
+        self.assertLessEqual(len(json.dumps(index).encode("utf-8")), 4096)
+        for identity in index["operation_ids"]:
+            self.assertEqual([m["id"] for m in fabric.search(identity, limit=1)["matches"]],
+                             [identity])
 
     def test_host_action_facets_are_budgeted_and_cannot_reveal_ungranted_names(self):
         candidates = [tool("action"+str(i)+"_"+"x"*24)
@@ -229,7 +239,7 @@ class CapabilityFabricTests(unittest.TestCase):
                              [identity])
         index["operation_ids"].append("invented/action")
         self.assertNotIn("invented/action", fabric.exact_lookup_index()["operation_ids"])
-        for names in ([f"op_{i}" for i in range(49)],
+        for names in ([f"op_{i}" for i in range(97)],
                       [f"op_{i}_" + "x"*100 for i in range(48)],
                       ["界"*60], ["trailing_space "]):
             with self.subTest(names=len(names)):

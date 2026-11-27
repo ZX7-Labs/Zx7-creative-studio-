@@ -609,7 +609,7 @@
       "When a genuine source-linked model experiment actually passes, retain the original failed result and add a verified comparable retest receipt; never leave an immutable NOT_ACCEPTED hard stop.",
       "When a field passes independently, update its evidence shape and require independent human/technical review of the underlying linked artifact; CI tests cannot themselves authenticate reviewer identity."
     ],
-    "next_action": "Verify exact candidate hosted gates; investigate audio competence separately from transport. Preserve model-independent verified acoustic facts as distinct from listening. No professional acceptance promotion, no blind paid rerun. Predeclare a matched bounded control/experiment before another necessary authorized model trial; G1 terminal and meaningful revision, actual human co-edit, held-out G2, A–L and release remain open."
+    "next_action": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
   },
   "latest_ci_checkpoint": {
     "source": "5b9efc497717f81e63c26c14ff621af58201bc57",
@@ -1272,9 +1272,64 @@
         "assertion_failures": 0,
         "limits": "Reconstructed exact parent blobs; absent MCP SDK, repository scripts and example config; no full checkout."
       },
-      "hosted": "PENDING exact candidate",
+      "hosted": {
+        "head": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
+        "counts": {
+          "success": 28,
+          "in_progress": 1
+        },
+        "installed": {
+          "run": 45942606959,
+          "artifact": 15174550542,
+          "sha256": "47d53ab4716c683965ba41832323d8a9815234097facb64d53b0c9851788e788",
+          "merge_commit": "10afc0a827195f3d7e5d3ae90a3d271af1ee87a4",
+          "exact_tree_equivalence": true,
+          "manifest_verified": 24,
+          "tests_run": 1775,
+          "passed": 1745,
+          "skipped": 30,
+          "failures": 0
+        },
+        "native_conflict": "Installed cross-process job 140320939079 initially refused stale add_assets_to_timeline at commit boundary; targeted unchanged-source retry successful. No proof exact cause; no safety relaxation."
+      },
       "genuine_model_benefit": false
     },
-    "next": "Verify exact candidate hosted gates; investigate audio competence separately from transport. Preserve model-independent verified acoustic facts as distinct from listening. No professional acceptance promotion, no blind paid rerun. Predeclare a matched bounded control/experiment before another necessary authorized model trial; G1 terminal and meaningful revision, actual human co-edit, held-out G2, A–L and release remain open."
+    "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality.",
+    "speech": {
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "run": 45944055906,
+      "job": 140324606233,
+      "source": "b282fd85606c38b87be2411833f092fe628da6a3",
+      "script_blob": "5a3ea4893b1a2364386996329ba02bae54a5d444",
+      "retired_trigger": "b0afff228fbf84f32a18e03252ec3bec59ee75e5",
+      "artifact": 15174256003,
+      "sha256": "a71c16e0191a302d53ff091b8a154bb3f27b8b09786fea99a3362d32af6c2352",
+      "passed": 4,
+      "cases": 4,
+      "reported_tokens": 3785,
+      "model_wall_ms": 5219.613,
+      "observations": [
+        "silver moon",
+        "",
+        "paper boat",
+        "winter rain"
+      ],
+      "independent": "ZIP CRC/SHA verified, four complete physical MP4 decodes and WAV+PCM hashes match; independent 16kHz mono decode byte-identical. Silence RMS zero.",
+      "limits": "Short English synthetic speech/silence discrimination only. Prior pitch failure stands; no general musical or artistic competence inferred."
+    }
+  },
+  "compositional_measurement_20261127": {
+    "parent": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
+    "source_blobs": {
+      "studio_next/capability_fabric.py": "4ee3423709bd317966801ef4309307d2df7e972b",
+      "studio_next/test_capability_fabric.py": "5c17c3ca6ce275369720099791770ac7bbdce29d",
+      "studio_next/body_creative_session.py": "d8c12239fc94a539c59c5d12f29e7c3b6a5bcc6a",
+      "studio_next/test_body_creative_session.py": "917a7b3717f8abf74dfa958222397c40767e2215"
+    },
+    "negative": "On exact installed baseline (four targeted tests): persisted owner fact was forged by adapter mutating context; legacy/known pending decision measurement absent; failed model call measurement absent; actual installed 77-grant profile had no exact lookup index because 48 limit too low. Two failures and three errors reproduced.",
+    "correction": "Deep-copy model context and returned intent. Persist model-call wall time and bounded provider-reported usage with pending intent, preserve receipt on resume, measure dispatch separately, failed inference cannot inherit prior usage. Raise existing complete-or-absent retrieval count cap to 96; retain 4096-byte/160-byte ID bounds, no new dispatch grant.",
+    "local": "Exact installed wheel from #15174550542; exact parent hashes and editor.example.json hash checked; recovered candidate GREEN 74/74 body creative session, picture selection, durable graph, fabric, media vault tests; actual FFmpeg fixture renders. Not an independent model or creative acceptance.",
+    "acceptance": "New exact head CI pending; actual compositional model comparator still unrun.",
+    "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
   }
 }

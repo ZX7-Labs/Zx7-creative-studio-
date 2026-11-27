@@ -42,6 +42,100 @@ class SessionControlRegression(unittest.TestCase):
                 self.assertEqual(state['events'],[])
             finally:release.set();c.close()
 
+    def test_model_adapter_cannot_mutate_owner_facts_or_prior_receipts(self):
+        from studio_next.body_creative_session import CreativeSessions
+        class MutatingAdapter:
+            calls = 0
+            last_call_usage = None
+            def decide(self, context):
+                self.calls += 1
+                if self.calls == 1:
+                    context['owner_facts']['product']['claim'] = 'forged'
+                    self.last_call_usage = {'prompt_tokens': 12, 'completion_tokens': 4,
+                                            'total_tokens': 16, 'private': 'discard'}
+                    return {'action':'assets','arguments':{},'reason':'Fixture only'}
+                context['recent_events'][0]['result']['assets'].append({'forged':True})
+                context['submitted_jobs'].append('foreign-job')
+                self.last_call_usage = {'prompt_tokens': True, 'completion_tokens': -1,
+                                        'total_tokens': 1000000001}
+                return {'action':'finish','arguments':{'summary':'Fixture only'},'reason':'Fixture only'}
+        with tempfile.TemporaryDirectory() as root:
+            c=LocalBodyCoordinator(root)
+            manager=CreativeSessions(c,MutatingAdapter(),max_turns=2)
+            try:
+                created=manager.create('film','Synthetic integrity test',{'product':{'claim':'owner fact'}})
+                manager.close()
+                state=manager.inspect(created['session_id'])
+                self.assertEqual(state['facts'],{'product':{'claim':'owner fact'}})
+                self.assertEqual(state['jobs'],[])
+                self.assertEqual(state['events'][0]['result']['assets'],[])
+                self.assertEqual(state['status'],'model_finished')
+                self.assertEqual(len(state['events']),2)
+                first, second = [event['model_call'] for event in state['events']]
+                self.assertEqual(first['provider_reported_token_usage'],
+                                 {'prompt_tokens':12,'completion_tokens':4,'total_tokens':16})
+                self.assertIsNone(second['provider_reported_token_usage'])
+                for event in state['events']:
+                    self.assertGreaterEqual(event['model_call']['measured_model_wall_ms'],0)
+                    self.assertFalse(event['model_call']['token_usage_independently_verified'])
+                    self.assertTrue(event['model_call']['model_response_returned'])
+                    self.assertGreaterEqual(event['measured_dispatch_wall_ms'],0)
+                self.assertIsNone(state['pending_model_call'])
+            finally:manager.close();c.close()
+
+    def test_resume_pending_decision_keeps_known_or_unknown_model_measurement(self):
+        from studio_next.body_creative_session import CreativeSessions
+        from unittest.mock import patch
+        class NoNewInference:
+            def decide(self,context):
+                raise AssertionError('Already persisted decision must not be inferred twice')
+        for recorded in (None, {'measured_model_wall_ms':1.25,
+                               'provider_reported_token_usage':{'total_tokens':21},
+                               'token_usage_independently_verified':False,
+                               'model_response_returned':True}):
+            with self.subTest(recorded=recorded), tempfile.TemporaryDirectory() as root:
+                c=LocalBodyCoordinator(root)
+                manager=CreativeSessions(c,NoNewInference(),max_turns=1)
+                try:
+                    with patch.object(manager,'_queue'):
+                        created=manager.create('film','Synthetic replay test',{})
+                    state=manager.inspect(created['session_id'])
+                    state['pending']={'action':'finish','arguments':{'summary':'Persisted intent'},'reason':'Fixture only'}
+                    if recorded is None:
+                        state.pop('pending_model_call',None) # legacy persisted session
+                    else:
+                        state['pending_model_call']=recorded
+                    manager._save(state)
+                    manager.resume_pending();manager.close()
+                    result=manager.inspect(created['session_id'])
+                    self.assertEqual(result['status'],'model_finished')
+                    self.assertEqual(len(result['events']),1)
+                    self.assertEqual(result['events'][0]['model_call'],recorded)
+                    self.assertIsNone(result['pending_model_call'])
+                finally:manager.close();c.close()
+
+    def test_failed_inference_retains_elapsed_but_not_stale_token_claim(self):
+        from studio_next.body_creative_session import CreativeSessions
+        class FailingAdapter:
+            last_call_usage={'total_tokens':42}
+            def decide(self,context):
+                raise OSError('Fixture transport failure')
+        with tempfile.TemporaryDirectory() as root:
+            c=LocalBodyCoordinator(root)
+            manager=CreativeSessions(c,FailingAdapter(),max_turns=1)
+            try:
+                created=manager.create('film','Synthetic failure test',{})
+                manager.close()
+                result=manager.inspect(created['session_id'])
+                self.assertEqual(result['status'],'blocked')
+                self.assertEqual(result['events'],[])
+                self.assertIsNone(result['pending'])
+                call=result['pending_model_call']
+                self.assertGreaterEqual(call['measured_model_wall_ms'],0)
+                self.assertFalse(call['model_response_returned'])
+                self.assertIsNone(call['provider_reported_token_usage'])
+            finally:manager.close();c.close()
+
     def test_nonfinite_model_response_is_persisted_as_blocked_not_left_running(self):
         class InvalidModel:
             def decide(self,context):

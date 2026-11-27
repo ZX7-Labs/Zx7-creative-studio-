@@ -332,7 +332,9 @@ class CapabilityFabric:
         identity, schema, untrusted description, or execution grant is sent.
         Large or non-queryable catalogs retain ordinary indexed discovery.
         """
-        if self.count > 48:
+        # Real installed native-editor audit (77 grants) fits the byte
+        # ceiling; allow modest growth, not an unbounded full catalog.
+        if self.count > 96:
             return None
         identities = sorted(self._records)
         if any(identity != identity.strip() or len(identity.encode("utf-8")) > 160
