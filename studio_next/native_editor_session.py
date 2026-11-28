@@ -496,6 +496,13 @@ async def run_native_session(args):
                     receipt_path=args.state / "owner-project-setup.jsonl")
             preconditions, machine_effects = trial_machine_contracts(
                 host_grants, fresh=fresh)
+            owner_delivery_offer = None
+            if (args.indexed_catalog and capture_render_project is not None and
+                    configuration.get("required_export_delivery") is not None and
+                    host_grants.get("export_timeline") == "write" and
+                    host_grants.get("check_export_readiness") == "read"):
+                from studio_next.body_editor_policy import EditorConfig, OwnerExportOffer
+                owner_delivery_offer = OwnerExportOffer(EditorConfig(**configuration))
             outcome = await NativeCreativeControl(
                 model_session, model, max_turns=args.max_turns,
                 host_tool_access=model_grants,
@@ -510,8 +517,9 @@ async def run_native_session(args):
                     pinned_electron_timeline_frame_previews(args.source, host_grants)),
                 required_evidence=required,
                 host_content_revision_tools=host_revisions,
-            host_capture_render_project=capture_render_project,
+                host_capture_render_project=capture_render_project,
                 host_capture_saved_project_identity=capture_saved_project_identity,
+                host_owner_delivery_offer=owner_delivery_offer,
                 receipt_path=args.receipt).run(brief)
     pair_report = {}
     if REVIEWED_RENDER_PAIR in required:

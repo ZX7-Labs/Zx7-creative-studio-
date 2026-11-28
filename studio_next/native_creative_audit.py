@@ -303,6 +303,21 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if not (reported or exception):
                     raise NativeJournalError("Malformed failed project bootstrap evidence")
             continue
+        if kind == "host_owner_delivery_readiness_observation":
+            status = event.get("native_readiness_status")
+            digest = event.get("text_sha256")
+            elapsed = event.get("measured_host_read_wall_ms")
+            if (pending is not None or event.get("tool") != "check_export_readiness" or
+                    host_tool_access.get("check_export_readiness") != "read" or
+                    host_tool_access.get(RENDER_TOOL) != "write" or
+                    event.get("host_attested_read_only") is not True or
+                    event.get("no_model_selected_mutation") is not True or
+                    not _sha(event.get("inputs_sha256")) or
+                    status not in ("matched", "not_ready", "profile_mismatch", "unconfirmed") or
+                    not ((status == "unconfirmed" and digest is None) or _sha(digest)) or
+                    type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0):
+                raise NativeJournalError("Owner delivery readiness lacks bounded host read evidence")
+            continue
         if kind in ("host_placement_track_observation", "host_placement_asset_observation"):
             tool, count_field, limit = (("get_timeline", "observed_track_count", 32)
                 if kind == "host_placement_track_observation" else ("get_assets", "observed_asset_count", 16))

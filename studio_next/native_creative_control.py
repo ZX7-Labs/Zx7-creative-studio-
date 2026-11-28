@@ -27,6 +27,8 @@ from .body_editor_client import (
     host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK,
     host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK,
 )
+from .body_editor_policy import OwnerExportOffer
+from .body_editor_delivery import native_delivery_matches
 from .native_editor_source_pin import (
     source_verified_preview_intent, source_verified_plan_preview_receipt,
 )
@@ -937,7 +939,8 @@ class NativeCreativeControl:
                  required_evidence: tuple[str, ...] = (),
                  host_content_revision_tools: tuple[str, ...] = (),
                  host_capture_render_project=None,
-                 host_capture_saved_project_identity=None):
+                 host_capture_saved_project_identity=None,
+                 host_owner_delivery_offer=None):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
             raise NativeCreativeControlError("Native model session requires finite turn budget")
         if not callable(getattr(model, "decide", None)):
@@ -981,6 +984,14 @@ class NativeCreativeControl:
                 "Trusted save-time project capture requires native render custody")
         self._capture_saved_project_identity = host_capture_saved_project_identity
         self._explicit_render_save_identity = None
+        if host_owner_delivery_offer is not None and (
+                not isinstance(host_owner_delivery_offer, OwnerExportOffer) or
+                host_capture_render_project is None or catalog_mode != "indexed" or
+                host_tool_access.get(RENDER_TOOL) != "write" or
+                host_tool_access.get("check_export_readiness") != "read"):
+            raise NativeCreativeControlError("Owner delivery offer requires indexed source-bound export grants")
+        self._owner_delivery_offer = host_owner_delivery_offer
+        self._owner_delivery_observation = None
         if (not isinstance(host_content_revision_tools, (list, tuple, frozenset)) or
                 any(not isinstance(name, str) or not name
                     for name in host_content_revision_tools) or
@@ -1193,6 +1204,73 @@ class NativeCreativeControl:
             read = self.session.call_tool
         return await read(tool, arguments)
 
+    async def _inspect_owner_delivery_candidate(self, candidate, validator):
+        """Read actual mechanical readiness once per saved source/options.
+
+        Same grant and option projection as the native export preflight; no
+        model observation epoch is refreshed. This observation is not a lock,
+        a reservation, or a substitute for dispatch-time or physical checks.
+        """
+        tool = "check_export_readiness"
+        arguments = candidate["arguments"]
+        profile = candidate["owner_delivery_profile"]
+        fields = validator.schema.get("properties", {})
+        read_args = {key: value for key, value in arguments.items() if key in fields}
+        semantic_fields = set(arguments) - {"outputPath", "previewOnly"}
+        if not semantic_fields.issubset(fields) or not validator.is_valid(read_args):
+            return None, {"status": "readiness_schema_incompatible", "owner_delivery_profile": profile}
+        key = (self._explicit_render_save_identity, _wire(read_args))
+        if self._owner_delivery_observation is None or self._owner_delivery_observation[0] != key:
+            status = "unconfirmed"
+            observed = None
+            digest = None
+            started = time.monotonic_ns()
+            try:
+                response = await self._host_preflight_read(tool, read_args)
+                if not _native_mcp_error_status(response):
+                    texts, images, audio = _native_content(response)
+                    if not images and not audio:
+                        state = _strict_receipt(texts, "Owner delivery readiness")
+                        digest = hashlib.sha256(texts[0].encode()).hexdigest()
+                        target = state.get("deliveryTarget")
+                        if isinstance(target, dict):
+                            # Bounded source facts only; do not copy native text,
+                            # unknown codec/container values or arbitrary metadata.
+                            observed = {}
+                            for name in ("width", "height", "fps", "duration"):
+                                value = target.get(name)
+                                if type(value) in (int, float) and 0 <= value <= 16384:
+                                    observed[name] = value
+                            for name, admitted in (("container", ("mp4",)),
+                                                   ("videoCodec", ("h264", "h265"))):
+                                if target.get(name) in admitted:
+                                    observed[name] = target[name]
+                        if state.get("ready") is not True or state.get("blockers") != []:
+                            status = "not_ready"
+                        elif native_delivery_matches(state, profile):
+                            status = "matched"
+                        else:
+                            status = "profile_mismatch"
+            except Exception:
+                # An optional read cannot change the native export contract.
+                # Cancellation remains a session boundary, not a read failure.
+                pass
+            elapsed = round((time.monotonic_ns() - started) / 1_000_000, 3)
+            self._append({"kind": "host_owner_delivery_readiness_observation", "tool": tool,
+                "inputs_sha256": hashlib.sha256(_wire(read_args).encode()).hexdigest(),
+                "text_sha256": digest, "native_readiness_status": status,
+                "measured_host_read_wall_ms": elapsed,
+                "host_attested_read_only": True, "no_model_selected_mutation": True})
+            self._owner_delivery_observation = (key, status, observed)
+        _, status, observed = self._owner_delivery_observation
+        if status == "matched":
+            return {**candidate, "native_readiness_verified": True,
+                "observed_delivery": observed,
+                "note": "Last host read matched owner profile. No creative range chosen; native readiness, source custody and destination rechecked at dispatch."}, None
+        return None, {"status": status, "owner_delivery_profile": profile,
+                      "observed_delivery": observed,
+                      "note": "Last host read did not establish an owner-matching export. Inspect current native state or choose different valid arguments; no export was attempted."}
+
     async def _observe_placement_inventory(self, tool, arguments, validator, *, refresh=False):
         timeline_id = self._trusted_project_active_timeline_id()
         if timeline_id is None or not validator.is_valid(arguments):
@@ -1377,6 +1455,12 @@ class NativeCreativeControl:
                 type(saved) is tuple and len(saved) in (2, 4) and
                 all(type(value) is str and value for value in saved[:2]) and
                 (len(saved) == 2 or all(_digest(value) for value in saved[2:])))
+
+    def _source_bound_export_needs_revision(self, evidence):
+        return bool(self._capture_render_project is not None and self._requires_av_review and
+                    (evidence["current_verified"] & evidence["current_frames"] &
+                     evidence["current_full_audio"]) and
+                    not evidence["post_review_write_acknowledged"])
 
     def _source_bound_delivery_affordance(self, evidence):
         """Expose one existing mechanical delivery option, never execute it.
@@ -2052,6 +2136,14 @@ class NativeCreativeControl:
                 if visible_selectable:
                     indexed_actions.append("invoke")
                 missing_completion = self._missing_completion_evidence()
+                delivery_candidate = delivery_feedback = None
+                if (self._owner_delivery_offer is not None and delivery_option == RENDER_TOOL and
+                        RENDER_TOOL in visible_selectable and
+                        not self._source_bound_export_needs_revision(export_evidence)):
+                    proposed = self._owner_delivery_offer.candidate(validators[RENDER_TOOL])
+                    if proposed is not None:
+                        delivery_candidate, delivery_feedback = await self._inspect_owner_delivery_candidate(
+                            proposed, validators["check_export_readiness"])
                 context = {
                     "creative_brief": brief,
                     # Expose only actions that the exact current grammar
@@ -2068,6 +2160,10 @@ class NativeCreativeControl:
                     "selectable_native_tools": visible_selectable,
                     "inspectable_native_tools": list(self._inspectable_tied_candidates),
                     "host_observed_machine_affordances": host_frontier,
+                    **({"host_owner_delivery_candidate": delivery_candidate}
+                       if delivery_candidate is not None else {}),
+                    **({"host_owner_delivery_feedback": delivery_feedback}
+                       if delivery_feedback is not None else {}),
                     "host_observed_content_video_tracks": content_video_tracks,
                     "host_selected_native_input_hints": (
                         _selected_native_input_hints(visible_selectable, self.tools,
@@ -2780,10 +2876,7 @@ class NativeCreativeControl:
                         self._requires_av_review and
                         args["inputs"].get("previewOnly") is not True):
                     reviewed = self._current_export_evidence()
-                    if ((reviewed["current_verified"] &
-                             reviewed["current_frames"] &
-                             reviewed["current_full_audio"]) and
-                            not reviewed["post_review_write_acknowledged"]):
+                    if self._source_bound_export_needs_revision(reviewed):
                         self._last_preflight_feedback = {
                             "tool": native_name,
                             "validation_keyword": "native_second_export_needs_content_revision",
@@ -2846,6 +2939,12 @@ class NativeCreativeControl:
                                   decision["reason"].encode("utf-8")).hexdigest(),
                               "model_reason_utf8_bytes": len(decision["reason"].encode("utf-8")),
                               "uncertain_write_do_not_replay": True})
+                if native_name == RENDER_TOOL and self._owner_delivery_offer is not None:
+                    self._owner_delivery_offer.retire_submitted(args["inputs"])
+                    # Dispatch may change current readiness even if refused.
+                    # Re-read only after the model has actually chosen export.
+                    if args["inputs"].get("previewOnly") is not True:
+                        self._owner_delivery_observation = None
                 call_started = time.monotonic_ns()
                 try:
                     result = await self.session.call_tool(native_name, args["inputs"])

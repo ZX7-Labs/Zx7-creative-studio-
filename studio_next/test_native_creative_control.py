@@ -2175,6 +2175,127 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(set(name for name, _ in actions) & set(brain.observed[0]["selectable_native_tools"]))
                 self.assertEqual(other.calls, [("get_project", {})])
 
+    async def test_owner_delivery_offer_is_available_after_save_and_model_selects_exact_args(self):
+        from studio_next.body_editor_policy import EditorConfig, OwnerExportOffer
+        from studio_next.native_render_evidence import (
+            REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR, TIMED_FRAMES, AUDIO_ENVELOPE)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in ("projects", "staging", "outputs"):
+                (root / name).mkdir()
+            class ScopedDelivery(FakeSession):
+                def __init__(self):
+                    super().__init__()
+                    self.tools.extend(SimpleNamespace(name=name, description=name,
+                        input_schema={"type": "object"}) for name in (
+                            "get_project", "save_project", TIMED_FRAMES, AUDIO_ENVELOPE))
+                    self.tools.append(SimpleNamespace(name="check_export_readiness", description="Read only",
+                        input_schema={"type": "object", "properties": {
+                            "target": {"enum": ["h264_project"]}, "resolution": {"enum": ["project"]},
+                            "fps": {"type": "number"}}}))
+                    self.host_reads = []
+                    self.width = 640
+                    self.tools.append(SimpleNamespace(name="export_timeline", description="Native export",
+                        input_schema={"type": "object", "properties": {
+                            "outputPath": {"type": "string"}, "target": {"enum": ["h264_project"]},
+                            "resolution": {"enum": ["project"]}, "fps": {"type": "number"},
+                            "previewOnly": {"type": "boolean"}}, "required": ["outputPath"]}))
+                async def call_tool(self, name, arguments):
+                    self.calls.append((name, arguments))
+                    if name == "get_project":
+                        value = {"mcp": {"hasProject": True},
+                            "project": {"currentTimelineId": "film"},
+                            "currentTimeline": {"id": "film", "clipCount": 2}}
+                    elif name == "save_project":
+                        value = {"success": True, "action": name,
+                            "result": {"project": {"path": "/synthetic/native", "modified": "t1"}}}
+                    elif name == "export_timeline":
+                        self.assert_path(arguments)
+                        value = {"success": True, "action": name, "projectPath": "/synthetic/native",
+                            "timeline": {"id": "film"}, "outputPath": arguments["outputPath"],
+                            "result": {"started": True, "outputPath": arguments["outputPath"]}}
+                    else:
+                        raise AssertionError("Unexpected dispatch " + name)
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text=json.dumps(value))])
+                async def call_host_read(self, name, arguments):
+                    if name != "check_export_readiness":
+                        return await self.call_tool(name, arguments)
+                    self.host_reads.append((name, arguments))
+                    value = {"ready": True, "blockers": [], "deliveryTarget": {
+                        "container": "mp4", "videoCodec": "h264", "width": self.width,
+                        "height": 360, "fps": 24, "duration": 6}}
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text=json.dumps(value))])
+                def assert_path(self, arguments):
+                    if not config._policy("export_timeline", arguments, "write"):
+                        raise AssertionError("Unscoped output")
+            session = ScopedDelivery()
+            grants = {t.name: ("write" if t.name in ("update_text_clip", "save_project",
+                "export_timeline") else "read") for t in session.tools}
+            config = EditorConfig("http://127.0.0.1:19790/mcp", root / "projects",
+                root / "staging", root / "outputs", grants, frozenset({"read", "write"}),
+                required_export_delivery={"width": 640, "height": 360, "fps": 24,
+                    "max_duration": 6, "video_codec": "h264"})
+            offer = OwnerExportOffer(config)
+            class ChoosingModel(ScriptedModel):
+                requires_native_function_contracts = True
+                def __init__(self):
+                    super().__init__([])
+                def decide(self, context):
+                    self.observed.append(context)
+                    if len(self.observed) == 1:
+                        return decision("invoke", tool="save_project", inputs={"previewOnly": False})
+                    if len(self.observed) == 3 and "host_owner_delivery_candidate" in context:
+                        candidate = context["host_owner_delivery_candidate"]
+                        return decision("invoke", tool=candidate["tool"], inputs=candidate["arguments"])
+                    return decision("search", query="creative choice")
+            model = ChoosingModel()
+            def make_control(native, brain, candidate_offer):
+                return NativeCreativeControl(native, brain, max_turns=4, catalog_mode="indexed",
+                    host_tool_access=grants, required_evidence=(REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+                    host_content_revision_tools=("update_text_clip",),
+                    host_capture_render_project=lambda *_: ("b"*64, "c"*64, "d"*64),
+                    host_capture_saved_project_identity=lambda *_: ("/synthetic/native", "t1", "e"*64, "f"*64),
+                    host_owner_delivery_offer=candidate_offer)
+            control = make_control(session, model, offer)
+            result = await control.run("Choose a native export or another creative action")
+            self.assertNotIn("host_owner_delivery_candidate", model.observed[0])
+            candidate = model.observed[1]["host_owner_delivery_candidate"]
+            self.assertTrue(candidate["native_readiness_verified"])
+            self.assertEqual(model.observed[2]["host_owner_delivery_candidate"], candidate)
+            self.assertIn("export_timeline", model.observed[2]["selectable_native_tools"])
+            self.assertEqual(session.host_reads, [("check_export_readiness", {
+                "target": "h264_project", "resolution": "project", "fps": 24})])
+            self.assertEqual([item for item in session.calls if item[0] != "get_project"], [
+                ("save_project", {"previewOnly": False}), ("export_timeline", candidate["arguments"])])
+            self.assertNotIn("host_owner_delivery_candidate", model.observed[3])
+            self.assertEqual(list((root / "outputs").iterdir()), [])
+            self.assertIsNone(offer._path)  # retire even before async native file appears
+            from studio_next.native_creative_audit import audit_native_journal, NativeJournalError
+            audit_args = {"host_tool_access": grants,
+                "expected_required_evidence": (REVIEWED_RENDER_PAIR, REVIEWED_AV_PAIR),
+                "host_content_revision_tools": ("update_text_clip",)}
+            self.assertTrue(audit_native_journal(result["events"], **audit_args)["journal_chain_structurally_valid"])
+            import copy
+            tampered = copy.deepcopy(result["events"])
+            read = next(e for e in tampered if e["kind"] == "host_owner_delivery_readiness_observation")
+            read["host_attested_read_only"] = False
+            with self.assertRaises(NativeJournalError):
+                audit_native_journal(tampered, **audit_args)
+
+            # Actual mismatching native target must NOT become an offered call.
+            wrong, other = ScopedDelivery(), ChoosingModel()
+            wrong.width = 1920
+            await make_control(wrong, other, OwnerExportOffer(config)).run("Do not guess a profile")
+            self.assertEqual(len(wrong.host_reads), 1)
+            for context in other.observed[1:]:
+                self.assertNotIn("host_owner_delivery_candidate", context)
+                feedback = context["host_owner_delivery_feedback"]
+                self.assertEqual(feedback["status"], "profile_mismatch")
+                self.assertEqual(feedback["observed_delivery"]["width"], 1920)
+            self.assertNotIn("export_timeline", [name for name, _ in wrong.calls])
+
     async def test_one_selected_full_av_window_replaces_two_reads_without_waiving_proof(self):
         """Matched controller/auditor fixture: same facts, fewer model calls.
 

@@ -1869,3 +1869,66 @@ Previous exact records at [76cc6e01ea03f247d50ef6b8dba92128c4b56d90](https://git
     "no_failures_observed": true
   }
 }
+
+
+## 28 Nov — independently verified derivative installation and owner export readiness candidate
+
+```json
+{
+  "receipt": {
+    "baseline": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
+    "tested_merge": "42a0ea1977d2da66848d02f087d5b2e1f5128eab",
+    "exact_tree": "60ccc5e6436c33fa682afa39e1a96b457068bc05",
+    "installed_run": 46101251651,
+    "jobs": [
+      140843964834,
+      140848194870
+    ],
+    "artifact": 15246172402,
+    "sha256": "292500ed737182e4426d0b18a9f93cdc659e42406f63f777d8a89e40414ae07a",
+    "tests": {
+      "run": 1827,
+      "pass": 1795,
+      "skip": 32,
+      "failures": 0,
+      "errors": 0
+    },
+    "verification": "All four new physical lineage tests executed; independently downloaded exact ZIP, CRC, 24 manifest entries, 5 changed wheel blobs, 3 complete FFmpeg physical media decodes; merge tree equal. No legal/artistic acceptance.",
+    "hosted_observed": {
+      "success": 28,
+      "in_progress": 1,
+      "mlt_run": 46101251636,
+      "research_success": true
+    }
+  },
+  "data": {
+    "baseline": "3132f855cb907713a5fa37839cf95202cbbc7378",
+    "real_failed_trial": 46045586986,
+    "causal_target": "7 existing-output refusals, 2 delivery mismatch, 1 target enum. Previous feedback was reactive; no confirmed single neural root cause.",
+    "correction": "Explicit owner-scoped H264 project-size candidate only after source-bound model-selected save and only if export is actually selectable and existing post-review revision gate allows it. Exact current export schema and scoped fresh unused path, no file reservation or implicit trim. Host-only granted check_export_readiness, exact projection of options and strict owner profile match, cached per save/options; current native receipt must match before offering. Bounded mismatch feedback, no model observation epoch advancement. Actual model still chooses and submits args; bridge readiness, grants, no-overwrite and save/capture/physical proof unchanged. Candidate retired on any apply submission even before file appears; no auto-dispatch or replay. H265 and unknown project-size routes receive no candidate.",
+    "blobs": {
+      "studio_next/body_editor_policy.py": "a2d626b9b2e569d1d165d3cf785c0852dc9102bb",
+      "studio_next/native_editor_session.py": "1dfa413341a6b227411fdc88efb5cf60dbcdbfa7",
+      "studio_next/native_creative_control.py": "85ed48198d15153b8139690fadeba94e19eed6b0",
+      "studio_next/native_creative_audit.py": "e25bf53c10a41d0883816abba9e95a50de8c99a2",
+      "studio_next/test_body_editor_policy.py": "004d22adeee3e551524204accd8bd9cf0dc96e1c",
+      "studio_next/test_native_creative_control.py": "686147931086d12fee717d5ed6b1c040b4ffa471"
+    },
+    "tests": {
+      "red": "missing path offer API, missing controller option, and readiness fact false; independently confirmed RED before correction",
+      "focused": "2/2 passed; actual filesystem collision/symlink, missing grants/unsupported profile/schema, native mock readiness matching and wrong 1920px, stable one-read offer, exact chosen arguments, no unselected write, journal rejection of altered read-role",
+      "related": {
+        "total_attempted": 297,
+        "passed": 258,
+        "skipped": 36,
+        "import_errors": 3,
+        "failed_assertions": 0,
+        "filtered_local_rerun": 294,
+        "remaining_errors": 0
+      },
+      "environment": "installed wheel-only local overlay, three checkout-only scripts.run_native_model_trial imports unavailable and 36 official MCP optional tests skipped"
+    },
+    "limits": "Local scripted host coordination evidence, not genuine model capability or real native readiness on current candidate. Candidate optional and may be ignored. No new provider run. Existing filesystem race limits remain; offer does not reserve path or change existing no-overwrite enforcement. No broad H265 support claimed. Exact hosted matrix pending."
+  }
+}
+```
