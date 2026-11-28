@@ -780,20 +780,6 @@
   "consent": "unchanged synthetic-only bounded policy",
   "proof": "no gate accepted by documentation"
  },
- "compositional_measurement_20261127": {
-  "parent": "d48af496fa70a9208a94016fd5e4d7320d05d0e1",
-  "source_blobs": {
-   "studio_next/capability_fabric.py": "4ee3423709bd317966801ef4309307d2df7e972b",
-   "studio_next/test_capability_fabric.py": "5c17c3ca6ce275369720099791770ac7bbdce29d",
-   "studio_next/body_creative_session.py": "d8c12239fc94a539c59c5d12f29e7c3b6a5bcc6a",
-   "studio_next/test_body_creative_session.py": "917a7b3717f8abf74dfa958222397c40767e2215"
-  },
-  "negative": "On exact installed baseline (four targeted tests): persisted owner fact was forged by adapter mutating context; legacy/known pending decision measurement absent; failed model call measurement absent; actual installed 77-grant profile had no exact lookup index because 48 limit too low. Two failures and three errors reproduced.",
-  "correction": "Deep-copy model context and returned intent. Persist model-call wall time and bounded provider-reported usage with pending intent, preserve receipt on resume, measure dispatch separately, failed inference cannot inherit prior usage. Raise existing complete-or-absent retrieval count cap to 96; retain 4096-byte/160-byte ID bounds, no new dispatch grant.",
-  "local": "Exact installed wheel from #15174550542; exact parent hashes and editor.example.json hash checked; recovered candidate GREEN 74/74 body creative session, picture selection, durable graph, fabric, media vault tests; actual FFmpeg fixture renders. Not an independent model or creative acceptance.",
-  "acceptance": "Exact 3320ba88 hosted 28 success/1 in progress at observation; actual compositional model comparator still unrun.",
-  "next": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
- },
  "compositional_configuration_guard_20261127": {
   "exact_prior_ledger": "76cc6e01ea03f247d50ef6b8dba92128c4b56d90",
   "blob": "9a0659096ce43d95bd0a57182383270c01dc29ca",
@@ -824,35 +810,6 @@
   "independent_decode": "Both ZIP entries byte-identical: 144 RGB frames, 640x360 H.264, 24/1 fps, 6s, stereo AAC 44100Hz; full RGB and PCM streams byte-identical locally. Original staged/native source SHAs agree. All saved project SHA receipts matched retained autosaves; first had 2 original clips; second only adds an empty video track; final adds two editable animated text clips at turns 41/42, saved 43, never re-exported. Prior model-selected samples 1/3/5 vs 0/2/4 seconds; full numeric audio read each. Original picture source correlation 0.9990, RGB MAE 2.635 at matched frame indices, no black frames; structural native source verifier explicitly does not attest render pixel provenance, preserve that limit.",
   "failed_events": "Turns 7, 14 and 44 stale identity safe rejection; 45/46 host preconditions project_open/project_assets_available unknown; turn 31 truncated tool response; 17 search events, empty results at 36/38/39. No pair, no neural semantic hearing, no professional acceptance. Scope digest denotes project path+timeline ID, not content identity; actual full decode proves duplication.",
   "comparison": "Prior indexed #45934918405 48 turns/17 searches/589619 reported tokens/1 output; latest 48/17/547741/2 paths but 1 digest. No causal efficiency or artistic win; direct arm had 2 distinct physical outputs but failed terminal acceptance."
- },
- "indexed_recovery_frontier_20261127": {
-  "parent": "fd648e50d41cf17ef68815db5e42b683bae1e239",
-  "source_blobs": {
-   "studio_next/native_creative_control.py": "7d2980233ec180e6966336381072fdd4f66caa63",
-   "studio_next/test_native_creative_control.py": "e01da471962884aeb20fad737b8bd3c8ab69b143"
-  },
-  "negative": "Exact installed source: stale bridge rejection clears project identity; indexed recovery get_project not selectable even if granted; model-chosen direct recovery rejected as unsearched. RED one error/one assertion failure. No-grant/invalid-schema controls pass.",
-  "correction": "Prioritize only actual installed granted READ get_project with valid empty inputs in indexed frontier after model identity invalidation; disappear after successful valid read. Provider sees exact contract. No automatic dispatch, grant expansion, cache trust or write replay.",
-  "local": {
-   "run": 266,
-   "passed": 260,
-   "environment_errors": 6,
-   "assertion_failures": 0,
-   "limits": "Exact installed controller/test source checked; missing repository scripts and optional MCP SDK. Four focused controls GREEN; not physical or neural acceptance."
-  },
-  "parent_ci": {
-   "success": 25,
-   "in_progress": 4,
-   "original_failed_job": 140335168274,
-   "run": 45947254008,
-   "diagnosis": "HTTP403 recovered, checksum Electron and Vite build succeeded; later silent build-step preflight failed, exact predicate unconfirmed. One targeted same-source non-model rerun requested; do not label pass."
-  },
-  "next": "Complete parent hosted gates without cancelling; integrate this tested candidate and validate exact-source gates. Investigate the no-content second render and uncompleted saved edit; compare matched compositional/direct routes only after evidence and within valid scope. No replay of spent trial."
- },
- "indexed_duplicate_feedback_20261127": {
-  "retained_in": "EVIDENCE/INDEX.md#retained-historical-indexed-duplicate-feedback-20261127",
-  "original_ledger_blob": "38959fe180502cacba095f8d49f17868a91821e7",
-  "summary": "Exact earlier causal controller correction and tests retained; no reimplementation or loss of previous negative proof."
  },
  "coedit_host_observation_boundary_20261127": {
   "retained_in": "EVIDENCE/INDEX.md#preserved-exact-receipt-coedithostobservationboundary20261127",
@@ -1390,5 +1347,27 @@
   "job": 140888398984,
   "result": "FAIL too_large: STATE.md",
   "correction": "Compact current snapshot under existing 14000-byte cap; prior full STATE and ledger retained at exact parent; no checker relaxation."
+ },
+ "bounded_checkpoint_archive_20261128": {
+  "exact_prior_ledger_commit": "3c6c78232ef1b7f28cec7f888a974ad549f48653",
+  "exact_prior_ledger_blob": "ea84f7f1725627d1b4f97f4cfc78473f9fab29da",
+  "records": [
+   "compositional_measurement_20261127",
+   "indexed_recovery_frontier_20261127",
+   "indexed_duplicate_feedback_20261127"
+  ],
+  "policy": "Read exact archived records at immutable prior commit; no acceptance, requirement, or negative evidence changed."
+ },
+ "g1_current_reviewed_delivery_retest_20261128": {
+  "base": "048bd83b9f1a4d14523e81d01e47fed7bef6c30a",
+  "request_commit": "62fab31523f0b761eb6fd3f9593cbd27133f5acd",
+  "branch": "trial/g1-super-vl-current-reviewed-delivery-20261128",
+  "request_id": "ZX7_SUPER_VL_G1_CURRENT_REVIEWED_DELIVERY_20261128",
+  "run": 46115838860,
+  "job": 140889352284,
+  "status": "IN_PROGRESS",
+  "observed": "Exact source/consent guard passed; dependency installation active; no inference or outcome yet established.",
+  "scope": "Same Super VL synthetic A/V task, 48 turns, existing authorization; tested current reviewed comparison and explicit owner-window choice, no automatic finish, private media or widened authority.",
+  "prior_failed_run": 46045586986
  }
 }

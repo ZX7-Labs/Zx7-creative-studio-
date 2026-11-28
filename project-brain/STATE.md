@@ -25,6 +25,8 @@
 
 Latest [#46045586986](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/46045586986) FAILED 48 turns, 6 searches, 614460 reported tokens, first export turn12, second turn20. Independently verified artifact #15223750481: two distinct 6s conforming H264/AAC pictures, identical PCM, original sources retained. Turn23 technical matched pair qualifies (picture OR audio), turn32 new edit revokes; terminal no pair, no finish. Existing path/profile/enum/stale placement refusals and later unverified ACK retained. No semantic hearing or artistic proof. Prior [full immutable checkpoint](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/661afb715306b8f5e5c56dd0d78e55fedf8c82ba/project-brain/STATE.md) retains detailed trial receipts and technical history. No blind paid replay.
 
+Exact one-use genuine Super VL retest [#46115838860](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/46115838860) active on request commit `62fab31523f0b761eb6fd3f9593cbd27133f5acd` (verified base `048bd83b9f1a4d14523e81d01e47fed7bef6c30a`). Source and existing consent guard passed, dependency install active, actual model execution/result not yet established. Same task/model and 48-turn cap; compare to failed #46045586986. Retire trigger after terminal result; inspect artifacts before claims. No replay.
+
 ## Next executable work
 
 G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 fabric comparison, full A–L G3 and G4 release remain open; no independently accepted domain. Verify exact native CGI/ACES2 and HTTP candidate results, inspect actual artifacts and remaining producer/history paths. Resolve Europe PMC upstream connection/header timing without widening network authority or weakening live gate. G1 next qualified synthetic trial must isolate improved owner-window/comparison, genuine model decision/perception and terminal finish; use exact-source scoped one-use authorization, no private media, no blind paid replay. Preserve full native editability, security, rights and professional judgment.
@@ -33,4 +35,4 @@ G1 autonomy, semantic observe/revise, genuine human coedit, matched G2 fabric co
 
 [Ledger](EXECUTION_LEDGER.json) and STATE change together; [evidence index](EVIDENCE/INDEX.md) retains exact receipts and negative history. [Document map](../docs/DOCUMENT_MAP.md), [decisions](DECISIONS.md), [risks](RISKS.md) keep distinct roles. Full prior state/ledger at immutable parent above; no loss or third status. Refresh live refs.
 
-**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=ea84f7f1725627d1b4f97f4cfc78473f9fab29da` (Git content ID, not security attestation).
+**Exact mutable ledger binding:** `LEDGER_GIT_BLOB=ec2e92094fe289d12a5d7794db0b696439941f2b` (Git content ID, not security attestation).
