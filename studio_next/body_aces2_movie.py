@@ -22,7 +22,7 @@ from .body_aces2_preview import (
     _physical_config,_float_channels,SOURCE_COLOR,DISPLAY,VIEW,HDR_DISPLAY,HDR_VIEW,
     _MAX_EXR_FRAME_BYTES)
 from .body_exr_passes import verify_exr_bundle
-from .media_vault import MediaVault,sha256_file
+from .media_vault import MediaVault,sha256_file,canonical_source_attestations
 from .production_qc import full_decode_inspection
 
 _MAX_TOTAL_PIXELS=2000000
@@ -203,6 +203,8 @@ def render_aces2_scene_movie(plan_file,workspace,vault_root,output):
         os.link(movie,dest)
     return {"path":str(dest),"sha256":sha256_file(dest),
             "bytes":dest.stat().st_size,"source_exr_sha256":source["asset_id"],
+            "source_attestations":canonical_source_attestations([
+                {key:source[key] for key in ("asset_id","attestation_id")}]),
             "original_frames":count,"fps":fps,
             "real_ocio_config_sha256":ocio_config_hash,
             "actual_10bit_prores_sdr_scene":not hdr,

@@ -206,6 +206,39 @@ class CreativeResearchTests(unittest.TestCase):
                 _public_api_json("https://images-api.nasa.gov/search?q=moon")
         self.assertEqual(opener.open.call_count, 1)
 
+
+    def test_public_transport_failure_classifies_stage_without_leaking_query_or_response(self):
+        from unittest.mock import MagicMock
+        from urllib.error import HTTPError, URLError
+        import socket
+        from studio_next.creative_research import _bounded_json_get
+        url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=PRIVATE_QUERY"
+        for stage, failure, expected in (
+                ("open", URLError(TimeoutError("PRIVATE_BODY")), "connect_or_headers:timeout"),
+                ("open", URLError(socket.gaierror(-2, "PRIVATE_BODY")), "connect_or_headers:dns"),
+                ("open", HTTPError(url, 403, "PRIVATE_BODY", {}, None), "connect_or_headers:http_status"),
+                ("read", TimeoutError("PRIVATE_BODY"), "body_read:timeout"),
+                ("json", b'{"PRIVATE_BODY":', "json_decode:invalid_json")):
+            with self.subTest(stage=stage, expected=expected):
+                opener = MagicMock()
+                response = MagicMock()
+                response.status = 200
+                response.__enter__.return_value = response
+                opener.open.return_value = response
+                if stage == "open":
+                    opener.open.side_effect = failure
+                elif stage == "read":
+                    response.read.side_effect = failure
+                else:
+                    response.read.return_value = failure
+                with patch("studio_next.creative_research.urllib.request.build_opener",
+                           return_value=opener):
+                    with self.assertRaisesRegex(CreativeResearchError, expected) as caught:
+                        _bounded_json_get(url)
+                self.assertNotIn("PRIVATE", str(caught.exception))
+                self.assertIsNotNone(caught.exception.__cause__)
+                self.assertEqual(opener.open.call_count, 1)
+
     def test_restored_research_providers_allow_only_exact_metadata_paths(self):
         allowed = (
             "https://openaccess-api.clevelandart.org/api/artworks/?q=light",

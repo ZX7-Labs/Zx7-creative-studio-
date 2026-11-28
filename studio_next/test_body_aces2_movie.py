@@ -250,7 +250,8 @@ class ActualNativeSceneToProRes(unittest.TestCase):
         self.assertEqual(first["completed"],["movie","rights"])
         result=self.root/"full-director-ACES2.mov"
         digest=sha256_file(result)
-        asset=MediaVault(self.root/"vault").inspect(digest)
+        vault=MediaVault(self.root/"vault")
+        asset=vault.inspect(digest)
         self.assertEqual(asset["mime"],"video/quicktime")
         self.assertTrue(any(x["rights"]=="generated_original" and
                             x["source_type"]=="trusted_renderer"
@@ -260,6 +261,21 @@ class ActualNativeSceneToProRes(unittest.TestCase):
         self.assertEqual(second["reused"],["movie","rights"])
         self.assertEqual(sha256_file(result),digest)
         self.assertFalse(second["video_proven"])
+        from studio_next.media_vault import MediaRightsWithdrawn
+        generated=next(x for x in asset["rights_attestations"]
+                       if x["source_type"]=="trusted_renderer")
+        self.assertEqual(generated["source_attestations"],[
+            {key:self.proof[key] for key in ("asset_id","attestation_id")}])
+        derivative=generated["attestation_id"]
+        vault.withdraw_attestation(self.proof["asset_id"],self.proof["attestation_id"],
+                                   reason="Original scene grant withdrawn")
+        with self.assertRaises(MediaRightsWithdrawn):
+            vault.inspect(digest,attestation_id=derivative)
+        with self.assertRaises(MediaRightsWithdrawn):
+            vault.checkout(digest,derivative,self.root/"revoked-master.mov")
+        self.assertFalse((self.root/"revoked-master.mov").exists())
+        self.assertNotEqual(run_body_project(graph,self.root)["status"],"all_tool_results_verified")
+        self.assertEqual(sha256_file(result),digest)
 
     def test_production_movie_does_not_allow_swapped_rights_or_source_primaries(self):
         self.plan["source_color_space"]="ACEScg (unproven source)"

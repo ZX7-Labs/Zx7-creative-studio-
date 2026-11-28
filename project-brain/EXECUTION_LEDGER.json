@@ -1309,8 +1309,64 @@
    "studio_next/film_finishing.py": "7410e9e5e48f234c8f317cb01473eb93ace2ab04",
    "studio_next/test_film_finishing.py": "c1b710fd05f593aa65daefffab7bc20e1811ea15"
   },
-  "integrated_ci": "NOT_RUN_AT_COMMIT",
+  "integrated_ci": {
+   "source": "048bd83b9f1a4d14523e81d01e47fed7bef6c30a",
+   "workflows": {
+    "success": 28,
+    "failure": 1
+   },
+   "installed": {
+    "run": 46113432414,
+    "job": 140881830153,
+    "tests": 1833,
+    "pass": 1801,
+    "skip": 32
+   },
+   "mlt": {
+    "run": 46113432432,
+    "job": 140881830370,
+    "tests": 1833,
+    "pass": 1831,
+    "skip": 2
+   },
+   "regression": "test_fit_fill_timeline_sound_finish_preserves_original_video_clock passed in both actual installed and full MLT jobs",
+   "research": {
+    "run": 46113432473,
+    "job": 140881830199,
+    "observed": "17/18; Europe PMC failed after 21.3s with generic exception; exact cause unknown"
+   },
+   "model": "actual NVIDIA and local jobs skipped",
+   "scope": "physical native technical only"
+  },
   "independent_field_acceptance": "NOT_ACCEPTED",
   "remaining": "Run exact-head physical regression and full matrix, inspect actual native artifact. Existing legacy zero-duration masters remain refused; support only with explicit owner-intent and exact independent native evidence. All A-L/G gates stay open."
+ },
+ "field_a_cgi_aces2_lineage_20261128": {
+  "baseline": "048bd83b9f1a4d14523e81d01e47fed7bef6c30a",
+  "source_gap": "Existing trusted CGI and ACES2 MOV graph producers consumed exact attested source bytes but did not return source_attestations or persist them at native publication. Existing vault ingestion used proof.get, permitting derivative grant without parent lineage. Source-confirmed; actual native RED not run on this host.",
+  "correction": "Return canonical exact grant pairs from sealed native inputs, bind output digest and durable publication to those grants, and require lineage in resumed witnesses. No new producer grants or changes to independent art acceptance.",
+  "tests": "Extend actual Blender→EXR→ACES2 graph test with persisted source grant, independent withdrawal, checkout refusal, cached graph refusal; add actual Blender textured CGI graph with independent same-byte grant, exact derived rights, reopen and withdrawal.",
+  "limits": "Local Blender, OpenEXR and OCIO unavailable and DNS blocked; native exact-source regressions not executed at publication. Historical already-issued lineage-free derivative grants and other producers remain open; no deletion, no retroactive claim.",
+  "candidate_blobs": {
+   "studio_next/body_cgi.py": "5311f25b3ff1cb5622542dec73666b74e5130584",
+   "studio_next/body_aces2_movie.py": "4bc0f1475a3e8ce31cc02885a839d30c85c7b49e",
+   "studio_next/body_integration.py": "834d026a99e322f8f9f5f2475e1e18a38159d83d",
+   "studio_next/test_body_aces2_movie.py": "3252a309398920d3c41a52bafa8ecd920bfd1491",
+   "studio_next/test_cgi_controls.py": "4cbf2190acd8d9bd8bd6093d8af8c78a07032232"
+  },
+  "integrated_ci": "NOT_RUN_AT_COMMIT"
+ },
+ "research_failure_stage_20261128": {
+  "baseline": "048bd83b9f1a4d14523e81d01e47fed7bef6c30a",
+  "failed_run": 46113432473,
+  "failed_job": 140881830199,
+  "observation": "Recurring Europe PMC failure at ~21.3s; underlying cause remains unknown. Existing transport masks failure stage.",
+  "correction": "Classify existing bounded HTTP request failure stage and cause into fixed safe strings; no query/URL/raw exception body, retries or authority changes. Distinguish headers/connect, body read, JSON decode, timeout, DNS, HTTP status, protocol and other transport. Existing same-URL one retry retained.",
+  "tests": "Mocked transport exact classification, cause preservation, no query leak and single call; existing live gate unchanged and exact hosted run pending.",
+  "candidate_blobs": {
+   "studio_next/creative_research.py": "d9dc3d75e0cd41e077b736515dddc79a59dd34a2",
+   "studio_next/test_creative_research.py": "231284e1699bcf9a3f71de92d9c22355189ff553"
+  },
+  "integrated_ci": "NOT_RUN_AT_COMMIT"
  }
 }

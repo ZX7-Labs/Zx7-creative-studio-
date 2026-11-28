@@ -164,19 +164,38 @@ def _bounded_json_get(url):
     request = urllib.request.Request(url, headers={
         "User-Agent": "ZX7-BODY-CreativeResearch/0.1 (https://github.com/ZX7-Labs/Zx7-creative-studio-; metadata-only)",
         "Accept": "application/json"})
+    stage = "connect_or_headers"
     try:
         with opener.open(request, timeout=10) as response:
             if response.status != 200:
                 raise CreativeResearchError("Research provider returned an unsuccessful status")
+            stage = "body_read"
             raw = response.read(1_000_001)
             if len(raw) > 1_000_000:
                 raise CreativeResearchError("Research metadata exceeds response budget")
+            stage = "json_decode"
             payload = json.loads(raw)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError,
             ValueError, HTTPException, RecursionError) as exc:
         if isinstance(exc, CreativeResearchError):
             raise
-        raise CreativeResearchError("Research provider unavailable or returned invalid JSON") from exc
+        # Never include the provider's response text, redirect location, URL,
+        # query, DNS details or arbitrary exception message in the model/log.
+        cause = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+        if isinstance(exc, urllib.error.HTTPError):
+            kind = "http_status"
+        elif isinstance(cause, TimeoutError):
+            kind = "timeout"
+        elif isinstance(cause, socket.gaierror):
+            kind = "dns"
+        elif stage == "json_decode":
+            kind = "invalid_json"
+        elif isinstance(cause, HTTPException):
+            kind = "http_protocol"
+        else:
+            kind = "transport"
+        raise CreativeResearchError(
+            f"Research provider unavailable or returned invalid JSON ({stage}:{kind})") from exc
     if not isinstance(payload, dict):
         raise CreativeResearchError("Research provider did not return a JSON object")
     return payload
