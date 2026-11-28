@@ -206,6 +206,41 @@ class CreativeResearchTests(unittest.TestCase):
                 _public_api_json("https://images-api.nasa.gov/search?q=moon")
         self.assertEqual(opener.open.call_count, 1)
 
+    def test_transport_failures_expose_only_bounded_causal_class_not_url_or_raw_error(self):
+        from unittest.mock import MagicMock
+        from urllib.error import HTTPError, URLError
+        import socket, ssl
+        url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=PRIVATE_QUERY"
+        # Preserve the existing one-time timeout retry and distinguish the
+        # final causal class. Neither a URL nor raw provider text may enter
+        # the failure receipt returned through a research tool.
+        for failure, category, count in (
+                (TimeoutError("PRIVATE_QUERY"), "timeout", 2),
+                (URLError(socket.gaierror(-2, "PRIVATE_QUERY")), "dns", 1),
+                (URLError(ssl.SSLCertVerificationError("PRIVATE_QUERY")), "tls", 1),
+                (HTTPError(url, 429, "PRIVATE_QUERY", {}, None), "http_429", 1),
+                (HTTPError(url, 302, "PRIVATE_QUERY", {}, None), "http_302", 1),
+                (ConnectionResetError("PRIVATE_QUERY"), "connection", 1)):
+            with self.subTest(category=category):
+                opener = MagicMock(); opener.open.side_effect = failure
+                with patch("studio_next.creative_research.urllib.request.build_opener", return_value=opener):
+                    with self.assertRaises(CreativeResearchError) as caught:
+                        _public_api_json(url)
+                self.assertIn("[" + category + "]", str(caught.exception))
+                self.assertNotIn("PRIVATE_QUERY", str(caught.exception))
+                self.assertEqual(opener.open.call_count, count)
+                self.assertEqual("after bounded retry" in str(caught.exception), count == 2)
+        response = MagicMock(); response.status = 200
+        response.read.return_value = b"PRIVATE_QUERY invalid JSON"
+        response.__enter__.return_value = response
+        opener = MagicMock(); opener.open.return_value = response
+        with patch("studio_next.creative_research.urllib.request.build_opener", return_value=opener):
+            with self.assertRaises(CreativeResearchError) as caught:
+                _public_api_json(url)
+        self.assertIn("[invalid_json]", str(caught.exception))
+        self.assertNotIn("PRIVATE_QUERY", str(caught.exception))
+        self.assertEqual(opener.open.call_count, 1)
+
     def test_restored_research_providers_allow_only_exact_metadata_paths(self):
         allowed = (
             "https://openaccess-api.clevelandart.org/api/artworks/?q=light",

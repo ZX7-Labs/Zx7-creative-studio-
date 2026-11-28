@@ -1273,5 +1273,25 @@
   "studio_next/test_native_creative_control.py": "a45e59377f2a109cdd9d155077514c827e892a49",
   "engines/velorn/owner_delivery_proof.py": "a728ff87509ae0ce31c5db00b104b754cf14007e",
   "engines/velorn/mcp-e2e.py": "cdf26803f3f5772645f110802639406e11108bd4"
+ },
+ "research_transport_diagnostics_20261128": {
+  "baseline": "1c316a76495b8c2c1210ff3b2b7b8f281ccb0897",
+  "causal_boundary": "Europe PMC current approved public endpoint already has one bounded same-URL 10s socket timeout retry. Prior live failures #46047138534 and #46108672505 ~21s suggest timeout but generic error does not prove final causal class. No new network call/retry or fallback authorized by this change.",
+  "correction": "Finite safe transport failure categories (timeout, DNS, TLS, bounded numeric HTTP status, connection, invalid JSON, HTTP protocol, IO, unclassified); report final failure and explicit bounded-retry exhaustion. Preserve existing exact approved URLs, no proxies/redirects, response cap, retry-only-timeout and fail-closed semantics. Do not expose raw error text, URL or private query in returned exception message.",
+  "tests": {
+   "red": "7 classification assertions failed on existing generic failure",
+   "green": {
+    "run": 32,
+    "pass": 28,
+    "skip": 4,
+    "fail": 0
+   },
+   "scope": "Injected transport errors and invalid JSON, no live network proof; optional official MCP dependencies unavailable locally."
+  },
+  "blobs": {
+   "studio_next/creative_research.py": "065ea8514b517b68561e36f9cc1ee0f45ab5d2b7",
+   "studio_next/test_creative_research.py": "0c3e4c9def95e13e467013abd2f6db90004cf52e"
+  },
+  "limits": "Does not restore Europe PMC availability or establish prior exact root cause. Exact hosted candidate and subsequent live request pending."
  }
 }

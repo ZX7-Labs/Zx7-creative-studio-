@@ -11,6 +11,7 @@ import ipaddress
 import json
 import re
 import socket
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -155,7 +156,36 @@ def _public_api_json(url):
                     isinstance(cause.reason, TimeoutError)))
         if (host, parsed.path) != ("www.ebi.ac.uk", "/europepmc/webservices/rest/search") or not timeout:
             raise
-        return _bounded_json_get(url)
+        try:
+            return _bounded_json_get(url)
+        except CreativeResearchError as retry:
+            # The final failure remains visible without raw endpoint/query
+            # or provider text. Retain the original exception chain locally.
+            raise CreativeResearchError(str(retry) + " (after bounded retry)") from retry
+
+
+def _transport_failure_class(exc):
+    """Finite, value-free diagnostics for failures of an admitted GET."""
+    if isinstance(exc, urllib.error.HTTPError):
+        status = exc.code
+        return f"http_{status}" if type(status) is int and 100 <= status <= 599 else "http_status"
+    if isinstance(exc, urllib.error.URLError):
+        exc = exc.reason
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if isinstance(exc, socket.gaierror):
+        return "dns"
+    if isinstance(exc, ssl.SSLError):
+        return "tls"
+    if isinstance(exc, ConnectionError):
+        return "connection"
+    if isinstance(exc, (json.JSONDecodeError, UnicodeError, RecursionError)):
+        return "invalid_json"
+    if isinstance(exc, HTTPException):
+        return "http_protocol"
+    if isinstance(exc, OSError):
+        return "io"
+    return "unclassified_transport_or_payload"
 
 
 def _bounded_json_get(url):
@@ -176,7 +206,8 @@ def _bounded_json_get(url):
             ValueError, HTTPException, RecursionError) as exc:
         if isinstance(exc, CreativeResearchError):
             raise
-        raise CreativeResearchError("Research provider unavailable or returned invalid JSON") from exc
+        raise CreativeResearchError("Research provider unavailable or returned invalid JSON ["
+                                    + _transport_failure_class(exc) + "]") from exc
     if not isinstance(payload, dict):
         raise CreativeResearchError("Research provider did not return a JSON object")
     return payload
