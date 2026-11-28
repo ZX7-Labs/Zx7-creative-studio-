@@ -144,6 +144,43 @@ class PlanarAcceptanceTests(unittest.TestCase):
                 'opacity':.8,'audio':'preserve_source','tracking':SETTINGS}
             self.assertTrue(validate_document('body.planar_insert',plan));(root/'plan.json').write_text(json.dumps(plan))
             r=render_planar_insert(root/'plan.json',root,root/'vault',root/'out.mp4')
+            from studio_next.media_vault import MediaCustodyError,canonical_source_attestations
+            from studio_next.body_integration import run_body_project
+            from unittest.mock import patch
+            # The direct renderer and graph both must bind every exact input
+            # grant; the independent physical sound/colour oracle below stays.
+            expected=canonical_source_attestations([{k:plan[field][k] for k in ('asset_id','attestation_id')} for field in ('media','overlay')])
+            self.assertEqual(r.get('source_attestations'),expected)
+            matte=np.zeros((240,320),np.uint8);matte[100:140,145:175]=255
+            cv2.imwrite(str(root/'foreground.png'),matte)
+            plan['foreground']={'media':ref('foreground.png','image/png'),'kind':'still_image'}
+            (root/'plan-with-matte.json').write_text(json.dumps(plan))
+            expected=canonical_source_attestations(expected+[{k:plan['foreground']['media'][k] for k in ('asset_id','attestation_id')}])
+            ir={'project':{'creative_intent':'Actual original motion and foreground-preserved planar insert'},
+                'shots':[{'id':'shot','purpose':'Native tracked insert'}],
+                'tool_graph':[{'id':'shot','tool_id':'body.planar_insert','purpose':'Track original plane',
+                    'inputs':{'plan':'plan-with-matte.json','out':'tracked.mp4'},'depends_on':[]},
+                    {'id':'custody','tool_id':'body.asset_vault','purpose':'Preserve exact original grants',
+                    'inputs':{'source_witness':{'$node_output':'shot'}},'depends_on':['shot']}]}
+            # Simulate a crash after actual tracked movie publication, before
+            # durable graph settlement. Recovery may not rerender.
+            with patch('studio_next.durable_graph.DurableFilmGraph.complete',side_effect=OSError('Interrupted after publish')):
+                self.assertNotEqual(run_body_project(ir,root)['status'],'all_tool_results_verified')
+            tracked=root/'tracked.mp4';digest=sha256_file(tracked)
+            with patch('studio_next.body_integration.render_planar_insert',side_effect=AssertionError('Must recover exact bytes')):
+                result=run_body_project(ir,root)
+            self.assertEqual(result['status'],'all_tool_results_verified',result)
+            grant=vault.inspect(digest)['rights_attestations'][0]
+            self.assertEqual(grant.get('source_attestations'),expected)
+            self.assertEqual(run_body_project(ir,root)['reused'],['shot','custody'])
+            original_matte=plan['foreground']['media']
+            vault.withdraw_attestation(original_matte['asset_id'],original_matte['attestation_id'],reason='Withdraw exact foreground source')
+            with self.assertRaisesRegex(MediaCustodyError,'withdrawn'):
+                MediaVault(root/'vault').checkout(digest,grant['attestation_id'],root/'denied.mp4')
+            self.assertFalse((root/'denied.mp4').exists())
+            self.assertEqual(sha256_file(tracked),digest)
+            for field in ('media','overlay'):
+                self.assertEqual(vault.inspect(plan[field]['asset_id'],attestation_id=plan[field]['attestation_id'])['asset_id'],plan[field]['asset_id'])
             self.assertEqual(r['actual_tracked_frames'],8);self.assertTrue(r['source_sound_bitstream_preserved'])
             def pcm(name):return subprocess.check_output(['ffmpeg','-v','error','-i',str(root/name),'-vn','-f','s16le','-'])
             self.assertEqual(pcm('source.mp4'),pcm('out.mp4'))

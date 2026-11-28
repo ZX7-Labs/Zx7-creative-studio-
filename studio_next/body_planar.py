@@ -8,7 +8,7 @@ planar VFX, not 3D camera solving, automatic person roto or scene-linear EXR.
 from __future__ import annotations
 import json,math,os,subprocess,tempfile
 from pathlib import Path
-from .media_vault import MediaVault,sha256_file
+from .media_vault import MediaVault,sha256_file,canonical_source_attestations
 from .composite_mix import _exact_media,sealed_attested_original,_decoded_source_duration
 from .precision_retime import _source_timebase
 from .body_color_pipeline import _actual_bt709_source
@@ -102,7 +102,7 @@ def render_planar_insert(plan_file,workspace,vault_root,output):
     for field in ('media','overlay'):
         p=_exact_media(plan[field],vault,root,need=field);originals.append((p,plan[field]))
     source,art=originals[0][0],originals[1][0]
-    if vault.inspect(plan['media']['asset_id'])['mime']!='video/mp4' or vault.inspect(plan['overlay']['asset_id'])['mime']!='image/png':
+    if vault.inspect(plan['media']['asset_id'],attestation_id=plan['media']['attestation_id'])['mime']!='video/mp4' or vault.inspect(plan['overlay']['asset_id'],attestation_id=plan['overlay']['attestation_id'])['mime']!='image/png':
         raise ValueError('Planar VFX needs decoded MP4 footage and PNG art')
     _actual_bt709_source(source);fps,count=_source_timebase(source);duration=float(count/fps)
     if plan['audio']=='preserve_source' and _decoded_source_duration(source,'audio')+0.015<duration:raise ValueError('Original sound does not cover the authored footage')
@@ -110,7 +110,7 @@ def render_planar_insert(plan_file,workspace,vault_root,output):
     if foreground is not None:
         if not isinstance(foreground,dict) or set(foreground)!={'media','kind'} or foreground['kind'] not in ('still_image','video'):raise ValueError('Foreground requires an explicit attested image or video matte')
         p=_exact_media(foreground['media'],vault,root,need='foreground matte');originals.append((p,foreground['media']))
-        mime=vault.inspect(foreground['media']['asset_id'])['mime']
+        mime=vault.inspect(foreground['media']['asset_id'],attestation_id=foreground['media']['attestation_id'])['mime']
         if mime!=('image/png' if foreground['kind']=='still_image' else 'video/mp4'):raise ValueError('Matte kind differs from actual source')
         if foreground['kind']=='video' and _source_timebase(p)!=(fps,count):raise ValueError('Moving matte clock differs from original footage')
     metrics=[]
@@ -166,6 +166,8 @@ def render_planar_insert(plan_file,workspace,vault_root,output):
         with encoded.open('rb') as stream:os.fsync(stream.fileno())
         os.link(encoded,output)
     return {'path':str(output),'sha256':sha256_file(output),'actual_tracked_frames':count,
+        'source_attestations':canonical_source_attestations([
+            {k:media[k] for k in ('asset_id','attestation_id')} for _,media in originals]),
         'minimum_inlier_ratio':min(x['inlier_ratio'] for x in metrics),
         'maximum_reprojection_error_pixels':max(x['reprojection_error_pixels'] for x in metrics),
         'source_sound_bitstream_preserved':plan['audio']=='preserve_source','foreground_matte_used':foreground is not None,

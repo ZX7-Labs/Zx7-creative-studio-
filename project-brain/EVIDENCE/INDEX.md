@@ -2036,3 +2036,104 @@ Previous exact records at [76cc6e01ea03f247d50ef6b8dba92128c4b56d90](https://git
   "limits": "Visual plus three more producer paths only; CGI, planar, ACES, EXR, motion and historical unbound grants still need exact lineage reconciliation. No independent legal or creative approval, old-backup recall, or global raw-path revocation. Hosted candidate pending."
 }
 ```
+
+
+## 28 Nov — integrated G1 matrix, padded owner range and planar lineage
+
+```json
+{
+  "receipt": {
+    "source": "1e0123bc84d8825c65028240a2b0b41448f77df1",
+    "merge": "44e4699ad802eb6b3b111c44483078b71657c22e",
+    "exact_tree": "97b62530d72e75ab7ae35bceae60ad5ef96ffe60",
+    "matrix": {
+      "success": 28,
+      "failure": 1
+    },
+    "installed": {
+      "run": 46108672744,
+      "jobs": [
+        140867070338,
+        140870578136
+      ],
+      "artifact": 15249615611,
+      "sha256": "88afb547c3a949081b26008473f4fce715dbe6402cbcca8b6450c85f0a68ec39",
+      "tests_run": 1830,
+      "pass": 1798,
+      "skip": 32,
+      "failed": 0,
+      "errors": 0,
+      "local_audit": "ZIP SHA/CRC, 24/24 manifest, eight changed wheel blob IDs exact, 3 full MP4 decodes"
+    },
+    "mlt": {
+      "run": 46108672443,
+      "job": 140867069739,
+      "tests": 1830,
+      "pass": 1828,
+      "skip": 2,
+      "failed": 0,
+      "preliminary": [
+        52,
+        26
+      ]
+    },
+    "research": {
+      "run": 46108672505,
+      "job": 140867069886,
+      "failure": "Europe PMC unavailable/invalid JSON; lower-layer cause unproven; other providers/languages passed"
+    },
+    "scope": "Technical only; new comparison/owner offer tests executed; no neural or professional acceptance."
+  },
+  "range": {
+    "baseline": "1e0123bc84d8825c65028240a2b0b41448f77df1",
+    "actual_source": "VelornLabs/velorn b3c02adbd5c0779feb8abf34978299e9502cc0e7 electron/mcpServer.js blob 22693419834cd1f24515e1ce5a6ff5c1b7f45311: full range max clip extent and timeline duration; projectStore default 60; timelineStore placements extend end+10.",
+    "red": "Existing offer absent for native 60s duration vs owner max 6s.",
+    "fix": "Only duration-only mismatch may produce separately verified optional explicit 0-to-owner-max custom range; disclose later timeline excluded. Model must select. Actual rangeStart, rangeEnd and duration match; same-length shifted range and wrong dimensions refused; bounded per-save/options cache; clear on apply submission. No hidden trim or dispatch.",
+    "tests": {
+      "focused": 26,
+      "related_attempt": {
+        "run": 268,
+        "pass": 230,
+        "skip": 36,
+        "checkout_only_import_errors": 2
+      },
+      "filtered": {
+        "run": 266,
+        "pass": 230,
+        "skip": 36,
+        "fail": 0
+      },
+      "real_native_fixture": "New helper syntax compiled locally, exact pinned loss-aware E2E hook. Real production run_native_session on actual reopened synthetic project, only scripted decision provider substituted. Wrong dimension refusal, positive padded range explicit 0–2s, saved source/options, independent 48-frame H264/AAC and audible PCM. Actual Electron not available locally; hosted unexecuted."
+    },
+    "limits": "No genuine inference improvement, no paid run, no auto-trim or forced finish. Option may exclude intended later material; creative choice remains model-owned."
+  },
+  "planar": {
+    "baseline": "e93e19457edd7957992141f3b39716bf60106655",
+    "red": "Actual planar renderer output lacked exact ancestor grants.",
+    "fix": "Exact selected source/overlay/optional foreground grant pairs bound to actual output hash and recoverable publication; exact grant MIME checks.",
+    "physical": "Actual independent projection+OpenCV SIFT/RANSAC+FFmpeg, original decoded sound and BT709 unchanged. Graph foreground derivative interrupted post-publication then recovered without rerender; withdraw matte denies fresh checkout, other grants and historical bytes unchanged.",
+    "tests": {
+      "red": 1,
+      "tracking_green": 9,
+      "focused_related": 14,
+      "broader_attempt": "30 successful cases before local 120s command timeout; not full suite. Prior candidate 107/107 preserved."
+    },
+    "limits": "CGI/ACES/EXR/motion/history still open."
+  },
+  "files": {
+    "studio_next/body_planar.py": "723ad7af7fd7c4d05b95fc51b1cc93a468297027",
+    "studio_next/test_cgi_tracking.py": "e3dca6c60b32f6f25a5d8b707e50b9614ce05584",
+    "studio_next/body_integration.py": "6520c685a6b286a05694f17292f2f20ad211639b",
+    "studio_next/body_editor_policy.py": "5e9431978471158510bea94bb1fdb9a8ff8a2a9b",
+    "studio_next/native_creative_control.py": "890931af0bec22ff7188955ce18cb36f45c478f3",
+    "studio_next/test_native_creative_control.py": "a45e59377f2a109cdd9d155077514c827e892a49",
+    "engines/velorn/owner_delivery_proof.py": "a728ff87509ae0ce31c5db00b104b754cf14007e",
+    "engines/velorn/mcp-e2e.py": "cdf26803f3f5772645f110802639406e11108bd4"
+  },
+  "prior": {
+    "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+    "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+    "retained_in": "project-brain/EVIDENCE/INDEX.md"
+  }
+}
+```

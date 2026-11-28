@@ -2192,13 +2192,18 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     self.tools.append(SimpleNamespace(name="check_export_readiness", description="Read only",
                         input_schema={"type": "object", "properties": {
                             "target": {"enum": ["h264_project"]}, "resolution": {"enum": ["project"]},
-                            "fps": {"type": "number"}}}))
+                            "fps": {"type": "number"}, "range": {"enum": ["full", "custom"]},
+                            "startSeconds": {"type": "number"}, "endSeconds": {"type": "number"}}}))
                     self.host_reads = []
                     self.width = 640
+                    self.duration = 6
+                    self.range_offset = 0
                     self.tools.append(SimpleNamespace(name="export_timeline", description="Native export",
                         input_schema={"type": "object", "properties": {
                             "outputPath": {"type": "string"}, "target": {"enum": ["h264_project"]},
                             "resolution": {"enum": ["project"]}, "fps": {"type": "number"},
+                            "range": {"enum": ["full", "custom"]},
+                            "startSeconds": {"type": "number"}, "endSeconds": {"type": "number"},
                             "previewOnly": {"type": "boolean"}}, "required": ["outputPath"]}))
                 async def call_tool(self, name, arguments):
                     self.calls.append((name, arguments))
@@ -2222,9 +2227,13 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     if name != "check_export_readiness":
                         return await self.call_tool(name, arguments)
                     self.host_reads.append((name, arguments))
+                    custom = arguments.get("range") == "custom"
+                    start = self.range_offset if custom else 0
+                    duration = arguments["endSeconds"] - arguments["startSeconds"] if custom else self.duration
                     value = {"ready": True, "blockers": [], "deliveryTarget": {
                         "container": "mp4", "videoCodec": "h264", "width": self.width,
-                        "height": 360, "fps": 24, "duration": 6}}
+                        "height": 360, "fps": 24, "duration": duration,
+                        "rangeStart": start, "rangeEnd": start + duration}}
                     return SimpleNamespace(is_error=False, content=[
                         SimpleNamespace(type="text", text=json.dumps(value))])
                 def assert_path(self, arguments):
@@ -2295,6 +2304,33 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(feedback["status"], "profile_mismatch")
                 self.assertEqual(feedback["observed_delivery"]["width"], 1920)
             self.assertNotIn("export_timeline", [name for name, _ in wrong.calls])
+
+            # Native timeline duration includes editor workspace padding even
+            # after an explicit short cut is authored. Offer the explicit
+            # bounded window as a choice only if native readback proves it.
+            padded, chooser = ScopedDelivery(), ChoosingModel()
+            padded.duration = 60
+            result = await make_control(padded, chooser, OwnerExportOffer(config)).run("Choose the intended range")
+            option = chooser.observed[1]["host_owner_delivery_candidate"]
+            self.assertEqual(option, chooser.observed[2]["host_owner_delivery_candidate"])
+            self.assertTrue(option["native_readiness_verified"])
+            self.assertEqual(option["full_timeline_observed_duration_seconds"], 60)
+            self.assertTrue(option["excludes_later_timeline_time"])
+            self.assertEqual({k:option["arguments"][k] for k in ("range", "startSeconds", "endSeconds")},
+                {"range":"custom", "startSeconds":0, "endSeconds":6})
+            self.assertEqual([args for _, args in padded.host_reads], [
+                {"target":"h264_project", "resolution":"project", "fps":24},
+                {"target":"h264_project", "resolution":"project", "fps":24,
+                 "range":"custom", "startSeconds":0, "endSeconds":6}])
+            self.assertEqual([args for name,args in padded.calls if name == "export_timeline"], [option["arguments"]])
+            self.assertTrue(audit_native_journal(result["events"], **audit_args)["journal_chain_structurally_valid"])
+            # Same-length but shifted native range is NOT the offered window.
+            shifted, chooser = ScopedDelivery(), ChoosingModel()
+            shifted.duration = 60; shifted.range_offset = 1
+            await make_control(shifted, chooser, OwnerExportOffer(config)).run("Do not guess an altered range")
+            self.assertEqual(len(shifted.host_reads), 2)
+            self.assertTrue(all("host_owner_delivery_candidate" not in c for c in chooser.observed))
+            self.assertFalse(any(name == "export_timeline" for name,_ in shifted.calls))
 
     async def test_one_selected_full_av_window_replaces_two_reads_without_waiving_proof(self):
         """Matched controller/auditor fixture: same facts, fewer model calls.

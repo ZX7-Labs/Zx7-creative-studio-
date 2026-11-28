@@ -216,7 +216,7 @@ class OwnerExportOffer:
 
     Only the source-pinned H264 project-size route is known here. Native
     readiness and the no-overwrite policy are authoritative at dispatch;
-    an offer neither changes timeline settings nor chooses a creative range.
+    an offer neither changes timeline settings nor applies a creative range.
     """
     def __init__(self, config: EditorConfig):
         if not isinstance(config, EditorConfig):
@@ -230,7 +230,9 @@ class OwnerExportOffer:
         except (EditorPreDispatchError, OSError):
             return False
 
-    def candidate(self, validator):
+    def candidate(self, validator, *, explicit_owner_window=False):
+        if type(explicit_owner_window) is not bool:
+            raise ValueError("Export range offer must be an explicit host choice")
         config = self._config
         approved = config.required_export_delivery
         root = config.outputs_root
@@ -248,6 +250,8 @@ class OwnerExportOffer:
         # Do not invent fields or fill unknown required artistic inputs.
         if not {"target", "resolution", "outputPath", "previewOnly"}.issubset(properties):
             return None
+        if explicit_owner_window and not {"range", "startSeconds", "endSeconds"}.issubset(properties):
+            return None
         if self._path is None or not self._available(self._path):
             self._path = None
             for _ in range(4):
@@ -261,13 +265,17 @@ class OwnerExportOffer:
                      "resolution": "project", "previewOnly": False}
         if "fps" in properties:
             arguments["fps"] = approved["fps"]
+        if explicit_owner_window:
+            arguments.update(range="custom", startSeconds=0, endSeconds=approved["max_duration"])
         if not validator.is_valid(arguments):
             return None
         return {"tool": "export_timeline", "arguments": arguments,
                 "owner_delivery_profile": dict(approved),
                 "native_readiness_verified": False,
                 "optional_model_selected_call": True,
-                "note": "Project size must match; full timeline, no implied trim. Native readiness and destination are rechecked before dispatch."}
+                "note": ("Explicit zero-to-owner-maximum window; later timeline time is excluded. "
+                         "Choose only if this is your intended creative range." if explicit_owner_window else
+                         "Project size must match; full timeline, no implied trim. Native readiness and destination are rechecked before dispatch.")}
 
     def retire_submitted(self, arguments):
         # A native export may have started before any file is visible.

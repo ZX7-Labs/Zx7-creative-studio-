@@ -925,8 +925,10 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         plan=_path_within(root,inputs["plan"],exists=True)
         dest=_body_output(root,inputs["out"],allowed=(".mp4",))
         measured={}
-        def produce(stage):measured.update(render_planar_insert(plan,root,vault.root,stage))
-        receipt=_commit_actual_body_output(dest,produce)
+        def produce(stage):
+            measured.update(render_planar_insert(plan,root,vault.root,stage))
+            return measured
+        receipt=_commit_actual_body_output(dest,produce,retain_source_attestations=True)
         return {**receipt,**{k:v for k,v in measured.items() if k not in ("path","sha256")},
                 "tracking_metrics_observed_in_this_invocation":bool(measured)}
 
@@ -1236,7 +1238,7 @@ def validate_witness(_tool_id,result):
     """Physically revisit file and stored rights evidence on every resume."""
     if not isinstance(result,dict):
         return False
-    if _tool_id in ("body.visual_graph","body.render_edit_owned","body.composite_mix","body.film_finish"):
+    if _tool_id in ("body.visual_graph","body.render_edit_owned","body.composite_mix","body.film_finish","body.planar_insert"):
         try:
             if canonical_source_attestations(result.get("source_attestations"))!=result["source_attestations"]:
                 return False

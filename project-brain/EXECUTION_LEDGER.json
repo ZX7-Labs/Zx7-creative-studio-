@@ -612,51 +612,46 @@
   "next_action": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
  },
  "latest_ci_checkpoint": {
-  "source": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
-  "tree": "60ccc5e6436c33fa682afa39e1a96b457068bc05",
-  "tested_merge": "42a0ea1977d2da66848d02f087d5b2e1f5128eab",
-  "workflows": {
-   "success": 29
+  "source": "1e0123bc84d8825c65028240a2b0b41448f77df1",
+  "merge": "44e4699ad802eb6b3b111c44483078b71657c22e",
+  "exact_tree": "97b62530d72e75ab7ae35bceae60ad5ef96ffe60",
+  "matrix": {
+   "success": 28,
+   "failure": 1
+  },
+  "installed": {
+   "run": 46108672744,
+   "jobs": [
+    140867070338,
+    140870578136
+   ],
+   "artifact": 15249615611,
+   "sha256": "88afb547c3a949081b26008473f4fce715dbe6402cbcca8b6450c85f0a68ec39",
+   "tests_run": 1830,
+   "pass": 1798,
+   "skip": 32,
+   "failed": 0,
+   "errors": 0,
+   "local_audit": "ZIP SHA/CRC, 24/24 manifest, eight changed wheel blob IDs exact, 3 full MP4 decodes"
   },
   "mlt": {
-   "run": 46101251636,
-   "job": 140843964765,
-   "tests": 1827,
-   "pass": 1825,
+   "run": 46108672443,
+   "job": 140867069739,
+   "tests": 1830,
+   "pass": 1828,
    "skip": 2,
-   "fail": 0,
+   "failed": 0,
    "preliminary": [
     52,
     26
-   ],
-   "four_lineage_tests_passed": true
+   ]
   },
-  "installed": {
-   "baseline": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
-   "tested_merge": "42a0ea1977d2da66848d02f087d5b2e1f5128eab",
-   "exact_tree": "60ccc5e6436c33fa682afa39e1a96b457068bc05",
-   "installed_run": 46101251651,
-   "jobs": [
-    140843964834,
-    140848194870
-   ],
-   "artifact": 15246172402,
-   "sha256": "292500ed737182e4426d0b18a9f93cdc659e42406f63f777d8a89e40414ae07a",
-   "tests": {
-    "run": 1827,
-    "pass": 1795,
-    "skip": 32,
-    "failures": 0,
-    "errors": 0
-   },
-   "verification": "All four new physical lineage tests executed; independently downloaded exact ZIP, CRC, 24 manifest entries, 5 changed wheel blobs, 3 complete FFmpeg physical media decodes; merge tree equal. No legal/artistic acceptance.",
-   "hosted_observed": {
-    "success": 29,
-    "mlt_run": 46101251636,
-    "research_success": true
-   }
+  "research": {
+   "run": 46108672505,
+   "job": 140867069886,
+   "failure": "Europe PMC unavailable/invalid JSON; lower-layer cause unproven; other providers/languages passed"
   },
-  "scope": "technical only; not actual model or professional acceptance"
+  "scope": "Technical only; new comparison/owner offer tests executed; no neural or professional acceptance."
  },
  "consolidation": {
   "owner_priority": "2026-11-26",
@@ -1011,11 +1006,11 @@
   "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "parent_installed_and_atomic_diagnostics_20261127": {
-  "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
-  "blob": "a9d629c80ff18f460ecbdf3d54d01b239a97ac61",
-  "key": "parent_installed_and_atomic_diagnostics_20261127",
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
   "retained_in": "project-brain/EVIDENCE/INDEX.md",
-  "note": "Prior exact record remains immutable; no evidence superseded or discarded."
+  "key": "parent_installed_and_atomic_diagnostics_20261127",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "parent_terminal_20261127": {
   "exact_prior_ledger": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
@@ -1025,74 +1020,25 @@
   "note": "Prior exact record remains immutable; no evidence superseded or discarded."
  },
  "g1_sensory_decision_continuity_20261127": {
-  "baseline": "4b6e033419b516afdf407ca9c4120b647d7e9c2d",
-  "actual_trial_run": 46007258095,
-  "artifact": 15203767091,
-  "observed": "Turn 25 combined A/V; turn 26 model chose get_timeline with 98-byte reason, journal retains only hash; turn 27–36 search burst. Exact controller consumed media on one decision and omitted model-authored rationale thereafter. Structural loss reproduced, causal contribution to neural failure unproven.",
-  "correction": "One ephemeral bounded historical model-authored rationale per actual picture or audio input; at most 512 UTF-8 bytes per reason, explicit truncation, source/media digests and available observation timing. No new media dispatch, raw-media replay, persisted reason, new grant or semantic claim. Existing validators and acceptance gates unchanged.",
-  "candidate_blobs": {
-   "studio_next/native_creative_control.py": "66bad8d2e6e2f25062b9f3c3ed03ffadd8a518fd",
-   "studio_next/test_native_creative_control.py": "522ca8ed31ef65482200341a19218c2d5aa77e1b",
-   "studio_next/test_native_audio_model_input.py": "0a126ad580467a2f6eb97c0444dd13eab896aff4"
-  },
-  "local": {
-   "red": 2,
-   "green": 2,
-   "run": 197,
-   "pass": 192,
-   "errors": 5,
-   "assertion_failures": 0,
-   "environment_errors": [
-    "2 missing repository scripts imports",
-    "3 missing mcp dependency"
-   ],
-   "scope": "Exact verified installed wheel overlay, no native or neural retest"
-  },
-  "next": "Require exact candidate source/native checks, then a bounded discriminating matched creative trial only if justified and under existing synthetic consent. Measure post-observation decisions, distinct physically verified revised export, original source custody and cost, not just memory availability. No acceptance change.",
-  "matched_retest": {
-   "run_id": 46045586986,
-   "job_id": 140663907085,
-   "status": "completed",
-   "conclusion": "failure",
-   "source": "4719db96d6230c186064b4739d94e9be08e97fc0",
-   "trigger_retired_at": "87df7e5be744b72b08fdbbe41dc12897c678fdc9",
-   "request": "ZX7_SUPER_VL_G1_SENSORY_CONTINUITY_20261127",
-   "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
-   "same_brief_grants_source_sampling": true,
-   "synthetic_only": true,
-   "raw_audio_upload": false,
-   "turn_ceiling": 48,
-   "baseline_run": 46007258095,
-   "hypothesis": "Matched cumulative search-cycle and sensory-rationale correction: post-observation search/decision counts, original custody, distinct revised physical export and costs. Not isolated causal attribution or semantic listening/professional acceptance. No retry; inspect terminal actual artifacts."
-  },
-  "hosted_observation": {
-   "commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
-   "tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
-   "matrix_at_observation": {
-    "success": 29
-   },
-   "remaining": [],
-   "note": "All 29 exact parent hosted workflows success; actual model trials skipped on regular CI. Separate matched G1 run tracked."
-  }
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "key": "g1_sensory_decision_continuity_20261127",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "field_g_selected_audio_finish_20261127": {
-  "observed": "Native audio-only finishing previously mapped only first video/audio and reencoded picture as 8-bit yuv420p. Real multitrack test RED. AAC reencode extended sample clock; loudnorm shifted timestamps; integer sample-index retime after verifying continuous zero-origin source fixes these without silently rebasing gaps.",
-  "correction": "Explicit audio_stream_index required with multiple programs. Existing film_finish, sealed CAS, select one audio stream in MP4; stream-copy all untouched video/audio/subtitle packets; shared physical proof extracted from subtitle delivery. Selected continuous audio trim/aresample and exact integer sample timebase, verify original logical and padded decoded sample counts and independent loudness before/after. Refuse unsupported clocks, other stream types, chapters/attachments, high precision/HDR or multitrack picture finishing rather than silently lose fidelity.",
-  "physical": "Actual 160x96 24000/1001 10-bit BT2020/PQ-tagged H264, English 48k + Hindi 44.1k mono AAC and mov_text. Exact untouched stream packet digests, timestamps and independent decoded A/V; original SHA unchanged. Selected gain -6 dB checked RMS, normalization -23 LUFS ±1 fixture; 132300 logical/133120 padded decoded samples. Ambiguous/nonexistent selection, gap/overlap, unsafe picture finishing refused without publication.",
-  "tests": {
-   "finishing": "7/7",
-   "neighboring": "48/48",
-   "revision": "16/16",
-   "combined_with_visual": "44/44 (overlapping tests, not additive)"
-  },
-  "limits": "MP4 targeted, not arbitrary container/stream/metadata/clock, formal general loudness compliance, professional mix, stems, calibrated HDR or semantic acceptance. Hosted candidate pending."
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "key": "field_g_selected_audio_finish_20261127",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "field_d_png16_source_20261127": {
-  "observed": "Original high-depth PNG explicitly refused before PIL conversion; RED actual 16-bit image.",
-  "correction": "Native FFmpeg rgba64le decode into float32 with explicit sRGB declaration, bounded PNG chunk/metadata scan, exact byte length and existing linear transfer/associated alpha. Reject conflicting gamma/chromaticities, cICP/ICC/HDR metadata, duplicate/bad bounded chunks.",
-  "physical": "Independent actual RGBA16 source-codeword and float transfer oracle, adjacent one-codeword difference preserved through authored graph math and physical edited PNG; source SHA unchanged; conflicting gAMA and cICP rejected. Separate direct native decoder probe grayscale, RGB, grayscale+alpha, RGBA and tRNS exact.",
-  "tests": "33 run, 29 pass, 4 skipped (local OpenEXR unavailable); combined 44/44 pass including sound finishing and shared revision",
-  "limits": "Only explicitly declared sRGB-compatible 16-bit PNG input; no arbitrary color profile or wide gamut; existing SDR PNG/MOV delivery remains 8-bit; no new EXR-file or professional acceptance. Hosted candidate pending."
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "key": "field_d_png16_source_20261127",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "field_a_derivative_lineage_gap_20261127": {
   "observed": "Actual local synthetic 4x4 owner PNG -> body.visual_graph expression photo_r*.5 -> body.asset_vault durable producer DAG all_tool_results_verified; derived bytes distinct, attestation generated_original/trusted_renderer with source_id only output SHA. After withdrawal of exact original attestation, original inspect refused but a fresh derived checkout succeeded.",
@@ -1101,43 +1047,18 @@
   "derived_sha": "6e722263e450ddca6c7af5f708440fc9622a09290b463b3f634a400b54710b0c"
  },
  "physical_finishing_precision_candidate_blobs_20261127": {
-  "studio_next/film_finishing.py": "c94103c669c8b061b1c4909a0cdf08833b3abe74",
-  "studio_next/body_stream_custody.py": "bfb49bc313d2a3b0b1bf1ccb36f413502c8a692b",
-  "studio_next/body_subtitles.py": "d3370f473f7edb0c80b91476752cafa4761569b1",
-  "studio_next/body_document_schemas.py": "57136be91b9211a1dff48119d67c65a963badb79",
-  "studio_next/body_integration.py": "0d4f24d953fb9ec6e7ef4a2563cd0051ca30af77",
-  "studio_next/test_film_finishing.py": "ff221ab70593c35d0c06068c069fe566cc0b4df0",
-  "studio_next/body_visual_render.py": "38beba98b37d2be69ea8ba4358b8de10679025cd",
-  "studio_next/body_visual_contract.py": "9ca9ab93cf56a3ad7dd1768dd6c26cc22ba7a166",
-  "studio_next/test_body_visual_graph.py": "47de2d37bde8d7f1d42a0e39becf64bd0afb31ea"
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "key": "physical_finishing_precision_candidate_blobs_20261127",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "continuity_installed_audit_20261127": {
-  "source_commit": "2fab105621d36a05958fc5f8cd06ea7e49e1584e",
-  "tested_merge": "809c304d2ecbfce490805d0bfcf78bf9a958e345",
-  "matching_tree": "39444fc733f37fddb7bff12460c0a4dee2ef3480",
-  "run": 46044219985,
-  "artifact": 15222496646,
-  "sha256": "80f7e6b52b76c4cae872dede32c58b57d0faed7ee86cea9bd8b81c90386d0de1",
-  "tests_run": 1821,
-  "passed": 1789,
-  "skipped": 32,
-  "failed": 0,
-  "errors": 0,
-  "independent_artifact_checks": "ZIP SHA/CRC, 24/24 manifest hashes/sizes, 3/3 full physical MP4 A/V decodes, all three sensory-continuity source/test wheel Git blob IDs exact. No genuine model or independent artistic acceptance.",
-  "matrix": {
-   "success": 29
-  },
-  "mlt_run": 46044220019,
-  "fresh_candidate_overlay": "Exact installed wheel from this run with nine candidate source/test blobs; 70 run, 66 pass, four optional OpenEXR skipped, exit 0. No fresh hosted or EXR acceptance.",
-  "mlt": {
-   "run": 46044220019,
-   "tests_run": 1821,
-   "passed": 1819,
-   "skipped": 2,
-   "failed": 0,
-   "errors": 0,
-   "exact_merge": "809c304d2ecbfce490805d0bfcf78bf9a958e345"
-  }
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "key": "continuity_installed_audit_20261127",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "g1_sensory_continuity_terminal_20261128": {
   "run": 46045586986,
@@ -1244,89 +1165,18 @@
   }
  },
  "g1_current_reviewed_comparison_20261128": {
-  "baseline": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
-  "real_run": 46045586986,
-  "artifact": 15223750481,
-  "artifact_sha256": "091c9515d2b98b040d926ce0bac643030ae9874d47dd0c0f6321b4ac3f1cf350",
-  "replayed_actual_journal": {
-   "pair_qualifying_sequence": 73,
-   "turn": 23,
-   "matched_picture_seconds": [
-    0,
-    2,
-    4
-   ],
-   "sampled_picture_changed": true,
-   "comparable_audio_window_seconds": [
-    0,
-    6
-   ],
-   "decoded_audio_changed": false,
-   "invalidated_sequence": 91,
-   "invalidated_turn": 32,
-   "invalidating_tool": "add_asset_to_timeline",
-   "terminal_pair": null,
-   "terminal_status": "turn_budget_exhausted"
-  },
-  "correction": "Exact script evaluator allows changed picture OR changed audio, not both; still requires matching source/render custody, audible conforming soundtrack, current evidence and model finish. Historical pair qualified technically at turn 23 then invalidated. No terminal or semantic/artistic acceptance. Expose current matching observation facts to model from existing invalidation-aware comparator, without action selection, automatic finish, proof relaxation, or invented meaning.",
-  "blobs": {
-   "studio_next/native_render_evidence.py": "b24058c46bb8a4e1d64cd9aebbab9147a32c646c",
-   "studio_next/native_creative_control.py": "36c19c5234bb2e00369fe5dc74953a184efd1497",
-   "studio_next/test_native_render_evidence.py": "82d3b505c42b8a4561777dd202ac55af45624aa9",
-   "studio_next/test_native_creative_control.py": "8c6193ddb4ac6eb065de68b55162ffd80dce8778"
-  },
-  "tests": {
-   "red": "missing comparison API",
-   "focused": 13,
-   "full_attempt": 172,
-   "passed": 170,
-   "environment_errors": 2,
-   "environment_error": "installed wheel lacks checkout-only scripts.run_native_model_trial",
-   "filtered_rerun": "170/170 pass, two named repository-script tests excluded only in local wheel overlay",
-   "actual_journal_replay": "qualifying comparison sequence 73, null at 91, terminal null"
-  },
-  "limits": "No paid replay; no causal proof of autonomous improvement; repeated export destination/profile refusal remains; need exact hosted tests before integration and genuine qualified completion followed by independent assessment.",
-  "parent_hosted_observed": {
-   "success": 17,
-   "in_progress": 12,
-   "research_live": "success",
-   "no_failures_observed": true
-  }
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "key": "g1_current_reviewed_comparison_20261128",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "g1_owner_delivery_candidate_20261128": {
-  "baseline": "3132f855cb907713a5fa37839cf95202cbbc7378",
-  "real_failed_trial": 46045586986,
-  "causal_target": "7 existing-output refusals, 2 delivery mismatch, 1 target enum. Previous feedback was reactive; no confirmed single neural root cause.",
-  "correction": "Explicit owner-scoped H264 project-size candidate only after source-bound model-selected save and only if export is actually selectable and existing post-review revision gate allows it. Exact current export schema and scoped fresh unused path, no file reservation or implicit trim. Host-only granted check_export_readiness, exact projection of options and strict owner profile match, cached per save/options; current native receipt must match before offering. Bounded mismatch feedback, no model observation epoch advancement. Actual model still chooses and submits args; bridge readiness, grants, no-overwrite and save/capture/physical proof unchanged. Candidate retired on any apply submission even before file appears; no auto-dispatch or replay. H265 and unknown project-size routes receive no candidate.",
-  "blobs": {
-   "studio_next/body_editor_policy.py": "a2d626b9b2e569d1d165d3cf785c0852dc9102bb",
-   "studio_next/native_editor_session.py": "1dfa413341a6b227411fdc88efb5cf60dbcdbfa7",
-   "studio_next/native_creative_control.py": "85ed48198d15153b8139690fadeba94e19eed6b0",
-   "studio_next/native_creative_audit.py": "e25bf53c10a41d0883816abba9e95a50de8c99a2",
-   "studio_next/test_body_editor_policy.py": "004d22adeee3e551524204accd8bd9cf0dc96e1c",
-   "studio_next/test_native_creative_control.py": "686147931086d12fee717d5ed6b1c040b4ffa471"
-  },
-  "tests": {
-   "red": "missing path offer API, missing controller option, and readiness fact false; independently confirmed RED before correction",
-   "focused": "2/2 passed; actual filesystem collision/symlink, missing grants/unsupported profile/schema, native mock readiness matching and wrong 1920px, stable one-read offer, exact chosen arguments, no unselected write, journal rejection of altered read-role",
-   "related": {
-    "total_attempted": 297,
-    "passed": 258,
-    "skipped": 36,
-    "import_errors": 3,
-    "failed_assertions": 0,
-    "filtered_local_rerun": 294,
-    "remaining_errors": 0
-   },
-   "environment": "installed wheel-only local overlay, three checkout-only scripts.run_native_model_trial imports unavailable and 36 official MCP optional tests skipped"
-  },
-  "limits": "Local scripted host coordination evidence, not genuine model capability or real native readiness on current candidate. Candidate optional and may be ignored. No new provider run. Existing filesystem race limits remain; offer does not reserve path or change existing no-overwrite enforcement. No broad H265 support claimed. Exact hosted matrix pending.",
-  "integration": {
-   "parent_terminal": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
-   "parent_all_29_pass": true,
-   "local_candidate": "97b0a183f3a696677f1a5d6a374125003a2dd905",
-   "action": "lease checked canonical fast-forward with updated terminal evidence"
-  }
+  "exact_prior_ledger": "e93e19457edd7957992141f3b39716bf60106655",
+  "blob": "0c8131593641cfc42902f49c35518c92ed2fe1ed",
+  "retained_in": "project-brain/EVIDENCE/INDEX.md",
+  "key": "g1_owner_delivery_candidate_20261128",
+  "note": "Full prior exact record remains in immutable commit."
  },
  "field_a_av_derivative_lineage_20261128": {
   "baseline": "1e0123bc84d8825c65028240a2b0b41448f77df1",
@@ -1371,6 +1221,57 @@
    "actual": "28 frames, r_frame_rate=120/1, time_base=1/1000000, duration_ts=1141666, avg_frame_rate=14000000/570833. Audio-only copy/reencode on local FFmpeg 7.1.5 changes unselected video duration_ts to 1182440 and avg_frame_rate to 100000/4223 while inspected packet timestamps match. Exact unchanged-stream verifier refuses, no accepted output. Separate picture+sound finish supported and verified; do not silently relax packet/timing proof.",
    "next": "Resolve native VFR/mux timing via separate physical contract; legacy fit/fill is not frame-exact editorial. Do not force CFR by dropping frames."
   },
-  "limits": "Visual plus three more producer paths only; CGI, planar, ACES, EXR, motion and historical unbound grants still need exact lineage reconciliation. No independent legal or creative approval, old-backup recall, or global raw-path revocation. Hosted candidate pending."
+  "limits": "Visual plus three more producer paths only; CGI, planar, ACES, EXR, motion and historical unbound grants still need exact lineage reconciliation. No independent legal or creative approval, old-backup recall, or global raw-path revocation. Hosted candidate pending.",
+  "integration": {
+   "parent_terminal": "1e0123bc84d8825c65028240a2b0b41448f77df1",
+   "source_candidate": "e93e19457edd7957992141f3b39716bf60106655",
+   "action": "canonical fast-forward after exact parent terminal; new matrix pending"
+  }
+ },
+ "g1_explicit_owner_window_20261128": {
+  "baseline": "1e0123bc84d8825c65028240a2b0b41448f77df1",
+  "actual_source": "VelornLabs/velorn b3c02adbd5c0779feb8abf34978299e9502cc0e7 electron/mcpServer.js blob 22693419834cd1f24515e1ce5a6ff5c1b7f45311: full range max clip extent and timeline duration; projectStore default 60; timelineStore placements extend end+10.",
+  "red": "Existing offer absent for native 60s duration vs owner max 6s.",
+  "fix": "Only duration-only mismatch may produce separately verified optional explicit 0-to-owner-max custom range; disclose later timeline excluded. Model must select. Actual rangeStart, rangeEnd and duration match; same-length shifted range and wrong dimensions refused; bounded per-save/options cache; clear on apply submission. No hidden trim or dispatch.",
+  "tests": {
+   "focused": 26,
+   "related_attempt": {
+    "run": 268,
+    "pass": 230,
+    "skip": 36,
+    "checkout_only_import_errors": 2
+   },
+   "filtered": {
+    "run": 266,
+    "pass": 230,
+    "skip": 36,
+    "fail": 0
+   },
+   "real_native_fixture": "New helper syntax compiled locally, exact pinned loss-aware E2E hook. Real production run_native_session on actual reopened synthetic project, only scripted decision provider substituted. Wrong dimension refusal, positive padded range explicit 0–2s, saved source/options, independent 48-frame H264/AAC and audible PCM. Actual Electron not available locally; hosted unexecuted."
+  },
+  "limits": "No genuine inference improvement, no paid run, no auto-trim or forced finish. Option may exclude intended later material; creative choice remains model-owned."
+ },
+ "field_a_planar_derivative_20261128": {
+  "baseline": "e93e19457edd7957992141f3b39716bf60106655",
+  "red": "Actual planar renderer output lacked exact ancestor grants.",
+  "fix": "Exact selected source/overlay/optional foreground grant pairs bound to actual output hash and recoverable publication; exact grant MIME checks.",
+  "physical": "Actual independent projection+OpenCV SIFT/RANSAC+FFmpeg, original decoded sound and BT709 unchanged. Graph foreground derivative interrupted post-publication then recovered without rerender; withdraw matte denies fresh checkout, other grants and historical bytes unchanged.",
+  "tests": {
+   "red": 1,
+   "tracking_green": 9,
+   "focused_related": 14,
+   "broader_attempt": "30 successful cases before local 120s command timeout; not full suite. Prior candidate 107/107 preserved."
+  },
+  "limits": "CGI/ACES/EXR/motion/history still open."
+ },
+ "current_integrated_candidate_blobs_20261128": {
+  "studio_next/body_planar.py": "723ad7af7fd7c4d05b95fc51b1cc93a468297027",
+  "studio_next/test_cgi_tracking.py": "e3dca6c60b32f6f25a5d8b707e50b9614ce05584",
+  "studio_next/body_integration.py": "6520c685a6b286a05694f17292f2f20ad211639b",
+  "studio_next/body_editor_policy.py": "5e9431978471158510bea94bb1fdb9a8ff8a2a9b",
+  "studio_next/native_creative_control.py": "890931af0bec22ff7188955ce18cb36f45c478f3",
+  "studio_next/test_native_creative_control.py": "a45e59377f2a109cdd9d155077514c827e892a49",
+  "engines/velorn/owner_delivery_proof.py": "a728ff87509ae0ce31c5db00b104b754cf14007e",
+  "engines/velorn/mcp-e2e.py": "cdf26803f3f5772645f110802639406e11108bd4"
  }
 }

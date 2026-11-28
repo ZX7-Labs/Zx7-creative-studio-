@@ -991,7 +991,7 @@ class NativeCreativeControl:
                 host_tool_access.get("check_export_readiness") != "read"):
             raise NativeCreativeControlError("Owner delivery offer requires indexed source-bound export grants")
         self._owner_delivery_offer = host_owner_delivery_offer
-        self._owner_delivery_observation = None
+        self._owner_delivery_observations = {}
         if (not isinstance(host_content_revision_tools, (list, tuple, frozenset)) or
                 any(not isinstance(name, str) or not name
                     for name in host_content_revision_tools) or
@@ -1220,7 +1220,10 @@ class NativeCreativeControl:
         if not semantic_fields.issubset(fields) or not validator.is_valid(read_args):
             return None, {"status": "readiness_schema_incompatible", "owner_delivery_profile": profile}
         key = (self._explicit_render_save_identity, _wire(read_args))
-        if self._owner_delivery_observation is None or self._owner_delivery_observation[0] != key:
+        if key not in self._owner_delivery_observations:
+            # At most the full timeline and one explicit window per save.
+            if len(self._owner_delivery_observations) >= 2:
+                self._owner_delivery_observations.clear()
             status = "unconfirmed"
             observed = None
             digest = None
@@ -1237,7 +1240,7 @@ class NativeCreativeControl:
                             # Bounded source facts only; do not copy native text,
                             # unknown codec/container values or arbitrary metadata.
                             observed = {}
-                            for name in ("width", "height", "fps", "duration"):
+                            for name in ("width", "height", "fps", "duration", "rangeStart", "rangeEnd"):
                                 value = target.get(name)
                                 if type(value) in (int, float) and 0 <= value <= 16384:
                                     observed[name] = value
@@ -1249,6 +1252,16 @@ class NativeCreativeControl:
                             status = "not_ready"
                         elif native_delivery_matches(state, profile):
                             status = "matched"
+                            if arguments.get("range") == "custom":
+                                # A same-length shifted window is not the
+                                # exact optional range presented to the Brain.
+                                expected_range = {"rangeStart": arguments["startSeconds"],
+                                    "rangeEnd": arguments["endSeconds"],
+                                    "duration": arguments["endSeconds"] - arguments["startSeconds"]}
+                                if not all(type(target.get(name)) in (int, float) and
+                                        math.isclose(target[name], value, rel_tol=0, abs_tol=1e-6)
+                                        for name, value in expected_range.items()):
+                                    status = "profile_mismatch"
                         else:
                             status = "profile_mismatch"
             except Exception:
@@ -1261,12 +1274,12 @@ class NativeCreativeControl:
                 "text_sha256": digest, "native_readiness_status": status,
                 "measured_host_read_wall_ms": elapsed,
                 "host_attested_read_only": True, "no_model_selected_mutation": True})
-            self._owner_delivery_observation = (key, status, observed)
-        _, status, observed = self._owner_delivery_observation
+            self._owner_delivery_observations[key] = (status, observed)
+        status, observed = self._owner_delivery_observations[key]
         if status == "matched":
             return {**candidate, "native_readiness_verified": True,
                 "observed_delivery": observed,
-                "note": "Last host read matched owner profile. No creative range chosen; native readiness, source custody and destination rechecked at dispatch."}, None
+                "note": candidate["note"] + " Last host read matched owner profile; native readiness, source custody and destination rechecked at dispatch."}, None
         return None, {"status": status, "owner_delivery_profile": profile,
                       "observed_delivery": observed,
                       "note": "Last host read did not establish an owner-matching export. Inspect current native state or choose different valid arguments; no export was attempted."}
@@ -2144,6 +2157,30 @@ class NativeCreativeControl:
                     if proposed is not None:
                         delivery_candidate, delivery_feedback = await self._inspect_owner_delivery_candidate(
                             proposed, validators["check_export_readiness"])
+                        # Velorn's full range includes timeline workspace padding.
+                        # Do NOT shorten it implicitly. If duration is the only
+                        # mismatch, separately expose the explicit owner-limit
+                        # window, with the exclusion stated and native-checked.
+                        observed = (delivery_feedback or {}).get("observed_delivery") or {}
+                        approved = proposed["owner_delivery_profile"]
+                        duration = observed.get("duration")
+                        if (delivery_candidate is None and
+                                (delivery_feedback or {}).get("status") == "profile_mismatch" and
+                                type(duration) in (int, float) and
+                                duration > approved["max_duration"] + 1e-6 and
+                                native_delivery_matches({"deliveryTarget": observed},
+                                    {**approved, "max_duration": duration})):
+                            bounded = self._owner_delivery_offer.candidate(validators[RENDER_TOOL],
+                                explicit_owner_window=True)
+                            if bounded is not None:
+                                bounded_result, bounded_feedback = await self._inspect_owner_delivery_candidate(
+                                    bounded, validators["check_export_readiness"])
+                                if bounded_result is not None:
+                                    delivery_candidate = {**bounded_result,
+                                        "full_timeline_observed_duration_seconds": duration,
+                                        "excludes_later_timeline_time": True}
+                                delivery_feedback = {**delivery_feedback,
+                                    "explicit_owner_window_readiness": (bounded_feedback or {"status": "matched"})}
                 context = {
                     "creative_brief": brief,
                     # Expose only actions that the exact current grammar
@@ -2944,7 +2981,7 @@ class NativeCreativeControl:
                     # Dispatch may change current readiness even if refused.
                     # Re-read only after the model has actually chosen export.
                     if args["inputs"].get("previewOnly") is not True:
-                        self._owner_delivery_observation = None
+                        self._owner_delivery_observations = {}
                 call_started = time.monotonic_ns()
                 try:
                     result = await self.session.call_tool(native_name, args["inputs"])

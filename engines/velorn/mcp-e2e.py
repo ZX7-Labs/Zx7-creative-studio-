@@ -2764,6 +2764,13 @@ async def exercise(options):
                     "genuine_neural_brain_or_professional_art_certified": False,
                 }, sort_keys=True), flush=True)
 
+    if loss_aware_range_source:
+        from owner_delivery_proof import prove_owner_delivery
+        await prove_owner_delivery(options=options, connected=connected, call=call,
+            wait=wait, fixture=fixture, config=config, project=project,
+            video_id=video_ids[0], staging=staging, outputs=outputs)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
