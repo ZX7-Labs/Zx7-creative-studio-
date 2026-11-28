@@ -239,6 +239,40 @@ class CreativeResearchTests(unittest.TestCase):
                 self.assertIsNotNone(caught.exception.__cause__)
                 self.assertEqual(opener.open.call_count, 1)
 
+
+    def test_real_truncated_http_body_cannot_return_valid_json_prefix(self):
+        from studio_next.creative_research import _bounded_json_get
+        calls = []
+
+        class LocalMetadata(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_GET(self):
+                calls.append(self.path)
+                body = b'{"results":[]}'
+                self.send_response(200)
+                if self.path == "/truncated":
+                    self.send_header("Content-Length", str(len(body) + 100))
+                elif self.path == "/complete":
+                    self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), LocalMetadata) as server:
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                with self.assertRaisesRegex(CreativeResearchError, "body_read:http_protocol"):
+                    _bounded_json_get(base + "/truncated")
+                self.assertEqual(_bounded_json_get(base + "/complete"), {"results": []})
+                self.assertEqual(_bounded_json_get(base + "/unknown-length"), {"results": []})
+            finally:
+                server.shutdown()
+                thread.join()
+        self.assertEqual(calls, ["/truncated", "/complete", "/unknown-length"])
+
     def test_restored_research_providers_allow_only_exact_metadata_paths(self):
         allowed = (
             "https://openaccess-api.clevelandart.org/api/artworks/?q=light",

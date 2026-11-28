@@ -170,9 +170,17 @@ def _bounded_json_get(url):
             if response.status != 200:
                 raise CreativeResearchError("Research provider returned an unsuccessful status")
             stage = "body_read"
+            # A bounded HTTPResponse.read(n) can return a shorter body on
+            # premature EOF without raising IncompleteRead. Never parse a
+            # valid JSON prefix of an incomplete declared representation.
+            declared_length = response.length
+            if type(declared_length) is int and declared_length > 1_000_000:
+                raise CreativeResearchError("Research metadata exceeds response budget")
             raw = response.read(1_000_001)
             if len(raw) > 1_000_000:
                 raise CreativeResearchError("Research metadata exceeds response budget")
+            if type(declared_length) is int and len(raw) != declared_length:
+                raise HTTPException("Incomplete research metadata body")
             stage = "json_decode"
             payload = json.loads(raw)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError,

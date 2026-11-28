@@ -1367,6 +1367,28 @@
    "studio_next/creative_research.py": "d9dc3d75e0cd41e077b736515dddc79a59dd34a2",
    "studio_next/test_creative_research.py": "231284e1699bcf9a3f71de92d9c22355189ff553"
   },
-  "integrated_ci": "NOT_RUN_AT_COMMIT"
+  "integrated_ci": {
+   "source": "661afb715306b8f5e5c56dd0d78e55fedf8c82ba",
+   "run": 46115534534,
+   "job": 140888398999,
+   "offline": "32/32 pass, new classification test passed",
+   "live": "17/18 success; Europe PMC connect_or_headers:timeout, ~21.6s; TCP/TLS/header subdivision unknown"
+  }
+ },
+ "research_truncated_body_20261128": {
+  "baseline": "661afb715306b8f5e5c56dd0d78e55fedf8c82ba",
+  "red": "Actual local HTTP server sends valid JSON prefix with Content-Length 100 and two bytes then closes. Isolated copy of exact candidate _bounded_json_get accepted it.",
+  "green": "Check known HTTPResponse.length before bounded read, reject over budget or shorter body via HTTPException before JSON parsing. Real loopback 7 requests: valid, invalid JSON, 403, redirect refused, oversize, array rejected, truncated refused; three mocked timeout/DNS/read classifications pass. Existing non-length/chunked semantics retained. Exact repo test pending.",
+  "candidate_blobs": {
+   "studio_next/creative_research.py": "dd25e62a34a347e542e69e342031f6d220d25c40",
+   "studio_next/test_creative_research.py": "3ccac7479fd3c2dfabb093fb47482a25832557f4"
+  }
+ },
+ "canonical_state_size_20261128": {
+  "source": "661afb715306b8f5e5c56dd0d78e55fedf8c82ba",
+  "run": 46115534535,
+  "job": 140888398984,
+  "result": "FAIL too_large: STATE.md",
+  "correction": "Compact current snapshot under existing 14000-byte cap; prior full STATE and ledger retained at exact parent; no checker relaxation."
  }
 }
