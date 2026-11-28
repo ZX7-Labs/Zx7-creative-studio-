@@ -1985,3 +1985,54 @@ Previous exact records at [76cc6e01ea03f247d50ef6b8dba92128c4b56d90](https://git
   "scope": "technical only; not actual model or professional acceptance"
 }
 ```
+
+
+## 28 Nov — exact edit, finishing and matte derivative grants; mutable matte decoder defect
+
+```json
+{
+  "baseline": "1e0123bc84d8825c65028240a2b0b41448f77df1",
+  "local_source": "Installed wheel from fully verified d6db5388, exact changed physical modules identical on current canonical source",
+  "blobs": {
+    "studio_next/body_owned_edit.py": "77dc62dd8e811dd368b1001eb442e9a494a0181d",
+    "studio_next/film_finishing.py": "f70d74823745da7f7817749745dba2739265786f",
+    "studio_next/composite_mix.py": "2584ff1ad96da32c524271122692402fcb12e9f5",
+    "studio_next/body_integration.py": "61de4e2e297ef7452cb9f216c7534851ff69b37f",
+    "studio_next/test_body_custody_graph.py": "f692dd0e84a42ec792509cf859f947c1735f4203",
+    "studio_next/test_composite_mix.py": "6a437f08f6dc6bdfe582b33b90487b0c2592c33f",
+    "studio_next/test_film_finishing.py": "b27d00fa2e5c151ae917ec7c5ec8039e136dd684",
+    "studio_next/test_body_integration.py": "b82fe823982db3dec6696a852481a67f5e0fa88e"
+  },
+  "red": [
+    "Actual two-owner video edit grant lacked source_attestations.",
+    "Actual matte input path in FFmpeg argv remained mutable workspace path; during real encode modified matte and restored before post-render checks. The discriminator tested kind==video instead of video_layers in sealing and final re-admission."
+  ],
+  "correction": "Extend existing exact source-attestation publication/recovery path to body.render_edit_owned, body.composite_mix and body.film_finish, using real renderer output SHA and exact admitted clip/layer/matte/source grants. Fix compositor matte discriminator at both private CAS sealing and commit-side re-admission. Shared canonicalization, no new custody subsystem or inferred ownership. Preserve independent grants and historical outputs.",
+  "physical": "Actual two original MP4 edit and second-generation explicit picture grade/sound gain finishing; exact ancestor pairs, restart reuse, withdraw one source then block both dependent checkouts, unaffected source accessible. Actual original RGBA red picture and white matte, mutate workspace mask to black during FFmpeg then restore; all decoder paths private sealed, decoded output still red; exact matte grant and derivative checkout refusal after withdrawal. Existing selected-program audio-only finishing test now checks exact source receipt.",
+  "tests": {
+    "focused_red": 2,
+    "focused_green": 2,
+    "related_initial": {
+      "run": 108,
+      "pass": 106,
+      "fail": 1,
+      "import_error": 1
+    },
+    "fixture_correction": "Prior mock physical-dimension verifier fixture omitted now-required source_attestations; explicitly verify missing field rejection as well as unchanged physical mismatch checks.",
+    "related_rerun": {
+      "run": 107,
+      "pass": 107,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
+    },
+    "environment": "One checkout-only scripts.research_audio_clock import unavailable in installed wheel; no test disabled in repository. Full hosted exact source required."
+  },
+  "discovered_boundary": {
+    "adapter": "Legacy fit/fill body.render_edit_owned two 0.6s inputs at authored 24fps",
+    "actual": "28 frames, r_frame_rate=120/1, time_base=1/1000000, duration_ts=1141666, avg_frame_rate=14000000/570833. Audio-only copy/reencode on local FFmpeg 7.1.5 changes unselected video duration_ts to 1182440 and avg_frame_rate to 100000/4223 while inspected packet timestamps match. Exact unchanged-stream verifier refuses, no accepted output. Separate picture+sound finish supported and verified; do not silently relax packet/timing proof.",
+    "next": "Resolve native VFR/mux timing via separate physical contract; legacy fit/fill is not frame-exact editorial. Do not force CFR by dropping frames."
+  },
+  "limits": "Visual plus three more producer paths only; CGI, planar, ACES, EXR, motion and historical unbound grants still need exact lineage reconciliation. No independent legal or creative approval, old-backup recall, or global raw-path revocation. Hosted candidate pending."
+}
+```

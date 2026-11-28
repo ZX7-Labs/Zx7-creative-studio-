@@ -16,7 +16,7 @@ import time
 from fractions import Fraction
 from pathlib import Path
 
-from .media_vault import MediaVault,sha256_file
+from .media_vault import MediaVault,sha256_file,canonical_source_attestations
 from .delivery_audit import _probe_details
 from .composite_mix import _exact_media,sealed_attested_original
 from .production_qc import full_decode_inspection
@@ -288,6 +288,8 @@ def finish_authorized_movie(spec_file,workspace,vault_root,output,*,runner=None,
             os.fsync(ready.fileno())
         os.link(encoded,destination)
     return {"path":str(destination),"sha256":sha256_file(destination),
+            "source_attestations":canonical_source_attestations([
+                {k:media[k] for k in ("asset_id","attestation_id")}]),
             "bytes":destination.stat().st_size,
             "duration_seconds":rendered["duration_seconds"],
             "width":rendered["width"],"height":rendered["height"],

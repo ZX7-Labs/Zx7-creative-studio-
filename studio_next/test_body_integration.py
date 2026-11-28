@@ -125,7 +125,8 @@ class TrustedCreativeBodyToolTests(unittest.TestCase):
             receipt={"path":str(movie),
                      "sha256":hashlib.sha256(movie.read_bytes()).hexdigest(),
                      "duration_seconds":4.0,"width":1280,"height":720,
-                     "audio_present":True}
+                     "audio_present":True,
+                     "source_attestations":[{"asset_id":"a"*64,"attestation_id":"b"*64}]}
             with patch("studio_next.body_integration._probe_details",
                        return_value=physical):
                 self.assertTrue(validate_witness("body.render_edit_owned",receipt))
@@ -135,7 +136,7 @@ class TrustedCreativeBodyToolTests(unittest.TestCase):
                     with self.subTest(field=name):
                         self.assertFalse(validate_witness(
                             "body.render_edit_owned",{**receipt,name:invalid}))
-                for missing in ("width","height","duration_seconds","audio_present"):
+                for missing in ("width","height","duration_seconds","audio_present","source_attestations"):
                     with self.subTest(missing=missing):
                         bad=dict(receipt)
                         del bad[missing]

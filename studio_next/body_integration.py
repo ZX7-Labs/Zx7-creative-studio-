@@ -575,7 +575,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             verification.update(observed)
             if observed["plan_sha256"]!=initial_sha:
                 raise ValueError("Verified rendering used a different director cut")
-        receipt=_commit_actual_body_output(target,produce)
+            return observed
+        receipt=_commit_actual_body_output(target,produce,retain_source_attestations=True)
         # Crash recovery may reuse an existing exact movie. It must still
         # fully decode picture and soundtrack before accepting that film.
         if not verification:
@@ -688,14 +689,14 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         source=_path_within(root,inputs["plan"],exists=True)
         out=_body_output(root,inputs["out"],allowed=(".mp4",))
         return _commit_actual_body_output(
-            out,lambda staged:render_composition(source,root,vault.root,staged))
+            out,lambda staged:render_composition(source,root,vault.root,staged),retain_source_attestations=True)
 
     def finish_movie(inputs):
         source=_path_within(root,inputs["plan"],exists=True)
         dest=_body_output(root,inputs["out"],allowed=(".mp4",))
         return _commit_actual_body_output(
             dest,lambda staged:finish_authorized_movie(
-                source,root,vault.root,staged))
+                source,root,vault.root,staged),retain_source_attestations=True)
 
     def color_grade_movie(inputs):
         plan=_path_within(root,inputs["plan"],exists=True)
@@ -1235,7 +1236,7 @@ def validate_witness(_tool_id,result):
     """Physically revisit file and stored rights evidence on every resume."""
     if not isinstance(result,dict):
         return False
-    if _tool_id=="body.visual_graph":
+    if _tool_id in ("body.visual_graph","body.render_edit_owned","body.composite_mix","body.film_finish"):
         try:
             if canonical_source_attestations(result.get("source_attestations"))!=result["source_attestations"]:
                 return False

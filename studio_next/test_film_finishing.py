@@ -184,6 +184,8 @@ class IndependentFilmFinishingTests(unittest.TestCase):
                                     allowed_access={"read", "write"})
             output = root / "finished.mp4"
             self.assertTrue(validate_witness("body.film_finish", result))
+            self.assertEqual(result["source_attestations"],[{
+                "asset_id":rights["asset_id"],"attestation_id":rights["attestation_id"]}])
             self.assertEqual(sha256_file(original), digest)
             def streams(path):
                 return json.loads(subprocess.check_output(["ffprobe", "-v", "error",

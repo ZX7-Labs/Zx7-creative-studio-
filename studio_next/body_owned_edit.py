@@ -17,7 +17,7 @@ import tempfile
 from pathlib import Path
 
 from .edit_timeline import validate_edit, edit_ffmpeg_command, probe_media, _path_within
-from .media_vault import MediaVault, sha256_file
+from .media_vault import MediaVault, sha256_file, canonical_source_attestations
 from .production_qc import full_decode_inspection
 from .composite_mix import _decoded_source_duration
 
@@ -165,7 +165,10 @@ def render_verified_owned_edit(plan_file, workspace, vault_root, output):
             # Only a single atomic, exclusive hardlink may expose a fully
             # decoded, still-rights-attested movie. A competitor wins safely.
             os.link(staged,output)
-        return {"source_custody_count":len(clean["clips"]),
+        return {"sha256":sha256_file(output),
+                "source_attestations":canonical_source_attestations([
+                    {k:clip[k] for k in ("asset_id","attestation_id")} for clip in plan["clips"]]),
+                "source_custody_count":len(clean["clips"]),
                 "distinct_originals":len(originals),
                 "plan_sha256":before,
                 "encoded_media_probe":final,
