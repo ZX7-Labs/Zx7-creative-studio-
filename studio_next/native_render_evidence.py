@@ -24,8 +24,10 @@ DESTINATION_FIELD = "native_export_destination_sha256"
 SCOPE_FIELD = "native_export_timeline_sha256"
 AV_REVIEW_FIELD = "native_av_review"
 AV_PCM_FIELD = "native_av_pcm_sha256"
+AV_WINDOW_AUDIO_FIELD = "native_av_window_audio"
 SAVED_RENDER_FIELD = "native_render_saved_project_sha256"
 SAVED_RENDER_OPTIONS_FIELD = "native_render_options_sha256"
+SAVED_RENDER_MEDIA_FIELD = "native_render_media_sha256"
 SAVED_RENDER_FAILURE = "native_render_saved_project_capture_failed"
 
 
@@ -36,7 +38,7 @@ def valid_av_review_values(tool, values):
         return False
     if tool == VERIFY_TOOL:
         return len(values) == 1 and 0 < values[0] <= 300
-    if tool == TIMED_FRAMES:
+    if tool in (TIMED_FRAMES, ACTIVE_AV_WINDOW):
         return 2 <= len(values) <= 4 and all(
             first < second for first, second in zip(values, values[1:]))
     if tool == AUDIO_ENVELOPE:
@@ -53,7 +55,7 @@ def av_review_values(tool, receipt):
                 observation.get("full_picture_and_sound_decoder_completed") is not True):
             return None
         values = [observation.get("duration_seconds")]
-    elif tool == TIMED_FRAMES:
+    elif tool in (TIMED_FRAMES, ACTIVE_AV_WINDOW):
         samples = receipt.get("samples")
         if not isinstance(samples, list) or not all(isinstance(item, dict) for item in samples):
             return None
@@ -76,6 +78,30 @@ def av_review_values(tool, receipt):
     else:
         return None
     return values if valid_av_review_values(tool, values) else None
+
+
+def av_window_audio_values(event):
+    """Both modalities must describe one actual bounded observation window.
+
+    No partial or mismatched receipt can mint full-film evidence. A valid
+    partial window may still be observed; the pair gate checks full coverage.
+    """
+    if event.get("tool") != ACTIVE_AV_WINDOW:
+        return None
+    frames = event.get(AV_REVIEW_FIELD)
+    audio = event.get(AV_WINDOW_AUDIO_FIELD)
+    hashes = event.get("image_sha256")
+    pcm = event.get(AV_PCM_FIELD)
+    if (not valid_av_review_values(ACTIVE_AV_WINDOW, frames) or
+            not valid_av_review_values(AUDIO_ENVELOPE, audio) or
+            not isinstance(hashes, list) or len(hashes) != len(frames) or
+            any(not isinstance(h, str) or not re.fullmatch(r"[a-f0-9]{64}", h)
+                for h in hashes) or
+            not isinstance(pcm, str) or not re.fullmatch(r"[a-f0-9]{64}", pcm) or
+            audio[1] - audio[0] > 30.02 or
+            frames[0] < audio[0] or frames[-1] >= audio[1]):
+        return None
+    return audio
 
 
 def destination_digest(path):
@@ -112,26 +138,31 @@ def native_render_binding(requested, receipt):
     return {DESTINATION_FIELD: destination, SCOPE_FIELD: scope}
 
 
-def _decoded_review_changed(before, after):
+def _decoded_review_comparison(before, after):
     before_frames, before_audio = before
     after_frames, after_audio = after
-    return (
-        any(before_frames[time] != after_frames[time]
-            for time in before_frames.keys() & after_frames.keys()) or
-        (before_audio[:2] == after_audio[:2] and before_audio[2] != after_audio[2])
-    )
+    times = sorted(before_frames.keys() & after_frames.keys())
+    audio_comparable = before_audio[:2] == after_audio[:2]
+    return {
+        "matched_picture_seconds": times,
+        "sampled_picture_changed": (any(before_frames[t] != after_frames[t] for t in times)
+                                    if times else None),
+        "comparable_audio_window_seconds": list(before_audio[:2]) if audio_comparable else None,
+        "decoded_audio_changed": (before_audio[2] != after_audio[2]
+                                  if audio_comparable else None),
+    }
 
 
-def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
-    """Return the latest qualifying pair of file receipts from one timeline."""
+def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
+    """Shared fail-closed source-bound pairing and read-only candidate state."""
     rendered, used_destinations, verified = {}, set(), {}
     first_verification = {}
     av_reviews = {}
-    review_tools = {TIMED_FRAMES, AUDIO_ENVELOPE} if audiovisual else FRAME_TOOLS
+    review_tools = {TIMED_FRAMES, AUDIO_ENVELOPE, ACTIVE_AV_WINDOW} if audiovisual else FRAME_TOOLS
     invalidating_reads = FRAME_TOOLS | {VERIFY_TOOL}
     if audiovisual:
         invalidating_reads |= {AUDIO_ENVELOPE}
-    last_review = before_revision = pair = None
+    last_review = before_revision = pair = comparison = None
     for event in events:
         tool, path = event.get("tool"), event.get(DESTINATION_FIELD)
         if event.get("kind") == "native_read_tool_reported_error":
@@ -198,7 +229,15 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
                 if not valid_av_review_values(tool, values):
                     continue
                 review = av_reviews.setdefault(path, {})
-                if tool == TIMED_FRAMES:
+                if tool == ACTIVE_AV_WINDOW:
+                    audio_values = av_window_audio_values(event)
+                    if audio_values is None:
+                        continue
+                    # The same model-selected read delivered both original
+                    # receipts. Keep the established two-modality comparator.
+                    review[TIMED_FRAMES] = dict(zip(values, event["image_sha256"]))
+                    review[AUDIO_ENVELOPE] = (*audio_values, event[AV_PCM_FIELD])
+                elif tool == TIMED_FRAMES:
                     hashes = event["image_sha256"]
                     if len(hashes) != len(values):
                         continue
@@ -221,11 +260,124 @@ def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
                 decoded = (review[TIMED_FRAMES], review[AUDIO_ENVELOPE])
             last_review = (rendered[path], path, digest, decoded)
             if (before_revision is not None and before_revision[0] == rendered[path] and
-                    before_revision[1] != path and before_revision[2] != digest and
-                    (not audiovisual or _decoded_review_changed(before_revision[3], decoded))):
+                    before_revision[1] != path and before_revision[2] != digest):
+                candidate = (_decoded_review_comparison(before_revision[3], decoded)
+                             if audiovisual else None)
+                if audiovisual and not (candidate["sampled_picture_changed"] or
+                                        candidate["decoded_audio_changed"]):
+                    continue
+                comparison = candidate
                 pair = [
                     {"destination_sha256": output_path, "export_sha256": output_digest,
                      "timeline_sha256": scope}
                     for scope, output_path, output_digest, _ in (before_revision, last_review)
                 ]
+    return pair, before_revision, rendered, verified, comparison if pair is not None else None
+
+
+def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
+    """Return the latest qualifying pair of file receipts from one timeline."""
+    pair, _, _, _, _ = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=audiovisual)
     return pair
+
+
+def reviewed_av_comparison(events, revision_tools):
+    """Explain the still-current qualifying pair, not semantic or artistic approval.
+
+    A None modality comparison means there was no matching observation window.
+    Writes and failed reads revoke this summary exactly as they revoke the pair.
+    """
+    _, _, _, _, comparison = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=True)
+    return comparison
+
+
+def reviewed_av_duplicate_export(events, revision_tools):
+    """Report a current separately rendered file with prior reviewed bytes.
+
+    Reuse the same scoped, invalidation-aware evidence as the pair gate.
+    This is byte equality, not a new observation, creative revision, or
+    claim that all perceptually identical encodings have equal hashes.
+    """
+    pair, before, rendered, verified, _ = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=True)
+    if pair is not None or before is None or before[3] is None:
+        return False
+    scope, prior_dest, prior_digest, _ = before
+    return any(dest != prior_dest and digest == prior_digest and
+               rendered.get(dest) == scope for dest, digest in verified.items())
+
+
+def reviewed_av_reference_frame_times(events, revision_tools):
+    """Return exact prior-model-observed times for *another* verified A/V cut.
+
+    Trusted receipts, real timeline identity and export SHA must all match the
+    same source-bound pairing state as the acceptance gate. This is a read-only
+    explanation of why identical-time samples may be needed, not a new model
+    action, source attestation, artistic plan or evidence waiver. None means
+    no safely comparable current export (or that the pair already qualifies).
+    """
+    pair, before, rendered, verified, _ = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=True)
+    if pair is not None or before is None or before[3] is None:
+        return None
+    scope, prior_dest, prior_digest, decoded = before
+    times = sorted(decoded[0])
+    if (not 2 <= len(times) <= 4 or not
+            valid_av_review_values(TIMED_FRAMES, times)):
+        return None
+    for current_dest, current_digest in verified.items():
+        if (current_dest != prior_dest and current_digest != prior_digest and
+                rendered.get(current_dest) == scope):
+            return times
+    return None
+
+
+def _reviewed_host_render_hashes(events, pair, field, *, distinct=False):
+    """Bind a reviewed export pair to exact trusted host-captured bytes.
+
+    This is source/receipt consistency, NOT a signature or proof of artistic
+    improvement. Later renders to an identical destination supersede prior
+    receipts; unknown or missing saved hashes fail closed.
+    """
+    if type(pair) is not list or len(pair) != 2 or type(events) is not list:
+        return None
+
+    def is_sha(value):
+        return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+    captures = {}
+    for event in events:
+        if (type(event) is dict and event.get("kind") == "native_tool_result" and
+                event.get("tool") == RENDER_TOOL and
+                event.get("host_application_write_acknowledged") is True):
+            dest = event.get(DESTINATION_FIELD)
+            if is_sha(dest):
+                captures[dest] = event
+
+    shas = []
+    for binding in pair:
+        if type(binding) is not dict or not (
+                is_sha(binding.get("destination_sha256")) and
+                is_sha(binding.get("timeline_sha256"))):
+            return None
+        capture = captures.get(binding["destination_sha256"])
+        if (capture is None or
+                capture.get(SCOPE_FIELD) != binding["timeline_sha256"] or
+                not is_sha(capture.get(SAVED_RENDER_FIELD)) or
+                not is_sha(capture.get(SAVED_RENDER_OPTIONS_FIELD)) or
+                not is_sha(capture.get(field))):
+            return None
+        shas.append(capture[field])
+    return shas if (not distinct or shas[0] != shas[1]) else None
+
+
+def reviewed_native_snapshot_hashes(events, pair):
+    """The exact first and revised native project bytes captured by the host."""
+    return _reviewed_host_render_hashes(events, pair, SAVED_RENDER_FIELD, distinct=True)
+
+
+def reviewed_native_media_hashes(events, pair):
+    """Render-time source-media closure digests for the same physical pair."""
+    return _reviewed_host_render_hashes(events, pair, SAVED_RENDER_MEDIA_FIELD)

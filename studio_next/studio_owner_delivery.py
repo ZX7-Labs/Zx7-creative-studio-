@@ -63,22 +63,93 @@ def _bounded_native_project(path):
     return doc, hashlib.sha256(raw).hexdigest()
 
 
-def _sha256(path):
+def _native_revision_content(document: dict):
+    """Keep every native-editable field except passive autosave clocks.
+
+    A second save can change the root and timeline modified timestamps
+    without changing picture, sound, media assets, or any editable scene.
+    A different raw project SHA is necessary for the host's custody proof,
+    but not sufficient evidence that the model authored a *content* revision.
+    Never mutate or normalize away creative fields from either source.
+    """
+    timelines = document.get("timelines")
+    if not isinstance(timelines, list) or any(
+            not isinstance(item, dict) for item in timelines):
+        raise ValueError("Native snapshot contains malformed editable timelines")
+    result = {key: value for key, value in document.items()
+              if key not in ("modified", "timelines")}
+    result["timelines"] = [
+        {key: value for key, value in item.items() if key != "modified"}
+        for item in timelines
+    ]
+    return result
+
+
+def _sha256_beneath_directory(project: Path, parts: list[str], expected_bytes: int):
+    """Hash authorized source inside one pinned directory-fd chain, not via a
+    re-resolved pathname that could cross a concurrently swapped parent link.
+
+    The already validated relative components are opened with O_NOFOLLOW at
+    every level. After reading, independently check both file and ancestor
+    identities to reject a rename, link swap or an unstable source. This is
+    owner-local read-only custody, not creative origin authentication.
+    """
+    if (not isinstance(parts, list) or not parts or any(
+            type(name) is not str or not name or name in (".", "..") or
+            "/" in name or "\\" in name or "\x00" in name
+            for name in parts)):
+        raise ValueError("Untrusted source media path component")
+    directory_flags = (getattr(os, "O_PATH", os.O_RDONLY) |
+                       os.O_DIRECTORY | os.O_NOFOLLOW |
+                       getattr(os, "O_CLOEXEC", 0))
+    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    directory_fds = []
     sha = hashlib.sha256()
-    with _open_original_no_follow(path) as stream:
-        before = os.fstat(stream.fileno())
-        if not stat.S_ISREG(before.st_mode) or before.st_size <= 0:
-            raise ValueError("Original source is not a nonempty regular file")
-        count = 0
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            count += len(chunk)
-            sha.update(chunk)
-        after = os.fstat(stream.fileno())
-    if (count != before.st_size or
-            _stable_identity(before) != _stable_identity(after) or
-            _stable_identity(after) != _stable_identity(path.stat(follow_symlinks=False))):
-        raise ValueError("Original source changed during verification")
-    return sha.hexdigest()
+    try:
+        current = os.open(project, directory_flags)
+        directory_fds.append(current)
+        for name in parts[:-1]:
+            current = os.open(name, directory_flags, dir_fd=current)
+            directory_fds.append(current)
+        with os.fdopen(os.open(parts[-1], file_flags,
+                               dir_fd=directory_fds[-1]), "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(before.st_mode) or
+                    before.st_size != expected_bytes):
+                raise ValueError("native source media size or type changed")
+            count = 0
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                count += len(chunk)
+                sha.update(chunk)
+            after = os.fstat(stream.fileno())
+            if count != expected_bytes or _stable_identity(before) != _stable_identity(after):
+                raise ValueError("native source media changed while hashing")
+            # The file may be intact but its *parent* replaced with a symlink
+            # while it was open. An ancestor identity check is indispensable.
+            if (_stable_identity(os.stat(project, follow_symlinks=False)) !=
+                    _stable_identity(os.fstat(directory_fds[0]))):
+                raise ValueError("native source media root changed")
+            for parent_fd, child, child_fd in zip(
+                    directory_fds, parts[:-1], directory_fds[1:]):
+                current_parent = os.stat(child, dir_fd=parent_fd,
+                                         follow_symlinks=False)
+                if (not stat.S_ISDIR(current_parent.st_mode) or
+                        _stable_identity(current_parent) !=
+                        _stable_identity(os.fstat(child_fd))):
+                    raise ValueError("native source media parent changed or linked")
+            current_file = os.stat(parts[-1], dir_fd=directory_fds[-1],
+                                   follow_symlinks=False)
+            if (not stat.S_ISREG(current_file.st_mode) or
+                    _stable_identity(current_file) != _stable_identity(after)):
+                raise ValueError("native source media changed or linked")
+        return sha.hexdigest()
+    except OSError:
+        # The path was unavailable or an untrusted component changed. Do not
+        # put private owner paths or OS error payloads into the public result.
+        raise ValueError("native source media is missing, changed or linked") from None
+    finally:
+        for fd in reversed(directory_fds):
+            os.close(fd)
 
 
 def _verify_staged_sources(root, session, ledger):
@@ -98,9 +169,104 @@ def _verify_staged_sources(root, session, ledger):
                 item["rights_independently_verified"] is not False or
                 type(item["rights"]) is not str):
             raise ValueError("Owner original is not a safe source with stated rights")
-        if source.stat().st_size != item["bytes"] or _sha256(source) != item["sha256"]:
+        try:
+            observed = _sha256_beneath_directory(
+                root, ["staging", session, source.name], item["bytes"])
+        except ValueError:
+            # Preserve the existing owner-level error contract while keeping
+            # private filesystem details out of any externally visible report.
+            raise ValueError("Original source bytes differ from session ledger") from None
+        if observed != item["sha256"]:
             raise ValueError("Original source bytes differ from session ledger")
     return len(ledger)
+
+
+def _verify_native_project_media_closure(project: Path, doc: dict):
+    """Rehash referenced physical native sources, not just a saved JSON receipt.
+
+    This is an owner-local read-only availability/integrity check at verify
+    time. It cannot authenticate the media's creative origin or prove that
+    those exact bytes contributed to an earlier render. Keep those separate.
+    """
+    inventory = doc.get("assets")
+    if not isinstance(inventory, list) or len(inventory) > _MAX_SCAN_ENTRIES:
+        raise ValueError("native source media inventory is missing or excessive")
+    sources = {}
+    for asset in inventory:
+        if not isinstance(asset, dict):
+            raise ValueError("Native project media entry is malformed")
+        ident = asset.get("id")
+        if type(ident) is not str or not ident or len(ident) > 256 or ident in sources:
+            raise ValueError("Native project has ambiguous media source identity")
+        sources[ident] = asset
+    active = next(
+        t for t in doc["timelines"] if isinstance(t, dict)
+        and t.get("id") == doc["currentTimelineId"])
+    referenced = set()
+    for clip in active["clips"]:
+        if not isinstance(clip, dict):
+            raise ValueError("Native timeline clip is malformed")
+        source_id = clip.get("assetId")
+        if source_id is None:
+            if clip.get("type") in ("video", "audio", "image"):
+                raise ValueError("Native media clip is missing its source identity")
+            continue
+        if type(source_id) is not str or source_id not in sources:
+            raise ValueError("Native timeline references an absent source media identity")
+        referenced.add(source_id)
+    # All imported inventory matters to an editable project, even if a clip
+    # is currently disabled/unused: omission would silently break human edits.
+    observation = hashlib.sha256()
+    total_bytes = 0
+    for source_id in sorted(sources):
+        asset = sources[source_id]
+        named, expected_bytes = asset.get("path"), asset.get("size")
+        if (type(named) is not str or not 1 <= len(named) <= 4096 or
+                "\\" in named or "\x00" in named or
+                type(expected_bytes) is not int or expected_bytes <= 0):
+            raise ValueError("Native media file path or byte count is invalid")
+        parts = named.split("/")
+        if (len(parts) < 3 or parts[0] != "assets" or
+                any(part in ("", ".", "..") for part in parts)):
+            raise ValueError("Native media file must remain within its project assets")
+        current_sha = _sha256_beneath_directory(project, parts, expected_bytes)
+        observation.update(source_id.encode("utf-8"))
+        observation.update(b"\x00")
+        observation.update(named.encode("utf-8"))
+        observation.update(b"\x00")
+        observation.update(current_sha.encode("ascii"))
+        observation.update(b"\n")
+        total_bytes += expected_bytes
+    return {
+        "native_media_source_closure_verified": True,
+        "native_media_asset_inventory_count": len(sources),
+        "native_media_used_asset_count": len(referenced),
+        "native_media_bytes_observed": total_bytes,
+        "native_media_observation_sha256": observation.hexdigest(),
+        "native_media_origin_or_export_contribution_proven": False,
+    }
+
+
+def validate_owner_delivery_target(target):
+    """Validate an explicit operator target before any neural or native write.
+
+    Target controls physical delivery, not the Brain's aesthetic decisions.
+    Missing target is permitted for exploratory runs but never counted as
+    independently verified brief/profile conformance.
+    """
+    if target is None:
+        return None
+    if type(target) is not dict or set(target) != {
+            "width", "height", "duration_seconds"}:
+        raise ValueError("Owner delivery target needs width, height and duration_seconds")
+    width, height, seconds = (target[k] for k in (
+        "width", "height", "duration_seconds"))
+    if (type(width) is not int or not 1 <= width <= 8192 or
+            type(height) is not int or not 1 <= height <= 8192 or
+            type(seconds) not in (int, float) or not math.isfinite(seconds) or
+            not 0 < seconds <= 300):
+        raise ValueError("Owner delivery target must have finite positive dimensions and duration")
+    return {"width": width, "height": height, "duration_seconds": float(seconds)}
 
 
 def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_seconds=900):
@@ -130,6 +296,9 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
             not isinstance(required, list) or
             REVIEWED_AV_PAIR not in required):
         raise ValueError("No completed host-required audiovisual review evidence")
+    # This is owner-declared state, not a model-authored verifier target.
+    # An omitted target cannot establish brief-compliant width/duration.
+    owner_target = validate_owner_delivery_target(status.get("owner_delivery_target"))
     pair = result.get("reviewed_native_audiovisual_pair")
     if not isinstance(pair, list) or len(pair) != 2:
         raise ValueError("No exact two-export audiovisual review pair")
@@ -183,7 +352,8 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
         if before[-1] != binding["export_sha256"]:
             raise ValueError("Physical output differs from reviewed native receipt")
         inspection = verify_native_editor_export(
-            str(item), policy=policy, expected={"require_audio": True},
+            str(item), policy=policy,
+            expected={"require_audio": True, **(owner_target or {})},
             max_seconds=max_decode_seconds)
         after = native_export_file_identity(item)
         if before != after or inspection["native_export_sha256"] != binding["export_sha256"]:
@@ -220,41 +390,91 @@ def verify_owner_audiovisual_delivery(workspace, session_id, *, max_decode_secon
             continue
         document, saved_sha = _bounded_native_project(saved)
         if timeline_scope_digest(str(entry), document["currentTimelineId"]) in timelines:
-            matches.append((saved, document["currentTimelineId"], saved_sha))
+            matches.append((saved, document["currentTimelineId"], saved_sha, document))
     if len(matches) != 1:
         raise ValueError("No unique editable saved project matches the reviewed timeline")
-    saved, timeline_id, saved_sha = matches[0]
+    saved, timeline_id, saved_sha, native_doc = matches[0]
+    native_media_observation = _verify_native_project_media_closure(
+        saved.parent, native_doc)
+    if _bounded_native_project(saved)[1] != saved_sha:
+        raise ValueError("Native project changed while checking its source media")
     snapshots_required = status.get("render_snapshots_required", False)
     if type(snapshots_required) is not bool:
         raise ValueError("Malformed owner render snapshot requirement")
     snapshot_bound = False
+    raw_final_snapshot_match = False
     if snapshots_required:
+        expected_snapshot_hashes = result.get("reviewed_native_snapshot_sha256")
+        if (type(expected_snapshot_hashes) is not list or
+                len(expected_snapshot_hashes) != 2 or
+                any(type(item) is not str or not _SHA.fullmatch(item)
+                    for item in expected_snapshot_hashes)):
+            raise ValueError("Host-required native render snapshot digests are missing")
         snapshots_root = root / "state" / session_id / "av-project-snapshots"
         if snapshots_root.is_symlink() or not snapshots_root.is_dir():
             raise ValueError("Host-required native render snapshots are missing")
+        expected_media_hashes = result.get("reviewed_native_media_sha256")
+        if (type(expected_media_hashes) is not list or len(expected_media_hashes) != 2 or
+                any(type(value) is not str or not _SHA.fullmatch(value)
+                    for value in expected_media_hashes)):
+            raise ValueError("Host-required render-time native media digests are missing")
         revisions = []
-        for binding in pair:
+        content_revisions = []
+        for index, (binding, captured_sha) in enumerate(zip(
+                pair, expected_snapshot_hashes, strict=True)):
             snapshot = snapshots_root / (binding["destination_sha256"] + ".comfystudio")
             if not snapshot.is_file() or snapshot.is_symlink():
                 raise ValueError("Host-required render snapshot is missing or linked")
             snapshot_doc, snapshot_sha = _bounded_native_project(snapshot)
             if snapshot_doc["currentTimelineId"] != timeline_id:
                 raise ValueError("Native snapshot timeline differs from reviewed project")
+            if snapshot_sha != captured_sha:
+                raise ValueError(
+                    "Native render snapshot digest differs from original render-time source")
+            # The first editable revision may reference media that the final
+            # revision no longer needs. Verifying only the final media closure
+            # would incorrectly accept an irrecoverable first saved project.
+            # Each render-time media digest was captured independently by the
+            # host; rehash each snapshot's *own* asset inventory, not the
+            # final inventory (which may legitimately add new native assets).
+            observed_media = (native_media_observation if index == len(pair) - 1
+                else _verify_native_project_media_closure(saved.parent, snapshot_doc))
+            if (observed_media["native_media_observation_sha256"] !=
+                    expected_media_hashes[index]):
+                raise ValueError(
+                    "Native snapshot source media differ from original render-time custody")
             revisions.append(snapshot_sha)
+            content_revisions.append(_native_revision_content(snapshot_doc))
         if revisions[0] == revisions[1]:
             raise ValueError("Native snapshots do not establish an editable revision")
-        if revisions[-1] != saved_sha:
+        if content_revisions[0] == content_revisions[1]:
+            raise ValueError("Native snapshots differ only by autosave metadata; no content revision")
+        raw_final_snapshot_match = revisions[-1] == saved_sha
+        if (not raw_final_snapshot_match and
+                _native_revision_content(native_doc) != content_revisions[-1]):
             raise ValueError("Final saved native source differs from the reviewed render")
+        if (native_media_observation["native_media_observation_sha256"] !=
+                expected_media_hashes[-1]):
+            raise ValueError("Native media source bytes changed since original final render")
         snapshot_bound = True
     return {
         "schema": 1, "kind": "zx7_owner_native_av_delivery_check",
+        **native_media_observation,
         "session_id": session_id, "physical_audiovisual_pair_verified": True,
+        "owner_delivery_profile_verified": owner_target is not None,
+        "owner_delivery_target": owner_target,
         "source_staging_sha256_verified": True, "owner_stated_original_count": original_count,
         "owner_rights_independently_verified": False,
         "original_media_visible_in_exports_proven": False,
         "editable_native_project_relative_to_workspace": str(saved.relative_to(root)),
         "editable_native_project_sha256": saved_sha,
-        "saved_native_matches_last_render_snapshot": snapshot_bound,
+        "saved_native_matches_last_render_snapshot": (
+            snapshot_bound and raw_final_snapshot_match),
+        "saved_native_content_matches_last_render_snapshot": snapshot_bound,
+        "native_clock_only_drift_after_render": (
+            snapshot_bound and not raw_final_snapshot_match),
+        "native_media_matches_final_render_capture": snapshot_bound,
+        "render_snapshot_media_closure_verified": snapshot_bound,
         "native_render_snapshot_match_not_tested": not snapshots_required,
         "rendered_exports": verified,
         "model_autonomy_independently_evaluated": False,

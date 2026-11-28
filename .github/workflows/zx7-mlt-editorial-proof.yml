@@ -24,6 +24,12 @@ jobs:
           python-version: '3.12'
       - name: Install actual open-source MLT engine and media decoders
         run: |
+          # The GitHub-hosted regional Ubuntu mirror exhausted CI timeout before
+          # any product tests ran. The official Ubuntu archive uses the same
+          # signed package Release metadata; preserve every physical test.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://us-east-2.ec2.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update -qq
           sudo apt-get install -y melt ffmpeg frei0r-plugins
           melt -query version
@@ -42,7 +48,7 @@ jobs:
           # preflight, so install its declared editor extra. Without this,
           # 40 tests errored on missing jsonschema before testing behavior.
           # Keep the other verified native/production extensions installed.
-          python -m pip install --no-cache-dir ".[editor,production]" "OpenEXR>=3.3,<4" "opencolorio>=2.5,<2.6" "opencv-python-headless>=4.10,<5" "setuptools>=77"
+          python -m pip install --no-cache-dir ".[editor,production,visual_acceleration,vfx_exr,vfx_tracking]" "opencolorio>=2.5,<2.6" "setuptools>=77"
           python -c 'import jsonschema, mcp; print("Native schema-preflight and MCP dependencies available")'
       - name: Run every existing and new studio application contract on this exact branch
         run: |

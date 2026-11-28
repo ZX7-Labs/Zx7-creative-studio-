@@ -86,6 +86,56 @@ class EditorPolicyTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 self.config(required_export_delivery=invalid)
 
+    def test_owner_export_offer_is_scoped_schema_checked_and_never_reserves_bytes(self):
+        from studio_next.body_editor_policy import OwnerExportOffer
+        from jsonschema import Draft202012Validator
+        profile = {"width": 640, "height": 360, "fps": 24,
+                   "max_duration": 6, "video_codec": "h264"}
+        config = self.config(required_export_delivery=profile, allowed_tools={
+            "export_timeline": "write", "check_export_readiness": "read"})
+        schema = {"type": "object", "additionalProperties": False,
+                  "properties": {"outputPath": {"type": "string"},
+                    "target": {"enum": ["h264_project", "h264_hd"]},
+                    "resolution": {"enum": ["project"]}, "fps": {"type": "number"},
+                    "previewOnly": {"type": "boolean"}},
+                  "required": ["outputPath", "target", "resolution", "previewOnly"]}
+        validator = Draft202012Validator(schema)
+        offer = OwnerExportOffer(config)
+        first = offer.candidate(validator)
+        args = first["arguments"]
+        path = Path(args["outputPath"])
+        self.assertEqual(path.parent, self.outputs.resolve())
+        self.assertEqual(args["target"], "h264_project")
+        self.assertEqual(args["resolution"], "project")
+        self.assertEqual(args["fps"], 24)
+        self.assertFalse(args["previewOnly"])
+        self.assertNotIn("endSeconds", args)
+        self.assertFalse(first["native_readiness_verified"])
+        self.assertFalse(path.exists())
+        self.assertEqual(offer.candidate(validator), first)
+        offer.retire_submitted(args)
+        second = offer.candidate(validator)
+        self.assertNotEqual(second["arguments"]["outputPath"], str(path))
+        occupied = Path(second["arguments"]["outputPath"])
+        occupied.write_bytes(b"immutable previous output")
+        third = offer.candidate(validator)
+        self.assertNotEqual(third["arguments"]["outputPath"], str(occupied))
+        self.assertEqual(occupied.read_bytes(), b"immutable previous output")
+        self.assertIsNone(offer.candidate(Draft202012Validator({**schema,
+            "required": [*schema["required"], "unavailable"]})))
+        for changes in ({"required_export_delivery": None},
+                        {"allowed_tools": {"check_export_readiness": "read"}},
+                        {"required_export_delivery": {**profile, "video_codec": "h265"}}):
+            other = self.config(required_export_delivery=profile, **{
+                "allowed_tools": dict(config.allowed_tools), **changes}) if "required_export_delivery" not in changes else self.config(
+                    allowed_tools=dict(config.allowed_tools), **changes)
+            self.assertIsNone(OwnerExportOffer(other).candidate(validator))
+        occupied.unlink()
+        self.outputs.rmdir()
+        self.outputs.symlink_to(self.outside, target_is_directory=True)
+        self.assertIsNone(offer.candidate(validator))
+        self.assertEqual(list(self.outside.iterdir()), [])
+
     def test_constructor_also_copies_grants_and_access(self):
         grants = {"get_project": "read"}
         access = ["read"]
@@ -146,6 +196,39 @@ class EditorPolicyTests(unittest.TestCase):
                 self.assertFalse(policy(tool, {field: str(self.outside / "secret")}, "write"))
             self.assertFalse(policy(tool, {"path": str(self.media), "sourcePath": "/etc/passwd"}, "write"))
             self.assertFalse(policy(tool, {}, "write"))
+
+    def test_audio_only_import_cannot_be_explicitly_mislabeled_as_visual(self):
+        # Real synthetic PCM WAV, not a fake extension. The pinned editor
+        # otherwise honors category before inferring from the filename.
+        import wave
+        from studio_next.body_editor_client import EditorPreDispatchError
+        audio = self.staging / "recording.WAV"
+        with wave.open(str(audio), "wb") as stream:
+            stream.setnchannels(1)
+            stream.setsampwidth(2)
+            stream.setframerate(8000)
+            stream.writeframes(b"\0\0" * 80)
+        policy = self.policy()
+        for field in ("path", "filePath", "sourcePath"):
+            for category_field in ("category", "type", "assetType"):
+                for category in ("video", "image", "images"):
+                    for preview in (True, False):
+                        args = {field: str(audio), category_field: category,
+                                "previewOnly": preview}
+                        with self.subTest(args=args):
+                            with self.assertRaises(EditorPreDispatchError) as denied:
+                                policy("import_asset_from_path", args, "write")
+                            self.assertEqual(denied.exception.code, "import_category_mismatch")
+            self.assertTrue(policy("import_asset_from_path", {field: str(audio)}, "write"))
+            self.assertTrue(policy("import_asset_from_path", {field: str(audio),
+                            "category": "audio"}, "write"))
+        # Preserve valid source options and the existing sequence-directory route.
+        self.assertTrue(policy("import_asset_from_path", {"path": str(self.media),
+                        "category": "audio"}, "write"))
+        directory = self.staging / "frames.wav"
+        directory.mkdir()
+        self.assertTrue(policy("import_asset_from_path", {"path": str(directory),
+                        "category": "video", "asSequence": True}, "write"))
 
     def test_new_outputs_are_allowed_under_project_or_output_roots_only(self):
         policy = self.policy()

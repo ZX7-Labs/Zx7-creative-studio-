@@ -37,6 +37,7 @@ MODEL_OUTPUT_REJECTION_CODES = frozenset({
     "missing_native_tool_message",
     "missing_or_multiple_native_tool_calls",
     "unknown_or_ungranted_native_function",
+    "native_function_not_currently_offered",
     "invalid_native_function_json",
     "native_function_missing_reason",
     "native_function_inputs_shape",
@@ -132,6 +133,8 @@ class LocalModelSettings:
 
 class LocalCreativeModel:
     """OpenAI-compatible local model adapter. No expensive cloud calls."""
+    # Explicit backend capability: inherited methods alone are not reliable.
+    supports_source_bound_wav_input = True
     def __init__(self,settings:LocalModelSettings,system_prompt:str=_CREATIVE_SYSTEM):
         self.settings=settings
         self.system_prompt=system_prompt

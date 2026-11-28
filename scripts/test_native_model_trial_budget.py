@@ -1,11 +1,14 @@
 """Admission-only local model budget checks; never load weights or start an editor."""
 import contextlib
+import hashlib
 import io
+import json
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
 
-from scripts.run_native_model_trial import build_trial_parser, retain_safe_native_editor_logs
+from scripts.run_native_model_trial import RecordedModel, build_trial_parser, retain_safe_native_editor_logs
 from scripts.run_nvidia_native_trial import synthetic_trial_delivery_requirement
 
 
@@ -120,6 +123,70 @@ class NativeModelTrialBudgetTests(unittest.TestCase):
             alias = root / "linked-editor-state"
             alias.symlink_to(session.parent, target_is_directory=True)
             self.assertEqual(retain_safe_native_editor_logs(alias, artifacts), 0)
+
+
+
+class RecordedNativeModelAudioHandoffTests(unittest.TestCase):
+    def test_audio_capable_local_model_receives_original_bytes_without_public_artifact_copy(self):
+        # A transport test, not proof of learned audio perception or artistic quality.
+        raw = b"synthetic-private-WAV-payload-" * 300
+        audio = [("audio/wav", raw)]
+        context = {"audio_evidence": {"wav_sha256": hashlib.sha256(raw).hexdigest()}}
+        class AudioCapableModel:
+            supports_source_bound_wav_input = True
+            settings = SimpleNamespace(model_id="synthetic-audio-fixture")
+            last_call_usage = {"prompt_tokens": 4}
+            def decide_with_audio(self, supplied_context, supplied_audio):
+                self.received = (supplied_context, supplied_audio)
+                return {"action": "finish", "arguments": {"summary": "Fixture transport only"}}
+
+        with tempfile.TemporaryDirectory() as temp:
+            model = AudioCapableModel()
+            recorder = RecordedModel(model, Path(temp))
+            self.assertEqual(recorder.decide_with_audio(context, audio)["action"], "finish")
+            self.assertTrue(recorder.supports_source_bound_wav_input)
+            model.allow_original_audio_upload = False
+            self.assertFalse(recorder.supports_source_bound_wav_input)
+            self.assertEqual(model.received, (context, audio))
+            record = json.loads((Path(temp) / "inference-transcript.jsonl").read_text())
+            self.assertEqual(record["audio_sha256"],
+                             [hashlib.sha256(raw).hexdigest()])
+            self.assertEqual(record["audio_mime"], ["audio/wav"])
+            self.assertEqual(record["server_reported_token_usage"], {"prompt_tokens": 4})
+            self.assertNotIn(raw.decode("ascii"),
+                             (Path(temp) / "inference-transcript.jsonl").read_text())
+            self.assertFalse((Path(temp) / "observations").exists())
+            self.assertEqual(recorder.turn, 1)
+
+    def test_audio_is_not_silently_replaced_with_text_for_incompatible_model(self):
+        class TextOnlyModel:
+            settings = SimpleNamespace(model_id="synthetic-text-only")
+            last_call_usage = None
+            def decide(self, context):
+                raise AssertionError("Original audio cannot fall back to text")
+
+        with tempfile.TemporaryDirectory() as temp:
+            recorder = RecordedModel(TextOnlyModel(), Path(temp))
+            with self.assertRaisesRegex(RuntimeError, "audio-capable"):
+                recorder.decide_with_audio(
+                    {"audio_evidence": {"wav_sha256": "a" * 64}},
+                    [("audio/wav", b"synthetic-audio")])
+            record = json.loads((Path(temp) / "inference-transcript.jsonl").read_text())
+            self.assertEqual(record["error_type"], "RuntimeError")
+            self.assertEqual(recorder.turn, 1)
+
+    def test_mixed_images_and_audio_cannot_pass_the_trial_recording_boundary(self):
+        class Model:
+            settings = SimpleNamespace(model_id="synthetic")
+            last_call_usage = None
+        with tempfile.TemporaryDirectory() as temp:
+            recorder = RecordedModel(Model(), Path(temp))
+            with self.assertRaisesRegex(ValueError, "Separate"):
+                recorder.infer({"task": "both"}, images=[("image/png", b"x")],
+                               audio=[("audio/wav", b"y")])
+            self.assertFalse((Path(temp) / "inference-transcript.jsonl").exists())
+
+
 
 
 if __name__ == "__main__":

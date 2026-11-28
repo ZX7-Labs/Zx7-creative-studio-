@@ -1,7 +1,11 @@
-# Optional minimum re-entry — one project, no repeated brief
+# Fresh-session resume
 
-Use only if a fresh chat cannot find this repository. The fixed product is NOT a new version each session; old files are historical source and the owner's goals do not change without an explicit delta.
+Owner shorthand: **Continue ZX7**.
 
 ```text
-Continue ZX7-Labs/Zx7-creative-studio- from live main. Read AGENTS.md, docs/BUILD_BLUEPRINT.md (relevant section), project-brain/BRIEF.md, STATE.md and EXECUTION_LEDGER.json. Use docs/DOCUMENT_MAP.md to resolve sources; preserve original CAPABILITIES.md and Master Plan without re-planning. Inspect the actual blocked owner outcome, its current source and exact prior failure evidence, then implement a meaningful, reviewable fix. Do not repeat previously passed technical CI or create duplicate engines, state stores or new scope. Scripted/physical/real-neural/external-artistic results are separate. Owner's 2026-11-13 directive defers paid NVIDIA and private egress without separate consent. Update mutable status only after real evidence. Report decisions and gaps concisely.
+Continue ZX7-Labs/Zx7-creative-studio- from the live head of draft PR #356 (canonical workstream), not stale main. Read AGENTS.md, BRIEF, STATE and relevant ledger/blueprint sections. Verify live refs and evidence; execute the highest-value unblocked acceptance dependency using outcome-first engineering, without repeating completed work. Preserve A–L, native foundations, consent and negative evidence; update STATE + ledger atomically. Do not restart planning, infer professional acceptance from CI or bypass authorization. Report actual blockers and verified outcomes.
 ```
+
+For the acceptance dependency identified in STATE, consult the relevant evidence and closure criteria in the [28 November independent product audit](../../project-brain/EVIDENCE/2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md).
+
+If the canonical workstream changes, follow the latest verified STATE/owner direction rather than this historical PR identifier.

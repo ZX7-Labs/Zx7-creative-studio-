@@ -22,6 +22,7 @@ from .body_editor_client import (
     EditorPreDispatchError, HOST_PRE_DISPATCH_META, native_input_digest, _load_json,
 )
 from .body_editor_policy import EditorPathPolicy
+from .body_editor_export import HOST_EXPORT_FAILURE_META, NativeExportMissingAudio
 
 
 def _local_schema_references(schema):
@@ -37,6 +38,58 @@ def _local_schema_references(schema):
             _local_schema_references(item)
 
 
+def native_admission_validator(schema, *, source_verified_export_aliases=False):
+    """One strict, source-native JSON Schema boundary for every BODY path.
+
+    The advertised native schema remains byte-for-byte unchanged; only
+    model-authored TOP-LEVEL fields outside the declared interface are
+    refused where upstream omitted additionalProperties. Nested artistic
+    data keeps the source's intended extensibility and JSON Schema dialect.
+    This does not grant tools, execute an operation or fetch remote schemas.
+    """
+    import jsonschema
+    if not isinstance(schema, dict):
+        raise ValueError("Native editor schema must be a JSON object")
+    _local_schema_references(schema)
+    admission = copy.deepcopy(schema)
+    if (isinstance(admission.get("properties"), dict)
+            and "additionalProperties" not in admission
+            and "patternProperties" not in admission):
+        # Only the pinned unscoped exporter has these undocumented aliases
+        # (resolveExportTarget in upstream electron/mcpServer.js). Do not
+        # extend explicit closed schemas or owner-constrained delivery.
+        if source_verified_export_aliases:
+            for alias in ("codec", "aspect", "preset"):
+                admission["properties"].setdefault(alias, {"type": "string"})
+            admission["properties"].setdefault("size", {"type": ["number", "string"]})
+        admission["additionalProperties"] = False
+    validator = jsonschema.validators.validator_for(admission)
+    validator.check_schema(admission)
+    return validator(admission)
+
+
+def native_revision_schema_arguments(name, arguments, revision_bridge_tools):
+    """Validate the private wire field without changing the dispatched payload.
+
+    A token is allowed only for an explicitly granted, source-attested commit.
+    The native renderer itself remains the authority on token freshness.
+    """
+    from .native_editor_identity import source_native_commit_intent
+    if not isinstance(arguments, dict):
+        raise ValueError("Native tool arguments must be an object")
+    key = "__zx7ExpectedRevision"
+    requires_revision = (name in revision_bridge_tools and
+                         source_native_commit_intent(name, arguments))
+    if not requires_revision:
+        if key in arguments:
+            raise ValueError("Native source revision is not permitted for this operation")
+        return arguments
+    token = arguments.get(key)
+    if not isinstance(token, str) or not 38 <= len(token) <= 80:
+        raise ValueError("Native source revision is missing or invalid")
+    return {k: v for k, v in arguments.items() if k != key}
+
+
 def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                          export_verifier=None, frame_observer=None,
                          audio_observer=None, audio_timeline_observer=None,
@@ -50,7 +103,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     """
     import anyio
     import jsonschema
-    from .body_editor_delivery import admitted_owner_delivery, native_delivery_matches
+    from .body_editor_delivery import (
+        admitted_owner_delivery, native_delivery_matches, owner_delivery_native_tool_hint)
     from mcp.server import Server
     from mcp import types
 
@@ -58,6 +112,7 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     from .native_editor_diagnostics import (
         CONTENT_DIAGNOSTICS_TOOL, native_content_diagnostics_source_verified,
         describe_native_text_semantics, inspect_native_content,
+        native_overlay_warning,
     )
     semantic_source = native_source is not None
     if semantic_source and not native_content_diagnostics_source_verified(native_source):
@@ -67,29 +122,8 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
     # A private bridge wire field, NOT a model-discovered schema property.
     # Only an exact clean collaboration source may receive it. The field
     # can restrict an already-granted edit, never grant a new native action.
-    from .native_editor_source_pin import (
-        _source_matches_pinned_native_collaboration,
-        _source_matches_pinned_native_scene,
-        _source_matches_pinned_native_loss_aware_editorial,
-        _source_matches_pinned_native_loss_aware_extract,
-    )
-    has_revision_reads = all(grants.get(x) == "read" for x in (
-        "get_project", "get_timeline", "get_assets"))
-    trusted_collab = bool(native_source is not None and
-                          _source_matches_pinned_native_collaboration(native_source))
-    trusted_scene = bool(trusted_collab and
-                         _source_matches_pinned_native_scene(native_source))
-    trusted_loss_aware = bool(trusted_collab and
-                              _source_matches_pinned_native_loss_aware_editorial(native_source))
-    trusted_extract = bool(trusted_loss_aware and
-                           _source_matches_pinned_native_loss_aware_extract(native_source))
-    revision_bridge_tools = frozenset(
-        name for name in (
-            (("update_text_clip",) if trusted_collab else ()) +
-            (("update_shape_clip", "set_clip_keyframes") if trusted_scene else ()) +
-            (("split_clip",) if trusted_loss_aware else ()) +
-            (("extract_range",) if trusted_extract else ())
-        ) if has_revision_reads and grants.get(name) == "write")
+    from .native_editor_identity import pinned_native_revision_tools
+    revision_bridge_tools = pinned_native_revision_tools(native_source, grants)
     if set(grants) - set(native):
         raise ValueError("Host-granted native editor tool is absent from discovery")
     required_export_delivery = admitted_owner_delivery(required_export_delivery)
@@ -135,17 +169,40 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 "workspace, never an existing destination. The owner's "
                 "creative brief supplies the actual permitted root.")
             schema["properties"]["outputPath"]["minLength"] = 1
+        declared_description = native[name].get("description") or ""
+        if semantic_source:
+            # Source-pinned Velorn resolves same-track title/shape overlap by
+            # trimming/removing existing footage. The direct NVIDIA adapter
+            # sees only the FIRST 256 chars of this tool description; carry
+            # that factual risk before generic creator text, without changing
+            # native input grammar or authoring an editing decision.
+            declared_description = (native_overlay_warning(
+                name, add_track_granted=grants.get("add_track") == "write") +
+                declared_description)
+        if required_export_delivery is not None and name in (
+                "export_timeline", "check_export_readiness"):
+            # The direct NVIDIA tool adapter takes only the *first 256*
+            # characters of each native tool description. Put the exact
+            # owner-authorized profile and pinned preset precedence first;
+            # otherwise a model sees the default 1080p instructions and
+            # repeatedly wastes decisions on safe pre-dispatch rejections.
+            # This is tool metadata only, not an action, export, new grant,
+            # or override of the source-native read-only readiness check.
+            guidance = owner_delivery_native_tool_hint(required_export_delivery)
+            schema = copy.deepcopy(schema)
+            schema["description"] = guidance
+            declared_description = guidance + " " + declared_description
         if required_export_delivery is not None and name == "export_timeline":
             # Velorn accepts undocumented aliases such as codec and aspect.
             # Readiness projects onto declared fields, so reject extras before
             # the export can see an option that its preflight did not inspect.
             schema = {**schema, "additionalProperties": False}
-        _local_schema_references(schema)
-        validator = jsonschema.validators.validator_for(schema)
-        validator.check_schema(schema)
-        validators[name] = validator(schema)
+        validators[name] = native_admission_validator(
+            schema, source_verified_export_aliases=(semantic_source and
+                name == "export_timeline" and required_export_delivery is None))
         tools[name] = types.Tool.model_validate({
-            **native[name], "inputSchema": schema})
+            **native[name], "description": declared_description,
+            "inputSchema": schema})
     verified_export_name = "zx7_verify_native_export"
     observed_frame_name = "zx7_observe_verified_export_frame"
     observed_samples_name = "zx7_observe_verified_export_samples"
@@ -309,8 +366,9 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                 "motion, transition, cutout or sound question. Requires prior "
                 "zx7_verify_native_export on those exact bytes. Numerical "
                 "audio and sparse stills are NOT listening, continuous motion, "
-                "semantic video understanding or artistic approval. Do not "
-                "assume this replaces the full-film audiovisual review."),
+                "semantic video understanding or artistic approval. A window covering "
+                "the independently verified full duration with separated samples can supply "
+                "both technical picture and numeric-audio review receipts; partial windows cannot."),
             inputSchema=av_window_schema)
         validators[observed_av_window_name] = (
             jsonschema.Draft202012Validator(av_window_schema))
@@ -343,7 +401,11 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         # its write, so the model can inspect or correct the current edit.
         if (export_readiness and name == "export_timeline" and
                 arguments.get("previewOnly") is not True):
-            fields = native["check_export_readiness"]["inputSchema"]["properties"]
+            fields = set(native["check_export_readiness"]["inputSchema"]["properties"])
+            if required_export_delivery is None:
+                # Use the same approved legacy aliases in readiness and export.
+                # The scoped delivery contract still refuses undeclared aliases.
+                fields.update(("codec", "aspect", "preset", "size"))
             read_args = {key: value for key, value in arguments.items() if key in fields}
             try:
                 observed = client.call("check_export_readiness", read_args, allowed_access=access)
@@ -364,7 +426,9 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
             # resolver before passing on the original, model-selected edit.
             try:
                 state = bounded_native_receipt(client.call(
-                    name, {**arguments, "previewOnly": True}, allowed_access=access))
+                    name, {**{k: v for k, v in arguments.items()
+                              if k != "__zx7ExpectedRevision"},
+                           "previewOnly": True}, allowed_access=access))
                 plan = state.get("plan")
                 if (state.get("action") != name or state.get("previewOnly") is not True or
                         "success" in state or not isinstance(plan, dict) or
@@ -383,23 +447,11 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
         # revision. Strip it ONLY for schema validation, then forward it
         # unchanged to the verified source-native synchronous writer. Raw
         # clients cannot acquire more grants via this optional wire value.
-        schema_arguments = arguments
-        requires_source_revision = (
-            name in revision_bridge_tools and
-            isinstance(arguments, dict) and (
-                (name in ("update_text_clip", "update_shape_clip") and
-                 arguments.get("previewOnly") is not True) or
-                (name in ("set_clip_keyframes", "split_clip", "extract_range") and
-                 arguments.get("previewOnly") is False)))
-        if requires_source_revision:
-            token = arguments.get("__zx7ExpectedRevision")
-            if (not isinstance(token, str) or
-                    not 38 <= len(token) <= 80 or
-                    "__zx7ExpectedRevision" not in arguments):
-                return failed("Native source revision is missing or invalid")
-            schema_arguments = {
-                key: value for key, value in arguments.items()
-                if key != "__zx7ExpectedRevision"}
+        try:
+            schema_arguments = native_revision_schema_arguments(
+                name, arguments, revision_bridge_tools)
+        except ValueError as exc:
+            return failed(str(exc))
         try:
             validators[name].validate(schema_arguments)
         except jsonschema.ValidationError as exc:
@@ -433,6 +485,13 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                     verified_exports.pop(next(iter(verified_exports)))
                 return types.CallToolResult(is_error=False, content=[
                     types.TextContent(type="text", text=json.dumps(proof, allow_nan=False))])
+            except NativeExportMissingAudio as exc:
+                verified_exports.pop(str(Path(arguments["path"]).resolve()), None)
+                return types.CallToolResult(is_error=True, content=[types.TextContent(
+                    type="text", text=str(exc))], _meta={HOST_EXPORT_FAILURE_META: {
+                        "inputs_sha256": native_input_digest(arguments),
+                        "export_sha256": exc.sha256, "missing_required_audio": True,
+                        "unchanged_already_inspected": exc.cached}})
             except (ValueError, OSError, subprocess.SubprocessError) as exc:
                 return failed("Independent native export verification failed: " + str(exc))
         if name in (observed_frame_name, observed_samples_name):
@@ -685,8 +744,10 @@ def main(argv=None):
             from .body_editor_frame import observe_verified_export_frame
             from .body_editor_audio import observe_verified_export_audio
             from .body_editor_audio_timeline import observe_verified_export_audio_timeline
+            missing_audio_cache = {}
             export_verifier = lambda path, expected=None: verify_native_editor_export(
-                path, policy=config._policy, expected=expected)
+                path, policy=config._policy, expected=expected,
+                missing_audio_cache=missing_audio_cache)
             frame_observer = lambda path, verified_sha256, at_seconds: observe_verified_export_frame(
                 path, policy=config._policy, verified_sha256=verified_sha256,
                 at_seconds=at_seconds)

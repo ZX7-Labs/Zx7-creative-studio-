@@ -7,6 +7,7 @@ import unittest
 
 from studio_next.native_editor_diagnostics import (
     describe_native_text_semantics, inspect_native_content,
+    native_overlay_warning,
     native_content_diagnostics_source_verified,
 )
 
@@ -141,6 +142,37 @@ class NativeContentDiagnosticsTests(unittest.TestCase):
         self.assertEqual(enriched, original)
         with self.assertRaises(ValueError):
             describe_native_text_semantics("add_text_clip", {"type": "object"})
+
+    def test_source_pinned_overlay_tool_warning_reaches_actual_model_function_schema(self):
+        from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel
+        for native_name in ("add_text_clip", "add_shape_clip"):
+            with self.subTest(native_name=native_name):
+                warning = native_overlay_warning(native_name, add_track_granted=True)
+                self.assertIn("SAME-TRACK OVERWRITE", warning)
+                self.assertIn("original footage", warning)
+                self.assertIn("add_track", warning[:256])
+                self.assertLessEqual(len(warning), 256)
+                schema = {"type": "object", "properties": {
+                    "trackId": {"type": "string"}}, "required": []}
+                native = {"name": native_name, "description": warning + "Real native clip creator",
+                          "input_schema": schema}
+                model_functions, routes = NvidiaNativeToolCreativeModel._tool_surface({
+                    "available_actions": ["invoke"], "compact_tool_catalog": False,
+                    "actual_granted_native_tools": [native_name],
+                    "host_native_tool_contracts": [native]})
+                self.assertEqual(routes, {"zx7_native_" + native_name: ("invoke", native_name)})
+                model_description = model_functions[0]["function"]["description"]
+                self.assertIn("original footage", model_description)
+                self.assertIn("add_track", model_description)
+                self.assertEqual(model_functions[0]["function"]["parameters"][
+                    "properties"]["inputs"], schema)
+        hidden = native_overlay_warning("add_text_clip", add_track_granted=False)
+        self.assertIn("not granted", hidden)
+        self.assertNotIn("add_track", hidden)
+        for tool in ("get_project", "update_text_clip", "add_track", "save_project"):
+            self.assertEqual(native_overlay_warning(tool, add_track_granted=True), "")
+        with self.assertRaises(ValueError):
+            native_overlay_warning("add_text_clip", add_track_granted="true")
 
     def test_source_attestation_checks_real_pin_and_rejects_arbitrary_paths(self):
         source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"

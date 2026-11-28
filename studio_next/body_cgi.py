@@ -8,7 +8,7 @@ import json,os,tempfile
 from pathlib import Path
 from .blender_scene import validate_blender_shot,referenced_scene_assets
 from .composite_mix import _exact_media,sealed_attested_original
-from .media_vault import MediaVault,sha256_file,verify_media_container
+from .media_vault import MediaVault,sha256_file,verify_media_container,canonical_source_attestations
 from .native_body_engines import render_original_blender
 from .production_qc import full_decode_inspection
 
@@ -63,6 +63,9 @@ def render_cgi_plan(plan_file,workspace,vault_root,output):
         os.link(encoded,output)
     return {'path':str(output),'sha256':sha256_file(output),'original_plan_sha256':plan_hash,
         'source_assets':len(named),'sealed_source_custody_during_render':True,
+        'source_attestations':canonical_source_attestations([
+            {key:media[key] for key in ('asset_id','attestation_id')}
+            for media,_,_ in named.values()]),
         'actual_native_cgi_rendered':True,'complete_decoder_verified':True,
         'native_controls':native['native_controls'],
         'aesthetic_quality_approved':False}

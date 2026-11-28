@@ -143,6 +143,132 @@ class IndependentFilmFinishingTests(unittest.TestCase):
             self.assertEqual(dest.read_bytes(),protected)
             self.assertFalse(list(base.glob(".zx7-owned-sources-*")))
 
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Actual picture, alternate sound and timed-text codecs required")
+    def test_selected_audio_finishing_preserves_every_unselected_native_stream(self):
+        from studio_next.body_integration import body_catalog, validate_witness
+        from studio_next.media_vault import sha256_file
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            original = root / "original-hdr-tagged-multitrack.mp4"
+            captions = root / "captions.srt"
+            captions.write_text("1\n00:00:00,125 --> 00:00:01,500\nOriginal caption\n\n")
+            subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-n",
+                "-f", "lavfi", "-i", "testsrc2=size=160x96:rate=24000/1001:duration=3",
+                "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3",
+                "-f", "lavfi", "-i", "sine=frequency=730:sample_rate=44100:duration=3",
+                "-f", "srt", "-i", str(captions), "-map", "0:v", "-map", "1:a",
+                "-map", "2:a", "-map", "3:s", "-c:v", "libx264", "-pix_fmt", "yuv420p10le",
+                "-x264-params", "colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc",
+                "-color_primaries", "bt2020", "-color_trc", "smpte2084", "-colorspace", "bt2020nc",
+                "-c:a", "aac", "-metadata:s:a:0", "language=eng", "-metadata:s:a:1", "language=hin",
+                "-c:s", "mov_text", str(original)], check=True, capture_output=True, timeout=60)
+            rights = MediaVault(root / "vault").ingest(original, mime="video/mp4",
+                rights="owner_supplied", source_type="owner_upload", source_id="multitrack-finisher",
+                evidence="Actual independently generated picture, two sounds and timed text",
+                owner_or_generator="owner")
+            digest = sha256_file(original)
+            plan = {"media": {"source": original.name, "asset_id": rights["asset_id"],
+                    "attestation_id": rights["attestation_id"]},
+                    "ops": {"video_ops": [], "audio_ops": [{"kind": "gain", "db": -6}]}}
+            spec = root / "finishing.json"
+            spec.write_text(json.dumps(plan))
+            # No silent first-program choice when several originals exist.
+            with self.assertRaisesRegex(ValueError, "explicit.*audio stream"):
+                finish_authorized_movie(spec, root, root / "vault", root / "ambiguous.mp4")
+            self.assertFalse((root / "ambiguous.mp4").exists())
+            plan["audio_stream_index"] = 1
+            spec.write_text(json.dumps(plan))
+            catalog = body_catalog(root)
+            result = catalog.invoke("body.film_finish", {"plan": spec.name, "out": "finished.mp4"},
+                                    allowed_access={"read", "write"})
+            output = root / "finished.mp4"
+            self.assertTrue(validate_witness("body.film_finish", result))
+            self.assertEqual(result["source_attestations"],[{
+                "asset_id":rights["asset_id"],"attestation_id":rights["attestation_id"]}])
+            self.assertEqual(sha256_file(original), digest)
+            def streams(path):
+                return json.loads(subprocess.check_output(["ffprobe", "-v", "error",
+                    "-show_streams", "-show_data_hash", "sha256", "-of", "json", str(path)],
+                    timeout=60))["streams"]
+            before, after = streams(original), streams(output)
+            self.assertEqual([s["codec_type"] for s in after], ["video", "audio", "audio", "subtitle"])
+            for i in (0, 1, 3):
+                for field in ("codec_name", "pix_fmt", "color_space", "color_transfer", "color_primaries",
+                              "sample_rate", "channels", "start_pts", "duration_ts", "time_base", "extradata_hash",
+                              "disposition"):
+                    self.assertEqual(before[i].get(field), after[i].get(field), (i, field))
+                def packets(path):
+                    return subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", str(i),
+                        "-show_packets", "-show_data_hash", "sha256", "-show_entries",
+                        "packet=pts,dts,duration,size,flags,data_hash:packet_side_data", "-of", "compact=p=0",
+                        str(path)], timeout=60)
+                self.assertEqual(packets(original), packets(output), i)
+            self.assertEqual(after[0]["pix_fmt"], "yuv420p10le")
+            self.assertEqual(after[0]["color_transfer"], "smpte2084")
+            self.assertEqual(after[2]["tags"]["language"], "hin")
+            for key in ("sample_rate", "channels", "start_pts", "duration_ts", "time_base"):
+                self.assertEqual(before[2][key], after[2][key], key)
+            def decode(path):
+                return subprocess.check_output(["ffmpeg", "-v", "error", "-xerror", "-nostdin",
+                    "-i", str(path), "-map", "0:v:0", "-map", "0:a", "-c:v", "rawvideo",
+                    "-pix_fmt", "yuv420p10le", "-fps_mode", "passthrough", "-threads:v", "1",
+                    "-c:a", "pcm_f64le", "-f", "streamhash", "-hash", "sha256", "-"], timeout=60).splitlines()
+            decoded_before, decoded_after = decode(original), decode(output)
+            self.assertEqual(decoded_before[:2], decoded_after[:2])
+            self.assertNotEqual(decoded_before[2], decoded_after[2])
+            import numpy as np
+            def selected_pcm(path):
+                return np.frombuffer(subprocess.check_output(["ffmpeg", "-v", "error", "-xerror",
+                    "-nostdin", "-i", str(path), "-map", "0:a:1", "-c:a", "pcm_f64le", "-f", "f64le", "-"],
+                    timeout=60), dtype="<f8")
+            a, b = selected_pcm(original), selected_pcm(output)
+            self.assertEqual(len(a), len(b))
+            ratio = np.sqrt(np.mean(b*b) / np.mean(a*a))
+            self.assertAlmostEqual(float(ratio), 10**(-6/20), delta=.025)
+            self.assertEqual(sha256_file(original), digest)
+            # Selecting a nonexistent program cannot produce a degraded master.
+            plan["audio_stream_index"] = 3
+            spec.write_text(json.dumps(plan))
+            with self.assertRaisesRegex(ValueError, "audio stream"):
+                finish_authorized_movie(spec, root, root / "vault", root / "absent.mp4")
+            self.assertFalse((root / "absent.mp4").exists())
+            plan.pop("audio_stream_index")
+            plan["ops"] = {"video_ops": [{"kind": "sharpen", "strength": .2}], "audio_ops": []}
+            spec.write_text(json.dumps(plan))
+            with self.assertRaisesRegex(ValueError, "cannot preserve"):
+                finish_authorized_movie(spec, root, root / "vault", root / "unsafe-grade.mp4")
+            self.assertFalse((root / "unsafe-grade.mp4").exists())
+            plan["audio_stream_index"] = 1
+            plan["ops"] = {"video_ops": [], "audio_ops": [{"kind": "loudnorm",
+                "integrated_lufs": -23, "true_peak_dbfs": -1.5, "loudness_range": 12}]}
+            spec.write_text(json.dumps(plan))
+            normalized = finish_authorized_movie(spec, root, root / "vault", root / "normalized.mp4")
+            self.assertTrue(normalized["unselected_packets_and_decoded_av_preserved"])
+            self.assertEqual(normalized["logical_audio_samples"], 132300)
+            self.assertEqual(len(selected_pcm(root / "normalized.mp4")), len(a))
+            self.assertEqual(decode(root / "normalized.mp4")[:2], decoded_before[:2])
+            self.assertFalse(normalized["target_loudness_independently_accepted"])
+            self.assertAlmostEqual(normalized["selected_program_after"]["integrated_loudness_lufs"], -23, delta=1)
+            # A genuinely discontinuous sound clock must not be silently rebased.
+            gapped = root / "gapped.mp4"
+            subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-n", "-i", str(original),
+                "-map", "0", "-c", "copy", "-filter:a:1", "aselect=not(between(t\\,0.8\\,1.2))",
+                "-c:a:1", "aac", str(gapped)], check=True, capture_output=True, timeout=60)
+            gap_rights = MediaVault(root / "vault").ingest(gapped, mime="video/mp4",
+                rights="owner_supplied", source_type="owner_upload", source_id="gapped-finisher",
+                evidence="Actual independently generated discontinuous soundtrack",
+                owner_or_generator="owner")
+            plan["media"] = {"source": gapped.name, "asset_id": gap_rights["asset_id"],
+                             "attestation_id": gap_rights["attestation_id"]}
+            spec.write_text(json.dumps(plan))
+            with self.assertRaisesRegex(ValueError, "gap, overlap"):
+                finish_authorized_movie(spec, root, root / "vault", root / "invalid-clock.mp4")
+            self.assertFalse((root / "invalid-clock.mp4").exists())
+
+            self.assertEqual(sha256_file(original), digest)
+
+
     def test_real_source_is_a_verified_media_vault_object(self):
         with tempfile.TemporaryDirectory() as root:
             p=Path(root)/"original.mp4"
@@ -174,6 +300,81 @@ class IndependentFilmFinishingTests(unittest.TestCase):
             self.assertFalse(result["full_picture_and_sound_decoder_completed"])
             self.assertTrue(result["runner_or_probe_mocked"])
             self.assertTrue(result_path.exists())
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Physical FFmpeg timeline and sound finishing required")
+    def test_fit_fill_timeline_sound_finish_preserves_original_video_clock(self):
+        from studio_next.edit_timeline import edit_ffmpeg_command, probe_media
+        from studio_next.media_vault import sha256_file
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            sources = []
+            for i, frequency in enumerate((440, 660)):
+                shot = root / f"shot-{i}.mp4"
+                subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-n",
+                    "-f", "lavfi", "-i", "testsrc2=size=160x96:rate=30:duration=0.6",
+                    "-f", "lavfi", "-i", f"sine=frequency={frequency}:sample_rate=48000:duration=0.6",
+                    "-c:v", "libx264", "-c:a", "aac", "-shortest", str(shot)],
+                    check=True, capture_output=True, timeout=60)
+                sources.append(shot)
+            originals = [sha256_file(shot) for shot in sources]
+            vault = MediaVault(root / "vault")
+
+            def picture(path):
+                stream = json.loads(subprocess.check_output(["ffprobe", "-v", "error",
+                    "-select_streams", "v:0", "-show_streams", "-show_data_hash", "sha256",
+                    "-of", "json", str(path)], timeout=60))["streams"][0]
+                packets = json.loads(subprocess.check_output(["ffprobe", "-v", "error",
+                    "-select_streams", "v:0", "-show_packets", "-show_data_hash", "sha256",
+                    "-show_entries", "packet=pts,dts,duration,size,flags,data_hash:packet_side_data",
+                    "-of", "json", str(path)], timeout=60))["packets"]
+                return stream, packets
+
+            def decoded(path):
+                return subprocess.check_output(["ffmpeg", "-v", "error", "-xerror",
+                    "-i", str(path), "-map", "0:v:0", "-map", "0:a:0",
+                    "-c:v", "rawvideo", "-pix_fmt", "yuv420p", "-fps_mode", "passthrough",
+                    "-threads:v", "1", "-c:a", "pcm_f64le", "-f", "streamhash",
+                    "-hash", "sha256", "-"], timeout=60).splitlines()
+
+            for framing in ("fit", "fill"):
+                with self.subTest(framing=framing):
+                    original = root / f"{framing}-original.mp4"
+                    edit = {"format": {"width": 160, "height": 96, "fps": 24,
+                                       "framing": framing, "background": "#000000"},
+                            "clips": [{"id": f"shot-{i}", "source": shot.name,
+                                       "rights": "generated_original", "audio": "preserve_source"}
+                                      for i, shot in enumerate(sources)]}
+                    subprocess.run(edit_ffmpeg_command(edit, root, original,
+                        source_info=[probe_media(shot) for shot in sources]),
+                        check=True, capture_output=True, timeout=60)
+                    native, packets = picture(original)
+                    self.assertGreater(len(packets), 0)
+                    self.assertGreater(native["duration_ts"] -
+                        (packets[-1]["dts"] - packets[0]["dts"]), 0)
+                    source_digest = sha256_file(original)
+                    ref = vault.ingest(original, mime="video/mp4", rights="generated_original",
+                        source_type="trusted_renderer", source_id=f"vfr-{framing}",
+                        evidence="Actual generated original fit/fill timeline",
+                        owner_or_generator="independent-ffmpeg")
+                    plan = root / f"{framing}-sound.json"
+                    plan.write_text(json.dumps({"media": {"source": original.name,
+                        "asset_id": ref["asset_id"], "attestation_id": ref["attestation_id"]},
+                        "ops": {"video_ops": [], "audio_ops": [{"kind": "gain", "db": -6}]}}))
+                    finished = root / f"{framing}-finished.mp4"
+                    result = finish_authorized_movie(plan, root, root / "vault", finished)
+                    after, after_packets = picture(finished)
+                    for key in ("time_base", "start_pts", "duration_ts", "r_frame_rate",
+                                "avg_frame_rate", "nb_frames", "extradata_hash", "pix_fmt"):
+                        self.assertEqual(native.get(key), after.get(key), key)
+                    self.assertEqual(packets, after_packets)
+                    before_decode, after_decode = decoded(original), decoded(finished)
+                    self.assertEqual(before_decode[0], after_decode[0])
+                    self.assertNotEqual(before_decode[1], after_decode[1])
+                    self.assertEqual(sha256_file(original), source_digest)
+                    self.assertTrue(result["unselected_packets_and_decoded_av_preserved"])
+            self.assertEqual([sha256_file(shot) for shot in sources], originals)
+
 
 if __name__=="__main__":
     unittest.main()

@@ -70,6 +70,61 @@ class EditorCatalogTests(unittest.TestCase):
                 "arguments": {"clipId": "original"}}, {"write"})
             self.assertEqual(editor.calls[-1][2], frozenset({"write"}))
 
+    def test_model_cannot_bypass_native_nested_schema_or_invent_arguments(self):
+        editor=Editor()
+        with tempfile.TemporaryDirectory() as root:
+            catalog=body_catalog(root,editor_client=editor)
+            for forged in (
+                {"arguments":{}},
+                {"arguments":{"clipId":1}},
+                {"arguments":{"clipId":"clip","unrecognizedEffect":"DROP_PROJECT"}},
+                {"arguments":{"clipId":"clip","text":False}},
+                {"arguments":{"clipId":"clip","text":{"command":"shell"}}},
+            ):
+                with self.subTest(forged=forged),self.assertRaises(ValueError):
+                    catalog.invoke("body.editor.update_text_clip",forged,{"write"})
+            self.assertEqual(editor.calls,[])
+            catalog.invoke("body.editor.update_text_clip",{
+                "arguments":{"clipId":"clip","text":None}},{"write"})
+            self.assertEqual(editor.calls[-1][1]["text"],None)
+
+    def test_native_schema_or_grant_changes_refuse_old_model_handle(self):
+        editor=Editor()
+        with tempfile.TemporaryDirectory() as root:
+            catalog=body_catalog(root,editor_client=editor)
+            editor.allowed_tools={"get_project":"read",
+                                  "update_text_clip":"read"}
+            with self.assertRaisesRegex(RuntimeError,"rediscover"):
+                catalog.invoke("body.editor.update_text_clip",{
+                    "arguments":{"clipId":"one"}},{"write"})
+            self.assertEqual(editor.calls,[])
+            editor.allowed_tools={"get_project":"read",
+                                  "update_text_clip":"write"}
+            real=editor.list_tools
+            def changed():
+                tools=real()
+                tools[1]["inputSchema"]["required"].append("newMandatoryField")
+                return tools
+            editor.list_tools=changed
+            with self.assertRaisesRegex(RuntimeError,"rediscover"):
+                catalog.invoke("body.editor.update_text_clip",{
+                    "arguments":{"clipId":"one"}},{"write"})
+            self.assertEqual(editor.calls,[])
+
+    def test_untrusted_remote_native_schema_reference_cannot_register(self):
+        editor=Editor()
+        real=editor.list_tools
+        def forged():
+            tools=real()
+            tools[1]["inputSchema"]["properties"]["text"]={
+                "$ref":"https://untrusted.invalid/schema.json"}
+            return tools
+        editor.list_tools=forged
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaises(ValueError):
+                body_catalog(root,editor_client=editor)
+            self.assertEqual(editor.calls,[])
+
     def test_missing_granted_tool_fails_discovery(self):
         editor = Editor()
         editor.allowed_tools = {"removed_tool": "write"}

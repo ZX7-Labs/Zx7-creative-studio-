@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 import math
+import secrets
 from pathlib import Path
 from types import MappingProxyType
 
@@ -128,6 +129,24 @@ class EditorPathPolicy:
                 continue  # Native asset-panel hierarchy, not a host file path.
             if key not in fields or not _scoped_path(arguments[key], fields[key]):
                 return False
+        if tool_name == "import_asset_from_path":
+            # Pinned Velorn prioritizes an explicit category over its extension
+            # inference. Its conventional audio-only extensions must not be
+            # mislabeled as visual assets. This is a format/ABI check, not
+            # proof of media contents, and never rewrites the Brain's input.
+            source = next(arguments[key] for key in ("path", "filePath", "sourcePath")
+                          if arguments.get(key))
+            requested = (arguments.get("category") or arguments.get("type") or
+                         arguments.get("assetType"))
+            if (isinstance(requested, str) and
+                    requested.strip().lower() in ("video", "image", "images") and
+                    Path(source).suffix.lower() in (".wav", ".mp3", ".flac", ".aac", ".aif", ".aiff")):
+                try:
+                    single_file = Path(source).is_file()
+                except OSError:
+                    return False
+                if single_file:
+                    raise EditorPreDispatchError("import_category_mismatch")
         if tool_name == "open_project":
             # The native loader appends one of these names, then follows it
             # through readFile. Checking only the folder misses document links.
@@ -190,6 +209,79 @@ class EditorConfig:
     def client(self, *, native_source=None) -> LocalEditorClient:
         return LocalEditorClient(self.endpoint, allowed_tools=self.allowed_tools,
             timeout=self.timeout, policy=self._policy, native_source=native_source)
+
+
+class OwnerExportOffer:
+    """An optional host-scoped argument candidate, never an export or reservation.
+
+    Only the source-pinned H264 project-size route is known here. Native
+    readiness and the no-overwrite policy are authoritative at dispatch;
+    an offer neither changes timeline settings nor applies a creative range.
+    """
+    def __init__(self, config: EditorConfig):
+        if not isinstance(config, EditorConfig):
+            raise TypeError("Owner delivery offer requires trusted EditorConfig")
+        self._config = config
+        self._path = None
+
+    def _available(self, path):
+        try:
+            return self._config._policy("export_timeline", {"outputPath": str(path)}, "write")
+        except (EditorPreDispatchError, OSError):
+            return False
+
+    def candidate(self, validator, *, explicit_owner_window=False):
+        if type(explicit_owner_window) is not bool:
+            raise ValueError("Export range offer must be an explicit host choice")
+        config = self._config
+        approved = config.required_export_delivery
+        root = config.outputs_root
+        if (approved is None or approved["video_codec"] != "h264" or
+                config.allowed_tools.get("export_timeline") != "write" or
+                config.allowed_tools.get("check_export_readiness") != "read" or
+                not {"read", "write"}.issubset(config.allowed_access)):
+            return None
+        try:
+            if not root.is_dir() or root.resolve(strict=True) != root:
+                return None
+        except (OSError, RuntimeError):
+            return None
+        properties = validator.schema.get("properties", {})
+        # Do not invent fields or fill unknown required artistic inputs.
+        if not {"target", "resolution", "outputPath", "previewOnly"}.issubset(properties):
+            return None
+        if explicit_owner_window and not {"range", "startSeconds", "endSeconds"}.issubset(properties):
+            return None
+        if self._path is None or not self._available(self._path):
+            self._path = None
+            for _ in range(4):
+                proposed = root / ("export-" + secrets.token_hex(12) + ".mp4")
+                if self._available(proposed):
+                    self._path = proposed
+                    break
+        if self._path is None:
+            return None
+        arguments = {"outputPath": str(self._path), "target": "h264_project",
+                     "resolution": "project", "previewOnly": False}
+        if "fps" in properties:
+            arguments["fps"] = approved["fps"]
+        if explicit_owner_window:
+            arguments.update(range="custom", startSeconds=0, endSeconds=approved["max_duration"])
+        if not validator.is_valid(arguments):
+            return None
+        return {"tool": "export_timeline", "arguments": arguments,
+                "owner_delivery_profile": dict(approved),
+                "native_readiness_verified": False,
+                "optional_model_selected_call": True,
+                "note": ("Explicit zero-to-owner-maximum window; later timeline time is excluded. "
+                         "Choose only if this is your intended creative range." if explicit_owner_window else
+                         "Project size must match; full timeline, no implied trim. Native readiness and destination are rechecked before dispatch.")}
+
+    def retire_submitted(self, arguments):
+        # A native export may have started before any file is visible.
+        # Never keep offering that same candidate after an apply submission.
+        if arguments.get("previewOnly") is not True:
+            self._path = None
 
 
 def load_editor_config(path) -> EditorConfig:

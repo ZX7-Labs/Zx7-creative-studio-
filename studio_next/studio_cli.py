@@ -118,12 +118,17 @@ def load_workspace(path):
     required = {"schema", "editor_source", "provider", "model_id", "base_url"}
     if (type(config) is not dict or set(config) != required or
             type(config["schema"]) is not int or config["schema"] != 1 or
-            config["provider"] not in ("local", "nvidia") or
+            config["provider"] not in ("local", "nvidia", "external") or
             not isinstance(config["editor_source"], str) or
-            not Path(config["editor_source"]).is_absolute() or
-            not isinstance(config["model_id"], str) or not config["model_id"].strip()):
+            not Path(config["editor_source"]).is_absolute()):
         raise ValueError("Invalid studio configuration")
-    LocalModelSettings(base_url=config["base_url"], model_id=config["model_id"])
+    if config["provider"] == "external":
+        if config["model_id"] is not None or config["base_url"] is not None:
+            raise ValueError("External Brain workspace cannot configure an inference endpoint")
+    else:
+        if not isinstance(config["model_id"], str) or not config["model_id"].strip():
+            raise ValueError("Invalid studio model configuration")
+        LocalModelSettings(base_url=config["base_url"], model_id=config["model_id"])
     if config["provider"] == "nvidia" and config["base_url"] != "http://127.0.0.1:8080":
         raise ValueError("NVIDIA endpoint is fixed; omit --base-url")
     _read_private(root / "editor-grants.json")
@@ -167,7 +172,7 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
                          base_url="http://127.0.0.1:8080"):
     from .native_editor_session import editor_runtime_path
 
-    if provider not in ("local", "nvidia"):
+    if provider not in ("local", "nvidia", "external"):
         raise ValueError("Unknown creative model provider")
     if provider == "nvidia" and base_url != "http://127.0.0.1:8080":
         raise ValueError("NVIDIA endpoint is fixed; omit --base-url")
@@ -179,7 +184,11 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
     if not source.is_dir():
         raise ValueError("Editor source must be a directory")
     # Validate the local endpoint before attempting an inventory request.
-    if model_id is None:
+    if provider == "external":
+        if model_id is not None or base_url != "http://127.0.0.1:8080":
+            raise ValueError("External Brain workspace cannot configure an inference endpoint")
+        base_url = None
+    elif model_id is None:
         if provider == "nvidia":
             from .nvidia_model import NvidiaModelSettings
 
@@ -192,7 +201,8 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
             if len(models) > 1:
                 raise ValueError("The local server lists multiple models. Select one with --model-id.")
             model_id, = models
-    LocalModelSettings(base_url=base_url, model_id=model_id)
+    if provider != "external":
+        LocalModelSettings(base_url=base_url, model_id=model_id)
     # Refuse to replace a workspace created while discovery was in progress.
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     root = root.resolve()
@@ -208,10 +218,10 @@ def initialize_workspace(path, *, source=None, model_id=None, provider="local",
     return {"workspace": str(root), "status": "initialized", "next": "doctor"}
 
 
-def doctor(path, *, check_model=True):
+def doctor(path, *, check_model=True, inspect_installed_body=False):
     """Inspect setup; never install engines, download weights or call cloud AI."""
     from .native_editor_session import editor_runtime_path, native_editor_child_environment
-    root, config, _ = load_workspace(path)
+    root, config, grants = load_workspace(path)
     checks = []
     def add(name, ok, detail):
         checks.append({"name": name, "ready": bool(ok), "detail": detail})
@@ -274,8 +284,30 @@ def doctor(path, *, check_model=True):
             add("local_model", False, "Start the configured local OpenAI-compatible model server")
     elif config["provider"] == "nvidia":
         add("provider_credentials", bool(os.environ.get("NVIDIA_API_KEY")), "NVIDIA_API_KEY presence only; no cloud request made")
-    return {"workspace": str(root), "ready": all(c["ready"] for c in checks),
-            "model_connection_checked": check_model and config["provider"] == "local", "checks": checks}
+    # Opt-in source-truth inventory of creative engines through the SAME
+    # local BODY catalog admitted for run --enable-installed-body-tools.
+    # No operation is invoked, no provider is contacted and the availability
+    # of a tool must not be misreported as creative-art or UX acceptance.
+    result = {"workspace": str(root), "ready": all(c["ready"] for c in checks),
+              "model_connection_checked": check_model and config["provider"] == "local",
+              "checks": checks}
+    if inspect_installed_body:
+        if config["provider"] not in ("local", "external"):
+            raise ValueError("Installed BODY inventory is local-only until separate hosted egress review")
+        # Report the identical permission-filtered model-facing adapter, not
+        # the raw migration catalog. This is a read-only inventory.
+        from .body_capability_adapter import InstalledBodyAdapter
+        operations = sorted(InstalledBodyAdapter(
+            root, allowed_access=grants.allowed_access).trusted_grants())
+        result["installed_body"] = {
+            "scope": "installed_host_granted_operations_only",
+            "operation_count": len(operations), "operations": operations,
+            "professional_creative_acceptance_verified": False,
+        }
+        add("installed_body_catalog", bool(operations),
+            "Actual locally executable/granted BODY tool names; not neural or professional acceptance")
+        result["ready"] = all(c["ready"] for c in checks)
+    return result
 
 
 def _stage_asset(path, destination, rights):
@@ -284,18 +316,25 @@ def _stage_asset(path, destination, rights):
         raise ValueError("Authorized source must be a nonempty regular file")
     temporary = destination / (".copy-" + secrets.token_hex(8))
     digest = hashlib.sha256()
-    before = source.stat()
+    # Verify the *opened bytes* belong to the admitted owner source. Path
+    # metadata alone cannot detect a swapped read fd or a same-size edit with
+    # restored mtime; ctime and fstat also close those custody gaps.
+    before = source.stat(follow_symlinks=False)
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
     try:
         with source.open("rb") as src, open(temporary, "xb", opener=lambda p, f: os.open(p, f, 0o600)) as out:
+            opened = os.fstat(src.fileno())
+            if not stat.S_ISREG(opened.st_mode) or identity(opened) != identity(before):
+                raise ValueError("Source changed while staging; read source differs from admitted original")
             while chunk := src.read(1024 * 1024):
                 digest.update(chunk)
                 out.write(chunk)
             out.flush()
             os.fsync(out.fileno())
-        after = source.stat()
-        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
-                after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
-            raise ValueError("Source changed while staging; original remains untouched")
+            after = source.stat(follow_symlinks=False)
+            if identity(before) != identity(os.fstat(src.fileno())) or identity(before) != identity(after):
+                raise ValueError("Source changed while staging; original may have been modified")
         target = destination / (digest.hexdigest()[:16] + "-" + source.name)
         # A run has its own staging directory. Refuse duplicate source names.
         os.link(temporary, target)
@@ -311,9 +350,11 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                   allow_cloud_audio_diagnostics=False, allow_cloud_original_wav_upload=False,
                   allow_public_research=False, searxng_url=None,
                   xvfb_binary=None, display=None,
-                  enable_installed_body=False):
+                  enable_installed_body=False, delivery_target=None):
     from .native_editor_session import build_parser, run_native_session
     root, config, grants = load_workspace(path)
+    if config["provider"] == "external":
+        raise ValueError("Attach the external MCP client using zx7-studio-mcp; this workspace has no internal model")
     if not isinstance(brief, str) or not 1 <= len(brief.strip()) <= 24000:
         raise ValueError("Provide a nonempty creative brief up to 24000 characters")
     if assets and (not isinstance(rights, str) or not rights.strip() or len(rights) > 4096):
@@ -324,6 +365,10 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
         raise ValueError("Model turn budget must be between 1 and 128")
     if type(enable_installed_body) is not bool:
         raise ValueError("Installed BODY tools require an explicit host boolean")
+    if delivery_target is not None and reviewed_av_revision is not True:
+        raise ValueError("Owner delivery target requires reviewed audiovisual mode")
+    from .studio_owner_delivery import validate_owner_delivery_target
+    delivery_target = validate_owner_delivery_target(delivery_target)
     if enable_installed_body and config["provider"] != "local":
         raise ValueError("Installed full creative BODY tools are local-only; no unreviewed cloud source exposure")
     if reviewed_revision and reviewed_av_revision:
@@ -361,6 +406,10 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
     # Existing projects are never silently treated as an empty fresh trial.
     fresh_av = (reviewed_av_revision and project_path is None and
                 not any((root / "projects").iterdir()))
+    # Both a truly fresh project and an explicitly owner-selected existing
+    # project can retain render-bound editable source snapshots. A new project
+    # in a populated root is not implicitly a fresh, source-bound trial.
+    snapshot_av = reviewed_av_revision and (fresh_av or project_path is not None)
     # Check before creating a run or copying media. No inference on bad setup.
     setup = doctor(root)
     if not setup["ready"]:
@@ -383,7 +432,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 directory.mkdir(mode=0o700)
             status = {"session_id": sid, "state": "preparing", "provider": config["provider"],
                       "model_id": config["model_id"], "artistic_quality_approved": False,
-                      "render_snapshots_required": bool(fresh_av),
+                      "render_snapshots_required": bool(snapshot_av),
+                      "owner_delivery_target": delivery_target,
                       "outputs_directory": str(locations["outputs"]),
                       "projects_directory": str(root / "projects"),
                       "native_journal": str(session / "native-journal.jsonl")}
@@ -398,6 +448,8 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                 owner_context = {"authorized_sources": ledger,
                     "existing_native_project": str(project_path) if project_path else None,
                     "projects_root": str(root / "projects"), "outputs_root": str(locations["outputs"])}
+                if delivery_target is not None:
+                    owner_context["owner_delivery_target"] = delivery_target
                 text = brief.strip() + "\n\nHost-authorized workspace facts (not an editing plan):\n" + json.dumps(owner_context, ensure_ascii=False)
                 if len(text) > 32000:
                     raise ValueError("Brief and asset context exceed the native session budget")
@@ -412,7 +464,9 @@ def run_workspace(path, *, brief, assets=(), rights=None, project=None,
                         ("reviewed-av-revision" if reviewed_av_revision else
                          "reviewed-revision" if reviewed_revision else "export")]
                 if fresh_av:
-                    argv += ["--fresh-trial-project", "--record-av-project-snapshots"]
+                    argv.append("--fresh-trial-project")
+                if snapshot_av:
+                    argv.append("--record-av-project-snapshots")
                 if allow_cloud_audio_diagnostics:
                     argv.append("--allow-cloud-audio-diagnostics")
                 if allow_cloud_original_wav_upload:
@@ -505,10 +559,14 @@ def main(argv=None):
     init.add_argument("workspace", type=Path)
     init.add_argument("--source", type=Path, help="Override the installed editor path")
     init.add_argument("--model-id", help="Select a local model or override the provider default")
-    init.add_argument("--provider", choices=("local", "nvidia"), default="local")
+    init.add_argument("--provider", choices=("local", "nvidia", "external"), default="local")
     init.add_argument("--base-url", default="http://127.0.0.1:8080")
     for name in ("doctor", "status"):
-        commands.add_parser(name).add_argument("workspace", type=Path)
+        command = commands.add_parser(name)
+        command.add_argument("workspace", type=Path)
+        if name == "doctor":
+            command.add_argument("--installed-body-tools", action="store_true",
+                help="Read-only inventory of actual local BODY creative engines in this Studio")
     verify = commands.add_parser("verify", help="Independently re-decode both reviewed A/V exports and match editable native project")
     verify.add_argument("workspace", type=Path)
     verify.add_argument("session_id")
@@ -548,6 +606,12 @@ def main(argv=None):
                      help="Separately allow NVIDIA to see numerical sound diagnostics (never raw WAV)")
     run.add_argument("--allow-cloud-original-wav-upload", action="store_true",
                      help="Independently consent to original WAV sent to exact NVIDIA Omni model")
+    run.add_argument("--target-width", type=int,
+                     help="Owner-required decoded video width; requires reviewed A/V mode")
+    run.add_argument("--target-height", type=int,
+                     help="Owner-required decoded video height; requires reviewed A/V mode")
+    run.add_argument("--target-duration-seconds", type=float,
+                     help="Owner-required physical runtime; exact decoder tolerance is 0.12s")
     run.add_argument("--xvfb-binary")
     run.add_argument("--display")
     args = p.parse_args(argv)
@@ -556,7 +620,7 @@ def main(argv=None):
             result = initialize_workspace(args.workspace, source=args.source, model_id=args.model_id,
                 provider=args.provider, base_url=args.base_url)
         elif args.command == "doctor":
-            result = doctor(args.workspace)
+            result = doctor(args.workspace, inspect_installed_body=args.installed_body_tools)
         elif args.command == "status":
             result = workspace_status(args.workspace)
         elif args.command == "verify":
@@ -577,8 +641,15 @@ def main(argv=None):
             else:
                 with args.brief_file.open(encoding="utf-8") as stream:
                     brief = stream.read(24001)
+            delivery_target = (
+                {"width": args.target_width, "height": args.target_height,
+                 "duration_seconds": args.target_duration_seconds}
+                if any(value is not None for value in (
+                    args.target_width, args.target_height, args.target_duration_seconds))
+                else None)
             result = run_workspace(args.workspace, brief=brief, assets=args.asset, rights=args.rights,
                 project=args.project, max_turns=args.max_turns, model_timeout=args.model_timeout,
+                delivery_target=delivery_target,
                 allow_cloud_image_upload=args.allow_cloud_image_upload,
                 allow_public_research=args.allow_public_research, searxng_url=args.searxng_url,
                 reviewed_revision=args.reviewed_revision,

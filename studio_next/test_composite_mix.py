@@ -340,6 +340,56 @@ class LayeredProductionCompositingTests(unittest.TestCase):
                 actual_composite_command(impossible,root,vault,
                                          root/"never-accepted.mp4")
 
+    def test_matte_decoder_uses_sealed_original_and_derivative_requires_its_grant(self):
+        from PIL import Image
+        from studio_next.media_vault import MediaCustodyError,sha256_file,canonical_source_attestations
+        from studio_next.body_integration import run_body_project
+        from studio_next import composite_mix
+        with tempfile.TemporaryDirectory() as home:
+            root=Path(home);vault=MediaVault(root/"vault")
+            refs=[]
+            for name,color in (("front",(255,0,0,255)),("matte",(255,255,255,255))):
+                source=root/(name+".png");Image.new("RGBA",(32,32),color).save(source)
+                grant=vault.ingest(source,mime="image/png",rights="owner_supplied",source_type="owner_upload",
+                    source_id=name,evidence="Original owner image",owner_or_generator="owner")
+                refs.append({"source":source.name,"asset_id":grant["asset_id"],"attestation_id":grant["attestation_id"]})
+            plan={"canvas":{"width":32,"height":32,"fps":12,"duration":1,"background":"#0000FF"},
+                "video_layers":[{"id":"picture",**refs[0],"source_kind":"still_image","start":0,
+                    "source_in":0,"duration":1,"x":0,"y":0,"width":32,"height":32,"opacity":1,
+                    "matte":{**refs[1],"source_kind":"still_image","source_in":0,"invert":False}}],"audio_tracks":[]}
+            (root/"composite.json").write_text(json.dumps(plan))
+            ir={"project":{"creative_intent":"Original matte compositing"},"shots":[{"id":"picture","purpose":"Real matte"}],
+                "tool_graph":[{"id":"movie","tool_id":"body.composite_mix","purpose":"Actual native composite",
+                    "inputs":{"plan":"composite.json","out":"movie.mp4"},"depends_on":[]},
+                    {"id":"custody","tool_id":"body.asset_vault","purpose":"Retain exact matte grant",
+                    "inputs":{"source_witness":{"$node_output":"movie"}},"depends_on":["movie"]}]}
+            real_run=subprocess.run;mask=root/"matte.png";before=mask.read_bytes();seen=[]
+            def swap_during_encode(argv,**kwargs):
+                if "-filter_complex" in argv and str(argv[0]).endswith("ffmpeg"):
+                    paths=[Path(argv[i+1]) for i,x in enumerate(argv[:-1]) if x=="-i" and Path(argv[i+1]).is_file()]
+                    seen.extend(paths)
+                    Image.new("RGBA",(32,32),(0,0,0,255)).save(mask)
+                    try:return real_run(argv,**kwargs)
+                    finally:mask.write_bytes(before)
+                return real_run(argv,**kwargs)
+            with patch.object(composite_mix.subprocess,"run",side_effect=swap_during_encode):
+                done=run_body_project(ir,root)
+            self.assertEqual(done["status"],"all_tool_results_verified",done)
+            self.assertEqual(len(seen),2)
+            self.assertTrue(all(".zx7-owned-sources-" in str(p) for p in seen),seen)
+            movie=root/"movie.mp4"
+            pixels=subprocess.check_output(["ffmpeg","-v","error","-i",str(movie),"-frames:v","1","-f","rawvideo","-pix_fmt","rgb24","-"],timeout=45)
+            self.assertGreater(pixels[0],180);self.assertLess(pixels[2],30)
+            digest=sha256_file(movie);grant=vault.inspect(digest)["rights_attestations"][0]
+            self.assertEqual(grant.get("source_attestations"),canonical_source_attestations([
+                {k:ref[k] for k in ("asset_id","attestation_id")} for ref in refs]))
+            self.assertEqual(run_body_project(ir,root)["reused"],["movie","custody"])
+            vault.withdraw_attestation(refs[1]["asset_id"],refs[1]["attestation_id"],reason="Matte grant withdrawn")
+            with self.assertRaisesRegex(MediaCustodyError,"withdrawn"):
+                vault.checkout(digest,grant["attestation_id"],root/"denied.mp4")
+            self.assertEqual(mask.read_bytes(),before)
+            self.assertEqual(sha256_file(movie),digest)
+
     def test_actual_owned_roto_matte_multiplies_original_transparency(self):
         try:
             from PIL import Image

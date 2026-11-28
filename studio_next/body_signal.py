@@ -19,6 +19,7 @@ from typing import Callable
 
 from .body_affordances import BodyAffordanceSurface
 from .body_integration import body_catalog
+from .registry import MODEL_UNATTESTED_TOOLS
 from .body_sensory import sense_body_job
 from .film_ir import validate_film_ir
 from .body_document_schemas import validate_document
@@ -29,7 +30,7 @@ _ACCESS=frozenset({"read","write","network","paid"})
 # Legacy edit/OTIO accept owner-supplied textual rights labels without real
 # MediaVault custody. Retain them for explicit historical migration, never
 # advertise or execute them from an autonomous model-facing BODY signal.
-_LEGACY_UNATTESTED=frozenset({"body.render_edit","body.otio"})
+_LEGACY_UNATTESTED=MODEL_UNATTESTED_TOOLS
 
 
 class BodyCommandRejected(ValueError):
@@ -411,10 +412,9 @@ class LiveBodySignal:
                 raise BodyCommandRejected("Original creative Film IR object required")
             catalog=self._factory(self._workspace(workspace_id))
             validation=validate_film_ir(ir,
-                installed_tool_ids=(
-                    catalog.executable_ids(
-                        allowed_access=self._authority.tool_access)
-                    -_LEGACY_UNATTESTED),
+                installed_tool_ids={identity for identity, detail in
+                    catalog.execution_admission(self._authority.tool_access).items()
+                    if detail["can_attempt_durable_graph"]} - _LEGACY_UNATTESTED,
                 fact_ids=set(self._authority.fact_ids))
             if not validation.render_ready:
                 raise BodyCommandRejected("Proposed film is not physically runnable: "+

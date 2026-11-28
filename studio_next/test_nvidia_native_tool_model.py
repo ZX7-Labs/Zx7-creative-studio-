@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from studio_next.nvidia_native_tool_model import (
     NvidiaNativeToolCreativeModel, NvidiaOmniNativeToolCreativeModel,
-    NVIDIA_OMNI_AUDIO_MODEL_ID, _provider_function,
+    NVIDIA_OMNI_AUDIO_MODEL_ID, NATIVE_DIRECT_TOOL_SYSTEM, _provider_function,
 )
 from studio_next.nvidia_model import NvidiaConfigurationError, NvidiaModelSettings
 from studio_next.providers import LocalModelOutputError
@@ -83,6 +83,7 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                                  _provider_function("add_asset_to_timeline")})
         typed = next(t["function"]["parameters"] for t in body["tools"]
                      if t["function"]["name"] == _provider_function("add_asset_to_timeline"))
+        self.assertEqual(list(typed["properties"]), ["inputs", "reason"])
         self.assertEqual(typed["properties"]["inputs"], context[
             "host_native_tool_contracts"][1]["input_schema"])
         self.assertNotIn("host_native_tool_contracts",
@@ -90,6 +91,134 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
         self.assertNotIn("nvapi-", json.dumps(body))
         self.assertNotIn("response_format", body)
         self.assertEqual(len(context["host_native_tool_contracts"]), 2)
+
+    def test_super_vl_truncation_uses_bounded_direct_recovery_only_for_host_rejection(self):
+        # Genuine Super VL #45731089541 spent two bounded recovery turns
+        # generating truncated reasoning instead of one native tool call.
+        # The provider documents a no-reasoning setting for this model.
+        # Recover ONLY a host-recorded truncation; do not change ordinary
+        # creative thinking, other providers, consent, or native grants.
+        settings = NvidiaModelSettings(
+            model_id="nvidia/nemotron-3.5-super-vl-120b-a12b",
+            max_tokens=8192, sampling={"temperature": 1.0,
+                                        "reasoning_effort": "low"})
+        model = NvidiaNativeToolCreativeModel(settings, system_prompt="Native proof")
+        base = _context()
+        rejected = {"previous_model_json_rejected": True,
+                    "reason_code": "truncated_tool_decision",
+                    "no_native_dispatch": True,
+                    "remaining_model_output_corrections": 1,
+                    "return_one_unambiguous_json_object": True}
+        cases = [
+            (base, "low"),
+            (dict(base, last_rejected_model_output_feedback=rejected), "none"),
+            (dict(base, last_rejected_model_output_feedback={
+                **rejected, "remaining_model_output_corrections": 0}), "none"),
+            (dict(base, last_rejected_model_output_feedback={
+                **rejected, "no_native_dispatch": False}), "low"),
+            (dict(base, last_rejected_model_output_feedback={
+                **rejected, "reason_code": "native_function_inputs_shape"}), "low"),
+        ]
+        for context, expected in cases:
+            with self.subTest(expected=expected, feedback=context.get(
+                    "last_rejected_model_output_feedback")), patch.object(
+                    model, "_open_request", return_value=_reply(
+                        _provider_function("get_project"),
+                        '{"inputs":{},"reason":"Observe the real project"}')) as transport:
+                result = model.decide(context)
+                self.assertEqual(result["arguments"]["tool"], "get_project")
+                self.assertEqual(transport.call_args.args[0]["reasoning_effort"], expected)
+        self.assertEqual(model.settings.sampling["reasoning_effort"], "low")
+
+        other = NvidiaNativeToolCreativeModel(
+            NvidiaModelSettings(model_id="nvidia/nemotron-3-ultra-550b-a55b",
+                                sampling={"reasoning_effort": "low"}),
+            system_prompt="Independent provider")
+        with patch.object(other, "_open_request", return_value=_reply(
+                _provider_function("get_project"),
+                '{"inputs":{},"reason":"Inspect current state"}')) as transport:
+            other.decide(dict(base, last_rejected_model_output_feedback=rejected))
+        self.assertEqual(transport.call_args.args[0]["reasoning_effort"], "low")
+
+    def test_native_recovery_requests_one_function_call_instead_of_plain_json(self):
+        model = NvidiaNativeToolCreativeModel(system_prompt="Native test")
+        feedback = {"return_one_unambiguous_json_object": True,
+                    "reason_code": "native_function_inputs_shape",
+                    "no_native_dispatch": True,
+                    "remaining_model_output_corrections": 1}
+        context = dict(_context(), last_rejected_model_output_feedback=feedback)
+        reply = _reply(_provider_function("get_project"),
+                       json.dumps({"inputs": {}, "reason": "Inspect project"}))
+        with patch.object(model, "_open_request", return_value=reply) as request:
+            model.decide(context)
+        payload = request.call_args.args[0]
+        sent = json.loads(payload["messages"][1]["content"])["last_rejected_model_output_feedback"]
+        self.assertNotIn("return_one_unambiguous_json_object", sent)
+        self.assertTrue(sent["choose_one_offered_function_call"])
+        self.assertEqual(sent["required_native_function_arguments"],
+                         {"inputs": "object (use {} for no inputs)", "reason": "nonempty string"})
+        self.assertEqual(sent["reason_code"], feedback["reason_code"])
+        self.assertEqual(sent["remaining_model_output_corrections"], 1)
+        self.assertTrue(sent["no_native_dispatch"])
+        self.assertTrue(feedback["return_one_unambiguous_json_object"])
+
+    def test_omni_shape_recovery_uses_only_actual_offered_function_fields(self):
+        """Real G1 failure: direct native fields plus extra inputs string.
+
+        Correct only model-visible instructions, NEVER accept ambiguous
+        provider parameters or dispatch an uncertain write.
+        """
+        model = NvidiaNativeToolCreativeModel(
+            NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID, sampling={}),
+            system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+        feedback = {"return_one_unambiguous_json_object": True,
+                    "reason_code": "native_function_inputs_shape",
+                    "no_native_dispatch": True,
+                    "remaining_model_output_corrections": 1}
+        context = dict(_context(), last_rejected_model_output_feedback=feedback)
+        reply = _reply(_provider_function("add_asset_to_timeline"),
+                       '{"assetId":"original","previewOnly":false,"reason":"Place source"}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            selected = model.decide(context)
+        self.assertEqual(selected["arguments"], {
+            "tool": "add_asset_to_timeline",
+            "inputs": {"assetId": "original", "previewOnly": False},
+        })
+        payload = remote.call_args.args[0]
+        native_function = next(
+            x["function"] for x in payload["tools"]
+            if x["function"]["name"] == _provider_function("add_asset_to_timeline"))
+        self.assertEqual(set(native_function["parameters"]["properties"]),
+                         {"assetId", "previewOnly", "reason"})
+        self.assertNotIn("inputs", native_function["parameters"]["properties"])
+        self.assertIn("Use an inputs property ONLY if", payload["messages"][0]["content"])
+        sent = json.loads(payload["messages"][1]["content"])[
+            "last_rejected_model_output_feedback"]
+        self.assertNotIn("required_native_function_arguments", sent)
+        self.assertIn("Do not add inputs unless that property is offered",
+                      sent["native_function_argument_format"])
+        self.assertEqual(sent["remaining_model_output_corrections"], 1)
+        self.assertTrue(sent["no_native_dispatch"])
+        self.assertTrue(feedback["return_one_unambiguous_json_object"])
+
+    def test_omni_missing_reason_recovery_requires_reason_without_inventing_inputs(self):
+        model = NvidiaNativeToolCreativeModel(
+            NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID, sampling={}),
+            system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+        context = dict(_context(), last_rejected_model_output_feedback={
+            "return_one_unambiguous_json_object": True,
+            "reason_code": "native_function_missing_reason",
+            "no_native_dispatch": True,
+            "remaining_model_output_corrections": 1,
+        })
+        reply = _reply(_provider_function("get_project"),
+                       '{"reason":"Inspect current project"}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            model.decide(context)
+        sent = json.loads(remote.call_args.args[0]["messages"][1]["content"])[
+            "last_rejected_model_output_feedback"]
+        self.assertIn("nonempty string reason", sent["native_function_argument_format"])
+        self.assertNotIn("required_native_function_arguments", sent)
 
     def test_selected_indexed_tools_are_the_only_native_functions_and_search_is_available(self):
         context = _context(compact=True)
@@ -118,6 +247,68 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                         NvidiaConfigurationError):
                     model.decide(context)
             opener.assert_not_called()
+
+    def test_wire_context_exposes_only_current_provider_function_surface(self):
+        # The controller may retain a real host grant/search candidate after
+        # a one-shot/current save becomes ineligible. The provider's tools
+        # array is authoritative for this decision, not historical names.
+        import copy
+        for compact in (False, True):
+            with self.subTest(compact=compact):
+                context = _context(compact)
+                context["host_native_tool_contracts"] = [
+                    spec for spec in context["host_native_tool_contracts"]
+                    if spec["name"] == "add_asset_to_timeline"]
+                grant_key = ("selectable_native_tools" if compact
+                             else "actual_granted_native_tools")
+                context[grant_key].append("save_project")
+                context["host_selected_native_input_hints"] = [
+                    {"tool": "save_project", "input_properties": []}]
+                context["last_native_result_texts"] = ["A previous save was acknowledged."]
+                before = copy.deepcopy(context)
+                model = NvidiaNativeToolCreativeModel(
+                    NvidiaModelSettings(model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+                                        sampling={}),
+                    system_prompt=NATIVE_DIRECT_TOOL_SYSTEM)
+                with patch.object(model, "_open_request", return_value=_reply(
+                        _provider_function("add_asset_to_timeline"),
+                        '{"assetId":"original","previewOnly":false,"reason":"Place source"}')) as remote:
+                    chosen = model.decide(context)
+                self.assertEqual(chosen["arguments"]["tool"], "add_asset_to_timeline")
+                payload = remote.call_args.args[0]
+                sent = json.loads(payload["messages"][1]["content"])
+                self.assertEqual(sent["current_provider_function_names"],
+                                 [t["function"]["name"] for t in payload["tools"]])
+                self.assertEqual(sent["selectable_native_tools"], ["add_asset_to_timeline"])
+                self.assertEqual(set(sent["available_actions"]),
+                                 {"invoke", "search"} if compact else {"invoke"})
+                self.assertNotIn("actual_granted_native_tools", sent)
+                self.assertNotIn("host_selected_native_input_hints", sent)
+                self.assertEqual(sent["last_native_result_texts"], before["last_native_result_texts"])
+                self.assertEqual(context, before)
+
+    def test_invalid_provider_function_envelopes_have_distinct_value_free_classification(self):
+        context = _context()
+        context["actual_granted_native_tools"].append("save_project")
+        for function, code in (
+            ({"name": _provider_function("save_project"), "arguments": "{}"},
+             "native_function_not_currently_offered"),
+            ({"name": "OWNER_PRIVATE_UNRECOGNIZED_NAME", "arguments": "{}"},
+             "unknown_or_ungranted_native_function"),
+            ({"name": _provider_function("get_project"), "arguments": {"private": "OWNER_PRIVATE"}},
+             "invalid_native_function_arguments"),
+            ({"name": ["OWNER_PRIVATE"], "arguments": "{}"}, "invalid_native_tool_envelope"),
+            ("OWNER_PRIVATE", "invalid_native_tool_envelope"),
+        ):
+            with self.subTest(code=code, shape=type(function).__name__):
+                reply = BytesIO(json.dumps({"choices": [{"finish_reason": "tool_calls",
+                    "message": {"tool_calls": [{"type": "function", "function": function}]}}]}).encode())
+                model = NvidiaNativeToolCreativeModel(system_prompt="Offline test")
+                with patch.object(model, "_open_request", return_value=reply):
+                    with self.assertRaises(LocalModelOutputError) as raised:
+                        model.decide(context)
+                self.assertEqual(raised.exception.code, code)
+                self.assertNotIn("OWNER_PRIVATE", str(raised.exception))
 
     def test_unknown_or_double_tool_call_never_creates_native_decision(self):
         for bad_name, extra in (
@@ -153,6 +344,34 @@ class NativeTypedNvidiaTransportTests(unittest.TestCase):
                     "studio_next.nvidia_model.build_opener", return_value=Opener()):
                 with self.assertRaises(LocalModelOutputError):
                     NvidiaNativeToolCreativeModel(system_prompt="test").decide(_context())
+
+    def test_native_malformed_argument_layout_never_leaks_model_values(self):
+        """Only typed/count metadata crosses the rejected-provider boundary."""
+        failures = (
+            ({"assetId": "OWNER_PRIVATE_MEDIA", "previewOnly": False,
+              "reason": "OWNER_PRIVATE_REASON"},
+             "inputs=missing reason=string native_direct=2 unknown=0 nested_native=0"),
+            ({"inputs": ["OWNER_PRIVATE_MEDIA"], "reason": "OWNER_PRIVATE_REASON"},
+             "inputs=array reason=string native_direct=0 unknown=0 nested_native=0"),
+            ({"inputs": {"assetId": "OWNER_PRIVATE_MEDIA"},
+              "reason": "OWNER_PRIVATE_REASON",
+              "OWNER_PRIVATE_FIELD": "OWNER_PRIVATE_MEDIA"},
+             "inputs=object reason=string native_direct=0 unknown=1 nested_native=1"),
+        )
+        for args, expected in failures:
+            response = _reply(_provider_function("add_asset_to_timeline"),
+                              json.dumps(args))
+            model = NvidiaNativeToolCreativeModel(system_prompt="Offline fixture")
+            with self.subTest(expected=expected), patch.object(
+                    model, "_open_request", return_value=response):
+                with self.assertRaises(LocalModelOutputError) as raised:
+                    model.decide(_context())
+                detail = str(raised.exception)
+                self.assertEqual(raised.exception.code, "native_function_inputs_shape")
+                self.assertIn(expected, detail)
+                for private in ("OWNER_PRIVATE_MEDIA", "OWNER_PRIVATE_REASON",
+                                "OWNER_PRIVATE_FIELD"):
+                    self.assertNotIn(private, detail)
 
     def test_host_finish_requires_actual_evidence_not_a_model_claim(self):
         context = _context()
@@ -262,6 +481,109 @@ class OmniOriginalWavNativeToolTests(unittest.TestCase):
             "preview_downmixed_and_resampled": True,
             "exact_original_audio_pts_proven": False,
         }
+
+    def test_omni_uses_auto_preserves_schema_and_rejects_text_only(self):
+        model = self._model()
+        ctx = _context()
+        schema = ctx["host_native_tool_contracts"][1]["input_schema"]
+        schema["properties"]["frames"] = {"type": "array", "uniqueItems": True,
+                                          "items": {"type": "number"}}
+        reply = BytesIO(b'{"choices":[{"message":{"content":"done"}}]}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            with self.assertRaisesRegex(LocalModelOutputError, "missing_or_multiple"):
+                model.decide(ctx)
+        body = remote.call_args.args[0]
+        self.assertEqual(body["tool_choice"], "auto")
+        self.assertEqual(body["tools"][1]["function"]["parameters"]["properties"]["frames"],
+                         schema["properties"]["frames"])
+
+    def test_omni_required_native_fields_are_direct_and_lossless(self):
+        model = self._model()
+        ctx = _context()
+        schema = ctx["host_native_tool_contracts"][1]["input_schema"]
+        reply = _reply(_provider_function("add_asset_to_timeline"),
+                       '{"assetId":"native-source","previewOnly":false,"reason":"Place source"}')
+        with patch.object(model, "_open_request", return_value=reply) as remote:
+            decision = model.decide(ctx)
+        self.assertEqual(decision["arguments"], {"tool": "add_asset_to_timeline",
+                         "inputs": {"assetId": "native-source", "previewOnly": False}})
+        parameters = remote.call_args.args[0]["tools"][1]["function"]["parameters"]
+        self.assertEqual(parameters["properties"]["assetId"], schema["properties"]["assetId"])
+        self.assertEqual(parameters["required"], ["assetId", "reason"])
+        self.assertNotIn("inputs", parameters["properties"])
+        self.assertFalse(parameters["additionalProperties"])
+
+    def test_omni_direct_native_fields_reject_unknown_missing_or_mixed_shapes(self):
+        model = self._model()
+        for args in ({"reason": "edit"}, {"previewOnly": False, "reason": "edit"},
+                     {"assetId": "x", "reason": "edit", "extra": True},
+                     {"assetId": "x", "inputs": {}, "reason": "edit"},
+                     {"inputs": {}, "reason": "edit"}):
+            with self.subTest(args=args), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("add_asset_to_timeline"), json.dumps(args))):
+                with self.assertRaisesRegex(LocalModelOutputError, "native_function_inputs_shape"):
+                    model.decide(_context())
+
+    def test_omni_optional_direct_fields_and_explicit_empty_wrapper(self):
+        model = self._model()
+        ctx = _context()
+        ctx["host_native_tool_contracts"][0]["input_schema"] = {
+            "type": "object", "properties": {"previewOnly": {"type": "boolean"}}}
+        for args, expected in (({"previewOnly": False, "reason": "inspect"}, {"previewOnly": False}),
+                               ({"inputs": {}, "reason": "inspect"}, {})):
+            with self.subTest(args=args), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("get_project"), json.dumps(args))):
+                self.assertEqual(model.decide(ctx)["arguments"]["inputs"], expected)
+
+    def test_omni_exact_empty_schema_reason_only_is_a_complete_decision(self):
+        model = self._model()
+        for extra in ({}, {"additionalProperties": False},
+                      {"additionalProperties": False, "required": []}):
+            with self.subTest(extra=extra):
+                ctx = _context()
+                # Pinned Velorn get_project omits additionalProperties;
+                # controller preflight explicitly closes declared objects.
+                ctx["host_native_tool_contracts"][0]["input_schema"] = {
+                    "type": "object", "properties": {}, **extra}
+                reply = _reply(_provider_function("get_project"),
+                               '{"reason":"Inspect project"}')
+                with patch.object(model, "_open_request", return_value=reply) as remote:
+                    decision = model.decide(ctx)
+                self.assertEqual(decision, {"action": "invoke", "arguments": {
+                    "tool": "get_project", "inputs": {}}, "reason": "Inspect project"})
+                parameters = remote.call_args.args[0]["tools"][0]["function"]["parameters"]
+                self.assertEqual(set(parameters["properties"]), {"reason"})
+                self.assertEqual(parameters["required"], ["reason"])
+                self.assertFalse(parameters["additionalProperties"])
+
+    def test_omni_omitted_arguments_never_guess_native_values(self):
+        model = self._model()
+        for schema in (
+            {"type": "object", "properties": {"assetId": {"type": "string"}},
+             "required": ["assetId"], "additionalProperties": False},
+            {"type": "object", "properties": {"previewOnly": {"type": "boolean"}},
+             "additionalProperties": False},
+            {"type": "object", "properties": {}, "additionalProperties": True},
+            {"type": "object", "properties": {}, "additionalProperties": False,
+             "minProperties": 1},
+        ):
+            ctx = _context()
+            ctx["host_native_tool_contracts"][0]["input_schema"] = schema
+            with self.subTest(schema=schema), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("get_project"),
+                                        '{"reason":"Inspect project"}')):
+                with self.assertRaisesRegex(LocalModelOutputError, "native_function_inputs_shape"):
+                    model.decide(ctx)
+
+    def test_omni_exact_empty_schema_rejects_extra_or_nonempty_arguments(self):
+        model = self._model()
+        for value in ('{"reason":"Inspect","unexpected":1}',
+                      '{"reason":"Inspect","inputs":{"assetId":"x"}}',
+                      '{"reason":"Inspect","inputs":null}'):
+            with self.subTest(value=value), patch.object(model, "_open_request",
+                    return_value=_reply(_provider_function("get_project"), value)):
+                with self.assertRaisesRegex(LocalModelOutputError, "native_function_inputs_shape"):
+                    model.decide(_context())
 
     def test_consent_false_wrong_model_and_ambiguous_custody_reject_before_network(self):
         sample = self._wav()

@@ -1,5 +1,7 @@
 # ZX7 BODY
 
+> Developer entry: [AGENTS](AGENTS.md) → [current STATE](project-brain/STATE.md) → [document map](docs/DOCUMENT_MAP.md). This README is installation and usage reference, not current project status.
+
 An open-source creative execution system operated by AI. The goal is one
 workspace for design, editing, animation, CGI, VFX and sound, with detailed
 control over the creative project and its output.
@@ -9,7 +11,7 @@ native Blender projects, media rendering, source custody and resumable jobs.
 Available operations depend on the engines installed on the host. Development
 is active; this is not a completed all-purpose creative suite.
 
-**Where to start:** [Fixed build blueprint](docs/BUILD_BLUEPRINT.md) (what ZX7 MUST become), [documentation ownership map](docs/DOCUMENT_MAP.md) (which source governs each fact), [current engineering STATE](project-brain/STATE.md) and [typed execution ledger](project-brain/EXECUTION_LEDGER.json) (what is actually built, failed or open). [Forensic failure register](project-brain/EVIDENCE/FAILURE_REGISTER.md) preserves original model-run blockers and exact logs. No A–L professional field is certified solely by these docs.
+**Where to start:** [Fixed build blueprint](docs/BUILD_BLUEPRINT.md) (what ZX7 MUST become), [documentation ownership map](docs/DOCUMENT_MAP.md) (which source governs each fact), [current engineering STATE](project-brain/STATE.md) and [typed execution ledger](project-brain/EXECUTION_LEDGER.json) (what is actually built, failed or open). [Independent product audit](project-brain/EVIDENCE/2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md) records the evidence and completion strategy. [Forensic failure register](project-brain/EVIDENCE/FAILURE_REGISTER.md) preserves original model-run blockers and exact logs. No A–L professional field is certified solely by these docs.
 
 The current [architecture](docs/architecture.md),
 [reuse research](docs/reuse-research.md) and
@@ -87,6 +89,35 @@ hosted NVIDIA route explicitly. An alternative install prefix can be passed as
 the installer argument. An existing prefix is refused. The install builds
 the pinned editor and downloads its public build dependencies.
 
+## Attach an external local Brain through one standard MCP connection
+
+For the **cumulative source-pinned** editor, install a fresh prefix and
+initialize a private workspace without any inference endpoint or model ID:
+
+```sh
+bash scripts/install-zx7-linux.sh --loss-aware-range "$HOME/.local/opt/zx7-combined"
+export PATH="$HOME/.local/opt/zx7-combined/bin:$PATH"
+zx7-studio init ./my-studio --provider external
+zx7-studio doctor ./my-studio --installed-body-tools
+zx7-studio-mcp --workspace ./my-studio
+```
+
+The stdio attachment reads the workspace's canonical editor source, private
+grants and state directory by default; explicit `--source`, `--config` and
+`--state` remain available to trusted host callers. External mode does not
+run Studio's internal inference command.
+
+Configure the executable and arguments in the local client's MCP settings.
+The command starts the existing native editor and exposes one live, host-granted
+catalog of native and installed BODY tools through the existing gateway.
+The host config is the shared read/write ceiling; the state directory must
+already exist privately. The model cannot grant more tools. The workspace
+lock prevents a second Studio session; native revision fences, source custody,
+call budgets and readback remain in force. It does not itself run a model,
+upload media or certify creative results. Use only an owner-trusted local
+client/model; the stdio server cannot determine where an external client sends
+its observations. No network research is implicitly admitted.
+
 ## Create and revise a native project
 
 On Linux, install Python 3.11+, Node, FFmpeg/FFprobe and the pinned editor's
@@ -99,6 +130,7 @@ model. If the server lists several, pass `--model-id` to choose one.
 python -m pip install '.[editor,production]'
 zx7-studio init ./my-studio --source ./third_party/velorn
 zx7-studio doctor ./my-studio
+zx7-studio doctor ./my-studio --installed-body-tools
 zx7-studio run ./my-studio --brief-file ./brief.txt --asset ./source.mov --rights 'I own this footage'
 zx7-studio status ./my-studio
 ```
@@ -106,6 +138,12 @@ zx7-studio status ./my-studio
 The `--source` override is optional when a built editor is already present at
 `share/zx7-studio/velorn` under the active Python installation or in the
 matching source checkout.
+
+The optional `doctor --installed-body-tools` shows **actual installed local BODY
+operations** from the same source catalog used during a Studio run. It performs
+no tool call, creates no vault/SQLite file, and does not grant cloud media access.
+This is a technical installation inventory, **not** professional CGI/VFX, audio,
+design or full A–L creative acceptance.
 
 For an **opt-in local-only** combined creative-tool session (same Brain, same
 host gateway and budget), enable the actual installed BODY catalog:

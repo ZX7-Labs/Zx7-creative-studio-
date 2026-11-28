@@ -52,6 +52,8 @@ jobs:
         run: python -m scripts.nvidia_native_trial_request research/nvidia-native-trial-request.json
       - name: Verify new A/V mode is DENIED until new source approval and exact dispatch ID
         run: python -m unittest -v scripts.test_nvidia_av_trial_request
+      - name: Reject non-integrated editor source and require exact trial route offline
+        run: python -m unittest -v scripts.test_run_nvidia_native_trial.RealNvidiaTrialBootstrapTests.test_integrated_trial_uses_exact_cumulative_native_source_not_bare_upstream
 
   real-model-native-editor-and-export:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.trial_mode == 'audiovisual'
@@ -99,28 +101,42 @@ jobs:
             scripts.test_nvidia_av_trial_request \
             scripts.test_run_nvidia_native_trial -v
       - name: Revalidate the exact newly admitted A/V consent and fixed provider model
+        id: grant
         env:
           APPROVAL_REQUEST_ID: ${{ inputs.approval_request_id }}
         run: |
-          python -m scripts.nvidia_av_trial_request \
+          model=$(python -m scripts.nvidia_av_trial_request --print-model \
             research/nvidia-native-audiovisual-request.json \
-            --dispatch-request-id "$APPROVAL_REQUEST_ID"
-      - name: Build actual existing source editor with no provider credential available
-        working-directory: third_party/velorn
+            --dispatch-request-id "$APPROVAL_REQUEST_ID")
+          echo "model=$model" >> "$GITHUB_OUTPUT"
+      - name: Rebuild exact source-pinned cumulative ZX7 native editor before provider access
         run: |
-          bash ../../engines/velorn/install-ci-dependencies.sh
+          set -euo pipefail
+          editor="$RUNNER_TEMP/zx7-cumulative-native-editor"
+          bash engines/velorn/prepare-native-loss-aware-extract-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$editor" --install
+          expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_extract_revision"])')
+          test "$(git -C "$editor" rev-parse HEAD)" = "$expected"
+          git -C "$editor" diff --exit-code HEAD --
+          echo "ZX7_INTEGRATED_NATIVE_EDITOR=$editor" >> "$GITHUB_ENV"
+      - name: Build actual cumulative source editor with no provider credential available
+        run: |
+          set -euo pipefail
+          cd "$ZX7_INTEGRATED_NATIVE_EDITOR"
+          bash "$GITHUB_WORKSPACE/engines/velorn/install-ci-dependencies.sh" supported-electron
           npm run build
           test -s dist/index.html
       - name: Preserve real Chromium sandbox
-        working-directory: third_party/velorn
         run: |
-          helper="$PWD/node_modules/electron/dist/chrome-sandbox"
+          set -euo pipefail
+          helper="$ZX7_INTEGRATED_NATIVE_EDITOR/node_modules/electron/dist/chrome-sandbox"
           test -f "$helper"
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(stat -c '%u:%a' "$helper")" = "0:4755"
       - name: Real NVIDIA creative decisions -> native A/V edit -> timed review -> revised output
         env:
+          APPROVED_MODEL: ${{ steps.grant.outputs.model }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         shell: bash
         run: |
@@ -129,15 +145,25 @@ jobs:
             echo "No NVIDIA_API_KEY Actions secret. Refusing cloud trial."
             exit 2
           fi
-          python -u -m scripts.run_nvidia_native_trial \
+          audio_flags=()
+          if [[ "$APPROVED_MODEL" == nvidia/nemotron-3-nano-omni-30b-a3b-reasoning ]]; then
+            audio_flags+=(--allow-cloud-synthetic-wav)
+          fi
+          python -u -m scripts.run_nvidia_native_trial --model-id "$APPROVED_MODEL" "${audio_flags[@]}" \
+            --integrated-editor-source "$ZX7_INTEGRATED_NATIVE_EDITOR" \
             --workspace "$RUNNER_TEMP/zx7-nvidia-native-trial" \
             --xvfb-binary /usr/bin/Xvfb --display 127.0.0.1:95 \
             --audiovisual-trial --allow-cloud-audio-diagnostics
-      - name: Independently confirm pinned editor code was never modified
+      - name: Independently confirm original and cumulative editor code unchanged
         if: always()
         run: |
           test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
           git -C third_party/velorn diff --exit-code HEAD --
+          if [[ -n "${ZX7_INTEGRATED_NATIVE_EDITOR:-}" ]]; then
+            expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_extract_revision"])')
+            test "$(git -C "$ZX7_INTEGRATED_NATIVE_EDITOR" rev-parse HEAD)" = "$expected"
+            git -C "$ZX7_INTEGRATED_NATIVE_EDITOR" diff --exit-code HEAD --
+          fi
       - name: Preserve only allowed synthetic media, editable native projects and redacted journal
         if: always()
         uses: actions/upload-artifact@v4

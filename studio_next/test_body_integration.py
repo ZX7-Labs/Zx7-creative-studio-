@@ -25,6 +25,58 @@ def actual_rgb_png():
 
 
 class TrustedCreativeBodyToolTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Real reference evidence requires physical video/audio decoders")
+    def test_reused_owner_reference_graph_is_live_read_only_and_source_bound(self):
+        import subprocess
+        import hashlib
+        with tempfile.TemporaryDirectory() as workspace:
+            original = Path(workspace) / "reference.mp4"
+            command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+            for color in ("black", "white", "black", "white"):
+                command += ["-f", "lavfi", "-i",
+                            f"color=c={color}:s=128x72:r=24:d=1"]
+            command += ["-f", "lavfi", "-i",
+                        "sine=frequency=440:sample_rate=8000:duration=4",
+                        "-filter_complex",
+                        "[0:v][1:v][2:v][3:v]concat=n=4:v=1:a=0[v]",
+                        "-map", "[v]", "-map", "4:a", "-c:v", "libx264",
+                        "-c:a", "aac", "-pix_fmt", "yuv420p", str(original)]
+            subprocess.run(command, check=True, timeout=60)
+            catalog = body_catalog(workspace)
+            live = {entry["id"]: entry for entry in catalog.discover()}
+            self.assertEqual(live["body.reference_graph"]["access"], "read")
+            self.assertEqual(live["body.reference_graph"]["status"], "installed")
+            self.assertIn("body.reference_graph", catalog.executable_ids({"read"}))
+            self.assertNotIn("body.reference_graph", catalog.executable_ids({"write"}))
+            args = {"source": original.name, "bins": 16}
+            with self.assertRaises(PermissionError):
+                catalog.invoke("body.reference_graph", args, allowed_access={"write"})
+            graph = catalog.invoke("body.reference_graph", args, allowed_access={"read"})
+            digest = hashlib.sha256(original.read_bytes()).hexdigest()
+            self.assertEqual(graph["schema"], "ZX7_AUTHORIZED_REFERENCE_GRAPH_V1")
+            self.assertEqual(graph["source_sha256"], digest)
+            self.assertEqual(graph["cut_candidate_count"], 3)
+            self.assertEqual(len(graph["graph"]), 16)
+            self.assertTrue(graph["has_audio"])
+            self.assertFalse(graph["model_has_understood_story_or_editing_intent"])
+            self.assertEqual(graph["limits"]["professional_artistic_quality"],
+                             "not certified")
+            receipt = catalog.trusted_material_fingerprint("body.reference_graph", args)
+            self.assertEqual(receipt[0]["sha256"], digest)
+            with self.assertRaises(ValueError):
+                catalog.invoke("body.reference_graph",
+                               {"source": "../outside.mp4"}, allowed_access={"read"})
+            with self.assertRaises(ValueError):
+                catalog.invoke("body.reference_graph",
+                               {"source": original.name, "bins": 100},
+                               allowed_access={"read"})
+            (Path(workspace) / "escape.mp4").symlink_to("/etc/passwd")
+            with self.assertRaises(ValueError):
+                catalog.invoke("body.reference_graph",
+                               {"source": "escape.mp4"}, allowed_access={"read"})
+            self.assertEqual(hashlib.sha256(original.read_bytes()).hexdigest(), digest)
+
     def test_native_motion_is_not_advertised_when_required_python_renderer_is_missing(self):
         actual=importlib.util.find_spec
         with tempfile.TemporaryDirectory() as root:
@@ -59,6 +111,40 @@ class TrustedCreativeBodyToolTests(unittest.TestCase):
             self.assertTrue(validate_witness("body.vector_png",result))
             p.write_bytes(b"not same artwork"*100)
             self.assertFalse(validate_witness("body.vector_png",result))
+
+    def test_durable_movie_witness_rechecks_actual_physical_dimensions(self):
+        # RED before this correction: the old verifier ignored recorded
+        # width/height although _witness() persisted both. This test mocks
+        # only the ffprobe boundary, never any source/rights/codec approval.
+        import hashlib
+        with tempfile.TemporaryDirectory() as root:
+            movie=Path(root)/"trusted-output.mp4"
+            movie.write_bytes(b"original-native-movie-payload"*64)
+            physical={"duration_seconds":4.0,"width":1280,"height":720,
+                      "audio_stream_present":True}
+            receipt={"path":str(movie),
+                     "sha256":hashlib.sha256(movie.read_bytes()).hexdigest(),
+                     "duration_seconds":4.0,"width":1280,"height":720,
+                     "audio_present":True,
+                     "source_attestations":[{"asset_id":"a"*64,"attestation_id":"b"*64}]}
+            with patch("studio_next.body_integration._probe_details",
+                       return_value=physical):
+                self.assertTrue(validate_witness("body.render_edit_owned",receipt))
+                for name,invalid in (("width",640),("height",360),
+                                     ("duration_seconds",6.0),
+                                     ("audio_present",False)):
+                    with self.subTest(field=name):
+                        self.assertFalse(validate_witness(
+                            "body.render_edit_owned",{**receipt,name:invalid}))
+                for missing in ("width","height","duration_seconds","audio_present","source_attestations"):
+                    with self.subTest(missing=missing):
+                        bad=dict(receipt)
+                        del bad[missing]
+                        self.assertFalse(validate_witness("body.render_edit_owned",bad))
+                self.assertFalse(validate_witness(
+                    "body.render_edit_owned",{**receipt,"duration_seconds":"forged"}))
+                movie.write_bytes(movie.read_bytes()+b"tampered")
+                self.assertFalse(validate_witness("body.render_edit_owned",receipt))
 
     def test_single_animated_body_discloses_unavailable_photoreal_gpu_renderer(self):
         with tempfile.TemporaryDirectory() as root:

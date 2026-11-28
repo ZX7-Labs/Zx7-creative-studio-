@@ -15,6 +15,7 @@ from .font_registry import resolve_artist_font
 
 _SOURCE_FIELDS={
     "body.inspect":("source",),
+    "body.reference_graph":("source",),
     # Pure SMPTE source-frame addresses have no physical file input; the
     # verified rational clock and address fields remain in the trusted DAG
     # input fingerprint. Empty tuple is a real registered adapter, not an
@@ -52,6 +53,7 @@ _SOURCE_FIELDS={
     "body.color_lut":("plan",),
     "body.full_decode":("source",),
     "body.loudness":("plan",),
+    "body.subtitle_delivery":("plan",),
     "body.review":("plan",),
     "body.temporal_evidence":("plan",),
     "body.review_data":("bundle",),
@@ -90,16 +92,24 @@ def _file(root,relative):
 def _nested_sources(value,root,found):
     if isinstance(value,dict):
         for key,datum in value.items():
-            if key=="source" and isinstance(datum,str) and datum.startswith("zx7:sha256:"):
-                digest=datum[len("zx7:sha256:"):]
-                if value.get("asset_id")!=digest or not isinstance(value.get("attestation_id"),str):
-                    raise ValueError("Machine-neutral media reference lacks matching custody identity")
+            if key=="source" and isinstance(datum,str) and (
+                    datum.startswith("zx7:sha256:") or
+                    "asset_id" in value or "attestation_id" in value):
+                digest=value.get("asset_id")
+                if (not isinstance(digest,str) or not isinstance(value.get("attestation_id"),str)
+                        or (datum.startswith("zx7:sha256:") and datum!="zx7:sha256:"+digest)):
+                    raise ValueError("Media reference lacks matching custody identity")
                 observed=MediaVault(root/"vault").inspect(digest,
                     attestation_id=value["attestation_id"])
                 physical=Path(observed["path"]).resolve()
                 if not physical.is_relative_to(root):
                     raise ValueError("Verified source escaped original production workspace")
                 found.add(physical)
+                if not datum.startswith("zx7:sha256:"):
+                    original=_file(root,datum)
+                    if not original.is_file() or sha256_file(original)!=digest:
+                        raise ValueError("Original workspace source differs from exact attested bytes")
+                    found.add(original)
             elif (key in _NESTED_SOURCE_KEYS and isinstance(datum,str)
                     and Path(datum).suffix.lower() in _PRODUCTION_SUFFIXES):
                 path=_file(root,datum)

@@ -22,12 +22,14 @@ from studio_next.native_creative_control import NativeCreativeControl, NATIVE_CR
 from studio_next.native_creative_audit import audit_native_journal
 from studio_next.native_render_evidence import (
     ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, REVIEWED_AV_PAIR, REVIEWED_NATIVE_EVIDENCE, REVIEWED_RENDER_PAIR,
+    reviewed_native_media_hashes, reviewed_native_snapshot_hashes,
 )
 from studio_next.native_editor_source_pin import (
     PINNED_VELORN_MCP_REVISION as _PINNED_MCP_PREVIEW_COMMIT,
     _PINNED_MARKER_PREVIEWS,
     pinned_electron_marker_previews, pinned_electron_asset_placement_previews,
     pinned_electron_clip_edit_previews, pinned_electron_timeline_frame_previews,
+    pinned_electron_plan_previews,
 )
 from studio_next.providers import LocalCreativeModel, LocalModelSettings
 from studio_next.capability_gateway import CapabilityGateway
@@ -40,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def attest_owner_body_source(workspace, *, configuration, provider,
-                             allowed_access=("read", "write")):
+                             allowed_access=None):
     """Admit already-installed creative BODY instruments from one owner workspace.
 
     The trusted owner process supplies this path, not the model. A separate
@@ -53,6 +55,13 @@ def attest_owner_body_source(workspace, *, configuration, provider,
         raise ValueError("Full installed BODY source is local-only until distinct cloud consent review")
     if not isinstance(configuration, dict) or not isinstance(workspace, (str, Path)):
         raise ValueError("Installed BODY requires trusted owner workspace and roots")
+    # The editor configuration is the owner's shared access ceiling. An
+    # omitted policy is read-only, exactly like the native editor config.
+    from .body_editor_policy import _access
+    ceiling = _access(configuration.get("allowed_access", ("read",)))
+    requested = ceiling if allowed_access is None else _access(allowed_access)
+    if not requested or not requested.issubset(ceiling):
+        raise ValueError("Installed BODY access exceeds the owner workspace grant")
     candidate = Path(workspace)
     if not candidate.is_absolute() or candidate.is_symlink():
         raise ValueError("Installed BODY workspace must be an absolute non-symlink owner root")
@@ -74,7 +83,7 @@ def attest_owner_body_source(workspace, *, configuration, provider,
     except (OSError, KeyError, TypeError) as exc:
         raise ValueError("Owner workspace roots are missing or invalid") from exc
     from .body_capability_adapter import InstalledBodyAdapter
-    return InstalledBodyAdapter(root, allowed_access=allowed_access)
+    return InstalledBodyAdapter(root, allowed_access=requested)
 
 
 
@@ -107,11 +116,31 @@ def native_session_grants(configuration: dict, source: Path) -> dict:
     return grants
 
 
+_NATIVE_CHILD_ENV_ALLOWED = frozenset({
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP",
+    "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "LC_COLLATE", "LC_NUMERIC",
+    "LC_TIME", "LC_MESSAGES", "LC_MONETARY", "DISPLAY", "XAUTHORITY",
+    "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE",
+    "XDG_CURRENT_DESKTOP", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+    "XDG_DATA_HOME", "XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
+    "DBUS_SESSION_BUS_ADDRESS", "GDK_BACKEND", "GTK_PATH", "FONTCONFIG_PATH",
+    "FONTCONFIG_FILE", "FONTCONFIG_SYSROOT", "LD_LIBRARY_PATH", "PYTHONPATH",
+    "PYTHONHOME", "PYTHONUNBUFFERED", "CI", "PULSE_SERVER", "PIPEWIRE_REMOTE",
+    "SSL_CERT_FILE", "SSL_CERT_DIR",
+})
+
+
 def native_editor_child_environment(environ=None):
-    """Never disclose a cloud provider credential to native subprocesses."""
-    child = dict(os.environ if environ is None else environ)
-    child.pop("NVIDIA_API_KEY", None)
-    return child
+    """Pass only local desktop/runtime settings to an untrusted native child.
+
+    No provider key, generic secret/token, cloud credential, SSH agent, GitHub
+    auth, or model-controlled environment reaches Electron or its workers.
+    Caller-provided variables cannot expand the executable allowlist. This is
+    environment isolation, not a replacement for the OS/editor sandbox.
+    """
+    source = os.environ if environ is None else environ
+    return {key: value for key, value in source.items()
+            if key in _NATIVE_CHILD_ENV_ALLOWED and isinstance(value, str)}
 
 
 def trial_machine_contracts(grants, *, fresh):
@@ -138,9 +167,19 @@ def trial_machine_contracts(grants, *, fresh):
     }
     if grants.get("create_project") != "write":
         raise ValueError("Fresh trial requires the real authorized project creator")
+    # Existing installed machine effects, not a host-authored creative plan.
+    # Only a model-selected actual import can establish an asset; only a
+    # model-selected actual placement can establish an editable clip.
+    possible_effects = {
+        "create_project": ("project_open",),
+        "import_asset_from_path": ("project_assets_available",),
+        "add_asset_to_timeline": ("timeline_clips_available",),
+        "add_assets_to_timeline": ("timeline_clips_available",),
+    }
     return ({name: list(facts) for name, facts in prerequisites.items()
-             if name in grants},
-            {"create_project": ["project_open"]})
+             if grants.get(name) == "write"},
+            {name: list(facts) for name, facts in possible_effects.items()
+             if grants.get(name) == "write"})
 
 
 def native_decision_model(args):
@@ -307,7 +346,8 @@ async def run_native_session(args):
         name for name in revision_roles if host_grants.get(name) == "write")
     preview_tools = (pinned_electron_marker_previews(args.source, host_grants) +
                      pinned_electron_asset_placement_previews(args.source, host_grants) +
-                     pinned_electron_clip_edit_previews(args.source, host_grants))
+                     pinned_electron_clip_edit_previews(args.source, host_grants) +
+                     pinned_electron_plan_previews(args.source, host_grants))
     cloud_diagnostics = getattr(args, "allow_cloud_audio_diagnostics", False)
     raw_wav_consent = getattr(args, "allow_cloud_original_wav_upload", False)
     if raw_wav_consent and (args.provider != "nvidia" or
@@ -327,34 +367,50 @@ async def run_native_session(args):
             audio_diagnostics=cloud_diagnostics,
             original_wav_upload=raw_wav_consent)
     capture_render_project = None
+    capture_saved_project_identity = None
     native_revision_source = None
     if getattr(args, "record_av_project_snapshots", False):
-        if not fresh or REVIEWED_AV_PAIR not in required or host_grants.get("save_project") != "write":
-            raise ValueError("Render snapshots require a fresh audiovisual trial with a save grant")
-        from .native_editor_project import capture_render_project as capture
+        if (not (fresh or getattr(args, "project", None) is not None) or
+                REVIEWED_AV_PAIR not in required or
+                host_grants.get("save_project") != "write"):
+            raise ValueError(
+                "Render snapshots require a fresh or owner-selected audiovisual project with a save grant")
+        from .native_editor_project import (capture_render_project as capture,
+                                            capture_acknowledged_save_identity as capture_save)
         from .native_revision_observation import NativeRevisionObservationMcpSession
         from .native_render_evidence import DESTINATION_FIELD
+        # Both fresh and selected projects need the same source-bound root.
+        project_root = Path(configuration["projects_root"])
         snapshots_root = args.state.resolve() / "av-project-snapshots"
         snapshots_root.mkdir(mode=0o700)
         native_revision_source = NativeRevisionObservationMcpSession(snapshots_root)
         physical_capture = partial(
-            capture, project_root.resolve(strict=True), snapshots_root)
+            capture, project_root.resolve(strict=True), snapshots_root,
+            expected_project=getattr(args, "project", None))
+        capture_saved_project_identity = partial(
+            capture_save, project_root.resolve(strict=True), snapshots_root,
+            expected_project=getattr(args, "project", None))
 
         def capture_and_register_native_revision(response, binding, save_identity):
             # Capture already attests save identity, native timeline scope,
             # real original bytes and render settings. Only AFTER that passes
             # may a model-visible READ candidate enter the host registry.
-            project_sha, options_sha = physical_capture(
+            project_sha, options_sha, media_sha = physical_capture(
                 response, binding, save_identity)
             native_revision_source.register_host_captured_render(
                 binding[DESTINATION_FIELD], project_sha, options_sha)
-            return project_sha, options_sha
+            return project_sha, options_sha, media_sha
 
         capture_render_project = capture_and_register_native_revision
     brief = args.brief_file.read_text(encoding="utf-8")
     if REVIEWED_AV_PAIR in required:
         brief += (
-            "\n\nHost audiovisual review requirement. Independently verify the physical "
+            "\n\nHost audiovisual review requirement. Before each native A/V export, "
+            "independently choose and APPLY save_project with previewOnly:false "
+            "after your latest edit; an autosave or project-open acknowledgement "
+            "does not establish immutable render source custody. If the editor "
+            "reports output_exists, select a NEW authorized output filename, "
+            "not the rejected path. Independently verify the physical "
             "first export with sound (up to 300 seconds in this evidence mode), "
             "view two to four frames covering separated moments "
             "at least a third of its duration apart, and inspect the decoded audio "
@@ -408,7 +464,8 @@ async def run_native_session(args):
                 # Native editor and local BODY share the original host gateway,
                 # session budget and model view. No second writer or scheduler.
                 bindings["zx7"] = (installed_body, installed_body.trusted_grants)
-            gateway = CapabilityGateway(bindings, session_budget=budget)
+            gateway = CapabilityGateway(bindings, session_budget=budget,
+                                        trusted_pre_dispatch_sources=("editor",))
             await gateway.refresh()
             admitted = CapabilityGatewayMcpSession(gateway, "editor")
             model_observation_fence = bool(identity and identity.get("fence"))
@@ -439,6 +496,13 @@ async def run_native_session(args):
                     receipt_path=args.state / "owner-project-setup.jsonl")
             preconditions, machine_effects = trial_machine_contracts(
                 host_grants, fresh=fresh)
+            owner_delivery_offer = None
+            if (args.indexed_catalog and capture_render_project is not None and
+                    configuration.get("required_export_delivery") is not None and
+                    host_grants.get("export_timeline") == "write" and
+                    host_grants.get("check_export_readiness") == "read"):
+                from studio_next.body_editor_policy import EditorConfig, OwnerExportOffer
+                owner_delivery_offer = OwnerExportOffer(EditorConfig(**configuration))
             outcome = await NativeCreativeControl(
                 model_session, model, max_turns=args.max_turns,
                 host_tool_access=model_grants,
@@ -453,7 +517,9 @@ async def run_native_session(args):
                     pinned_electron_timeline_frame_previews(args.source, host_grants)),
                 required_evidence=required,
                 host_content_revision_tools=host_revisions,
-            host_capture_render_project=capture_render_project,
+                host_capture_render_project=capture_render_project,
+                host_capture_saved_project_identity=capture_saved_project_identity,
+                host_owner_delivery_offer=owner_delivery_offer,
                 receipt_path=args.receipt).run(brief)
     pair_report = {}
     if REVIEWED_RENDER_PAIR in required:
@@ -462,7 +528,20 @@ async def run_native_session(args):
             host_pre_dispatch_rejections=True, host_verified_preview_error_tools=preview_tools)
         pair_report["reviewed_native_render_pair"] = audit["reviewed_native_render_pair"]
         if REVIEWED_AV_PAIR in required:
-            pair_report["reviewed_native_audiovisual_pair"] = audit["reviewed_native_audiovisual_pair"]
+            pair = audit["reviewed_native_audiovisual_pair"]
+            pair_report["reviewed_native_audiovisual_pair"] = pair
+            if capture_render_project is not None and pair is not None:
+                hashes = reviewed_native_snapshot_hashes(outcome["events"], pair)
+                if hashes is None:
+                    raise RuntimeError(
+                        "Reviewed native export pair lacks original render-time snapshot digests")
+                # Only bounded immutable digests enter the owner status. The
+                # actual project snapshots remain in the granted private state.
+                pair_report["reviewed_native_snapshot_sha256"] = hashes
+                media_hashes = reviewed_native_media_hashes(outcome["events"], pair)
+                if media_hashes is None:
+                    raise RuntimeError("Reviewed native pair lacks render-time media digests")
+                pair_report["reviewed_native_media_sha256"] = media_hashes
     return {
         **pair_report,
         "status": outcome["status"],

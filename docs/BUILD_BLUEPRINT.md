@@ -12,7 +12,7 @@
 
 Build **one professionally usable, original, open-source, local-first, self-hostable, model-independent ZX7 Creative Studio / BODY**. A replaceable, genuinely capable creative Brain can research appropriate material, originate ideas, choose **both the art and its method**, inspect actual authorized workspace/media, compose across specialist engines, test the effects of its work, critique genuine image/motion/audio, surgically revise, preserve human work and native editability, and deliver independently verifiable results. It must not require one proprietary model, paid API, hardware vendor or hosted inference service at runtime.
 
-This is a complete, future-extensible creative production environment, not a toy film generator, an editor clone, a 130-tool facade, a hard-coded recipe, or a promise that every artistic task can be executed by today's weakest model. Full A–L scope remains binding, with first professional video/NLE C as an integration vertical and A/B/F/G/I/J dependencies—not a reduction of scope.
+This is a complete, future-extensible creative production environment, not a toy film generator, an editor clone, a 130-tool facade, a hard-coded recipe, or a promise that every artistic task can be executed by today's weakest model. Full A–L scope remains binding. Video/NLE C is one integration workload with A/B/F/G/I/J dependencies, not a mandatory prerequisite for independent studio domains.
 
 Founder priority ordering **(preserve): originality → production-grade system strength → disciplined design/UX → independently measured business value**, except where lower-priority concerns imply serious safety, privacy, rights or reliability harm. “Best” is a comparative, falsifiable aspiration across art, correct media, expressiveness, latency, memory/VRAM, cost, stability, maintainability, portability and accessibility, not a marketing label earned from CI.
 
@@ -27,7 +27,7 @@ The Brain may be general, specialist, local or separately authorized hosted; cap
 | **FIXED** | Visually AND audibly meaningful temporal sensing; not merely numeric stats or file existence | A–L J/G, Master Plan §5.5 |
 | **FIXED** | Real saved editable project, original asset custody, non-destructive revisions, truthful undo/reopen, human override | A/B/C/I/K |
 | **FIXED** | FOSS, local-first, no required paid-model dependency; independent security and rights acceptance | BRIEF, CAPABILITIES |
-| **FIXED** | Complete all A–L; professional evidence before field transition; G1 before claiming C | Master Plan §11, ENGINEERING_STANDARD |
+| **FIXED** | Complete all A–L; professional evidence before claiming each field; G1 before claiming C | Master Plan §11, ENGINEERING_STANDARD |
 | **PREFERRED REUSE RULE** | Inspect existing source-owning native engines, graphics, host gateway, journal and project heads before new systems; actual installed capability and pins belong to the live source map | ENGINEERING_STANDARD and PROJECT_MAP |
 | **CANDIDATE / G2** | CSF minimal typed fabric coordinating intent/observations/actions, adaptive router, model-optimized procedural medium | Master Plan §5, G2; NOT an already proven API |
 | **CANDIDATE** | Runtime specialist models, agent-memory indexes, rich learned perception, safe procedural grammar, exact interchange adapters | Measure expressive gain, cost and safety before adoption |
@@ -77,6 +77,8 @@ Owner creative brief + rights-granted source
 
 The fabric is an **outcome contract** using existing gateways and native sources first. Do not create six microservices for six concepts.
 
+**Runtime attachment:** a compatible replaceable Brain receives actual capabilities through executable discovery and typed native contracts, observes current state, acts within host grants, receives verified results and adapts. No runtime Markdown or manually authored creative prompt pack should be required. The user's brief is intent, not an engineered action script. Protocol metadata and provider transport instructions are distinct from creative scripts; verify which existing instructions remain necessary and remove redundant dependencies only with regression evidence. Measure latency, competence and cross-domain operation rather than claiming an API key creates automatic expertise.
+
 1. **Intent** — arbitrary creative goal, user constraints, context, alternatives and intent provenance. The host must not hardcode genre, mood, camera, duration, style, cut count or a cheaper default artwork.
 2. **State** — real versioned native clips/tracks, masks/keyframes, vector/text shapes, objects/meshes/lights/camera, mixer channels and sources. Observe current real object identities, exact rational clocks, coordinate spaces, original rights and grant boundaries.
 3. **Perception** — source-bound actual decoded frames at relevant intervals, moving sequence where needed, genuine audible signal and semantic observations only with a compatible model. Return time coverage, uncertainty and source; numeric loudness/transcripts alone cannot certify listening, acting or emotion.
@@ -88,9 +90,9 @@ The fabric is an **outcome contract** using existing gateways and native sources
 
 Security invariants: reject stale native revision and fabricated IDs before writes; reject ambiguous side effects without auto-replay; keep source bytes immutable; preserve unknown native metadata or fail closed; isolate generated programs with no default network and bounded CPU/GPU/RAM/time; refuse raw private sound/image cloud transport without separate explicit consent. Human changes invalidate stale Brain snapshots. A refusal is better than silently changing the requested creative direction.
 
-## 5. Exact G1 vertical: observable real creative loop (build order)
+## 5. G1 audiovisual workload: observable real creative loop
 
-This is the **next integrated product outcome**, not a request for yet another narrow “24/24 CI” change. Start with a single complete legally safe audiovisual assignment and advance capability depth until its acceptance gates pass. Use deliberate varied follow-up briefs, not one scripted style.
+This is an integrated audiovisual acceptance workload, not the sole next task or a prerequisite for independent A–L integration. Use a complete legally safe audiovisual assignment to advance capability depth until its acceptance gates pass. Use deliberate varied follow-up briefs, not one scripted style.
 
 **G1-01 — Admission and genuine creative choices.** Given natural-language brief, rights-cleared source, expected visual/audio targets and host grants, a *real model* chooses a nontrivial original creative plan and practical route based on actual installed affordances. Model/tool provenance is captured. Host may reject impossible/unsafe actions but cannot write the aesthetic decisions. Check that no engineer-authored timeline/cut list impersonates model choice.
 
@@ -106,7 +108,7 @@ This is the **next integrated product outcome**, not a request for yet another n
 
 **G1-07 — Failure, security and quality.** Attempt invalid source ID, stale head, license/revocation, malformed model tool call, uncertain write/crash, refused private-media egress and wrong output profile. Record exact layer and cause. Independently grade varied original results against a competent existing professional baseline, including visual timing, intelligibility/mix and aesthetic defects. Graders can disagree; record disagreement, not an invented universal quality percentage.
 
-**G1 exit condition:** all relevant source/rights, actually applied native state, physical picture+sound, autonomous selection, semantic review, nontrivial revision, human collaboration, recovery and independent artistic/security gates accepted on an exact version. Never declare field C complete from an internal fixture, test count, 320×180 clip, or a hosted model reputation. Only after defensible field completion show the owner a concrete original film, then proceed to the next field.
+**G1 exit condition:** all relevant source/rights, actually applied native state, physical picture+sound, autonomous selection, semantic review, nontrivial revision, human collaboration, recovery and independent artistic/security gates accepted on an exact version. Never declare field C complete from an internal fixture, test count, 320×180 clip, or a hosted model reputation. Only after defensible field completion show the owner a concrete original film as a completion showcase. Other independent domains can progress before this gate closes.
 
 **Historical experiments are not fixed requirements.** For real model failures, subsequent source fixes, comparable retests and current permission, read the [mutable failure evidence](../project-brain/EVIDENCE/FAILURE_REGISTER.md) and [execution ledger](../project-brain/EXECUTION_LEDGER.json).
 
@@ -138,15 +140,17 @@ L **Independent release-quality proof.** Cohesive source, packaging/notices, rig
 
 No entire A–L field is currently certified merely because its candidate modules exist. **F01–F14** in [G0 coverage](../project-brain/EVIDENCE/2026-11-12-G0-COVERAGE.md) are proposed representative fixtures; **T01–T24** in the [Master Plan](ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) are verification scenarios. Mark individual outcomes only after independently attached real evidence.
 
-## 7. The staged execution route and no-premature-upgrade rule
+## 7. Acceptance workstreams and no-premature-upgrade rule
+
+G1–G3 are outcome gates, not a mandatory serial task order. Independent shared and domain-specific work progresses by measured dependencies; G4 requires whole-product acceptance.
 
 **G0 — Reconcile first, only once per relevant baseline.** Use [file ownership map](DOCUMENT_MAP.md), [live execution ledger](../project-brain/EXECUTION_LEDGER.json), main SHA, installed engines/availability, open PR overlap and negative runs. Existing full product planning is settled; do not generate another spec every session. Correct one source-grounded gap; avoid wholesale older-PR merges. G0 is complete only when current authority/ownership, all source links and next actual blocker can be resolved without founder rebrief.
 
-**G1 — Finish authentic professional native creative video.** Follow §5; prefer reaching the missing model/artistic result over recycling previously passed native script fixtures. Complete source code, real semantics, independent grade and honest handoff together.
+**G1 — Authentic professional native creative video acceptance.** Follow §5; prefer reaching the missing model/artistic result over recycling previously passed native script fixtures. Complete source code, real semantics, independent grade and honest handoff together.
 
 **G2 — Prove or reject the fabric representation and routing advantage.** On comparable video, motion, 3D and audio tasks, test **A** existing native tool baseline, **B** safe procedural/editable code route, **C** minimal adaptive creative fabric. Match model/settings, rights-cleared media, resource budgets, held-out briefs; measure task expressivity, actual quality, native fidelity, correctness, latency, cost, failure rate and security. *Kill C* if it adds cost/complexity without meaningful advantage; retain the fixed creative outcome using A/B. Do not begin with a giant unmeasured universal JSON.
 
-**G3 — Complete integrated A–L.** Finish D/E/F/G/H and shared A/B/I/J/K with native interoperable creative projects rather than disconnected toys. Use real domain creative tasks; adaptive order follows dependencies, not arbitrary marketing phases.
+**G3 — Complete integrated A–L.** Resolve all domain and shared dependencies, including C/D/E/F/G/H and A/B/I/J/K with native interoperable creative projects rather than disconnected toys. Use real domain creative tasks; adaptive order follows dependencies, not arbitrary marketing phases.
 
 **G4 — Ship safely after external acceptance.** Reproducible install, exact third-party licenses and notices, optional weight/media rights, owner UX, privacy/remote/mobile hardening, durable recovery, performance/cost, field-by-field independent technical/artistic confirmation and owner authorization for public launch.
 
@@ -161,6 +165,32 @@ No entire A–L field is currently certified merely because its candidate module
 5. Run focused offline and real native physical checks, then once a stable code head exists run necessary combined regressions. Do not claim external reviewer independence from self-review. Do not run paid inference merely to test source schema errors.
 6. Real semantic/model or craft claims require separately authorized *actual* inference and held-out professional evaluation, with objective artifacts and failure history. Offline CI is a different tier of evidence.
 7. Update **only mutable** [execution ledger](../project-brain/EXECUTION_LEDGER.json), [STATE](../project-brain/STATE.md), [RISKS](../project-brain/RISKS.md), [EVIDENCE](../project-brain/EVIDENCE/INDEX.md) and append a new decision **only if a decision actually changes**. Keep errors and tentative diagnoses distinct. Leave next executable task with exact preconditions.
+
+### Outcome-first execution refinement (27 November)
+
+Primary progress is a reproducible capability that closes an actual acceptance dependency, or a causally resolved uncertainty, not files, tools, activity, CI or historical variant counts. The [dated assessment](../project-brain/EVIDENCE/2026-11-27-ENGINEERING-STRATEGY-ASSESSMENT.md) records evidence, not a competing plan.
+
+| Frontier | Entry / exit condition |
+|---|---|
+| Baseline and relevant consolidation | Refresh exact source/PR/CI, preserve archive; resolve integrity, security, data-loss and chosen workload blockers. Unrelated variants stay open; no ref deletion. Integrate small coherent increments. |
+| Isolate critical uncertainty | Match source, grants, input, model/settings and budget for paired controls where possible. Separate provider/ABI, tool choice, native execution, physical verification, semantic perception and professional assessment. If trusted control fails, fix that layer; if transport unavailable, record and stop, no blind retry. |
+| Authentic loop | Choose highest-information feasible workload by dependency, not fixed domain order. Preserve audiovisual G1 obligations. Actual model intent, editable native execution, meaningful semantic observation and intentional revision. Host may mechanically acquire/align verifier evidence under existing grants, never fabricate model perception or select art. |
+| Efficiency and G2 | Measure success, model turns, tokens, round trips, latency, cost, native fidelity and independent quality on matched workloads; reject changes that do not earn complexity. G2 A/B/C remains an experiment, not a universal runtime mandate. |
+| Domain and release closure | Reuse shared foundations for all A–L. Actual human, rights/security, recovery, install and independently assessed professional gates remain mandatory. |
+
+**Before implementation:** name concrete acceptance blocker, source owner, negative/missing evidence, smallest falsifiable change, matched control, success/failure condition, consent/resources and stop rule. Otherwise maintenance backlog, unless needed for security/correctness/release. Do not reopen accepted work without changed dependency or contrary evidence. The host may verify and align evidence and perform explicitly authorized deterministic substeps of a selected action; not silently choose edits, save on behalf of a model when a gate requires its save, replay uncertain writes, waive model observation or widen grants. Benchmark changes need comparable evidence and retained negative history.
+
+The [28 November product audit](../project-brain/EVIDENCE/2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md) records exact Brain–BODY failure evidence, design judgment and the closure experiments behind this rule.
+
+### Critical creative-interface decision rule
+
+- Qualify provider/ABI, model tool competence, semantic perception and creative reasoning separately before expensive full-loop trials. Use the smallest discriminating control; connectivity alone proves none of these.
+- Compare existing granular native, compositional/procedural and hybrid routes on matched models/settings, held-out briefs, source inputs, grants and budgets before introducing new abstraction. Measure success/failure class, turns/tokens, calls, latency/cost, native fidelity, independently assessed creative quality and safety. Reject routes that do not earn their complexity; unrun comparisons remain unproven.
+- Host owns deterministic reference/state resolution, explicitly authorized dependent execution, physical verification and comparable-time evidence. Brain owns artistic intent, method, meaningful semantic observation and revision. Preserve existing explicit model-save and observation gates unless a separately reviewed evidence-backed change preserves their meaning. Neither numeric/hash receipts nor physical differences certify semantic understanding or artistic improvement.
+- Separate technical integration, genuine creative loop, independent professional evaluation and release. Stabilize regressions, integrate small coherent units, use focused tests then necessary full physical checks on stable candidates; no full-draft merge before its gates. Never drop coverage or bypass admission to accelerate. Select by critical acceptance dependency and information value, not ease of generating commits.
+- Exit each work unit with reproducible accepted capability, resolved uncertainty or exact evidenced blocker and next executable dependency. Continue independent unblocked work; no repeated planning or invented completion percentage.
+
+**Verification:** focused failing regression then passing candidate; affected integration and adversarial checks; full native/physical and release-required matrix on coherent stable candidate. Reuse exact unaffected receipts only with explicit source/dependency equivalence. No skipped/failed evidence as pass. Preflight live model tests offline; use existing bounded consent only; never substitute scripted success for genuine comparable retest. Independent professional review remains separate. Avoid new planning documents; update STATE/ledger/evidence at meaningful outcomes.
 
 For any accepted claim, record: source commit+pin, model/settings (if any), original rights/media hash, grants, native project/revision/source IDs, chosen tool decision, full event/acknowledgement refs, physical export hashes/stream facts, timed observation coverage, comparison verdict, independent assessor, cost/performance and artifact retention. **Raw traces belong in access-controlled evidence storage, not secrets/private media in public Git.** Markdown may link a trace but never impersonate its full event list.
 

@@ -36,6 +36,71 @@ TOOLS = [
 ]
 
 
+class OwnerDeliveryGuidanceTests(unittest.TestCase):
+    def test_pinned_native_delivery_guidance_is_exact_and_bounded(self):
+        from studio_next.body_editor_delivery import owner_delivery_native_tool_hint
+        approved = {"width": 640, "height": 360, "fps": 24,
+                    "max_duration": 6, "video_codec": "h264"}
+        hint = owner_delivery_native_tool_hint(approved)
+        self.assertIn("640x360", hint)
+        self.assertIn("24fps", hint)
+        self.assertIn("h264_project", hint)
+        self.assertIn("resolution=project", hint)
+        self.assertIn("h264_hd", hint)
+        self.assertIn("readiness.deliveryTarget", hint)
+        self.assertIn("new outputPath", hint)
+        self.assertLessEqual(len(hint), 245)  # NVIDIA native tool description truncates at 256.
+        self.assertNotIn("/home/", hint)
+
+    def test_owner_delivery_guidance_is_absent_without_verified_host_profile(self):
+        from studio_next.body_editor_delivery import owner_delivery_native_tool_hint
+        self.assertIsNone(owner_delivery_native_tool_hint(None))
+        with self.assertRaisesRegex(ValueError, "dimensions"):
+            owner_delivery_native_tool_hint({"width": 641, "height": 360,
+                "fps": 24, "max_duration": 6, "video_codec": "h264"})
+
+
+class NativeAdmissionCompatibilityTests(unittest.TestCase):
+    def test_only_source_verified_unconstrained_export_aliases_are_admitted(self):
+        from studio_next.body_editor_mcp import native_admission_validator
+        schema = {"type": "object", "properties": {"target": {"type": "string"}}}
+        self.assertFalse(native_admission_validator(schema).is_valid({"codec": "h265"}))
+        trusted = native_admission_validator(schema, source_verified_export_aliases=True)
+        for name, value in (("codec", "h265"), ("aspect", "vertical"),
+                            ("size", 720), ("preset", "h264_hd")):
+            with self.subTest(name=name):
+                self.assertTrue(trusted.is_valid({name: value}))
+        self.assertFalse(trusted.is_valid({"fakePermission": "write"}))
+        self.assertFalse(trusted.is_valid({"codec": {"bad": 1}}))
+        self.assertFalse(trusted.is_valid({"__zx7ExpectedRevision": "x" * 40}))
+        self.assertFalse(native_admission_validator(
+            {**schema, "additionalProperties": False},
+            source_verified_export_aliases=True).is_valid({"codec": "h265"}))
+        self.assertEqual(schema, {"type": "object", "properties": {"target": {"type": "string"}}})
+
+    def test_exact_revision_wire_projection_preserves_payload_and_rejects_spoof(self):
+        from studio_next.body_editor_mcp import native_revision_schema_arguments
+        revision = "x" * 40
+        args = {"assetId": "real", "previewOnly": False,
+                "__zx7ExpectedRevision": revision}
+        granted = frozenset({"add_asset_to_timeline"})
+        self.assertEqual(native_revision_schema_arguments("add_asset_to_timeline", args, granted),
+                         {"assetId": "real", "previewOnly": False})
+        self.assertEqual(args["__zx7ExpectedRevision"], revision)
+        for name, bad, tools in (
+            ("add_asset_to_timeline", args, frozenset()),
+            ("get_project", args, granted),
+            ("add_asset_to_timeline", {**args, "previewOnly": True}, granted),
+            ("add_asset_to_timeline", {**args, "__zx7ExpectedRevision": "short"}, granted),
+            ("add_asset_to_timeline", {"assetId": "real", "previewOnly": False}, granted),
+        ):
+            with self.subTest(name=name, args=bad, tools=tools):
+                with self.assertRaises(ValueError):
+                    native_revision_schema_arguments(name, bad, tools)
+        preview = {"assetId": "real", "previewOnly": True}
+        self.assertEqual(native_revision_schema_arguments("add_asset_to_timeline", preview, granted), preview)
+
+
 @unittest.skipUnless(HAS_MCP, "Install the editor extra to test the official MCP protocol")
 class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -123,6 +188,54 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.requests[-1]["params"], {
                 "name": "update_text_clip", "arguments": {"clipId": "native", "text": "Revised"}})
         await self.with_session(check)
+
+    async def test_source_attested_overlay_overwrite_warning_is_in_real_mcp_model_contract(self):
+        """A genuine 120B trial lost original footage after adding a title on its
+        only video lane. Exact source describes overwrite, not an auto-fix.
+        """
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        self.tools = [
+            {"name": "add_track", "description": "Native add track", "inputSchema": {
+                "type": "object", "properties": {"type": {"type": "string"}}}},
+            {"name": "add_text_clip", "description": "Native title", "inputSchema": {
+                "type": "object", "properties": {
+                    "text": {"type": "string"}, "trackId": {"type": "string"},
+                    "transform": {"type": "object", "properties": {
+                        "opacity": {"type": "number"}}},
+                    "animationPreset": {"type": "string", "enum": ["fade", "none"]}},
+                "required": ["text"]}},
+            {"name": "add_shape_clip", "description": "Native shape", "inputSchema": {
+                "type": "object", "properties": {"trackId": {"type": "string"}}}},
+        ]
+        from studio_next.nvidia_native_tool_model import NvidiaNativeToolCreativeModel
+
+        async def check(session, *, expected_track_grant):
+            catalog = {t.name: t for t in (await session.list_tools()).tools}
+            for name in ("add_text_clip", "add_shape_clip"):
+                self.assertIn("SAME-TRACK OVERWRITE", catalog[name].description[:256])
+                self.assertIn("original footage", catalog[name].description[:256])
+                if expected_track_grant:
+                    self.assertIn("add_track", catalog[name].description[:256])
+                else:
+                    self.assertIn("not granted", catalog[name].description[:256])
+                    self.assertNotIn("add_track", catalog[name].description[:256])
+                specs, _ = NvidiaNativeToolCreativeModel._tool_surface({
+                    "available_actions": ["invoke"], "compact_tool_catalog": False,
+                    "actual_granted_native_tools": [name],
+                    "host_native_tool_contracts": [{
+                        "name": name, "description": catalog[name].description,
+                        "input_schema": catalog[name].input_schema}]})
+                self.assertIn("SAME-TRACK OVERWRITE", specs[0]["function"]["description"])
+            self.assertFalse(any(r["method"] == "tools/call" for r in self.requests))
+
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={
+            "add_track": "write", "add_text_clip": "write", "add_shape_clip": "write"})
+        await self.with_session(lambda session: check(session, expected_track_grant=True),
+                                native_source=source)
+        self.client = LocalEditorClient(self.endpoint, allowed_tools={
+            "add_text_clip": "write", "add_shape_clip": "write"})
+        await self.with_session(lambda session: check(session, expected_track_grant=False),
+                                native_source=source)
 
     async def test_source_attested_content_diagnostics_reads_native_state_without_writes(self):
         source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
@@ -258,6 +371,16 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                     "endSeconds": 6, "previewOnly": False}
 
             async def check(session):
+                tools = {t.name: t for t in (await session.list_tools()).tools}
+                for name in ("export_timeline", "check_export_readiness"):
+                    metadata = tools[name]
+                    self.assertIn("OWNER DELIVERY:", metadata.description)
+                    self.assertIn("640x360", metadata.description[:256])
+                    self.assertIn("target=h264_project", metadata.description[:256])
+                    self.assertIn("resolution=project", metadata.description[:256])
+                    self.assertIn("h264_hd default overrides custom", metadata.description[:256])
+                    self.assertIn("check_export_readiness.deliveryTarget", metadata.description[:256])
+                    self.assertIn("OWNER DELIVERY", metadata.input_schema["description"])
                 def receipt(width=640, height=360, fps=24, duration=6, codec="h264"):
                     return json.dumps({
                         "ready": True, "blockers": [],
@@ -315,11 +438,20 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                     "container": "mp4", "videoCodec": "h264",
                     "width": 1920, "height": 1080, "fps": 24, "duration": 6}})
             async def no_constraint(session):
+                unscoped = {t.name: t for t in (await session.list_tools()).tools}
+                for tool_name in ("check_export_readiness", "export_timeline"):
+                    self.assertNotIn("OWNER DELIVERY", unscoped[tool_name].description or "")
+                    self.assertNotIn("description", unscoped[tool_name].input_schema)
                 unconstrained_args = {**args, "codec": "h265"}
                 accepted = await session.call_tool("export_timeline", unconstrained_args)
                 self.assertFalse(accepted.is_error)
                 self.assertEqual(self.requests[-1]["params"], {
                     "name": "export_timeline", "arguments": unconstrained_args})
+                self.assertEqual(self.requests[-2]["params"]["arguments"]["codec"], "h265")
+                before = len(self.requests)
+                denied = await session.call_tool("export_timeline", {**args, "fakePermission": "write"})
+                self.assertTrue(denied.is_error)
+                self.assertEqual(len(self.requests), before)
             await self.with_session(no_constraint, native_source=source)
 
     async def test_owner_delivery_fails_closed_without_native_readiness_authority(self):
@@ -361,6 +493,48 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                              [{**corrected, "previewOnly": True}, corrected])
 
         await self.with_session(check, native_source=source)
+
+    async def test_cas_placement_preflight_receipt_survives_actual_sdk_gateway(self):
+        """Use the real HTTP/SDK bridge and gateway; only source pin is a fixture."""
+        from unittest.mock import patch
+        from studio_next.body_editor_client import host_pre_dispatch_rejection
+        from studio_next.capability_gateway import CapabilityGateway
+        from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
+        tool = "add_asset_to_timeline"
+        grants = {tool: "write"}
+        self.tools = [{"name": tool, "inputSchema": {"type": "object", "properties": {
+            "assetId": {"type": "string"}, "previewOnly": {"type": "boolean"}}}}]
+        self.client = LocalEditorClient(self.endpoint, allowed_tools=grants)
+        public = {"assetId": "existing-video", "previewOnly": False}
+        revision = "12345678-1234-1234-1234-123456789abc:123"
+        policy = {"reader": lambda: {"assets": {"ids": ["existing-video"], "complete": True},
+                                    "__zx7_live_revision": revision},
+                  "rules": {tool: {"/assetId": "assets"}},
+                  "fence": {tool: {"inventory_key": "__zx7_live_revision",
+                      "argument_key": "__zx7ExpectedRevision",
+                      "rejected_code": "ZX7_STALE_NATIVE_REVISION"}}}
+        async def check(session):
+            self.native_fail = True
+            self.native_text = "No placeable asset matched fixture."
+            gateway = CapabilityGateway({"editor": (session, grants, {}, None, {}, policy)},
+                                        trusted_pre_dispatch_sources=("editor",))
+            await gateway.refresh()
+            view = CapabilityGatewayMcpSession(gateway, "editor")
+            refused = await view.call_tool(tool, public)
+            self.assertTrue(refused.is_error)
+            self.assertEqual(host_pre_dispatch_rejection(refused, tool, public),
+                             "placement_plan_unconfirmed")
+            self.assertEqual(gateway.evidence()[-1]["state"], "host_rejected_no_native_write")
+            self.assertEqual([r["params"]["arguments"] for r in self.requests
+                              if r["method"] == "tools/call"],
+                             [{**public, "previewOnly": True}])
+        source = Path(__file__).resolve().parents[1] / "third_party" / "velorn"
+        with patch("studio_next.native_editor_diagnostics.native_content_diagnostics_source_verified",
+                   return_value=True), patch("studio_next.native_editor_identity.pinned_native_revision_tools",
+                   return_value=frozenset({tool})), patch(
+                       "studio_next.native_editor_source_pin.pinned_electron_asset_placement_previews",
+                       return_value=frozenset({tool})):
+            await self.with_session(check, native_source=source)
 
     async def test_rejected_export_path_can_be_corrected_without_replaying_a_write(self):
         """Real hosted runs spent turns on legitimate no-overwrite refusals.
@@ -416,7 +590,8 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 from studio_next.capability_mcp_session import CapabilityGatewayMcpSession
                 from studio_next.capability_session_budget import CapabilitySessionBudget
                 budget = CapabilitySessionBudget(max_calls=2, max_writes=2)
-                gateway = CapabilityGateway({"editor": (session, grants)}, session_budget=budget)
+                gateway = CapabilityGateway({"editor": (session, grants)}, session_budget=budget,
+                                            trusted_pre_dispatch_sources=("editor",))
                 await gateway.refresh()
                 admitted = CapabilityGatewayMcpSession(gateway, "editor")
                 outcome = await NativeCreativeControl(admitted, model, max_turns=3,
@@ -587,6 +762,45 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((await session.call_tool("get_project", {})).is_error)
         await self.with_session(check)
 
+    async def test_upstream_undeclared_native_parameters_never_reach_stateful_editor(self):
+        import copy
+        self.tools=copy.deepcopy(TOOLS)
+        self.tools[1]["inputSchema"].pop("additionalProperties")
+        async def check(session):
+            advertised=[tool for tool in (await session.list_tools()).tools
+                        if tool.name=="update_text_clip"][0].input_schema
+            self.assertNotIn("additionalProperties",advertised)
+            forbidden=await session.call_tool("update_text_clip",{
+                "clipId":"real", "fakePermission":"write"})
+            self.assertTrue(forbidden.is_error)
+            self.assertFalse(any(row["method"]=="tools/call" for row in self.requests))
+            permitted=await session.call_tool("update_text_clip",{
+                "clipId":"real","text":None})
+            self.assertFalse(permitted.is_error)
+            self.assertEqual(sum(row["method"]=="tools/call" for row in self.requests),1)
+        await self.with_session(check)
+
+    async def test_nested_original_artistic_schema_not_accidentally_sealed(self):
+        import copy
+        self.tools=copy.deepcopy(TOOLS)
+        self.tools[1]["inputSchema"]={
+            "type":"object",
+            "required":["clipId","visual"],
+            "properties":{
+                "clipId":{"type":"string"},
+                "visual":{"type":"object","properties":{
+                    "layer":{"type":"string"}}},
+            },
+        }
+        async def check(session):
+            allowed=await session.call_tool("update_text_clip",{
+                "clipId":"real",
+                "visual":{"layer":"title","original_artist_shader_parameters":{
+                    "contrast":0.77,"custom":[1,2,3]}}})
+            self.assertFalse(allowed.is_error)
+            self.assertEqual(sum(row["method"]=="tools/call" for row in self.requests),1)
+        await self.with_session(check)
+
     async def test_native_tool_error_is_preserved_and_session_remains_usable(self):
         async def check(session):
             self.native_fail = True
@@ -705,6 +919,26 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
         await self.with_session(no_read, access=frozenset({"write"}), export_verifier=verifier)
         self.assertEqual(observed, [("/trusted/export.mp4", {"require_audio": True}),
                                     ("/etc/passwd", None)])
+
+    async def test_missing_required_audio_returns_only_input_bound_host_evidence(self):
+        from studio_next.body_editor_client import native_input_digest
+        from studio_next.body_editor_export import HOST_EXPORT_FAILURE_META, NativeExportMissingAudio
+
+        args = {"path": "/trusted/export.mp4", "expected": {"require_audio": True}}
+
+        def verifier(path, expected=None):
+            self.assertEqual((path, expected), (args["path"], args["expected"]))
+            raise NativeExportMissingAudio("b" * 64, cached=True)
+
+        async def check(session):
+            result = await session.call_tool("zx7_verify_native_export", args)
+            self.assertTrue(result.is_error)
+            self.assertEqual(result.meta[HOST_EXPORT_FAILURE_META], {
+                "inputs_sha256": native_input_digest(args), "export_sha256": "b" * 64,
+                "missing_required_audio": True, "unchanged_already_inspected": True})
+            self.assertFalse(any(x["method"] == "tools/call" for x in self.requests))
+
+        await self.with_session(check, export_verifier=verifier)
 
     async def test_a_frame_is_only_visible_after_its_exact_export_was_verified(self):
         observers = []
@@ -1007,6 +1241,36 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
                 self.assertGreater(max(x["sample_peak_normalized"] for x
                                        in receipt["audio_timeline"]["intervals"]), 0.02)
                 self.assertFalse(receipt["numeric_audio_not_semantic_listening"] is False)
+                from studio_next.native_render_evidence import (
+                    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_REVIEW_FIELD,
+                    AV_WINDOW_AUDIO_FIELD, AV_PCM_FIELD, av_review_values,
+                    av_window_audio_values,
+                )
+                # Full actual three-second source, with the same decoder
+                # evidence as the two existing separate read instruments.
+                full = {**query, "start_seconds": 0, "duration_seconds": 3,
+                        "frame_seconds": [0.5, 1.5, 2.5]}
+                physical = await session.call_tool(ACTIVE_AV_WINDOW, full)
+                self.assertFalse(physical.is_error, physical)
+                proof = json.loads(physical.content[0].text)
+                separate_frames = await session.call_tool(
+                    "zx7_observe_verified_export_samples",
+                    {"path": str(movie), "at_seconds": full["frame_seconds"]})
+                separate_audio = await session.call_tool(AUDIO_ENVELOPE,
+                    {k: full[k] for k in ("path", "start_seconds", "duration_seconds", "bins")})
+                self.assertFalse(separate_frames.is_error, separate_frames)
+                self.assertFalse(separate_audio.is_error, separate_audio)
+                self.assertEqual(proof["samples"], json.loads(separate_frames.content[0].text)["samples"])
+                self.assertEqual(proof["audio_timeline"], json.loads(separate_audio.content[0].text))
+                receipt_event = {
+                    "tool": ACTIVE_AV_WINDOW,
+                    AV_REVIEW_FIELD: av_review_values(ACTIVE_AV_WINDOW, proof),
+                    AV_WINDOW_AUDIO_FIELD: av_review_values(AUDIO_ENVELOPE, proof["audio_timeline"]),
+                    AV_PCM_FIELD: proof["audio_timeline"]["preview_pcm_sha256"],
+                    "image_sha256": [hashlib.sha256(base64.b64decode(block.data)).hexdigest()
+                                     for block in physical.content[1:]],
+                }
+                self.assertEqual(av_window_audio_values(receipt_event), [0, 3])
                 altered = movie.read_bytes() + b"post-verification mutation"
                 movie.write_bytes(altered)
                 failed = await session.call_tool(

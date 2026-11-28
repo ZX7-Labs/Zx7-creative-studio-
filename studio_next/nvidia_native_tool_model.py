@@ -30,8 +30,11 @@ NATIVE_DIRECT_TOOL_SYSTEM = """You control a real native creative editor.
 Independently choose original artistic edits from the owner's brief and real
 observations. Use the ACTUAL named functions offered in this request. Each
 zx7_native_* function maps to exactly one installed host-authorized editor
-operation; its inputs are typed under the required inputs field. Supply your
-own concise reason. You may choose any exposed creative operation; the
+operation; use EXACTLY its offered function parameter names and types.
+Use an inputs property ONLY if it exists in that function's parameter schema;
+never mix direct native parameters with an inputs envelope or invent extra keys.
+A function with only a reason parameter needs no native inputs. Supply your own concise
+reason. You may choose any exposed creative operation; the
 host does not prescribe a shot list or author edits.
 You do not need to discover/describe tools already provided as functions.
 Use real read results to learn asset IDs, project state, frame identities and
@@ -78,6 +81,83 @@ def _meta_parameters(action: str, choices: list[str] | None = None) -> dict:
         "required": needed + ["reason"], "additionalProperties": False}
 
 
+def _direct_native_fields(schema: dict) -> bool:
+    """Only project a plain closed native object; keep scoped schemas wrapped."""
+    props = schema.get("properties")
+    required = schema.get("required", [])
+    return (set(schema) <= {"type", "properties", "required", "additionalProperties"}
+            and schema.get("type") == "object"
+            and type(props) is dict and not ({"reason", "inputs"} & props.keys())
+            and type(required) is list and all(type(k) is str and k in props for k in required)
+            and len(required) == len(set(required))
+            and schema.get("additionalProperties", False) is False)
+
+
+def _has_schema_scope(value):
+    if isinstance(value, dict):
+        return bool({"$ref", "$dynamicRef", "$recursiveRef", "$id", "$anchor",
+                     "$dynamicAnchor", "$schema", "$defs", "definitions"} & value.keys()) or any(
+                         _has_schema_scope(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_has_schema_scope(v) for v in value)
+    return False
+
+
+def _direct_native_signature(schema):
+    # Optional-only nonempty schemas keep an explicit inputs envelope, so
+    # omission cannot silently select a default write. Explicit direct fields
+    # can still be normalized losslessly by the decoder.
+    return (_direct_native_fields(schema) and not _has_schema_scope(schema)
+            and (not schema["properties"] or bool(schema.get("required"))))
+
+
+def _rejected_native_argument_layout(args: dict, schema: dict) -> str:
+    """Bounded, value-free diagnostics for malformed provider function arguments.
+
+    Only the fixed envelope names are printed. Unknown field names, tool
+    arguments, reasons, media paths and prompt text must never enter logs.
+    """
+    def kind(key):
+        if key not in args:
+            return "missing"
+        value = args[key]
+        if value is None:
+            return "null"
+        if type(value) is bool:
+            return "boolean"
+        if type(value) is dict:
+            return "object"
+        if type(value) is list:
+            return "array"
+        if type(value) is str:
+            return "string"
+        if type(value) in (int, float):
+            return "number"
+        return "other"
+
+    properties = schema.get("properties")
+    native = set(properties) if type(properties) is dict else set()
+    envelope = {"inputs", "reason"}
+    native_direct = sum(key in native and key not in envelope for key in args)
+    unknown = sum(key not in envelope and key not in native for key in args)
+    nested = args.get("inputs")
+    nested_native = sum(key in native for key in nested) if type(nested) is dict else 0
+    return (f"inputs={kind('inputs')} reason={kind('reason')} "
+            f"native_direct={native_direct} unknown={unknown} "
+            f"nested_native={nested_native}")
+
+
+class _NativeFunctionInputsShapeError(LocalModelOutputError):
+    """Keep the host's finite error code and append only non-value diagnostics."""
+
+    def __init__(self, args: dict, schema: dict):
+        super().__init__("native_function_inputs_shape")
+        self.layout = _rejected_native_argument_layout(args, schema)
+
+    def __str__(self):
+        return f"{super().__str__()} [{self.layout}]"
+
+
 class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
     """Provider-native function selection, native host grants never broadened."""
 
@@ -99,10 +179,35 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
         compact = copy.deepcopy(context)
         compact.pop("host_native_tool_contracts", None)
         compact.pop("host_declared_tool_hints", None)
+        feedback = compact.get("last_rejected_model_output_feedback")
+        if isinstance(feedback, dict) and feedback.pop("return_one_unambiguous_json_object", False):
+            feedback["choose_one_offered_function_call"] = True
+            if feedback.get("reason_code") in ("native_function_not_currently_offered",
+                                               "unknown_or_ungranted_native_function"):
+                feedback["native_function_scope"] = (
+                    "Choose one exact name from current_provider_function_names. "
+                    "Historical receipts and tool names are not callable functions.")
+            if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID and feedback.get(
+                    "reason_code") in ("native_function_inputs_shape",
+                                      "native_function_missing_reason"):
+                # Omni's actual direct native functions omit an inputs property.
+                # The previous correction prompt falsely told Omni to add
+                # inputs alongside native fields (real failed G1 run
+                # 45544449431). Never relax the strict host parser; tell
+                # the model only how to honor the offered schema.
+                feedback["native_function_argument_format"] = (
+                    "Use exactly the selected function's offered parameter "
+                    "property names. Include a nonempty string reason. "
+                    "Do not add inputs unless that property is offered; "
+                    "never mix direct native fields with an inputs envelope.")
+            elif feedback.get("reason_code") == "native_function_inputs_shape":
+                feedback["required_native_function_arguments"] = {
+                    "inputs": "object (use {} for no inputs)",
+                    "reason": "nonempty string"}
         return super()._messages(compact, images)
 
     @staticmethod
-    def _tool_surface(context):
+    def _tool_surface(context, *, omit_empty_inputs=False):
         if not isinstance(context, dict):
             raise NvidiaConfigurationError("Trusted native tool context required")
         allowed = context.get("available_actions")
@@ -137,6 +242,10 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             if fn_name in mapping:
                 raise NvidiaConfigurationError("Native tool function name collision")
             mapping[fn_name] = ("invoke", name)
+            direct = omit_empty_inputs and _direct_native_signature(schema)
+            properties = (copy.deepcopy(schema["properties"]) if direct
+                          else {"inputs": copy.deepcopy(schema)})
+            properties["reason"] = {"type": "string", "minLength": 1}
             functions.append({"type": "function", "function": {
                 "name": fn_name,
                 "description": (
@@ -144,11 +253,9 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                     ". Native source description: " + spec["description"][:256]),
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "inputs": copy.deepcopy(schema),
-                        "reason": {"type": "string", "minLength": 1},
-                    },
-                    "required": ["inputs", "reason"],
+                    "properties": properties,
+                    "required": (list(schema.get("required", [])) + ["reason"]
+                                 if direct else ["inputs", "reason"]),
                     "additionalProperties": False,
                 },
             }})
@@ -193,20 +300,52 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
 
     def _call_as_native_tool(self, context, *, images=(), audio=()):
         self.last_call_usage = None
-        functions, mapping = self._tool_surface(context)
+        omit_empty_inputs = self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID
+        functions, mapping = self._tool_surface(context, omit_empty_inputs=omit_empty_inputs)
+        # The actual provider function array is the decision-local authority.
+        # A real host grant or cached search candidate can be temporarily
+        # unavailable (e.g. an already-current save). Do not present stale
+        # names or duplicate input hints as other callable functions.
+        visible = dict(context)
+        visible.pop("actual_granted_native_tools", None)
+        visible.pop("host_selected_native_input_hints", None)
+        visible["available_actions"] = list(dict.fromkeys(action for action, _ in mapping.values()))
+        visible["selectable_native_tools"] = [name for action, name in mapping.values()
+                                              if action == "invoke"]
+        visible["current_provider_function_names"] = list(mapping)
+        if "describe" not in visible["available_actions"]:
+            visible["inspectable_native_tools"] = []
         payload = {
             "model": self.settings.model_id,
             "stream": False,
             # Validated locally and stripped by NvidiaCreativeModel._open_request,
             # NOT advertised as a provider-side JSON Schema guarantee.
             "response_format": {"type": "json_object"},
-            "messages": (self._messages_with_audio(context, images, audio)
-                         if audio else self._messages(context, images)),
+            "messages": (self._messages_with_audio(visible, images, audio)
+                         if audio else self._messages(visible, images)),
             "tools": functions,
-            "tool_choice": "required",
+            # Omni's required-mode grammar rejects native uniqueItems schemas.
+            # Preserve the full schema; the host still requires exactly one typed call.
+            "tool_choice": "auto" if self.settings.model_id == NVIDIA_OMNI_AUDIO_MODEL_ID else "required",
             "parallel_tool_calls": False,
         }
         payload.update(self.settings.sampling)
+        # NVIDIA's Super VL shares the completion budget between internal
+        # reasoning and the actual function call. Genuine one-use G1 #45731089541
+        # exhausted the host's two recovery decisions on truncated reasoning.
+        # Only when the trusted controller reports a no-dispatch truncation,
+        # preserve the SAME one-decision/tool/grant budget but use the provider's
+        # documented direct-response mode for that correction turn. Ordinary
+        # creative turns remain on the selected low-reasoning configuration.
+        feedback = context.get("last_rejected_model_output_feedback")
+        if (self.settings.model_id == "nvidia/nemotron-3.5-super-vl-120b-a12b"
+                and payload.get("reasoning_effort") in ("low", "high")
+                and isinstance(feedback, dict)
+                and feedback.get("reason_code") == "truncated_tool_decision"
+                and feedback.get("no_native_dispatch") is True
+                and type(feedback.get("remaining_model_output_corrections")) is int
+                and feedback["remaining_model_output_corrections"] in (0, 1)):
+            payload["reasoning_effort"] = "none"
         try:
             with self._open_request(payload) as response:
                 raw = response.read(self.settings.max_response_bytes + 1)
@@ -232,9 +371,18 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
             if not isinstance(calls, list) or len(calls) != 1 or not isinstance(calls[0], dict):
                 raise LocalModelOutputError("missing_or_multiple_native_tool_calls")
             fn = calls[0].get("function")
-            if (not isinstance(fn, dict) or fn.get("name") not in mapping or
-                    type(fn.get("arguments")) is not str):
+            if not isinstance(fn, dict) or type(fn.get("name")) is not str:
+                raise LocalModelOutputError("invalid_native_tool_envelope")
+            if fn["name"] not in mapping:
+                # Distinguish a stale, known host candidate from a fabricated
+                # function without recording the model's arbitrary name.
+                grant_key = ("selectable_native_tools" if context["compact_tool_catalog"]
+                             else "actual_granted_native_tools")
+                if fn["name"] in {_provider_function(name) for name in context[grant_key]}:
+                    raise LocalModelOutputError("native_function_not_currently_offered")
                 raise LocalModelOutputError("unknown_or_ungranted_native_function")
+            if type(fn.get("arguments")) is not str:
+                raise LocalModelOutputError("invalid_native_function_arguments")
             try:
                 args = _model_json(fn["arguments"])
             except ValueError:
@@ -243,10 +391,26 @@ class NvidiaNativeToolCreativeModel(NvidiaToolCreativeModel):
                 raise LocalModelOutputError("native_function_missing_reason")
             action, name = mapping[fn["name"]]
             if action == "invoke":
-                if set(args) != {"inputs", "reason"} or type(args["inputs"]) is not dict:
-                    raise LocalModelOutputError("native_function_inputs_shape")
+                contract = next(spec["input_schema"] for spec in
+                                context["host_native_tool_contracts"]
+                                if spec["name"] == name)
+                if omit_empty_inputs and _direct_native_fields(contract):
+                    if set(args) == {"inputs", "reason"} and type(args["inputs"]) is dict:
+                        inputs = args["inputs"]
+                    elif "inputs" not in args and (set(args) != {"reason"}
+                          or _direct_native_signature(contract)):
+                        inputs = {k: v for k, v in args.items() if k != "reason"}
+                    else:
+                        raise _NativeFunctionInputsShapeError(args, contract)
+                    if (not set(inputs) <= contract["properties"].keys()
+                            or not set(contract.get("required", [])) <= inputs.keys()):
+                        raise _NativeFunctionInputsShapeError(args, contract)
+                elif set(args) == {"inputs", "reason"} and type(args["inputs"]) is dict:
+                    inputs = args["inputs"]
+                else:
+                    raise _NativeFunctionInputsShapeError(args, contract)
                 return {"action": "invoke",
-                        "arguments": {"tool": name, "inputs": args["inputs"]},
+                        "arguments": {"tool": name, "inputs": inputs},
                         "reason": args["reason"]}
             if action == "search":
                 allowed_keys = ({"query", "reason"}, {"query", "limit", "reason"})
@@ -294,6 +458,9 @@ class NvidiaOmniNativeToolCreativeModel(NvidiaNativeToolCreativeModel):
     competence and semantic sound perception require separate live evaluation.
     No WAV leaves the process without explicit consent and source-hash binding.
     """
+
+    # Exact Omni adapter implements separately consented original WAV transport.
+    supports_source_bound_wav_input = True
 
     def __init__(self, settings=None, *, system_prompt=None,
                  allow_image_upload=False, allow_original_audio_upload=False):

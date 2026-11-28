@@ -7,6 +7,7 @@ and never installs models, accesses the network or authorizes a mutation.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import os
 import subprocess
@@ -51,6 +52,75 @@ _PINNED_CLIP_EDIT_PREVIEWS = (
 
 
 
+_PINNED_DEFAULT_PLAN_PREVIEWS = ("create_timeline",)
+_PINNED_EXPLICIT_PLAN_PREVIEWS = ("add_text_clip", "add_shape_clip", "export_timeline")
+
+
+def source_verified_plan_preview_receipt(tool, inputs, response, attested_tools) -> bool:
+    """Recognize the reviewed flat MCP plan envelopes, never a write receipt."""
+    if (not source_verified_preview_intent(tool, inputs, attested_tools) or
+            type(response) is not dict or response.get("action") != tool):
+        return False
+    if tool == "create_timeline":
+        if (set(response) != {"previewOnly", "action", "message", "plan", "suggestedApplyCall"}
+                or response["previewOnly"] is not True
+                or response["message"] != "Sequence creation plan only. No timeline was created."):
+            return False
+        plan, suggestion = response["plan"], response["suggestedApplyCall"]
+        if (type(plan) is not dict or set(plan) != {
+                "action", "previewOnly", "requestedName", "name", "nameAdjusted", "width", "height",
+                "fps", "durationSeconds", "color", "folderId", "copySettingsFromCurrent",
+                "switchToTimeline", "existingTimelineCount", "currentTimeline"}
+                or plan["action"] != tool or plan["previewOnly"] is not True
+                or type(suggestion) is not dict or set(suggestion) != {"tool", "arguments"}
+                or suggestion["tool"] != tool or type(suggestion["arguments"]) is not dict):
+            return False
+        apply = suggestion["arguments"]
+        fields = ("name", "width", "height", "fps", "durationSeconds",
+                  "copySettingsFromCurrent", "switchToTimeline")
+        return (apply.get("previewOnly") is False and all(
+            k in apply and type(apply[k]) is type(plan[k]) and apply[k] == plan[k] for k in fields)
+            and all(apply.get(k) == plan[k] for k in ("color", "folderId"))
+            and all(type(plan[k]) is str and bool(plan[k]) for k in ("name", "requestedName"))
+            and all(type(plan[k]) is bool for k in ("nameAdjusted", "copySettingsFromCurrent", "switchToTimeline"))
+            and all(type(plan[k]) is int and plan[k] > 0 for k in ("width", "height"))
+            and all((type(plan[k]) is int or (type(plan[k]) is float and math.isfinite(plan[k])))
+                    and plan[k] > 0
+                    for k in ("fps", "durationSeconds"))
+            and type(plan["existingTimelineCount"]) is int and plan["existingTimelineCount"] >= 0
+            and (plan["currentTimeline"] is None or type(plan["currentTimeline"]) is dict)
+            and all(plan[k] is None or type(plan[k]) is str for k in ("color", "folderId")))
+    if tool in ("add_text_clip", "add_shape_clip"):
+        text = tool == "add_text_clip"
+        message = ("Text" if text else "Shape") + " clip creation plan only. No timeline change was made."
+        fields = {"track", "startSeconds", "durationSeconds", "style", "transform", "keyframes"}
+        fields |= ({"text", "animationPreset", "animationMode"} if text else {"shapeType", "name", "crop"})
+        plan = response.get("plan")
+        return (set(response) == {"previewOnly", "action", "message", "plan", "warning"}
+                and response["previewOnly"] is True and response["message"] == message
+                and type(response["warning"]) is str and type(plan) is dict and set(plan) == fields
+                and (plan["track"] is None or type(plan["track"]) is dict)
+                and all(type(plan[k]) is dict for k in ("style", "transform"))
+                and type(plan["keyframes"]) is list
+                and all((type(plan[k]) is int or (type(plan[k]) is float and math.isfinite(plan[k])))
+                        for k in ("startSeconds", "durationSeconds")))
+    if tool == "export_timeline":
+        common = {"action", "message", "projectPath", "outputPath", "settings", "timeline", "readiness"}
+        readiness = response.get("readiness")
+        if (type(readiness) is not dict or type(readiness.get("blockers")) is not list
+                or not all(type(response.get(k)) is str for k in ("projectPath", "outputPath"))
+                or not all(type(response.get(k)) is dict for k in ("settings", "timeline"))):
+            return False
+        return ((set(response) == common | {"previewOnly"} and response["previewOnly"] is True
+                 and response["message"] == "Export plan only. No render was started."
+                 and not readiness["blockers"])
+                or (set(response) == common | {"success"} and response["success"] is False
+                    and response["message"] == "Export was not started because delivery blockers were found."
+                    and bool(readiness["blockers"])))
+    return False
+
+
+
 def source_verified_preview_intent(tool, inputs, attested_tools) -> bool:
     """Recognize only the pinned MCP no-renderer-write request branches.
 
@@ -64,9 +134,10 @@ def source_verified_preview_intent(tool, inputs, attested_tools) -> bool:
             any(not isinstance(name, str) or not name for name in attested_tools) or
             len(set(attested_tools)) != len(attested_tools) or tool not in attested_tools):
         return False
-    if tool in _PINNED_MARKER_PREVIEWS:
+    if tool in (*_PINNED_MARKER_PREVIEWS, *_PINNED_EXPLICIT_PLAN_PREVIEWS):
         return inputs.get("previewOnly") is True
-    if tool in (*_PINNED_ASSET_PLACEMENT_PREVIEWS, *_PINNED_CLIP_EDIT_PREVIEWS):
+    if tool in (*_PINNED_ASSET_PLACEMENT_PREVIEWS, *_PINNED_CLIP_EDIT_PREVIEWS,
+                *_PINNED_DEFAULT_PLAN_PREVIEWS):
         return inputs.get("previewOnly", True) is True
     return False
 
@@ -308,6 +379,16 @@ def pinned_electron_asset_placement_previews(
     if not _source_matches_pinned_electron_mcp(source):
         return ()
     return tuple(name for name in _PINNED_ASSET_PLACEMENT_PREVIEWS
+                 if grants.get(name) == "write")
+
+
+def pinned_electron_plan_previews(source: Path, grants: dict) -> tuple[str, ...]:
+    """Attest reviewed non-mutating sequence, title, shape and export plan branches."""
+    if not _verified_editor_grants(grants) or not isinstance(source, Path):
+        raise ValueError("Pinned plan preview requires trusted native source/grants")
+    if not _source_matches_pinned_electron_mcp(source):
+        return ()
+    return tuple(name for name in (*_PINNED_DEFAULT_PLAN_PREVIEWS, *_PINNED_EXPLICIT_PLAN_PREVIEWS)
                  if grants.get(name) == "write")
 
 

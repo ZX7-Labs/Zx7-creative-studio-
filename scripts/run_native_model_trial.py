@@ -211,10 +211,18 @@ class RecordedModel:
         return getattr(self.model, "requires_indexed_native_function_contracts", False)
 
     @property
+    def supports_source_bound_wav_input(self):
+        return (getattr(self.model, "supports_source_bound_wav_input", False) is True
+                and getattr(self.model, "allow_original_audio_upload", True) is True
+                and callable(getattr(self.model, "decide_with_audio", None)))
+
+    @property
     def last_call_usage(self):
         return self.model.last_call_usage
 
-    def infer(self, context, images=()):
+    def infer(self, context, images=(), audio=()):
+        if images and audio:
+            raise ValueError("Separate audio and image model turns require an audited backend")
         started = time.monotonic()
         # The actual local trial uses the SAME host-current dynamic native
         # schema adapter as the production native-model client. Previously
@@ -227,9 +235,22 @@ class RecordedModel:
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(raw)
             record['image_sha256'].append(sha(path))
+        if audio:
+            # Record only media type and digest in public synthetic trial artifacts.
+            # The actual original PCM/WAV bytes go straight to the model adapter.
+            record['audio_mime'] = [mime for mime, _ in audio]
+            record['audio_sha256'] = [hashlib.sha256(raw).hexdigest()
+                                      for _, raw in audio]
         try:
-            decision = (self.model.decide_with_images(context, images) if images
-                        else self.model.decide(context))
+            if audio:
+                listener = getattr(self.model, 'decide_with_audio', None)
+                if not self.supports_source_bound_wav_input:
+                    raise RuntimeError('Recorded native trial requires an audio-capable model')
+                decision = listener(context, audio)
+            elif images:
+                decision = self.model.decide_with_images(context, images)
+            else:
+                decision = self.model.decide(context)
             record['decision'] = decision
             return decision
         except BaseException as exc:
@@ -249,6 +270,9 @@ class RecordedModel:
 
     def decide_with_images(self, context, images):
         return self.infer(context, images)
+
+    def decide_with_audio(self, context, audio):
+        return self.infer(context, audio=audio)
 
 
 def fresh_trial_project_open_effects(projects_root):

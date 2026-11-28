@@ -31,7 +31,8 @@ def digest(path):
 
 
 async def exercise(options):
-    from studio_next.native_editor_project import capture_render_project
+    from studio_next.native_editor_project import (capture_render_project,
+                                               capture_acknowledged_save_identity)
     from studio_next.native_render_evidence import native_render_binding
 
     from studio_next.native_editor_source_pin import (
@@ -159,7 +160,8 @@ async def exercise(options):
         assert data.get("success") is not False or (arguments or {}).get("previewOnly") is True, (name, data)
         return data
 
-    async def render_and_verify(session, output, save_receipt):
+    async def render_and_verify(session, output, save_receipt, *,
+                                source_bound_save=False):
         # Native save success is an application acknowledgement; read the
         # actual document until that exact acknowledged modified revision is
         # physically present BEFORE dispatching an irreversible export. Do
@@ -176,14 +178,20 @@ async def exercise(options):
                 raise AssertionError(
                     "Native saved document never converged to acknowledged revision")
             await asyncio.sleep(.15)
+        save = save_receipt["result"]["project"]
+        # Existing physical source has already converged to exact model-like
+        # explicit save. Capture its immutable creative+media identity before
+        # native render, without adding another native save or write.
+        saved_for_render = (capture_acknowledged_save_identity(
+            projects, snapshots, save) if source_bound_save else
+            (save["path"], save["modified"]))
         rendered = await call(session, "export_timeline", {
             "outputPath": str(output), "target": "h264_project", "width": 320,
             "height": 180, "range": "custom", "startSeconds": 0, "endSeconds": 2,
             "fps": 24, "includeAudio": True, "previewOnly": False})
-        save = save_receipt["result"]["project"]
         binding = native_render_binding(str(output), rendered)
         captured = capture_render_project(
-            projects, snapshots, rendered, binding, (save["path"], save["modified"]))
+            projects, snapshots, rendered, binding, saved_for_render)
         deadline = time.monotonic() + 90
         while True:
             logs = (fixture / "state").glob("session-*/velorn/export-worker.log")
@@ -514,21 +522,77 @@ async def exercise(options):
         for name, count in (("source.mp4", 1), ("tone.wav", 2)):
             await call(session, "import_asset_from_path", {"path": str(staging / name), "previewOnly": False})
             await wait(session, lambda state: state.get("assetCount") == count)
+        # Independently exercise revision admission AND placement admission.
+        # A tokenless commit on the pinned editorial writer must fail before
+        # any write; the invalid-asset cases below supply the live source
+        # token so they actually reach the independent read-only plan guard.
+        placement_revision = {}
+        if editorial_source:
+            revision = (await call(session, "get_project"))["zx7NativeRevision"]
+            assert isinstance(revision, str) and 38 <= len(revision) <= 80
+            tokenless = await session.call_tool("add_assets_to_timeline", {
+                "assetNames": ["source.mp4"], "previewOnly": False})
+            assert tokenless.is_error and "revision" in tokenless.content[0].text.lower(), tokenless
+            assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
+            placement_revision = {"__zx7ExpectedRevision": revision}
         unimported = await session.call_tool("add_assets_to_timeline", {
-            "assetNames": ["source.mp4", "not-imported.mp4"], "previewOnly": False})
+            "assetNames": ["source.mp4", "not-imported.mp4"], "previewOnly": False,
+            **placement_revision})
         assert unimported.is_error, unimported
         assert unimported.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
         missing = await session.call_tool("add_asset_to_timeline", {
-            "assetName": "not-imported.mp4", "previewOnly": False})
+            "assetName": "not-imported.mp4", "previewOnly": False,
+            **placement_revision})
         assert missing.is_error, missing
         assert missing.meta["zx7.host/pre-dispatch-rejection"]["code"] == "placement_plan_unconfirmed"
         assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
+        # Exercise the same trusted gateway path used by the Brain, not only
+        # the raw bridge receipt. The editor is the real source-pinned writer.
+        placement_session = session
+        if editorial_source:
+            from studio_next.native_editor_identity import pinned_native_editor_identity_policy
+            from studio_next.body_editor_client import host_pre_dispatch_rejection
+            placement_policy = pinned_native_editor_identity_policy(options.source, tools, session)
+            assert placement_policy and {"add_asset_to_timeline", "add_assets_to_timeline"}.issubset(
+                placement_policy["fence"])
+            placement_gateway = CapabilityGateway(
+                {"editor": (session, tools, {}, None, {}, placement_policy)},
+                trusted_pre_dispatch_sources=("editor",))
+            await placement_gateway.refresh()
+            placement_session = CapabilityGatewayMcpSession(placement_gateway, "editor",
+                require_model_native_observation=True)
+            await call(placement_session, "get_project")
+            for tool_name, proposal in (
+                    ("add_assets_to_timeline", {"assetNames": ["source.mp4", "not-imported.mp4"],
+                                                "previewOnly": False}),
+                    ("add_asset_to_timeline", {"assetName": "not-imported.mp4", "previewOnly": False})):
+                denied = await placement_session.call_tool(tool_name, proposal)
+                assert denied.is_error, denied
+                assert host_pre_dispatch_rejection(denied, tool_name, proposal) == "placement_plan_unconfirmed", denied
+                assert placement_gateway.evidence()[-1]["state"] == "host_rejected_no_native_write"
+            assert (await call(session, "get_project"))["currentTimeline"]["clipCount"] == 0
+            # Independent fixture choices, not an automatic retry or a model.
+            # Observe the actual imported asset and project before the valid edit.
+            imported = await call(placement_session, "get_assets", {"limit": 100})
+            assert {item["name"] for item in imported["assets"]}.issuperset({"source.mp4", "tone.wav"})
+            await call(placement_session, "get_project")
         timeline = await call(session, "get_timeline", {"includeClips": False})
         picture_track = next(track["id"] for track in timeline["tracks"] if track["type"] == "video")
-        await call(session, "add_assets_to_timeline", {"assetNames": ["source.mp4"],
+        await call(placement_session, "add_assets_to_timeline", {"assetNames": ["source.mp4"],
             "trackStrategy": "singleTrack", "trackId": picture_track, "startSeconds": 0,
             "includeAudio": False, "previewOnly": False})
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 1)
+        if editorial_source:
+            writes = [event["state"] for event in placement_gateway.evidence() if event["access"] == "write"]
+            assert writes == ["host_rejected_no_native_write", "host_rejected_no_native_write",
+                              "host_reported_success_unverified"], writes
+            print("ACTUAL_NATIVE_GATEWAY_PLACEMENT_RECOVERY " + json.dumps({
+                "two_source_pinned_refusals_no_timeline_edit": True,
+                "fresh_native_asset_and_project_read": True,
+                "one_subsequent_model_facing_fixture_placement_ack": True,
+                "one_real_native_clip_observed": True,
+                "real_neural_or_artistic_proof": False,
+            }, sort_keys=True), flush=True)
         await call(session, "add_asset_to_timeline", {"assetName": "tone.wav", "startSeconds": 0, "previewOnly": False})
         await wait(session, lambda state: (state.get("currentTimeline") or {}).get("clipCount") == 2)
         await call(session, "add_track", {"type": "video", "name": "Editable title", "previewOnly": False})
@@ -605,7 +669,7 @@ async def exercise(options):
         shutil.copy2(native_path, fixture / "revision-1.comfystudio")
         first_output = outputs / "mcp-export-first.mp4"
         first_timeline, first_sha, first_profile, first_capture = await render_and_verify(
-            session, first_output, saved_first)
+            session, first_output, saved_first, source_bound_save=True)
         first_frames = await observe_samples(session, first_output, first_sha)
         first_audio = await observe_audio_envelope(session, first_output, first_sha)
         if collaboration_source:
@@ -786,7 +850,7 @@ async def exercise(options):
         assert (await session.call_tool("open_project", {"projectPath": str(linked_project), "previewOnly": False})).is_error
         output = outputs / "mcp-export.mp4"
         second_timeline, second_sha, second_profile, second_capture = await render_and_verify(
-            session, output, saved_second)
+            session, output, saved_second, source_bound_save=True)
         second_frames = await observe_samples(session, output, second_sha)
         second_audio = await observe_audio_envelope(session, output, second_sha)
         assert first_timeline and first_timeline == second_timeline
@@ -794,6 +858,10 @@ async def exercise(options):
         assert first_profile == second_profile
         assert first_capture[0] == digest(fixture / "revision-1.comfystudio")
         assert second_capture[0] == digest(fixture / "revision-2.comfystudio")
+        assert len(list((snapshots / "save-witnesses").glob("*.comfystudio"))) == 2
+        print("ACTUAL_NATIVE_SAVE_WITNESSES_ISOLATED "
+              "two model-like explicit saves and real physical A/V exports",
+              flush=True)
         assert first_capture[1] == second_capture[1]
         assert first_frames != second_frames, "The saved title edit did not change paired decoded frames"
         # Title-only edits must retain this fixture's measured soundtrack.
@@ -2695,6 +2763,13 @@ async def exercise(options):
                     "final_encoded_video_and_audio_independently_decoded": True,
                     "genuine_neural_brain_or_professional_art_certified": False,
                 }, sort_keys=True), flush=True)
+
+    if loss_aware_range_source:
+        from owner_delivery_proof import prove_owner_delivery
+        await prove_owner_delivery(options=options, connected=connected, call=call,
+            wait=wait, fixture=fixture, config=config, project=project,
+            video_id=video_ids[0], staging=staging, outputs=outputs)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

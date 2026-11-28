@@ -55,6 +55,57 @@ def execute(job,output,base=None):
                 if any(n.bl_idname=="CompositorNodeOutputFile" for n in scene.node_tree.nodes):
                     raise ValueError("Render publication uses host-owned output paths")
 
+    def define_armature_bones(obj,bones):
+        from studio_next.body_motion_project import validate_armature_bones
+        validate_armature_bones(bones)
+        layer=bpy.context.view_layer
+        if not isinstance(obj,bpy.types.Object) or obj.type!="ARMATURE":
+            raise ValueError("Bone definition target must be a native armature object")
+        if obj.library or obj.data.library or obj.data.users!=1 or len(obj.data.bones):
+            raise ValueError("Bone definition requires empty local single-user armature data")
+        if bpy.context.mode!="OBJECT":
+            raise ValueError("Bone definition requires native object mode")
+        # Linking a new object via RNA schedules a dependency graph update.
+        # Synchronize the actual layer before checking membership or entering
+        # edit mode; never permit edits to an object from another view layer.
+        layer.update()
+        if layer.objects.get(obj.name)!=obj:
+            raise ValueError("Bone definition target is not in the active view layer")
+        selected=list(bpy.context.selected_objects);active=layer.objects.active
+        try:
+            for item in selected:item.select_set(False)
+            obj.select_set(True);layer.objects.active=obj
+            if bpy.ops.object.mode_set(mode="EDIT")!={"FINISHED"}:
+                raise RuntimeError("Native armature edit mode unavailable")
+            edit=obj.data.edit_bones
+            for spec in bones:
+                bone=edit.new(spec["name"])
+                if bone.name!=spec["name"]:raise ValueError("Native bone identity was changed")
+                bone.head=spec["head"];bone.tail=spec["tail"];bone.roll=spec["roll"]
+            for spec in bones:
+                bone=edit[spec["name"]]
+                if spec["parent"] is not None:bone.parent=edit[spec["parent"]]
+                bone.use_connect=spec["connected"]
+            if bpy.ops.object.mode_set(mode="OBJECT")!={"FINISHED"}:
+                raise RuntimeError("Native armature commit failed")
+        finally:
+            if obj.mode=="EDIT":bpy.ops.object.mode_set(mode="OBJECT")
+            for item in list(bpy.context.selected_objects):item.select_set(False)
+            for item in selected:item.select_set(True)
+            layer.objects.active=active
+        actual=obj.data.bones
+        if len(actual)!=len(bones):raise ValueError("Native bone count differs from authored topology")
+        for spec in bones:
+            bone=actual[spec["name"]]
+            if ((bone.parent.name if bone.parent else None)!=spec["parent"] or
+                bone.use_connect!=spec["connected"] or bone.length<1e-5):
+                raise ValueError("Native rest hierarchy differs from authored topology")
+            for point,key in ((bone.head_local,"head"),(bone.tail_local,"tail")):
+                if any(abs(a-b)>max(1e-6,abs(b)*1e-6) for a,b in zip(point,spec[key])):
+                    raise ValueError("Native rest coordinates differ from authored topology")
+        return {"armature":obj.name,"bones":[{"name":b.name,"parent":b.parent.name if b.parent else None,
+                "head":list(b.head_local),"tail":list(b.tail_local),"connected":b.use_connect} for b in actual]}
+
     portable()
     for index,action in enumerate(job["actions"]):
         try:
@@ -77,6 +128,7 @@ def execute(job,output,base=None):
                 if returned is False:raise ValueError("Native data method reported failure")
                 if action["as"] is not None:refs[action["as"]]=returned
                 result=observed(returned)
+            elif op=="define_armature_bones":result=define_armature_bones(target,action["bones"])
             elif op=="read":result=observed(target)
             elif op=="list":
                 result={"total":len(target),"items":[observed(target[i]) for i in

@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .media_vault import MediaVault,sha256_file,MediaCustodyError
+from .media_vault import MediaVault,sha256_file,MediaCustodyError,canonical_source_attestations
 from .delivery_audit import _probe_details
 from .production_qc import full_decode_inspection
 
@@ -633,7 +633,7 @@ def _freeze_composition_sources(plan,root,vault,private):
             frozen=sealed_attested_original(
                 vault,identity,attestation,private,sealed)
             layer["source"]=str(frozen.relative_to(root))
-            if kind=="video" and "matte" in layer:
+            if kind=="video_layers" and "matte" in layer:
                 original_matte=original_layer["matte"]
                 original_mask=_exact_media(original_matte,vault,root,
                                            need="original matte")
@@ -702,20 +702,24 @@ def render_composition(plan_json,workspace,vault_root,out,*,runner=None,probe=No
                 raise ValueError("Owner media or director plan changed during real compositing")
             if any(sha256_file(path)!=digest for (digest,_),path in snapshots.items()):
                 raise ValueError("Original frozen media bytes changed during compositing")
+            admitted=[]
             for kind in ("video_layers","audio_tracks"):
                 for layer in plan[kind]:
                     vault.inspect(layer["asset_id"],
                                   attestation_id=layer["attestation_id"])
-                    if kind=="video" and "matte" in layer:
+                    admitted.append({k:layer[k] for k in ("asset_id","attestation_id")})
+                    if kind=="video_layers" and "matte" in layer:
                         matte=layer["matte"]
                         vault.inspect(matte["asset_id"],
                                       attestation_id=matte["attestation_id"])
+                        admitted.append({k:matte[k] for k in ("asset_id","attestation_id")})
             # Hardlink rejects any concurrent creator's approved result; an
             # os.replace() could silently overwrite an already accepted movie.
             with temporary.open("rb") as movie:
                 os.fsync(movie.fileno())
             os.link(temporary,output)
         return {"path":str(output),"sha256":sha256_file(output),
+                "source_attestations":canonical_source_attestations(admitted),
                 "bytes":output.stat().st_size,"duration_seconds":detail["duration_seconds"],
                 "video_layers":len(plan["video_layers"]),
                 "audio_tracks":len(plan["audio_tracks"]),"audio_present":True,

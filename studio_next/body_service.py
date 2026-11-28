@@ -14,6 +14,7 @@ import argparse
 import base64
 import binascii
 import concurrent.futures
+from contextlib import closing
 import fcntl
 import hmac
 import json
@@ -267,6 +268,25 @@ class LocalBodyCoordinator:
                     raise
                 return True
 
+    def withdraw_attestation(self,workspace_id,asset_id,attestation_id,*,reason):
+        """Authenticated owner maintenance, never a model-callable tool."""
+        with self._maintenance_lock,self._lock:
+            workspace=self._workspace(workspace_id)
+            vault=workspace/"vault"
+            if not (vault/"assets.sqlite3").is_file():
+                raise ValueError("Original owner vault does not exist")
+            if any(stage.parent==workspace for stage in self._active_uploads):
+                raise RuntimeError("Cannot withdraw rights during active owner uploads")
+            with self._connect() as db:
+                if db.execute("SELECT 1 FROM jobs WHERE workspace_id=? AND status IN ('queued','running')",
+                              (workspace_id,)).fetchone():
+                    raise RuntimeError("Cannot withdraw rights during active production; pause or cancel first")
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='creative_sessions'").fetchone():
+                    states=db.execute("SELECT state FROM creative_sessions WHERE workspace=?",(workspace_id,)).fetchall()
+                    if any(json.loads(raw)["status"] in ("queued","running") for (raw,) in states):
+                        raise RuntimeError("Cannot withdraw rights during an active creative session; stop it first")
+            return MediaVault(vault).withdraw_attestation(asset_id,attestation_id,reason=reason)
+
     def create_recovery_snapshot(self, archive_path):
         """Quiescent, WAL-consistent snapshot of jobs + every film workspace.
 
@@ -402,7 +422,8 @@ class LocalBodyCoordinator:
         if not path.is_file():
             return empty
         try:
-            with sqlite3.connect(f"file:{path}?mode=ro",uri=True,timeout=4) as db:
+            with closing(sqlite3.connect(path.absolute().as_uri()+"?mode=ro",
+                                         uri=True,timeout=4)) as db:
                 tables=db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
                 if ("node_results",) not in tables:
                     return empty
@@ -430,7 +451,9 @@ class LocalBodyCoordinator:
                 FROM jobs ORDER BY modified DESC,id DESC LIMIT ?""",(limit,)).fetchall()
         return {"jobs":[{"job_id":a,"workspace_id":b,"status":c,
                          "attempts":d,"updated_at":e} for a,b,c,d,e in rows],
-                "status_is_physical_execution_evidence":True,
+                # Durable scheduler state is not a native execution or media receipt.
+                "status_is_observed_durable_job_state":True,
+                "status_is_physical_execution_evidence":False,
                 "successful_jobs_do_not_automatically_prove_a_movie_exists":True}
 
     def _requested_control(self,identity):
@@ -767,6 +790,19 @@ def make_body_http_handler(coordinator,token):
                         sha256=media["sha256"],length=media["bytes"])
                     return self._reply(201,ticket)
                 except (ValueError,TypeError,OSError,RuntimeError) as exc:
+                    return self._reply(400,{"error":str(exc)})
+            if path.startswith("/v1/workspaces/") and path.endswith("/rights/withdraw"):
+                try:
+                    pieces=path.split("/")
+                    if len(pieces)!=6 or pieces[1:3]!=["v1","workspaces"]:
+                        raise ValueError("Invalid owner rights maintenance route")
+                    length=int(self.headers.get("Content-Length","0"))
+                    if not 0<length<=8192:raise ValueError("Bounded owner withdrawal request required")
+                    payload=json.loads(self.rfile.read(length))
+                    if not isinstance(payload,dict) or set(payload)!={"asset_id","attestation_id","reason"}:
+                        raise ValueError("Exact asset, attestation and owner reason required")
+                    return self._reply(200,coordinator.withdraw_attestation(pieces[3],**payload))
+                except (ValueError,TypeError,RuntimeError,OSError) as exc:
                     return self._reply(400,{"error":str(exc)})
             if path.startswith("/v1/workspaces/") and "/assets/" in path:
                 pieces=path.split("/")

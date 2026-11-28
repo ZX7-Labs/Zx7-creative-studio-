@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from studio_next.body_integration import run_body_project,validate_witness
-from studio_next.media_vault import MediaVault,sha256_file
+from studio_next.media_vault import MediaVault,MediaCustodyError,sha256_file,canonical_source_attestations
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
@@ -76,6 +76,9 @@ class OwnerAssetProductionGraphProof(unittest.TestCase):
             self.assertEqual(second["status"],"all_tool_results_verified",second)
             self.assertEqual(second["reused"],["movie","custody"])
             self.assertEqual(sha256_file(finished),actual)
+            bound=next(x for x in proof["rights_attestations"] if x["source_type"]=="trusted_renderer")
+            self.assertEqual(bound.get("source_attestations"),canonical_source_attestations([
+                {k:clip[k] for k in ("asset_id","attestation_id")} for clip in clips]))
             self.assertEqual([sha256_file(root/x["source"]) for x in clips],
                              original_bytes)
             invalid=copy.deepcopy(ir)
@@ -83,6 +86,35 @@ class OwnerAssetProductionGraphProof(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"trusted renderer dependency"):
                 run_body_project(invalid,root)
             self.assertEqual(sha256_file(finished),actual)
+            # Render a second-generation picture and sound master, then revoke one grant.
+            # The fit/fill adapter can emit VFR; do not silently weaken the
+            # lossless sound-only finishing contract to support this source.
+            spec={"media":{"source":finished.name,"asset_id":actual,
+                "attestation_id":bound["attestation_id"]},
+                "ops":{"video_ops":[{"kind":"color_eq","brightness":.03,"contrast":1.1,
+                    "saturation":1.1,"gamma":1}],"audio_ops":[{"kind":"gain","db":-6}]}}
+            (root/"finish.json").write_text(json.dumps(spec))
+            finishing={"project":{"creative_intent":"Independently selected picture grade and sound gain"},
+                "shots":[{"id":"finish","purpose":"Original master picture and audio revision"}],
+                "tool_graph":[{"id":"film","tool_id":"body.film_finish","purpose":"Native finish",
+                    "inputs":{"plan":"finish.json","out":"finished-master.mp4"},"depends_on":[]},
+                    {"id":"custody","tool_id":"body.asset_vault","purpose":"Keep source grants",
+                    "inputs":{"source_witness":{"$node_output":"film"}},"depends_on":["film"]}]}
+            done=run_body_project(finishing,root)
+            self.assertEqual(done["status"],"all_tool_results_verified",done)
+            master=root/"finished-master.mp4";master_id=sha256_file(master)
+            master_grant=vault.inspect(master_id)["rights_attestations"][0]
+            self.assertEqual(master_grant.get("source_attestations"),[
+                {"asset_id":actual,"attestation_id":bound["attestation_id"]}])
+            self.assertEqual(run_body_project(finishing,root)["reused"],["film","custody"])
+            vault.withdraw_attestation(clips[0]["asset_id"],clips[0]["attestation_id"],reason="Withdraw first source")
+            vault=MediaVault(root/"vault")
+            for digest,grant in ((actual,bound),(master_id,master_grant)):
+                with self.assertRaisesRegex(MediaCustodyError,"withdrawn"):
+                    vault.checkout(digest,grant["attestation_id"],root/"denied.mp4")
+            self.assertFalse((root/"denied.mp4").exists())
+            self.assertEqual(sha256_file(master),master_id)
+            self.assertEqual(vault.inspect(clips[1]["asset_id"],attestation_id=clips[1]["attestation_id"])["asset_id"],clips[1]["asset_id"])
 
 
 if __name__=="__main__":

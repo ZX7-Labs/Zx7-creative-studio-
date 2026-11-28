@@ -6,6 +6,7 @@ Tests may inject a scripted client; those runs are explicitly not live-model
 creative acceptance. Audio semantics and professional quality remain unproven.
 """
 from concurrent.futures import ThreadPoolExecutor
+import copy
 import hashlib
 import json
 import threading
@@ -78,7 +79,15 @@ class CreativeSessions:
         settings=getattr(self.model,"settings",None)
         provider=getattr(settings,"provider_id","local")
         endpoint=getattr(settings,"base_url",None)
+        # Persist a digest, not raw configuration (or credentials). Match the
+        # generation/transport limits and explicit egress policy on resume;
+        # a model name alone does not identify a comparable experiment.
+        config={name:getattr(settings,name,None) for name in (
+            "sampling","timeout_seconds","max_response_bytes","max_tokens")}
+        config.update({name:getattr(self.model,name,None) for name in (
+            "allow_image_upload","allow_original_audio_upload")})
         return {"model_id":getattr(settings,"model_id",None),
+                "model_config_sha256":hashlib.sha256(_wire(config).encode()).hexdigest(),
                 "provider_id":provider,
                 "local_endpoint":endpoint if provider=="local" else None,
                 "remote_endpoint":endpoint if provider=="nvidia" else None,
@@ -86,6 +95,12 @@ class CreativeSessions:
                 "system_prompt_sha256":hashlib.sha256(
                     getattr(self.model,"system_prompt",SESSION_SYSTEM).encode()).hexdigest(),
                 "neural_weights_or_independent_creativity_verified":False}
+
+    def _require_model_identity(self,state):
+        if "model_config_sha256" not in state["model_identity"]:
+            raise RuntimeError("Legacy session has no original model configuration receipt; preserve it and start a new session")
+        if state["model_identity"]!=self._model_identity():
+            raise RuntimeError("Session requires the original configured model, protocol and media permissions")
 
     def create(self,workspace,brief,facts):
         self.coordinator._workspace(workspace)
@@ -96,7 +111,7 @@ class CreativeSessions:
         identity=uuid.uuid4().hex
         state={"id":identity,"workspace_id":workspace,"brief":brief,"facts":facts,
                "model_identity":self._model_identity(),
-               "status":"queued","events":[],"pending":None,"jobs":[],
+               "status":"queued","events":[],"pending":None,"pending_model_call":None,"jobs":[],
                "pictures":[],"elapsed_seconds":0,"turn_limit":self.max_turns,
                "expires_at":time.time()+self.seconds,
                "time_limit_seconds":self.seconds,"artistic_quality_approved":False,
@@ -288,8 +303,7 @@ class CreativeSessions:
     def _run(self,identity):
         state=self.inspect(identity); started=time.monotonic(); previous=state["elapsed_seconds"]
         try:
-            if state["model_identity"]!=self._model_identity():
-                raise RuntimeError("Resume requires the original configured model and protocol")
+            self._require_model_identity(state)
             state["status"]="running"; self._save(state)
             signal=LiveBodySignal(self.coordinator,authority=BodyAuthority(
                 workspace_ids=frozenset({state["workspace_id"]}),
@@ -305,22 +319,49 @@ class CreativeSessions:
                              "workspace_id":state["workspace_id"],"submitted_jobs":state["jobs"],
                              "recent_events":state["events"][-8:],"picture_evidence":state["pictures"],
                              "remaining_turns":state["turn_limit"]-len(state["events"])}
+                    # Model adapters consume a snapshot, never mutable owner facts,
+                    # job identities or historical receipts owned by this session.
+                    context=copy.deepcopy(context)
                     images=self._pictures(state)
-                    if images:decision=self.model.decide_with_images(context,images)
-                    else:decision=self.model.decide(context)
+                    self._require_model_identity(state)
+                    model_started=time.monotonic_ns()
+                    returned=False
+                    try:
+                        if images:decision=self.model.decide_with_images(context,images)
+                        else:decision=self.model.decide(context)
+                        returned=True
+                    finally:
+                        elapsed=round((time.monotonic_ns()-model_started)/1_000_000,3)
+                        usage=getattr(self.model,"last_call_usage",None) if returned else None
+                        reported=({key:usage[key] for key in
+                                   ("prompt_tokens","completion_tokens","total_tokens")
+                                   if type(usage.get(key)) is int and 0<=usage[key]<=1_000_000_000}
+                                  if isinstance(usage,dict) else None)
+                        state["pending_model_call"]={
+                            "measured_model_wall_ms":elapsed,
+                            "provider_reported_token_usage":reported or None,
+                            "token_usage_independently_verified":False,
+                            "model_response_returned":returned}
                     if len(_wire(decision))>262144:
                         raise ValueError("Model action exceeds the session response budget")
-                    state["pending"]=decision
-                    self._save(state) # Commit intent before any BODY mutation.
+                    state["pending"]=copy.deepcopy(decision)
+                    self._save(state) # Commit intent and its measured call together.
                 if self._stopped(identity):
                     state["status"]="stopped";return
                 if time.time()>=state["expires_at"]:break
+                self._require_model_identity(state)
                 decision=state["pending"]
+                dispatch_started=time.monotonic_ns()
                 try:result=self._dispatch(state,signal,decision)
                 except (ValueError,TypeError,RuntimeError,OSError,KeyError) as exc:
                     result={"error":type(exc).__name__+": "+str(exc)[:1600]}
-                state["events"].append({"decision":decision,"result":result})
+                state["events"].append({"decision":decision,"result":result,
+                    # A legacy pending decision has no known measurement. On
+                    # resume retain the saved call receipt, never re-infer it.
+                    "model_call":state.get("pending_model_call"),
+                    "measured_dispatch_wall_ms":round((time.monotonic_ns()-dispatch_started)/1_000_000,3)})
                 state["pending"]=None
+                state["pending_model_call"]=None
                 state["elapsed_seconds"]=previous+time.monotonic()-started
                 self._save(state)
                 if state["status"]!="running":return

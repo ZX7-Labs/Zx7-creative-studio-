@@ -17,11 +17,14 @@ import re
 import stat
 from .body_editor_client import HOST_REJECTION_FEEDBACK
 from .providers import MODEL_OUTPUT_REJECTION_CODES
+from .body_picture_observation import TOOL as BODY_PICTURE_TOOL
 from .native_render_evidence import (
-    AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, AV_WINDOW_AUDIO_FIELD,
+    DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
-    SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES, reviewed_render_pair,
-    valid_av_review_values,
+    SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, SCOPE_FIELD, TIMED_FRAMES,
+    reviewed_render_pair,
+    valid_av_review_values, av_window_audio_values,
 )
 
 
@@ -299,6 +302,21 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                              digest is None and oversized is None)
                 if not (reported or exception):
                     raise NativeJournalError("Malformed failed project bootstrap evidence")
+            continue
+        if kind == "host_owner_delivery_readiness_observation":
+            status = event.get("native_readiness_status")
+            digest = event.get("text_sha256")
+            elapsed = event.get("measured_host_read_wall_ms")
+            if (pending is not None or event.get("tool") != "check_export_readiness" or
+                    host_tool_access.get("check_export_readiness") != "read" or
+                    host_tool_access.get(RENDER_TOOL) != "write" or
+                    event.get("host_attested_read_only") is not True or
+                    event.get("no_model_selected_mutation") is not True or
+                    not _sha(event.get("inputs_sha256")) or
+                    status not in ("matched", "not_ready", "profile_mismatch", "unconfirmed") or
+                    not ((status == "unconfirmed" and digest is None) or _sha(digest)) or
+                    type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0):
+                raise NativeJournalError("Owner delivery readiness lacks bounded host read evidence")
             continue
         if kind in ("host_placement_track_observation", "host_placement_asset_observation"):
             tool, count_field, limit = (("get_timeline", "observed_track_count", 32)
@@ -635,12 +653,20 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                 if AV_REVIEW_FIELD in event and (not requires_av_review or path is None or
                         access != "read" or not valid_av_review_values(tool, event[AV_REVIEW_FIELD])):
                     raise NativeJournalError("Invalid native audiovisual review evidence")
+                if ((AV_WINDOW_AUDIO_FIELD in event) !=
+                        (tool == ACTIVE_AV_WINDOW and AV_REVIEW_FIELD in event) or
+                        (AV_WINDOW_AUDIO_FIELD in event and av_window_audio_values(event) is None)):
+                    raise NativeJournalError("Invalid combined audiovisual window evidence")
                 if ((AV_PCM_FIELD in event) !=
-                        (tool == AUDIO_ENVELOPE and AV_REVIEW_FIELD in event) or
+                        (tool in (AUDIO_ENVELOPE, ACTIVE_AV_WINDOW) and AV_REVIEW_FIELD in event) or
                         (AV_PCM_FIELD in event and not _sha(event[AV_PCM_FIELD]))):
                     raise NativeJournalError("Invalid decoded audio checksum")
                 if (SAVED_RENDER_FIELD in event) != (SAVED_RENDER_OPTIONS_FIELD in event):
                     raise NativeJournalError("Invalid saved project render binding")
+                if (SAVED_RENDER_MEDIA_FIELD in event and
+                        (SAVED_RENDER_FIELD not in event or
+                         not _sha(event[SAVED_RENDER_MEDIA_FIELD]))):
+                    raise NativeJournalError("Invalid render-time native media digest")
                 if {SAVED_RENDER_FIELD, SAVED_RENDER_FAILURE} & event.keys():
                     if (not requires_av_review or tool != RENDER_TOOL or scope is None
                             or next((name for _, name in reversed(writes) if name != RENDER_TOOL),
@@ -728,8 +754,17 @@ def audit_native_journal(events, *, host_tool_access, expected_required_evidence
                         event.get("audio_sha256") is not None):
                     raise NativeJournalError(
                         "Native timeline JPEG cannot masquerade as verified export")
+                body_picture_sha = event.get("body_picture_source_sha256")
+                if ((tool == BODY_PICTURE_TOOL) != (body_picture_sha is not None) or
+                        (body_picture_sha is not None and (
+                            not _sha(body_picture_sha) or access != "read" or
+                            seen_sha is not None or new_sha is not None or
+                            len(event.get("image_sha256", [])) != 1 or
+                            event.get("audio_sha256") is not None))):
+                    raise NativeJournalError("BODY picture cannot masquerade as verified video export")
                 if bool(event.get("image_sha256")) != (
-                        tool in _FRAME_OBSERVERS or timeline_preview is True):
+                        tool in _FRAME_OBSERVERS or timeline_preview is True or
+                        body_picture_sha is not None):
                     raise NativeJournalError("Native visual evidence mismatches sensor identity")
                 audio_sha = event.get("audio_sha256")
                 if audio_sha is not None:
@@ -824,11 +859,12 @@ def main():
             raise NativeJournalError("Native diagnostics source cannot be independently attested")
         from .native_editor_source_pin import (
             pinned_electron_marker_previews, pinned_electron_asset_placement_previews,
-            pinned_electron_clip_edit_previews,
+            pinned_electron_clip_edit_previews, pinned_electron_plan_previews,
         )
         preview_error_tools = (pinned_electron_marker_previews(args.native_source, grants) +
             pinned_electron_asset_placement_previews(args.native_source, grants) +
-            pinned_electron_clip_edit_previews(args.native_source, grants))
+            pinned_electron_clip_edit_previews(args.native_source, grants) +
+            pinned_electron_plan_previews(args.native_source, grants))
         if "read" in config.allowed_access and grants.get("get_timeline") == "read":
             grants["zx7_inspect_native_content"] = "read"
     outcome = audit_native_journal(read_native_journal(args.journal),

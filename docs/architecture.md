@@ -370,11 +370,10 @@ old rendering selectable until the replacement wins its matched conformance
 and practical workload gates. Removal requires a reviewed migration rationale,
 reopen/undo/transfer proof and passing required exact-commit CI.
 
-Video editing remains the first field. Its gate includes dependent source
+Video editing is one integration workload. Its gate includes dependent source
 custody, editable multitrack projects, exact clocks/audio, color, recovery,
-observation and owner delivery. General generation and every other field remain
-in scope, with their own later acceptance; adding a model must not be used to
-hide unfinished editing.
+observation and owner delivery. All A–L fields progress in measured dependency
+order with their own acceptance; a model must not hide unfinished native work.
 
 Professional acceptance requires materially different briefs, real connected
 model decisions through BODY, observed outputs, requested revisions, preserved

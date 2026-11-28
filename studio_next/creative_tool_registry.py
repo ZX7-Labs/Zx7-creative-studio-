@@ -42,7 +42,7 @@ FOSS_TOOL_CANDIDATES = (
 
 APPLICATION_OPERATIONS = {
     "blender": ("body.blender3d", "body.exr_passes"),
-    "ffmpeg": ("body.composite_mix", "body.sequence_cuts", "body.film_finish"),
+    "ffmpeg": ("body.composite_mix", "body.sequence_cuts", "body.film_finish", "body.subtitle_delivery"),
     "inkscape": ("body.vector_png",),
     "mlt": ("body.mlt_owned_export", "body.mlt_owned_import", "body.mlt_owned_render"),
 }

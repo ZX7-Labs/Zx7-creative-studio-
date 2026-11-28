@@ -1,6 +1,14 @@
 name: "ZX7 BODY — Real Mobile Browser Acceptance"
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "studio_next/**"
+      - "motion_studio/**"
+      - "pyproject.toml"
+      - "scripts/release_test_summary.py"
+      - ".github/workflows/studio-body-browser-acceptance.yml"
   push:
     branches: [main]
     paths:
@@ -33,17 +41,33 @@ jobs:
           python-version: "3.11"
       - name: Install real browser and real media source decoders
         run: |
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://us-east-2.ec2.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg
           python -m pip install --no-cache-dir "playwright>=1.55,<2" "Pillow>=10,<13"
           python -m playwright install --with-deps chromium
       - name: Prove mobile owner UI with running Chromium and actual HTTP media rights
+        shell: bash
         env:
           ZX7_BROWSER_QA_PNG: ${{ github.workspace }}/output/real-browser/mobile-operator.png
         run: |
           mkdir -p output/real-browser
+          set -o pipefail
           python -m unittest studio_next.test_body_browser -v 2>&1 | tee output/real-browser/browser-run.txt
-          test -s output/real-browser/mobile-operator.png
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          from scripts.release_test_summary import parse_unittest_summary
+          root = Path('output/real-browser')
+          total, skipped = parse_unittest_summary((root/'browser-run.txt').read_text())
+          assert skipped == 0, 'Real browser acceptance did not execute every test'
+          with Image.open(root/'mobile-operator.png') as image:
+              assert image.format == 'PNG' and image.width > 0 and image.height > 0
+              image.verify()
+          print(f'Actual Chromium browser acceptance: {total} passed, zero skipped')
+          PY
       - name: Keep real browser evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -24,6 +24,27 @@ _NVIDIA_PARAMS = frozenset({"temperature", "top_p", "seed", "chat_template_kwarg
                             "reasoning_effort"})
 
 
+def _rejected_request_field(error):
+    """Report only a known top-level field explicitly named by the provider."""
+    if error.code != 400:
+        return None
+    try:
+        raw = error.read(8193)
+        if len(raw) > 8192:
+            return None
+        reply = json.loads(raw)
+    except (OSError, ValueError, RecursionError):
+        return None
+    detail = reply.get("error") if isinstance(reply, dict) else None
+    param = detail.get("param") if isinstance(detail, dict) else None
+    if isinstance(param, str) and param in {
+        "model", "messages", "tools", "tool_choice", "parallel_tool_calls",
+        "max_tokens", "temperature", "chat_template_kwargs", "reasoning_effort",
+    }:
+        return param
+    return None
+
+
 class NvidiaConfigurationError(ValueError):
     """The operator's NVIDIA configuration was rejected before a network call."""
 
@@ -114,6 +135,8 @@ class NvidiaCreativeModel(LocalCreativeModel):
     Sending original image bytes requires explicit host opt-in. Never log inputs,
     response bodies, remote errors, or Authorization headers.
     """
+    # Visual endpoints inherit an audio method that intentionally rejects WAV.
+    supports_source_bound_wav_input = False
 
     def __init__(self, settings: NvidiaModelSettings | None = None, *,
                  system_prompt: str = _CREATIVE_SYSTEM, allow_image_upload: bool = False):
@@ -179,8 +202,10 @@ class NvidiaCreativeModel(LocalCreativeModel):
             return opener.open(request, timeout=self.settings.timeout_seconds)
         except HTTPError as exc:
             # Never print API error bodies; they may echo prompt/private media.
-            raise NvidiaTransportError("NVIDIA rejected inference request (HTTP %d)" %
-                                       exc.code) from None
+            with exc:
+                field = _rejected_request_field(exc)
+            suffix = f", provider field {field}" if field else ""
+            raise NvidiaTransportError(f"NVIDIA rejected inference request (HTTP {exc.code}{suffix})") from None
         except (URLError, OSError, ssl.SSLError) as exc:
             # A timed-out POST may have been processed and consume quota.
             # Classify without retrying, exposing the request or leaking keys.

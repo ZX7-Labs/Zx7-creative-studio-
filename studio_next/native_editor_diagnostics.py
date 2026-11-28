@@ -71,6 +71,29 @@ def describe_native_text_semantics(name: str, schema: dict) -> dict:
     return result
 
 
+def native_overlay_warning(name: str, *, add_track_granted: bool) -> str:
+    """Exact pinned editor's same-track overlap semantics in model-visible text.
+
+    Source is independently attested by the MCP bridge before this helper is
+    used. The message changes neither an editor schema nor any grant, and it
+    never selects a creative action for the model.
+    """
+    if type(add_track_granted) is not bool:
+        raise ValueError("Overlay source affordance needs a real host grant state")
+    if name not in ("add_text_clip", "add_shape_clip"):
+        return ""
+    warning = (
+        "SAME-TRACK OVERWRITE: this native visual write can trim/remove existing "
+        "overlapping clips on its video track, including original footage. "
+    )
+    if add_track_granted:
+        return warning + (
+            "The granted add_track can create a separate top video layer; "
+            "no track is created automatically. "
+        )
+    return warning + "A separate track is not granted; inspect before this write. "
+
+
 def _identity(value):
     if (type(value) is not str or not 1 <= len(value) <= 128 or
             any(ord(c) < 32 for c in value)):

@@ -24,8 +24,18 @@ fetch() {
       printf '%s  %s\n' "$sha" "$output" | sha256sum --check --status; then
     return
   fi
+  if curl --fail --silent --show-error --location --retry 1 --max-time 55 \
+      --proto '=https' --proto-redir '=https' --output "$output" "$download/$name" &&
+      printf '%s  %s\n' "$sha" "$output" | sha256sum --check --status; then
+    return
+  fi
+  # Upstream explicitly documents this fixed alternate CDN. A GitHub asset
+  # HTTP 403 cannot erase otherwise executable native source tests, yet the
+  # exact existing pinned upstream SHA256 remains mandatory after download.
+  # Never accept model/environment-supplied mirrors or skip the digest.
   curl --fail --silent --show-error --location --retry 1 --max-time 55 \
-    --proto '=https' --proto-redir '=https' --output "$output" "$download/$name"
+    --proto '=https' --proto-redir '=https' --output "$output" \
+    "https://cdn.npmmirror.com/binaries/ffmpeg-static/b6.1.1/$name"
   printf '%s  %s\n' "$sha" "$output" | sha256sum --check --status
 }
 

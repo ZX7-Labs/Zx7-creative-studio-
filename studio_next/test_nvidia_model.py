@@ -170,6 +170,19 @@ class NvidiaProviderContractTest(unittest.TestCase):
         self.assertNotIn(credential, str(observed.exception))
         self.assertNotIn("private-media", str(observed.exception))
 
+    def test_http_400_reports_only_an_allowlisted_provider_field(self):
+        from studio_next.nvidia_model import _rejected_request_field
+        for body, expected in [
+                (b'{"error":{"param":"tools","message":"private media"}}', "tools"),
+                (b'{"error":{"param":"private media"}}', None),
+                (b'{"error":{"param":["tools"]}}', None),
+                (b'{"error":{"param":"tools"}}' + b' ' * 8192, None),
+                (b'private text mentions tools', None)]:
+            with self.subTest(expected=expected):
+                error = HTTPError("https://example.invalid", 400, "", {}, BytesIO(body))
+                with error:
+                    self.assertEqual(_rejected_request_field(error), expected)
+
     def test_hosted_transport_timeout_is_redacted_and_not_retried(self):
         secret = "nvapi-" + "Q" * 32
         for fault, expected in (

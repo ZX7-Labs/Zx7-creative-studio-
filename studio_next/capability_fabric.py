@@ -195,7 +195,9 @@ class CapabilityFabric:
                         schema, ensure_ascii=False, allow_nan=False)),
                     "schema_bytes": schema_bytes,
                     "name_tokens": _tokens(name + " " + namespace),
-                    "description_tokens": _tokens(summary),
+                    # Index the bounded native vocabulary, not just the displayed
+                    # summary. Keep long untrusted descriptions out of model context.
+                    "description_tokens": _tokens(desc[:1024]),
                     "requires": list(requirements.get(name, ())),
                     # Potential effect is an affordance, NOT evidence that a
                     # later native call actually changed a project fact.
@@ -228,7 +230,10 @@ class CapabilityFabric:
         # selection even when the *name* is reused for a different ABI/grant.
         self.revision = hashlib.sha256(_wire([{
             "id": key, "access": value["access"],
-            "summary": value["description"], "schema": value["input_schema"],
+            "summary": value["description"],
+            "search_tokens_sha256": hashlib.sha256(
+                _wire(sorted(value["description_tokens"])).encode("utf-8")).hexdigest(),
+            "schema": value["input_schema"],
             "requires": value["requires"], "may_enable": value["may_enable"]
         } for key, value in sorted(records.items())]).encode("utf-8")).hexdigest()
 
@@ -320,6 +325,28 @@ class CapabilityFabric:
             result["terms_are_search_hints_not_execution_grants"] = True
         return result
 
+    def exact_lookup_index(self):
+        """For a small catalog, expose identities for exact retrieval, not calls.
+
+        The list is complete or absent; no arbitrarily truncated operation
+        identity, schema, untrusted description, or execution grant is sent.
+        Large or non-queryable catalogs retain ordinary indexed discovery.
+        """
+        # Real installed native-editor audit (77 grants) fits the byte
+        # ceiling; allow modest growth, not an unbounded full catalog.
+        if self.count > 96:
+            return None
+        identities = sorted(self._records)
+        if any(identity != identity.strip() or len(identity.encode("utf-8")) > 160
+               for identity in identities):
+            return None
+        index = {"revision": self.revision, "operation_ids": identities,
+                 "retrieval_only_not_execution_grant": True,
+                 "query": "Use an exact operation_id as the search query; select a returned tool before invoking."}
+        if len(json.dumps(index).encode("utf-8")) > 4096:
+            return None
+        return index
+
     def search(self, query: str, *, limit: int = 6):
         if (not isinstance(query, str) or not query.strip() or
                 len(query.encode("utf-8")) > 160 or
@@ -369,29 +396,35 @@ class CapabilityFabric:
                     score += 16
                 scored.append((-score, ident, record))
         scored.sort(key=lambda x: (x[0], x[1]))
-        # A tiny specialist must not treat arbitrary alphabetical tie-breaks
-        # as an informed choice between different creative write operations.
-        # Return bounded *non-invokable* examples until the brain refines intent.
-        if len(scored) > limit and scored[limit][0] == scored[limit - 1][0]:
-            examples = [{"id": ident, "description": rec["description"][:96],
-                         "access": rec["access"]}
-                        for _, ident, rec in scored[:6]]
-            return {"revision": self.revision, "matches": [],
-                    "has_more": True, "requires_refinement": True,
-                    "candidate_examples": examples,
-                    "candidates_examined": len(candidates)}
+        # Never select an arbitrary subset of an equal-score group. A tie
+        # below complete stronger groups must not erase those groups: return
+        # their entire prefix and withhold the split group. If the top group
+        # itself cannot fit, offer only bounded, non-invokable examples.
+        end = min(limit, len(scored))
+        if end < len(scored) and scored[end][0] == scored[end - 1][0]:
+            boundary_score = scored[end][0]
+            while end and scored[end - 1][0] == boundary_score:
+                end -= 1
+            if not end:
+                examples = [{"id": ident, "description": rec["description"][:96],
+                             "access": rec["access"]}
+                            for _, ident, rec in scored[:6]]
+                return {"revision": self.revision, "matches": [],
+                        "has_more": True, "requires_refinement": True,
+                        "candidate_examples": examples,
+                        "candidates_examined": len(candidates)}
         items = []
-        for _, ident, record in scored[:limit]:
+        for _, ident, record in scored[:end]:
             schema = record["input_schema"]
             props = schema.get("properties")
             param_names = list(props)[:6] if isinstance(props, dict) else []
             items.append({"id": ident, "description": record["description"][:96],
                           "access": record["access"],
                           "parameters_sample": param_names,
-                          "requires": record["requires"],
-                          "may_enable": record["may_enable"]})
+                          "requires": list(record["requires"]),
+                          "may_enable": list(record["may_enable"])})
         return {"revision": self.revision, "matches": items,
-                "has_more": len(scored) > limit,
+                "has_more": len(scored) > end,
                 "requires_refinement": False,
                 "candidates_examined": len(candidates)}
 

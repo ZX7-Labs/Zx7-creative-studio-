@@ -185,7 +185,15 @@ _SCHEMAS = {
     "body.review": ("plan", obj({"media": SOURCE,
         "timecodes_seconds": array(TIME, minItems=1, maxItems=24),
         "audio_windows_seconds": array(PAIR, maxItems=24)})),
-    "body.loudness": ("plan", obj({"media": SOURCE})),
+    "body.loudness": ("plan", obj({"media": SOURCE}, {
+        "audio_stream_indices": {**array(number(0,integer=True),minItems=1,maxItems=8),
+            "description": "Unique zero-based audio-only stream ordinals in requested order; default [0]."}})),
+    "body.subtitle_delivery": ("plan", obj({"media": SOURCE,
+        "tracks": array(obj({"language": {"type": "string", "pattern": "[a-z]{3}"},
+            "default": {"type": "boolean"}, "cues": array(obj({
+                "start_ms": number(0,86400000,integer=True),
+                "end_ms": number(1,86400000,integer=True), "text": TEXT}),
+                minItems=1,maxItems=10000)}),minItems=1,maxItems=8)})),
     "body.color_lut": ("plan", obj({"media": SOURCE,
         "color_transform": obj({"kind": choice("display_referred_3d_lut"),
             "input_color_space": choice("bt709"), "output_color_space": choice("bt709"),
@@ -199,7 +207,9 @@ _SCHEMAS = {
             obj({"kind": choice("sharpen"), "strength": number(-2,5)})]}),
         "audio_ops": array({"oneOf": [obj({"kind": choice("gain"), "db": number(-60,30)}),
             obj({"kind": choice("loudnorm"), "integrated_lufs": number(-70,-5),
-                 "true_peak_dbfs": number(-9,0), "loudness_range": number(1,30)})]})})})),
+                 "true_peak_dbfs": number(-9,0), "loudness_range": number(1,30)})]})})}, {
+        "audio_stream_index": {**number(0, integer=True),
+            "description": "Zero-based selected audio program; required for multitrack audio-only finishing."}})),
 }
 
 # The 2D instrument's drawing grammar is technical geometry, not a supplied
@@ -368,7 +378,9 @@ _SCHEMAS["body.planar_insert"]=("plan",obj({"media":SOURCE,"overlay":SOURCE,
 _ACES={"source":SOURCE,"source_color_space":choice("Linear Rec.709 (sRGB)"),
     "alpha_association":choice("associated_scene_linear"),"scene_linear_background_rgb":_RGB,
     "display":choice("sRGB - Display"),"view":choice("ACES 2.0 - SDR 100 nits (Rec.709)")}
-_SCHEMAS["body.aces2_movie"]=("plan",obj(_ACES))
+_SCHEMAS["body.aces2_movie"]=("plan",{"oneOf":[obj(_ACES),obj({**_ACES,
+    "display":choice("Rec.2100-PQ - Display"),
+    "view":choice("ACES 2.0 - HDR 1000 nits (Rec.2020)")})]})
 _SCHEMAS["body.aces2_preview"]=("plan",obj({**_ACES,"frame_index":SIZE}))
 _INDEX=number(0,integer=True)
 _DELTA=number(-2000000,2000000,integer=True)

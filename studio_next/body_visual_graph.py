@@ -17,6 +17,11 @@ from .body_pixel_math import BASE_VARIABLES, FUNCTION_ARITY, PixelExpression
 
 _NAME=re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 _CHANNELS="rgba"
+_PATH_SAMPLES=8
+_PATH_MAX_SEGMENTS=512
+_PATH_MAX_EDGES=4096
+_PATH_MAX_COORDINATE=1000000
+_PATH_TOLERANCE=1/32
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,89 @@ def _uniforms(value):
         validate_curve(signal)
 
 
+def _validate_path_mask(params):
+    _exact(params,("contours","fill_rule","invert"),"Path mask")
+    if params["fill_rule"] not in ("evenodd","nonzero") or type(params["invert"]) is not bool:
+        raise ValueError("Path mask requires an explicit fill rule and inversion flag")
+    contours=params["contours"]
+    if not isinstance(contours,list) or not 1<=len(contours)<=_PATH_MAX_SEGMENTS:
+        raise ValueError("Path contour budget exceeded")
+    count=0
+    def point(value):
+        if not isinstance(value,list) or len(value)!=2:
+            raise ValueError("Path points require two authored scalar curves")
+        for signal in value:validate_curve(signal)
+    for contour in contours:
+        _exact(contour,("start","segments"),"Path contour")
+        point(contour["start"])
+        segments=contour["segments"]
+        if not isinstance(segments,list) or not segments:
+            raise ValueError("Path contour requires at least one cubic segment")
+        count+=len(segments)
+        if count>_PATH_MAX_SEGMENTS:raise ValueError("Path segment budget exceeded")
+        for segment in segments:
+            _exact(segment,("control1","control2","end"),"Cubic path segment")
+            for value in segment.values():point(value)
+
+
+def _path_coverage(params,frame,h,w):
+    """Flatten cubic paths within a subpixel bound, then sample winding coverage.
+
+    Authored coordinates are on the original canvas, not normalized pixels.
+    Each contour has an explicit straight closure from its last endpoint to
+    its start. Half-open edges avoid double-counting shared vertices.
+    """
+    import numpy as np
+    edges=[]
+    def evaluated(point):
+        p=tuple(curve_value(v,frame) for v in point)
+        if not all(math.isfinite(v) and abs(v)<=_PATH_MAX_COORDINATE for v in p):
+            raise ValueError("Animated path coordinate exceeds finite host bounds")
+        return p
+    def edge(a,b):
+        if a==b:return
+        if len(edges)>=_PATH_MAX_EDGES:raise ValueError("Flattened path edge budget exceeded")
+        edges.append((a,b))
+    def mid(a,b):return ((a[0]+b[0])/2,(a[1]+b[1])/2)
+    def flatten(a,b,c,d,depth=0):
+        # Convex-hull bound on deviation from the line parameterized as a
+        # cubic; unlike distance-to-chord alone this also catches overshoot.
+        delta=max(math.hypot(b[0]-(2*a[0]+d[0])/3,b[1]-(2*a[1]+d[1])/3),
+                  math.hypot(c[0]-(a[0]+2*d[0])/3,c[1]-(a[1]+2*d[1])/3))
+        if delta<=_PATH_TOLERANCE:
+            edge(a,d);return
+        if depth>=20:raise ValueError("Cubic subdivision budget exceeded")
+        ab,bc,cd=mid(a,b),mid(b,c),mid(c,d)
+        abc,bcd=mid(ab,bc),mid(bc,cd);m=mid(abc,bcd)
+        flatten(a,ab,abc,m,depth+1);flatten(m,bcd,cd,d,depth+1)
+    for contour in params["contours"]:
+        start=evaluated(contour["start"]);last=start
+        for segment in contour["segments"]:
+            end=evaluated(segment["end"])
+            flatten(last,evaluated(segment["control1"]),evaluated(segment["control2"]),end)
+            last=end
+        edge(last,start)
+    n=_PATH_SAMPLES;coverage=np.zeros((h,w),dtype=np.float32)
+    if edges:
+        a,b=np.asarray(edges,dtype=np.float64).transpose(1,0,2)
+        ax,ay=a.T;bx,by=b.T
+        low=np.minimum(ay,by);high=np.maximum(ay,by)
+        xs=(np.arange(w*n,dtype=np.float64)+.5)/n
+        for row in range(h):
+            for sub in range(n):
+                y=row+(sub+.5)/n;active=(low<=y)&(y<high)
+                if not np.any(active):continue
+                crossings=ax[active]+(y-ay[active])*(bx[active]-ax[active])/(by[active]-ay[active])
+                order=np.argsort(crossings);positions=np.searchsorted(crossings[order],xs,side="right")
+                if params["fill_rule"]=="evenodd":inside=positions%2!=0
+                else:
+                    winding=np.concatenate(([0],np.cumsum(np.where(by[active]>ay[active],1,-1)[order])))
+                    inside=winding[positions]!=0
+                coverage[row]+=inside.reshape(w,n).sum(axis=1)
+    coverage/=n*n
+    return 1-coverage if params["invert"] else coverage
+
+
 def validate_graph(plan,*,budget=None):
     budget=budget or VisualBudget()
     _exact(plan,("version","canvas","nodes","output","render"),"Visual graph")
@@ -76,7 +164,7 @@ def validate_graph(plan,*,budget=None):
         raise ValueError("Export range and separate-track audio decisions must match the format")
     if not isinstance(plan["nodes"],list) or not 1<=len(plan["nodes"])<=budget.max_nodes:
         raise ValueError("Graph is empty or exceeds host node budget")
-    indexed,compiled={},{};work=0
+    indexed,compiled={},{};work=0;mask_work=0
     for node in plan["nodes"]:
         _exact(node,("id","op","inputs","params"),"Node")
         name=node["id"]
@@ -126,6 +214,10 @@ def validate_graph(plan,*,budget=None):
         elif op=="over":
             _exact(inputs,("foreground","background"),"Over inputs")
             _exact(p,("opacity",),"Over controls");validate_curve(p["opacity"])
+        elif op=="path_mask":
+            _exact(inputs,("image",),"Path mask inputs");_validate_path_mask(p)
+            # Bound scanline intersection and subpixel work across all masks.
+            mask_work+=h*_PATH_SAMPLES*_PATH_MAX_EDGES*16+w*h*_PATH_SAMPLES**2*16
         elif op=="convolve":
             _exact(inputs,("image",),"Convolution inputs")
             _exact(p,("kernel_x","kernel_y","divisor","border"),"Convolution controls",("channels",))
@@ -141,7 +233,7 @@ def validate_graph(plan,*,budget=None):
             if p["border"] not in ("transparent","clamp","wrap"):raise ValueError("Unknown convolution edge policy")
         else:raise ValueError("Unknown native graph primitive: "+str(op))
         compiled[name]=expressions
-    if work*w*h>budget.max_expression_work:raise ValueError("Graph exceeds host pixel-math work budget per frame")
+    if work*w*h+mask_work>budget.max_expression_work:raise ValueError("Graph exceeds host pixel-math work budget per frame")
     if not isinstance(plan["output"],str) or plan["output"] not in indexed:
         raise ValueError("Graph output must identify an existing node")
     order,active,done=[],set(),set()
@@ -202,8 +294,26 @@ def sample_image(image,x,y,*,method,border):
             +(1-dx)*dy*fetch(x0,y0+1)+dx*dy*fetch(x0+1,y0+1)).astype(np.float32)
 
 
-def _convolve(image,kernels,border):
+def _convolve(image,kernels,border,*,backend="numpy"):
+    """Separable native filtering with a host-selected and attested backend.
+
+    Existing NumPy numerics remain the default. Optional SciPy executes the
+    SAME artist-authored kernels using compiled ndimage.convolve1d; no image
+    becomes an 8-bit Pillow intermediate and no color/alpha contract changes.
+    The output backend is recorded by the physical renderer for reproducibility.
+    """
     import numpy as np
+    if backend=="scipy":
+        from scipy.ndimage import convolve1d
+        edge={"transparent":"constant","clamp":"nearest","wrap":"wrap"}[border]
+        # Convolution, not correlation: preserve asymmetric signed kernels.
+        result=image
+        for axis,weights in ((1,kernels[0]),(0,kernels[1])):
+            result=convolve1d(result,weights,axis=axis,mode=edge,cval=0.,
+                              output=np.float32)
+        return result
+    if backend!="numpy":
+        raise ValueError("Unsupported visual convolution backend")
     result=image
     for axis,weights in ((1,kernels[0]),(0,kernels[1])):
         radius=len(weights)//2;padding=[(0,0)]*3;padding[axis]=(radius,radius)
@@ -217,7 +327,17 @@ def _convolve(image,kernels,border):
 
 
 class VisualGraph:
-    def __init__(self,plan,*,budget=None):
+    def __init__(self,plan,*,budget=None,convolution_backend="numpy"):
+        # The host opts in explicitly. A project's original JSON remains
+        # independent of installed wheels and creative-model suggestions.
+        if convolution_backend not in ("numpy","scipy"):
+            raise ValueError("Unsupported visual convolution backend")
+        if convolution_backend=="scipy":
+            try:
+                from scipy.ndimage import convolve1d  # noqa: F401
+            except ImportError as exc:
+                raise RuntimeError("Selected SciPy visual engine is not installed") from exc
+        self.convolution_backend=convolution_backend
         self.budget=budget or VisualBudget()
         self.plan=json.loads(json.dumps(plan,allow_nan=False))
         self.nodes,self.order,self.compiled=validate_graph(self.plan,budget=self.budget)
@@ -265,11 +385,16 @@ class VisualGraph:
                 opacity=curve_value(p["opacity"],frame_index)
                 if not 0<=opacity<=1:raise ValueError("Animated opacity left the physical alpha range")
                 fg=foreground*opacity;rgba=fg+background*(1-fg[...,3:4])
+            elif op=="path_mask":
+                image=inputs["image"]
+                if image.shape!=(h,w,4):raise ValueError("Explicitly remap source dimensions before path masking")
+                rgba=image*_path_coverage(p,frame_index,h,w)[...,None]
             else:
                 kernels=[[curve_value(k,frame_index) for k in p[key]] for key in ("kernel_x","kernel_y")]
                 divisor=curve_value(p["divisor"],frame_index)
                 if not math.isfinite(divisor) or divisor==0:raise ValueError("Convolution divisor must be finite and nonzero")
-                rgba=_convolve(inputs["image"],kernels,p["border"])/divisor
+                rgba=_convolve(inputs["image"],kernels,p["border"],
+                               backend=self.convolution_backend)/divisor
                 if p.get("channels","rgba")=="rgb":rgba[...,3]=inputs["image"][...,3]
             if not np.all(np.isfinite(rgba)) or np.min(rgba[...,3])< -1e-6 or np.max(rgba[...,3])>1+1e-6:
                 raise ValueError("Node "+name+" produced invalid finite RGBA/alpha")

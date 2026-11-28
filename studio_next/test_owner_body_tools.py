@@ -10,8 +10,10 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
+import subprocess
+import sys
 
-from studio_next.native_editor_session import attest_owner_body_source
+from studio_next.native_editor_session import (attest_owner_body_source, native_editor_child_environment)
 from studio_next.body_capability_adapter import InstalledBodyAdapter
 from studio_next.capability_gateway import CapabilityExecutionError, CapabilityGateway
 from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
@@ -40,6 +42,7 @@ def fixture(root):
     (root / "staging" / "session-1").mkdir()
     (root / "outputs" / "session-1").mkdir()
     return {
+        "allowed_access": ["read", "write"],
         "projects_root": str(root / "projects"),
         "staging_root": str(root / "staging" / "session-1"),
         "outputs_root": str(root / "outputs" / "session-1"),
@@ -47,6 +50,81 @@ def fixture(root):
 
 
 class OwnerInstalledBodyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_editor_read_only_or_default_grant_cannot_attach_writable_body(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config = fixture(root)
+            for policy in ({**config, "allowed_access": ["read"]},
+                           {k: v for k, v in config.items() if k != "allowed_access"}):
+                adapter = attest_owner_body_source(root, configuration=policy, provider="local")
+                grants = adapter.trusted_grants()
+                self.assertIn("body.timecode_format", grants)
+                self.assertTrue(all(mode == "read" for mode in grants.values()))
+                self.assertNotIn("body.visual_author", grants)
+                with self.assertRaises(ValueError):
+                    attest_owner_body_source(root, configuration=policy, provider="local",
+                                             allowed_access=("read", "write"))
+
+
+    async def test_native_child_never_inherits_cloud_or_host_credentials(self):
+        # Reproduces previously observed host leakage: only NVIDIA_API_KEY
+        # was stripped while unrelated provider and CI credentials survived.
+        original = {
+            "PATH": "/usr/bin", "DISPLAY": ":99", "CI": "true",
+            "PYTHONPATH": "/trusted/runtime", "HOME": "/workspace/private",
+            "NVIDIA_API_KEY": "not-a-real-key",
+            "OPENAI_API_KEY": "not-a-real-key",
+            "AZURE_OPENAI_API_KEY": "not-a-real-key",
+            "HF_TOKEN": "not-a-real-token",
+            "GITHUB_TOKEN": "not-a-real-token",
+            "AWS_SECRET_ACCESS_KEY": "not-a-real-key",
+            "SSH_AUTH_SOCK": "/tmp/ssh-credentials",
+            "GIT_ASKPASS": "/tmp/credential-helper",
+            "MODEL_PROVIDER_SESSION": "not-a-real-token",
+            "ZX7_UNAPPROVED_CHILD_FLAG": "not-an-approval",
+        }
+        allowed = {key: original[key] for key in
+                   ("PATH", "DISPLAY", "CI", "PYTHONPATH", "HOME")}
+        self.assertEqual(native_editor_child_environment(original), allowed)
+        isolated = subprocess.run([sys.executable, "-c",
+            "import os; assert 'OPENAI_API_KEY' not in os.environ; "
+            "assert 'NVIDIA_API_KEY' not in os.environ; "
+            "assert 'AWS_SECRET_ACCESS_KEY' not in os.environ; "
+            "assert 'GITHUB_TOKEN' not in os.environ; "
+            "assert 'SSH_AUTH_SOCK' not in os.environ; "
+            "assert os.environ.get('DISPLAY') == ':99'"],
+            env=allowed, capture_output=True, text=True, timeout=5)
+        self.assertEqual(isolated.returncode, 0, isolated.stderr)
+        self.assertEqual(original["NVIDIA_API_KEY"], "not-a-real-key")
+        self.assertEqual(native_editor_child_environment({
+            **original, "PATH": 123})["DISPLAY"], ":99")
+        self.assertNotIn("PATH", native_editor_child_environment({
+            **original, "PATH": 123}))
+
+    async def test_standard_attachment_uses_validated_roots_and_never_calls_model(self):
+        from studio_next.studio_mcp import prepare_attachment
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config = fixture(root)
+            config.update(endpoint="http://127.0.0.1:19790/mcp",
+                          allowed_tools={"get_project": "read"}, allowed_access=["read"])
+            file = root / "editor.json"
+            file.write_text(json.dumps(config), encoding="utf-8")
+            state = root / "state"
+            state.mkdir(mode=0o700)
+            canonical, adapter, budget = prepare_attachment(
+                root, file, state, max_calls=8, max_writes=0)
+            self.assertEqual(canonical["projects_root"], str(root / "projects"))
+            self.assertEqual(canonical["allowed_access"], ["read"])
+            self.assertTrue(all(v == "read" for v in adapter.trusted_grants().values()))
+            self.assertEqual(budget.snapshot()["reserved_calls"], 0)
+            self.assertFalse((root / "vault").exists())
+            for invalid in (root, root / "outputs", Path("state")):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    prepare_attachment(root, file, invalid, max_calls=8, max_writes=0)
+            with self.assertRaises(ValueError):
+                prepare_attachment(root, file, state, max_calls=2, max_writes=3)
+
     async def test_real_installed_catalog_is_optional_host_source_not_model_grants(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

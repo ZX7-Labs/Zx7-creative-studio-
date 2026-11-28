@@ -52,13 +52,32 @@ class CGIContractTests(unittest.TestCase):
         with self.assertRaises(Invalid3DShot):validate_blender_shot(s)
 
     def test_cgi_texture_source_bytes_are_in_actual_material_fingerprint(self):
+        from PIL import Image
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d);p=root/'label.png';p.write_bytes(b'first original')
-            plan={'scene':{},'assets':[{'name':'label.png','media':{'source':'label.png','asset_id':'x','attestation_id':'y'}}]}
-            (root/'cgi.json').write_text(json.dumps(plan))
-            a=fingerprint_physical_inputs('body.cgi_shot',{'plan':'cgi.json','out':'out.mp4'},root)
-            p.write_bytes(b'changed original');b=fingerprint_physical_inputs('body.cgi_shot',{'plan':'cgi.json','out':'out.mp4'},root)
+            root=Path(d);p=root/'label.png';vault=MediaVault(root/'vault')
+            def admit():
+                r=vault.ingest(p,mime='image/png',rights='owner_supplied',source_type='owner_upload',
+                    source_id='synthetic-label',evidence='Original generated test texture',owner_or_generator='test author')
+                return {'source':'label.png','asset_id':r['asset_id'],'attestation_id':r['attestation_id']}
+            def fingerprint(ref):
+                plan={'scene':{},'assets':[{'name':'label.png','media':ref}]}
+                (root/'cgi.json').write_text(json.dumps(plan))
+                return fingerprint_physical_inputs('body.cgi_shot',{'plan':'cgi.json','out':'out.mp4'},root)
+            Image.new('RGB',(8,8),(20,40,60)).save(p)
+            first=admit();a=fingerprint(first)
+            self.assertIn(first['asset_id'],[item['sha256'] for item in a])
+            Image.new('RGB',(8,8),(60,40,20)).save(p)
+            with self.assertRaisesRegex(ValueError,'Original workspace source differs'):
+                fingerprint(first)
+            second=admit();b=fingerprint(second)
+            self.assertNotEqual(first['asset_id'],second['asset_id'])
+            self.assertIn(second['asset_id'],[item['sha256'] for item in b])
             self.assertNotEqual(a,b)
+            with self.assertRaisesRegex(ValueError,'Unsafe media content digest'):
+                fingerprint({'source':'label.png','asset_id':'x','attestation_id':'y'})
+            vault.withdraw_attestation(second['asset_id'],second['attestation_id'],reason='test withdrawal')
+            with self.assertRaisesRegex(ValueError,'has been withdrawn'):
+                fingerprint(second)
 
 TRACKING_READY=bool(importlib.util.find_spec('cv2') and importlib.util.find_spec('numpy') and shutil.which('ffmpeg'))
 SETTINGS={'max_features':1800,'min_matches':10,'min_inlier_ratio':.55,'ransac_pixels':2,'max_reprojection_error':1.5}
@@ -115,7 +134,7 @@ class PlanarAcceptanceTests(unittest.TestCase):
             with wave.open(str(root/'sound.wav'),'wb') as w:
                 w.setnchannels(1);w.setsampwidth(2);w.setframerate(48000)
                 a=(np.sin(2*np.pi*440*np.arange(48000)/48000)*4000).astype('<i2');w.writeframes(a.tobytes())
-            subprocess.run(['ffmpeg','-v','error','-framerate','8','-i',str(root/'f%03d.png'),'-i',str(root/'sound.wav'),'-c:v','libx264','-crf','12','-pix_fmt','yuv420p','-vf','scale=in_range=full:out_range=tv:out_color_matrix=bt709','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-c:a','aac','-y',str(root/'source.mp4')],check=True)
+            subprocess.run(['ffmpeg','-v','error','-framerate','8','-i',str(root/'f%03d.png'),'-i',str(root/'sound.wav'),'-c:v','libx264','-crf','12','-pix_fmt','yuv420p','-vf','scale=in_range=full:out_range=tv:out_color_matrix=bt709','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','tv','-x264-params','colorprim=bt709:transfer=bt709:colormatrix=bt709','-c:a','aac','-y',str(root/'source.mp4')],check=True)
             art=np.zeros((80,120,4),np.uint8);art[:,:,1]=220;art[:,:,3]=100;cv2.imwrite(str(root/'art.png'),art)
             vault=MediaVault(root/'vault')
             def ref(name,mime):
@@ -125,8 +144,48 @@ class PlanarAcceptanceTests(unittest.TestCase):
                 'opacity':.8,'audio':'preserve_source','tracking':SETTINGS}
             self.assertTrue(validate_document('body.planar_insert',plan));(root/'plan.json').write_text(json.dumps(plan))
             r=render_planar_insert(root/'plan.json',root,root/'vault',root/'out.mp4')
+            from studio_next.media_vault import MediaCustodyError,canonical_source_attestations
+            from studio_next.body_integration import run_body_project
+            from unittest.mock import patch
+            # The direct renderer and graph both must bind every exact input
+            # grant; the independent physical sound/colour oracle below stays.
+            expected=canonical_source_attestations([{k:plan[field][k] for k in ('asset_id','attestation_id')} for field in ('media','overlay')])
+            self.assertEqual(r.get('source_attestations'),expected)
+            matte=np.zeros((240,320),np.uint8);matte[100:140,145:175]=255
+            cv2.imwrite(str(root/'foreground.png'),matte)
+            plan['foreground']={'media':ref('foreground.png','image/png'),'kind':'still_image'}
+            (root/'plan-with-matte.json').write_text(json.dumps(plan))
+            expected=canonical_source_attestations(expected+[{k:plan['foreground']['media'][k] for k in ('asset_id','attestation_id')}])
+            ir={'project':{'creative_intent':'Actual original motion and foreground-preserved planar insert'},
+                'shots':[{'id':'shot','purpose':'Native tracked insert'}],
+                'tool_graph':[{'id':'shot','tool_id':'body.planar_insert','purpose':'Track original plane',
+                    'inputs':{'plan':'plan-with-matte.json','out':'tracked.mp4'},'depends_on':[]},
+                    {'id':'custody','tool_id':'body.asset_vault','purpose':'Preserve exact original grants',
+                    'inputs':{'source_witness':{'$node_output':'shot'}},'depends_on':['shot']}]}
+            # Simulate a crash after actual tracked movie publication, before
+            # durable graph settlement. Recovery may not rerender.
+            with patch('studio_next.durable_graph.DurableFilmGraph.complete',side_effect=OSError('Interrupted after publish')):
+                self.assertNotEqual(run_body_project(ir,root)['status'],'all_tool_results_verified')
+            tracked=root/'tracked.mp4';digest=sha256_file(tracked)
+            with patch('studio_next.body_integration.render_planar_insert',side_effect=AssertionError('Must recover exact bytes')):
+                result=run_body_project(ir,root)
+            self.assertEqual(result['status'],'all_tool_results_verified',result)
+            grant=vault.inspect(digest)['rights_attestations'][0]
+            self.assertEqual(grant.get('source_attestations'),expected)
+            self.assertEqual(run_body_project(ir,root)['reused'],['shot','custody'])
+            original_matte=plan['foreground']['media']
+            vault.withdraw_attestation(original_matte['asset_id'],original_matte['attestation_id'],reason='Withdraw exact foreground source')
+            with self.assertRaisesRegex(MediaCustodyError,'withdrawn'):
+                MediaVault(root/'vault').checkout(digest,grant['attestation_id'],root/'denied.mp4')
+            self.assertFalse((root/'denied.mp4').exists())
+            self.assertEqual(sha256_file(tracked),digest)
+            for field in ('media','overlay'):
+                self.assertEqual(vault.inspect(plan[field]['asset_id'],attestation_id=plan[field]['attestation_id'])['asset_id'],plan[field]['asset_id'])
             self.assertEqual(r['actual_tracked_frames'],8);self.assertTrue(r['source_sound_bitstream_preserved'])
             def pcm(name):return subprocess.check_output(['ffmpeg','-v','error','-i',str(root/name),'-vn','-f','s16le','-'])
             self.assertEqual(pcm('source.mp4'),pcm('out.mp4'))
+            for name in ('source.mp4','out.mp4'):
+                probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=color_space,color_primaries,color_transfer,color_range','-of','json',str(root/name)]))
+                self.assertEqual(probe['streams'],[{'color_range':'tv','color_space':'bt709','color_transfer':'bt709','color_primaries':'bt709'}],name)
 
 if __name__=='__main__':unittest.main()

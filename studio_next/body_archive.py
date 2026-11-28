@@ -11,6 +11,7 @@ cryptographic signature. No remote provider or subscription.
 """
 from __future__ import annotations
 
+from contextlib import closing
 import ctypes
 import errno
 import hashlib
@@ -62,6 +63,7 @@ def _publish_restored_directory_exclusively(staged,target):
 _PRIVATE_RENDER_PREFIXES=(
     ".zx7-owned-sources-",
     ".zx7-media-review-",
+    ".zx7-subtitle-",
     ".zx7-original-exr-render-",
     ".zx7-scene-seal-",
     ".zx7-temporal-",
@@ -99,8 +101,9 @@ def _name(path):
 def _consistent_sqlite(original,target):
     """Back up live SQLite with its WAL, rather than copying stale DB bytes."""
     try:
-        with sqlite3.connect(f"file:{original}?mode=ro",uri=True,timeout=20) as reader:
-            with sqlite3.connect(target,timeout=20) as writer:
+        with closing(sqlite3.connect(Path(original).absolute().as_uri()+"?mode=ro",
+                                     uri=True,timeout=20)) as reader:
+            with closing(sqlite3.connect(target,timeout=20)) as writer, writer:
                 reader.backup(writer,pages=256,sleep=.05)
                 check=writer.execute("PRAGMA quick_check").fetchone()
                 if check!=("ok",):
@@ -249,7 +252,7 @@ def restore_body_archive(archive,destination,*,expected_sha256,relocate=False):
                 if sha.hexdigest()!=row["sha256"]:
                     raise ValueError("Restored movie/media bytes differ from immutable snapshot")
             for db in temp.rglob("*.sqlite3"):
-                with sqlite3.connect(f"file:{db}?mode=ro",uri=True) as conn:
+                with closing(sqlite3.connect(db.absolute().as_uri()+"?mode=ro",uri=True)) as conn:
                     if conn.execute("PRAGMA quick_check").fetchone()!=("ok",):
                         raise ValueError("Restored scene checkpoint SQLite is corrupted")
             # Atomic publish into the same location used by original source
@@ -297,7 +300,7 @@ def save_body_archive_offline(workspace,archive):
         try:
             database=root/"body-jobs.sqlite3"
             if database.exists():
-                with sqlite3.connect(f"file:{database}?mode=ro",uri=True) as conn:
+                with closing(sqlite3.connect(database.absolute().as_uri()+"?mode=ro",uri=True)) as conn:
                     active=conn.execute(
                         "SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running')"
                     ).fetchone()[0]

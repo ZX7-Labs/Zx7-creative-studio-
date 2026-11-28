@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 from functools import lru_cache
 import json
+import math
 import os
 from fractions import Fraction
 from pathlib import Path
@@ -48,17 +49,62 @@ def motion_document_schema():
         "as":{"oneOf":[text,{"type":"null"}]}}),("read",{}),("describe",{}),
         ("list",{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":256}})):
         actions.append(obj({"op":{"enum":[op]},"path":path,**extra}))
+    vector={"type":"array","minItems":3,"maxItems":3,"items":{"type":"number","minimum":-1000000,"maximum":1000000}}
+    bone=obj({"name":{"type":"string","minLength":1,"maxLength":63},"head":vector,"tail":vector,
+        "roll":{"type":"number","minimum":-2*math.pi,"maximum":2*math.pi},
+        "parent":{"oneOf":[text,{"type":"null"}]},"connected":{"type":"boolean"}})
+    actions.append(obj({"op":{"enum":["define_armature_bones"]},"path":path,
+        "bones":{"type":"array","minItems":1,"maxItems":1024,"items":bone}}))
     schema=obj({"version":{"enum":[VERSION]},"project":{"oneOf":[text,{"type":"null"}]},
         "actions":{"type":"array","items":{"oneOf":actions},"maxItems":10000},
         "renders":{"type":"array","maxItems":10000,"items":obj({"scene":text,"frame":integer,"format":{"enum":["png","exr32"]}})}})
     schema["description"]=("Native Blender 4.5+ project transaction. Root paths: data -> bpy.data, scene -> active scene, refs -> named call returns. "
         "Path tokens select public native RNA attributes, named collection members or integer indices. set edits RNA properties/array elements; "
         "call invokes native data construction/animation methods. args/kwargs may contain literal JSON values, arrays or {$ref:path} pointer values. "
+        "define_armature_bones creates an explicitly authored bone hierarchy on an empty, local armature object in the active view layer; rest coordinates are armature-local. "
+        "Use native vertex groups, modifiers and pose keyframes for skin and motion. "
         "describe returns installed RNA properties/enums and available data methods; list pages native collections; read observes a property. "
         "All actions form one isolated transaction and publish a new native project; project null starts empty. renders use authored scene names "
         "and original frame numbers in delivery order. Engine/render settings belong to the artist. Paths, script execution and dependencies are host-managed. "
         "Only self-contained packed projects currently accepted; no arbitrary operator/Python execution or unsealed external cache import.")
     return schema
+
+
+def validate_armature_bones(bones):
+    """Admit bounded native rest topology without guessing weights or joints."""
+    if not isinstance(bones,list) or not 1<=len(bones)<=1024:
+        raise ValueError("Armature requires 1..1024 explicitly authored bones")
+    by_name={}
+    for bone in bones:
+        if not isinstance(bone,dict) or set(bone)!={"name","head","tail","roll","parent","connected"}:
+            raise ValueError("Invalid native bone fields")
+        name=bone["name"]
+        if (not isinstance(name,str) or not name.strip() or len(name.encode("utf-8"))>63 or
+            any(ord(c)<32 or ord(c)==127 for c in name) or name in by_name):
+            raise ValueError("Bone names must be unique native names of at most 63 UTF-8 bytes")
+        for point in (bone["head"],bone["tail"]):
+            if (not isinstance(point,list) or len(point)!=3 or any(type(x) not in (int,float) or
+                not -1000000<=x<=1000000 for x in point)):
+                raise ValueError("Rest coordinates must be bounded finite armature-local vectors")
+        if sum((a-b)**2 for a,b in zip(bone["head"],bone["tail"]))<1e-10:
+            raise ValueError("Bone must have nonzero rest length")
+        if type(bone["roll"]) not in (int,float) or not -2*math.pi<=bone["roll"]<=2*math.pi:
+            raise ValueError("Bone roll must be finite radians in [-2pi,2pi]")
+        if (bone["parent"] is not None and not isinstance(bone["parent"],str)) or type(bone["connected"]) is not bool:
+            raise ValueError("Invalid native parent or connection flag")
+        by_name[name]=bone
+    for bone in bones:
+        parent=bone["parent"]
+        if parent is not None and parent not in by_name:
+            raise ValueError("Unknown bone parent")
+        if bone["connected"] and (parent is None or bone["head"]!=by_name[parent]["tail"]):
+            raise ValueError("Connected child head must exactly meet parent tail")
+    for bone in bones:
+        parent=bone["parent"];seen={bone["name"]}
+        while parent is not None:
+            if parent in seen:raise ValueError("Cyclic native bone hierarchy")
+            seen.add(parent);parent=by_name[parent]["parent"]
+    return bones
 
 
 def validate_motion_job(job):
@@ -84,10 +130,12 @@ def validate_motion_job(job):
         if not isinstance(action,dict):raise ValueError("Native actions must be objects")
         op=action.get("op")
         fields={"set":{"op","path","value"},"call":{"op","path","method","args","kwargs","as"},
-                "read":{"op","path"},"describe":{"op","path"},"list":{"op","path","offset","limit"}}
+                "read":{"op","path"},"describe":{"op","path"},"list":{"op","path","offset","limit"},
+                "define_armature_bones":{"op","path","bones"}}
         if op not in fields or set(action)!=fields[op]:raise ValueError("Native action fields do not match operation")
         path(action["path"])
         if op=="set":values(action["value"])
+        if op=="define_armature_bones":validate_armature_bones(action["bones"])
         if op=="call":
             if action["method"] not in METHODS or not isinstance(action["args"],list) or not isinstance(action["kwargs"],dict):
                 raise ValueError("Unsupported native data method")

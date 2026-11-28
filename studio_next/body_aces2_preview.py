@@ -25,10 +25,14 @@ OCIO_BUILTIN="cg-config-v4.0.0_aces-v2.0_ocio-v2.5"
 SOURCE_COLOR="Linear Rec.709 (sRGB)"
 DISPLAY="sRGB - Display"
 VIEW="ACES 2.0 - SDR 100 nits (Rec.709)"
+HDR_DISPLAY="Rec.2100-PQ - Display"
+HDR_VIEW="ACES 2.0 - HDR 1000 nits (Rec.2020)"
 _MAX_EXR_FRAME_BYTES=80*1024*1024
 
 
-def _physical_config():
+def _physical_config(display=DISPLAY,view=VIEW):
+    if (display,view) not in ((DISPLAY,VIEW),(HDR_DISPLAY,HDR_VIEW)):
+        raise ValueError("Unsupported pinned ACES2 display/view pair")
     import PyOpenColorIO as OCIO
     version=importlib.metadata.version("opencolorio")
     numbers=version.split(".")
@@ -40,8 +44,8 @@ def _physical_config():
         raise RuntimeError("Pinned ACES2 config does not expose original scene Rec.709")
     transform=OCIO.DisplayViewTransform()
     transform.setSrc(SOURCE_COLOR)
-    transform.setDisplay(DISPLAY)
-    transform.setView(VIEW)
+    transform.setDisplay(display)
+    transform.setView(view)
     processor=config.getProcessor(transform)
     cpu=processor.getDefaultCPUProcessor()
     config_hash=hashlib.sha256(config.serialize().encode("utf-8")).hexdigest()

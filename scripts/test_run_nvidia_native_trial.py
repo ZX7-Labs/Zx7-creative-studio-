@@ -23,6 +23,82 @@ from scripts.run_nvidia_native_trial import (
 
 
 class RealNvidiaTrialBootstrapTests(unittest.TestCase):
+    def test_integrated_trial_uses_exact_cumulative_native_source_not_bare_upstream(self):
+        """Real neural proof must use the reviewed cumulative BODY editor."""
+        from scripts.run_nvidia_native_trial import _PINNED_EDITOR
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            integrated = base / "reviewed-native-source"
+            integrated.mkdir()
+            workspace = base / "separate-output"
+            # An upstream-only checkout cannot impersonate the complete editor.
+            fake_git = subprocess.CompletedProcess([], 0, _PINNED_EDITOR + "\n", "")
+            with patch("scripts.run_nvidia_native_trial.subprocess.run",
+                       return_value=fake_git):
+                with self.assertRaisesRegex(ValueError, "Unpinned native editor source"):
+                    prepare_trial(workspace, source=integrated,
+                                  audiovisual=True, integrated_native=True)
+            self.assertFalse(workspace.exists())
+
+            # The actual native client, not only the preflight, must receive
+            # this exact reviewed source. No hosted provider is called here.
+            workspace.mkdir()
+            roots = {"state": workspace / "state", "outputs": workspace / "outputs"}
+            with patch("scripts.run_nvidia_native_trial.prepare_trial",
+                       return_value=(roots, workspace / "host-grants.json")) as staged, patch(
+                    "scripts.run_nvidia_native_trial.subprocess.run",
+                    return_value=subprocess.CompletedProcess([], 1, "", "")) as child:
+                with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                    run_trial(workspace, model_id=_ALLOWED_MODEL,
+                              xvfb_binary="/usr/bin/Xvfb",
+                              display="127.0.0.1:95",
+                              audiovisual=True, allow_cloud_audio_diagnostics=True,
+                              integrated_editor_source=integrated)
+            staged.assert_called_once_with(
+                workspace, source=integrated.resolve(),
+                audiovisual=True, integrated_native=True)
+            cli = child.call_args.args[0]
+            self.assertEqual(cli[cli.index("--source") + 1], str(integrated.resolve()))
+            workflow = (Path(__file__).resolve().parents[1] /
+                        ".github/workflows/zx7-nvidia-native-editor-trial.yml").read_text()
+            self.assertIn("prepare-native-loss-aware-extract-candidate.sh", workflow)
+            self.assertIn('--integrated-editor-source "$ZX7_INTEGRATED_NATIVE_EDITOR"', workflow)
+
+    def test_omni_synthetic_wav_flag_reaches_only_the_exact_authorized_native_session(self):
+        from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            args = dict(xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                        audiovisual=True, allow_cloud_audio_diagnostics=True)
+            with patch("scripts.run_nvidia_native_trial.prepare_trial") as stage:
+                for model, wav in [(_ALLOWED_MODEL, True), (NVIDIA_OMNI_AUDIO_MODEL_ID, False)]:
+                    with self.assertRaises(ValueError):
+                        run_trial(root, model_id=model, allow_cloud_synthetic_wav=wav, **args)
+                stage.assert_not_called()
+                stage.return_value = ({"state": root, "outputs": root}, root / "host.json")
+                with patch("scripts.run_nvidia_native_trial.subprocess.run",
+                           return_value=subprocess.CompletedProcess([], 1, "", "")) as child:
+                    with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                        run_trial(root, model_id=NVIDIA_OMNI_AUDIO_MODEL_ID,
+                                  allow_cloud_synthetic_wav=True, **args)
+                cmd = child.call_args.args[0]
+                self.assertIn("--allow-cloud-original-wav-upload", cmd)
+                self.assertIn("--indexed-catalog", cmd)
+                self.assertEqual(cmd[cmd.index("--model-id") + 1], NVIDIA_OMNI_AUDIO_MODEL_ID)
+
+    def test_wav_decision_receipt_excludes_failed_or_missing_next_turn(self):
+        from scripts.run_nvidia_native_trial import exports_with_wav_decisions
+
+        def wav(turn, export):
+            return dict(kind="native_tool_result", turn=turn, audio_sha256="a" * 64,
+                        observed_export_sha256=export, audio_sent_to_model_for_next_decision=True)
+
+        events = [wav(2, "first"), dict(turn=3, kind="model_finished", measured_model_wall_ms=2),
+                  wav(5, "revised"), dict(turn=6, kind="model_decision_failed", measured_model_wall_ms=1),
+                  wav(8, "unobserved")]
+        self.assertEqual(exports_with_wav_decisions(events), {"first"})
+
     def test_host_only_grants_and_real_owned_media_are_created(self):
         with tempfile.TemporaryDirectory() as scratch:
             workspace = Path(scratch) / "fresh"
@@ -54,6 +130,18 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must not preexist"):
                 prepare_trial(workspace, source=_SOURCE_EDITOR)
 
+    def test_audiovisual_layer_writer_is_reachable_without_destructive_track_grants(self):
+        """Source picture and titles need distinct native lanes, not replacement."""
+        from scripts.run_nvidia_native_trial import AV_TRIAL_REVISION_TOOLS
+        catalog = json.loads((Path(__file__).resolve().parents[1] /
+                              "engines/velorn/editor.example.json").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["allowed_tools"]["add_track"], "write")
+        self.assertIn("add_track", AV_TRIAL_REVISION_TOOLS)
+        self.assertNotIn("add_track", _HOST_ALLOWED)
+        self.assertIn("add_text_clip", AV_TRIAL_REVISION_TOOLS)
+        for destructive in ("remove_track", "delete_clips", "restore_project_checkpoint"):
+            self.assertNotIn(destructive, _HOST_ALLOWED | AV_TRIAL_REVISION_TOOLS)
+
     def test_cloud_media_consent_is_exactly_synthetic_and_bounded(self):
         request_path = (Path(__file__).resolve().parents[1] /
                         "research" / "nvidia-native-trial-request.json")
@@ -81,10 +169,15 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                   "velorn" / "native-model-client.py")
         module = runpy.run_path(str(script), run_name="native_client_test")
         given = {"PATH": "/usr/bin", "NVIDIA_API_KEY": "synthetic-secret-test-value",
-                 "OTHER_SETTING": "keep"}
+                 "OPENAI_API_KEY": "synthetic-secret-test-value",
+                 "OTHER_SETTING": "unapproved-host-environment"}
         child = module["native_editor_child_environment"](given)
+        # The native child receives only trusted desktop/runtime keys. The
+        # historical expectation that arbitrary host env survives was unsafe.
         self.assertNotIn("NVIDIA_API_KEY", child)
-        self.assertEqual(child, {"PATH": "/usr/bin", "OTHER_SETTING": "keep"})
+        self.assertNotIn("OPENAI_API_KEY", child)
+        self.assertNotIn("OTHER_SETTING", child)
+        self.assertEqual(child, {"PATH": "/usr/bin"})
         self.assertIn("NVIDIA_API_KEY", given)
 
     def test_pinned_real_electron_preview_attestation_requires_clean_exact_source(self):
@@ -211,15 +304,39 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
         granted = {
             "create_project": "write", "import_asset_from_path": "write",
             "add_text_clip": "write", "save_project": "write",
+            "export_timeline": "read",
         }
         requires, effects = method(granted, fresh=True)
         self.assertEqual(
             set(requires), {"import_asset_from_path", "add_text_clip", "save_project"})
-        self.assertEqual(effects, {"create_project": ["project_open"]})
+        # RED in the previous NVIDIA entry point: the controller already
+        # handled these native machine effects, but the hosted session omitted
+        # the real import/placement frontier after project creation.
+        self.assertEqual(effects, {
+            "create_project": ["project_open"],
+            "import_asset_from_path": ["project_assets_available"],
+        })
         self.assertNotIn("add_asset_to_timeline", requires)
         with_asset = {**granted, "add_asset_to_timeline": "write",
+                      "add_assets_to_timeline": "write",
                       "replace_clip_with_asset": "write"}
-        source_rules, _ = method(with_asset, fresh=True)
+        source_rules, source_effects = method(with_asset, fresh=True)
+        self.assertEqual(source_effects, {
+            "create_project": ["project_open"],
+            "import_asset_from_path": ["project_assets_available"],
+            "add_asset_to_timeline": ["timeline_clips_available"],
+            "add_assets_to_timeline": ["timeline_clips_available"],
+        })
+        self.assertNotIn("replace_clip_with_asset", source_effects)
+        # Missing/read-only grants do not mint new executable possibilities.
+        reduced = {**with_asset, "import_asset_from_path": "read",
+                   "add_assets_to_timeline": "read"}
+        _, reduced_effects = method(reduced, fresh=True)
+        self.assertEqual(reduced_effects, {
+            "create_project": ["project_open"],
+            "add_asset_to_timeline": ["timeline_clips_available"],
+        })
+        self.assertEqual(method(with_asset, fresh=False), ({}, {}))
         self.assertEqual(source_rules["add_asset_to_timeline"],
                          ["project_open", "project_assets_available"])
         self.assertEqual(source_rules["replace_clip_with_asset"],
@@ -432,6 +549,47 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
                 native_call.call_args.kwargs["timeout"], 35 * 60 - 5 * 60)
 
 
+    def test_explicit_indexed_av_trial_reuses_existing_native_frontier(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            workspace = Path(scratch)
+            roots = {"state": workspace / "state", "outputs": workspace / "out"}
+            failed = subprocess.CompletedProcess([], 1, "", "fixture")
+            with patch("scripts.run_nvidia_native_trial.prepare_trial",
+                       return_value=(roots, workspace / "host.json")) as stage, patch(
+                    "scripts.run_nvidia_native_trial.subprocess.run",
+                    return_value=failed) as native_call:
+                with self.assertRaisesRegex(RuntimeError, "trial failed"):
+                    run_trial(workspace, model_id=_ALLOWED_MODEL,
+                              xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                              audiovisual=True, allow_cloud_audio_diagnostics=True,
+                              indexed_catalog=True)
+                command = native_call.call_args.args[0]
+                self.assertEqual(command.count("--indexed-catalog"), 1)
+                self.assertIn("--structured-actions", command)
+                self.assertEqual(command[command.index("--max-turns") + 1], "48")
+                self.assertIn("--allow-cloud-audio-diagnostics", command)
+                self.assertNotIn("--allow-cloud-original-wav-upload", command)
+                self.assertEqual(native_call.call_count, 1)
+                stage.reset_mock()
+                native_call.reset_mock()
+                for invalid, av in (("yes", True), (True, False)):
+                    with self.assertRaises(ValueError):
+                        run_trial(workspace, model_id=_ALLOWED_MODEL,
+                                  xvfb_binary="/usr/bin/Xvfb", display="127.0.0.1:95",
+                                  audiovisual=av, allow_cloud_audio_diagnostics=av,
+                                  indexed_catalog=invalid)
+                stage.assert_not_called()
+                native_call.assert_not_called()
+
+    def test_cli_indexed_av_trial_forwards_explicit_opt_in(self):
+        from scripts.run_nvidia_native_trial import main
+        with tempfile.TemporaryDirectory() as scratch:
+            with patch("scripts.run_nvidia_native_trial.run_trial") as launch:
+                main(["--workspace", scratch, "--audiovisual-trial",
+                      "--allow-cloud-audio-diagnostics", "--indexed-catalog"])
+                self.assertIs(launch.call_args.kwargs["indexed_catalog"], True)
+                self.assertIs(launch.call_args.kwargs["allow_cloud_synthetic_wav"], False)
+
     def test_saved_native_trial_requires_active_real_source_clip(self):
         """Only a structural acceptance fixture, not model or video proof."""
         import hashlib
@@ -551,6 +709,52 @@ class RealNvidiaTrialBootstrapTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 verify_saved_native_trial(workspace)
 
+
+    def test_recovered_original_footage_verifier_binds_live_native_source_without_claiming_pixels(self):
+        """Recovered #179 source witness checks exact real project-owned source,
+        not the movie's artistic quality or actual exported picture pixels.
+        """
+        from scripts import run_nvidia_native_trial as trial
+        import hashlib
+        import shutil
+        with tempfile.TemporaryDirectory() as temp:
+            workspace = Path(temp)
+            staging = workspace / "staging"
+            staging.mkdir()
+            source = staging / "original-neutral-gradient.mp4"
+            source.write_bytes(b"synthetic source identity fixture, not a decoded movie")
+            sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            (workspace / "source-ledger.json").write_text(json.dumps([
+                {"path": str(source), "sha256": sha, "media_kind": "video"}]))
+            root = workspace / "projects" / "real-native"
+            asset_path = root / "assets" / "video" / source.name
+            asset_path.parent.mkdir(parents=True)
+            shutil.copyfile(source, asset_path)
+            native_path = root / "project.comfystudio"
+            original_clip = {"id": "clip-source", "assetId": "asset-original",
+                             "type": "video", "trackId": "video-1",
+                             "startTime": 0.0, "duration": 6.0}
+            native = {"currentTimelineId": "timeline-native",
+                      "assets": [{"id": "asset-original", "type": "video",
+                                  "path": "assets/video/" + source.name,
+                                  "settings": {"sourcePath": str(source),
+                                               "importedViaMcp": True}}],
+                      "timelines": [{"id": "timeline-native", "duration": 6.0,
+                                     "tracks": [{"id": "video-1", "type": "video",
+                                                 "visible": True}],
+                                     "clips": [original_clip]}]}
+            native_path.write_text(json.dumps(native))
+            witness = getattr(trial, "verify_native_original_picture_visibility", None)
+            self.assertTrue(callable(witness), "Existing historical original-source verifier is not wired")
+            valid = witness(workspace)
+            self.assertTrue(valid["source_original_visible_in_native_timeline"])
+            self.assertFalse(valid["source_original_rendered_pixels_verified"])
+            self.assertEqual(valid["original_visible_video_clip_count"], 1)
+            native["timelines"][0]["clips"][0] = {**original_clip, "enabled": False}
+            native_path.write_text(json.dumps(native))
+            hidden = witness(workspace)
+            self.assertFalse(hidden["source_original_visible_in_native_timeline"])
+            self.assertFalse(hidden["source_original_rendered_pixels_verified"])
 
     def test_native_export_revision_requires_changed_decoded_picture_not_new_container(self):
         """Actual FFmpeg decoder, not a mocked model or a filename assertion."""

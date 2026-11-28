@@ -16,7 +16,7 @@ import time
 from .body_animation import curve_value
 from .body_visual_graph import VisualGraph,associate,to_linear,rgba8
 from .composite_mix import _exact_media,sealed_attested_original
-from .media_vault import MediaVault,sha256_file
+from .media_vault import MediaVault,sha256_file,canonical_source_attestations
 from .production_qc import full_decode_inspection
 
 
@@ -26,6 +26,37 @@ def _probe(path):
     streams=json.loads(result.stdout)["streams"]
     if len(streams)!=1:raise ValueError("Source needs a physically decodable video stream")
     return streams[0]
+
+
+def _validate_png16_color(path):
+    """Admit only explicit sRGB-compatible high-depth PNG color metadata."""
+    size=path.stat().st_size
+    standard={b"gAMA":(45455,), b"cHRM":(31270,32900,64000,33000,30000,60000,15000,6000)}
+    seen=set()
+    with path.open("rb") as stream:
+        stream.seek(8)
+        for _ in range(65536):
+            header=stream.read(8)
+            if len(header)!=8:break
+            length=int.from_bytes(header[:4],"big");kind=header[4:]
+            if stream.tell()+length+4>size:break
+            if kind in (b"iCCP",b"cICP",b"mDCV",b"cLLI"):
+                raise ValueError("16-bit PNG requires supported sRGB color metadata; explicit profile conversion is unavailable")
+            if kind in standard or kind==b"sRGB":
+                if kind in seen:raise ValueError("16-bit PNG has duplicate color metadata")
+                seen.add(kind)
+                if kind==b"sRGB":
+                    if length!=1 or stream.read(1) not in (b"\x00",b"\x01",b"\x02",b"\x03"):
+                        raise ValueError("16-bit PNG has invalid sRGB color metadata")
+                else:
+                    values=standard[kind]
+                    if length!=4*len(values) or stream.read(length)!=b"".join(v.to_bytes(4,"big") for v in values):
+                        raise ValueError("16-bit PNG color metadata conflicts with explicit sRGB")
+                stream.seek(4,os.SEEK_CUR)
+            else:
+                stream.seek(length+4,os.SEEK_CUR)
+            if kind==b"IEND" and length==0 and stream.tell()==size:return
+    raise ValueError("16-bit PNG color metadata scan is incomplete or exceeds host bounds")
 
 
 class SealedGraphSources:
@@ -86,11 +117,16 @@ class SealedGraphSources:
     def _check_image(self,path):
         from PIL import Image
         with path.open("rb") as stream:header=stream.read(26)
-        if header.startswith(b"\x89PNG\r\n\x1a\n") and header[24] not in (1,2,4,8):
-            raise ValueError("Source PNG must have at most 8-bit channels")
+        png16=header.startswith(b"\x89PNG\r\n\x1a\n") and len(header)==26 and header[24]==16
         with Image.open(path) as image:
             if image.width*image.height>self.graph.budget.max_pixels:raise ValueError("Source image exceeds host pixel budget")
             if getattr(image,"n_frames",1)!=1:raise ValueError("Animated image needs explicit video conversion")
+            if png16:
+                if image.width*image.height*64>self.graph.budget.max_live_bytes:
+                    raise ValueError("16-bit PNG source decode exceeds host memory budget")
+                _validate_png16_color(path)
+                return image.width,image.height
+        return None
 
     def __call__(self,name,frame):
         import numpy as np
@@ -105,7 +141,17 @@ class SealedGraphSources:
             result=read_float_rgba(path,budget=self.graph.budget,alpha_mode=p["alpha_mode"],channels=p.get("channels"))
             self.last=(key,result)
             return result
-        self._check_image(path)
+        precision=self._check_image(path)
+        if precision is not None:
+            w,h=precision
+            raw=subprocess.check_output(["ffmpeg","-v","error","-xerror","-nostdin",
+                "-protocol_whitelist","file,pipe","-f","png_pipe","-i",str(path),
+                "-frames:v","1","-pix_fmt","rgba64le","-threads:v","1","-f","rawvideo","-"],timeout=120)
+            if len(raw)!=w*h*8:raise ValueError("16-bit PNG native decoder returned incomplete RGBA")
+            pixels=np.frombuffer(raw,dtype="<u2").reshape(h,w,4).astype(np.float32)/65535
+            pixels[...,:3]=to_linear(pixels[...,:3],"srgb")
+            result=associate(pixels);self.last=(key,result)
+            return result
         with Image.open(path) as image:
             rgba=image.convert("RGBA");icc=image.info.get("icc_profile")
             if icc:
@@ -126,7 +172,8 @@ class SealedGraphSources:
         for _,media,_ in self.sources.values():self.vault.inspect(media["asset_id"],attestation_id=media["attestation_id"])
 
 
-def render_visual_graph(plan_file,workspace,vault_root,output,*,budget=None):
+def render_visual_graph(plan_file,workspace,vault_root,output,*,
+                        budget=None,convolution_backend="numpy"):
     from PIL import Image,PngImagePlugin
     root,plan_file,output=Path(workspace).resolve(),Path(plan_file).resolve(),Path(output).resolve()
     if not plan_file.is_relative_to(root) or not output.is_relative_to(root) or output.exists():
@@ -136,7 +183,9 @@ def render_visual_graph(plan_file,workspace,vault_root,output,*,budget=None):
     # different creative directions between those two operations.
     with plan_file.open("rb") as stream:raw_plan=stream.read(16777217)
     if len(raw_plan)>16777216:raise ValueError("Visual graph exceeds host input size budget")
-    plan_sha=hashlib.sha256(raw_plan).hexdigest();graph=VisualGraph(json.loads(raw_plan),budget=budget)
+    plan_sha=hashlib.sha256(raw_plan).hexdigest()
+    graph=VisualGraph(json.loads(raw_plan),budget=budget,
+                      convolution_backend=convolution_backend)
     selection=graph.plan["render"];suffix={"png":".png","rgba_mov":".mov","exr32":".exr"}[selection["format"]]
     if output.suffix.lower()!=suffix:raise ValueError("Output suffix differs from authored format")
     if graph.canvas["width"]*graph.canvas["height"]*4*selection["frame_count"]>graph.budget.max_decode_bytes:
@@ -206,4 +255,12 @@ def render_visual_graph(plan_file,workspace,vault_root,output,*,budget=None):
         "delivery_precision":"float32_linear_srgb_associated_rgba" if selection["format"]=="exr32" else "8bit_srgb_straight_rgba",
         "explicitly_clipped_rgb_components":clipped,
         "audio_policy":"separate_editable_tracks","source_assets":len(sources.sources),
-        "project_node_fingerprints":graph.node_fingerprints(),"aesthetic_quality_approved":False}
+        "source_attestations":canonical_source_attestations([
+            {"asset_id":media["asset_id"],"attestation_id":media["attestation_id"]}
+            for _,media,_ in sources.sources.values()]),
+        "project_node_fingerprints":graph.node_fingerprints(),
+        "convolution_backend":graph.convolution_backend,
+        "convolution_backend_runtime_version": (
+            __import__("scipy").__version__ if graph.convolution_backend=="scipy"
+            else __import__("numpy").__version__),
+        "aesthetic_quality_approved":False}

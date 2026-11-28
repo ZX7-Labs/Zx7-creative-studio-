@@ -180,7 +180,11 @@ class ProjectBrainContractTests(unittest.TestCase):
 
     def test_current_owner_provider_policy_is_not_mixed_with_old_now_commands(self):
         brief = (_here / "BRIEF.md").read_text(encoding="utf-8")
-        self.assertIn("2026-11-13", brief)
+        # Validate a single dated current owner policy, not a frozen historical date.
+        self.assertRegex(brief, r"\*\*Owner clarification · \d{4}-\d{2}-\d{2} \(CURRENT\):\*\*")
+        self.assertEqual(brief.count("(CURRENT):**"), 1)
+        self.assertIn("Normal CI must never call a hosted provider implicitly", brief)
+        self.assertIn("private", brief.lower())
         self.assertNotIn("- **NOW (historical):**", brief)
         self.assertNotIn("updated 2026-11-10 following the founder's NVIDIA-first", brief)
 
@@ -237,6 +241,32 @@ class ProjectBrainContractTests(unittest.TestCase):
             path.write_text(json.dumps(data), encoding="utf-8")
             self.assertIn("unsupported_execution_ledger_field_acceptance",
                           _module.validate(root))
+
+
+    def test_typed_execution_ledger_grows_beyond_old_limit_but_stays_bounded(self):
+        # RED at 40 KB: exact-head #356 integrity run 44099891001 rejected
+        # an otherwise valid 41+ KB typed ledger. Preserve limits elsewhere.
+        with tempfile.TemporaryDirectory() as temp:
+            root = _copy_scope_fixture(temp)
+            path = root / "EXECUTION_LEDGER.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            # Measure the serialization used by the fixture, not the source
+            # file's whitespace. A ledger close to the bound must not be
+            # accidentally inflated by reindenting historical records.
+            def packed(value):
+                return json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n"
+            baseline_bytes = len(packed(record).encode("utf-8"))
+            padding = max(0, 43_000 - baseline_bytes)
+            if padding:
+                record["snapshot"]["notes"] += " synthetic-source-linked-receipts " + "r" * padding
+            path.write_text(packed(record), encoding="utf-8")
+            self.assertGreater(path.stat().st_size, 40_000)
+            self.assertLess(path.stat().st_size, 80_000)
+            self.assertNotIn("too_large: EXECUTION_LEDGER.json", _module.validate(root))
+            # No unlimited diary: the typed ledger still fails closed above 80 KB.
+            with path.open("ab") as stream:
+                stream.write(b" " * (80_001 - path.stat().st_size))
+            self.assertIn("too_large: EXECUTION_LEDGER.json", _module.validate(root))
 
 
 if __name__ == "__main__":

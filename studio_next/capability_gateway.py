@@ -17,7 +17,9 @@ from collections.abc import Mapping
 
 from .capability_fabric import (
     CapabilityContractError, CapabilityFabric, discover_all_live_tools)
-from .body_editor_mcp import _local_schema_references
+from .body_editor_mcp import native_admission_validator
+from .body_editor_client import host_pre_dispatch_rejection
+from .native_editor_identity import source_native_commit_intent as _source_native_commit_intent
 from .capability_attempts import CapabilityAttemptStore
 from .capability_reference_guard import (
     CapabilityReferenceError, compile_reference_rules, validate_live_references)
@@ -26,18 +28,18 @@ from .capability_session_budget import (
 
 
 _MODEL_NATIVE_OBSERVATION_UNCHECKED = object()
-# Only pinned, synchronously committing editorial actions. An arbitrary
-# WRITE does not acquire native revision semantics by its name.
-_SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS = frozenset((
-    "move_clips", "trim_clips", "delete_clips",
-    "add_asset_to_timeline", "add_assets_to_timeline",
-    "set_clip_audio", "set_clip_speed", "update_track",
-    "add_transition", "set_clip_style", "split_clip", "extract_range",
-))
 
 
 class CapabilityExecutionError(ValueError):
-    """Rejected BEFORE any native dispatch; no guessed operation is allowed."""
+    """BODY operation could not be admitted or its outcome verified."""
+
+
+class CapabilityPreDispatchError(CapabilityExecutionError):
+    """Host-classified rejection before any selected operation is dispatched."""
+
+    def __init__(self, code, message=None):
+        self.code = code
+        super().__init__(code if message is None else message)
 
 
 _SAFE_NATIVE_IDENTITY_READ_ERRORS = frozenset({
@@ -60,20 +62,6 @@ class NativeReferencePreDispatchError(CapabilityExecutionError):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
-
-
-def _source_native_commit_intent(tool, inputs):
-    """Only source-attested *commits* need a native writer CAS token.
-
-    Reader-like previews remain public-schema clean. In the pinned editor
-    keyframe previews are the default; text and shape previews require an
-    explicit true. Never infer that a preview is a write from the tool name.
-    """
-    if tool == "set_clip_keyframes" or tool in _SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS:
-        return inputs.get("previewOnly") is False
-    if tool in ("update_text_clip", "update_shape_clip"):
-        return inputs.get("previewOnly") is not True
-    return False
 
 
 def _confirmed_native_revision_conflict(result, code):
@@ -120,7 +108,7 @@ class CapabilityGateway:
     """
 
     def __init__(self, bindings: Mapping, *, attempt_store=None,
-                 session_budget=None):
+                 session_budget=None, trusted_pre_dispatch_sources=()):
         if session_budget is not None and not isinstance(
                 session_budget, CapabilitySessionBudget):
             raise CapabilityExecutionError(
@@ -131,6 +119,13 @@ class CapabilityGateway:
         self._attempt_store = attempt_store
         if not isinstance(bindings, Mapping) or not 1 <= len(bindings) <= 256:
             raise CapabilityExecutionError("Connected host-bound source inventory is required")
+        # This is an explicit HOST trust decision about a connected bridge,
+        # not a grant inferred from a native tool or its returned metadata.
+        if (not isinstance(trusted_pre_dispatch_sources, (tuple, list, set, frozenset)) or
+                any(not isinstance(name, str) or name not in bindings
+                    for name in trusted_pre_dispatch_sources)):
+            raise CapabilityExecutionError("Invalid trusted pre-dispatch source scope")
+        self._trusted_pre_dispatch_sources = frozenset(trusted_pre_dispatch_sources)
         self._bindings = {}
         self._locks = {}
         for namespace, entry in bindings.items():
@@ -149,13 +144,14 @@ class CapabilityGateway:
                         not isinstance(identity["rules"], Mapping) or
                         not 1 <= len(identity["rules"]) <= 256):
                     raise CapabilityExecutionError("Invalid native identity policy")
+                identity_grants = grants() if callable(grants) else grants
                 compiled = {}
                 try:
                     for tool_name, rules in identity["rules"].items():
                         if (not isinstance(tool_name, str) or
                                 len(tool_name) > 160 or
-                                not isinstance(grants, Mapping) or
-                                grants.get(tool_name) != "write"):
+                                not isinstance(identity_grants, Mapping) or
+                                identity_grants.get(tool_name) != "write"):
                             raise CapabilityReferenceError(
                                 "invalid_host_reference_policy")
                         compiled[tool_name] = compile_reference_rules(rules)
@@ -198,6 +194,7 @@ class CapabilityGateway:
             except CapabilitySessionBudgetError as exc:
                 raise CapabilityExecutionError(str(exc)) from exc
         self._fabric = None
+        self._refresh_lock = asyncio.Lock()
         self._events = []
 
     def _live_grants(self, namespace):
@@ -215,12 +212,16 @@ class CapabilityGateway:
         Refreshing changes the contract digest. Previously selected handles
         never gain authority under an updated ABI or grant set.
         """
-        discovery = {name: (entry[0], self._live_grants(name),
-                            entry[2], entry[4])
-                     for name, entry in self._bindings.items()}
-        fabric = await CapabilityFabric.from_connections(discovery)
-        self._fabric = fabric
-        return fabric.overview()
+        # Keep the last complete snapshot until a newer complete discovery
+        # succeeds. Serial publication prevents a slow older tools/list from
+        # replacing a newer catalog; invocation still checks live grants/ABI.
+        async with self._refresh_lock:
+            discovery = {name: (entry[0], self._live_grants(name),
+                                entry[2], entry[4])
+                         for name, entry in self._bindings.items()}
+            fabric = await CapabilityFabric.from_connections(discovery)
+            self._fabric = fabric
+            return fabric.overview()
 
     def _current(self):
         if self._fabric is None:
@@ -302,14 +303,14 @@ class CapabilityGateway:
                     self._session_budget.check_available(
                         source=namespace, access=record["access"])
                 except CapabilitySessionBudgetError as exc:
-                    raise CapabilityExecutionError(str(exc)) from exc
+                    raise CapabilityPreDispatchError(str(exc)) from exc
             grants = self._live_grants(namespace)
             advertised = await discover_all_live_tools(session)
             fresh = CapabilityFabric({namespace: (
                 advertised, grants, conditions, effects)})
             live_record = fresh.resolve(operation_id, revision=fresh.revision)
             for field in ("access", "input_schema", "description",
-                          "requires", "may_enable"):
+                          "requires", "may_enable", "description_tokens"):
                 if record[field] != live_record[field]:
                     raise CapabilityExecutionError(
                         "Native operation contract changed; rediscover capability")
@@ -317,28 +318,17 @@ class CapabilityGateway:
                 raise CapabilityExecutionError("Native grant changed before operation")
             current = prior
             schema = copy.deepcopy(record["input_schema"])
-            _local_schema_references(schema)
-            import jsonschema
             if not isinstance(inputs, dict):
-                raise CapabilityExecutionError("BODY inputs must be a structured object")
+                raise CapabilityPreDispatchError("invalid_input_object", "BODY inputs must be a structured object")
             try:
                 encoded_inputs = _wire(inputs).encode("utf-8")
             except (ValueError, TypeError, OverflowError, RecursionError) as exc:
-                raise CapabilityExecutionError("Native model inputs must be finite JSON") from exc
+                raise CapabilityPreDispatchError("invalid_input_json", "Native model inputs must be finite JSON") from exc
             if len(encoded_inputs) > 262_144:
-                raise CapabilityExecutionError("Native model inputs exceed bounded ABI budget")
-            # Host-named top-level fields are an ABI. Unspecified top-level
-            # fields invite model hallucinations; intentionally open nested
-            # artistic parameters remain unrestricted by this preflight.
-            if (isinstance(schema.get("properties"), dict) and
-                    "additionalProperties" not in schema and
-                    "patternProperties" not in schema):
-                schema["additionalProperties"] = False
-            validator_type = jsonschema.validators.validator_for(schema)
-            validator_type.check_schema(schema)
-            invalid = next(validator_type(schema).iter_errors(inputs), None)
+                raise CapabilityPreDispatchError("input_budget_exceeded", "Native model inputs exceed bounded ABI budget")
+            invalid = next(native_admission_validator(schema).iter_errors(inputs), None)
             if invalid is not None:
-                raise CapabilityExecutionError(
+                raise CapabilityPreDispatchError("invalid_native_parameters",
                     "Invalid native parameters (" + str(invalid.validator)[:40] + ")")
             requirements = record["requires"]
             if requirements:
@@ -427,7 +417,7 @@ class CapabilityGateway:
                     self._session_budget.reserve(
                         source=namespace, access=record["access"])
                 except CapabilitySessionBudgetError as exc:
-                    raise CapabilityExecutionError(str(exc)) from exc
+                    raise CapabilityPreDispatchError(str(exc)) from exc
             digest = hashlib.sha256(encoded_inputs).hexdigest()
             durable_write = (self._attempt_store is not None and
                              record["access"] == "write")
@@ -447,13 +437,21 @@ class CapabilityGateway:
             self._events.append(trace)
             try:
                 # One submission only; uncertain writes require reconciliation.
-                result = await session.call_tool(name, dispatch_inputs)
-            except BaseException:
+                # Keep the exact receipt-binding payload independent of a
+                # local adapter's mutable argument object.
+                result = await session.call_tool(name, copy.deepcopy(dispatch_inputs))
+            except BaseException as exc:
                 trace["state"] = ("read_failed" if record["access"] == "read"
                                   else "write_uncertain_reconciliation_required")
                 if durable_write:
                     self._attempt_store.settle(
                         request_id=request_id, state=trace["state"])
+                # Source exceptions after submission cannot manufacture a host
+                # no-dispatch receipt, even when their class looks familiar.
+                if isinstance(exc, (CapabilityPreDispatchError,
+                                    NativeReferencePreDispatchError)):
+                    raise CapabilityExecutionError(
+                        "Native operation outcome could not be confirmed") from exc
                 raise
             try:
                 failure = _native_mcp_status(result)
@@ -466,7 +464,15 @@ class CapabilityGateway:
                     self._attempt_store.settle(
                         request_id=request_id, state=trace["state"])
                 raise
-            if failure:
+            rejection = (host_pre_dispatch_rejection(result, name, dispatch_inputs)
+                         if failure and record["access"] == "write" and
+                         namespace in self._trusted_pre_dispatch_sources else None)
+            if rejection is not None:
+                # The trusted bridge binds its denial to the exact wire call,
+                # including the host-injected revision. The model never sees
+                # that token. A matching public-only digest is insufficient.
+                trace["state"] = "host_rejected_no_native_write"
+            elif failure:
                 # A *source-pinned* synchronous renderer rejection is known
                 # to precede any native mutation. Without the strict exact
                 # receipt, an ordinary failed write remains uncertain.
@@ -486,4 +492,5 @@ class CapabilityGateway:
                 self._attempt_store.settle(
                     request_id=request_id, state=trace["state"])
             return {"state": trace["state"], "operation_id": operation_id,
-                    "native_result": result}
+                    "native_result": result,
+                    **({"host_pre_dispatch_code": rejection} if rejection is not None else {})}

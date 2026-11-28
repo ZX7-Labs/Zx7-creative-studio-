@@ -21,7 +21,8 @@ import zipfile
 from pathlib import Path
 
 from .contracts import ToolSpec
-from .creative_research import CreativeResearch
+from .creative_research import (CreativeResearch, ASSET_RESEARCH_MEDIA,
+                                ASSET_RESEARCH_PROVIDERS, STUDY_RESEARCH_PROVIDERS)
 from .registry import ToolCatalog
 from .edit_timeline import render_edit,_path_within
 from .editorial_interchange import export_editable_timeline
@@ -44,7 +45,8 @@ from .body_motion_project import run_motion_project,export_motion_media,verify_m
 from .body_planar import render_planar_insert
 from .delivery_audit import audit_delivered_movie,_probe_details
 from .durable_graph import DurableFilmGraph,execute_durable_film_graph
-from .media_vault import MediaVault,sha256_file,verify_media_container,MediaCustodyError
+from .media_vault import (MediaVault,sha256_file,verify_media_container,MediaCustodyError,
+                          canonical_source_attestations)
 from .composite_mix import render_composition
 from .film_finishing import finish_authorized_movie
 from .body_color_pipeline import render_verified_color_job
@@ -58,11 +60,13 @@ from .body_timeline_revision import render_editorial_revision
 from .body_owned_edit import render_verified_owned_edit,validate_owned_edit
 from .production_qc import full_decode_inspection
 from .body_loudness import inspect_original_loudness
+from .body_subtitles import render_subtitle_delivery
 from .body_observation import produce_review_bundle,verify_review_bundle
 from .body_temporal_evidence import (
     observe_every_original_frame,verify_full_temporal_evidence)
 from .body_review_access import read_verified_review,extract_verified_review_frame
 from .body_review_compare import compare_verified_revisions
+from .reference_evidence_tools import inspect_authorized_reference
 from .body_plugins import discover_enabled_body_plugins
 from .body_tool_contracts import real_operation_schema
 from .body_materials import fingerprint_physical_inputs
@@ -125,9 +129,17 @@ def _verify_witness(result):
         try:return bool(verify_motion_bundle(p)["native"])
         except (ValueError,KeyError,OSError,zipfile.BadZipFile):return False
     if p.suffix.lower() in (".mp4",".mov",".mkv",".webm"):
-        observed=_probe_details(p)
-        return (abs(observed["duration_seconds"]-result["duration_seconds"])<.08
-                and observed["audio_stream_present"]==result["audio_present"])
+        # A content hash ties the file to this receipt, but does not prove
+        # fields inside the receipt are true. Recheck the complete stored
+        # physical picture/audio profile before trusting a durable replay.
+        try:
+            observed=_probe_details(p)
+            return (abs(observed["duration_seconds"]-result["duration_seconds"])<.08
+                    and observed["width"]==result["width"]
+                    and observed["height"]==result["height"]
+                    and observed["audio_stream_present"]==result["audio_present"])
+        except (KeyError,TypeError,ValueError,RuntimeError,OSError,OverflowError):
+            return False
     if p.suffix.lower()==".zip":
         try:
             return bool(verify_exr_bundle(p)["original_exr_passes_real"])
@@ -165,13 +177,53 @@ def _verify_witness(result):
     return False
 
 
-def _trusted_body_revision(tool_id):
+class _BodyRevisionInputs:
+    """Read shared fingerprint inputs once per catalog build, never across builds.
+
+    Exact bytes, executable identities and installed library versions still feed
+    the original per-operation digest. The cache lifetime is one synchronous
+    catalog construction, not a session or a process.
+    """
+    def __init__(self):
+        self.files = {}
+        self.commands = {}
+        self.libraries = {}
+
+    def source_bytes(self, path):
+        if path not in self.files:
+            self.files[path] = path.read_bytes()
+        return self.files[path]
+
+    def command_identity(self, command):
+        if command not in self.commands:
+            executable = shutil.which(command)
+            if executable is None:
+                raise ValueError("Cannot fingerprint missing actual creative renderer")
+            file = Path(executable).resolve()
+            stat = file.stat()
+            self.commands[command] = json.dumps({"command": command, "binary_path": str(file),
+                "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}, sort_keys=True).encode()
+        return self.commands[command]
+
+    def library_identity(self, library):
+        if library not in self.libraries:
+            try:
+                version = importlib.metadata.version(library)
+            except importlib.metadata.PackageNotFoundError:
+                version = "not_installed"
+            self.libraries[library] = json.dumps({"library": library,
+                "version": version}, sort_keys=True).encode()
+        return self.libraries[library]
+
+
+def _trusted_body_revision(tool_id, *, revision_inputs=None):
     """Per-tool code and installed executable revision, not a fixed schema label.
 
     Renderer implementation changes invalidate cached creative media only for
     that operation and downstream consumers of its physical output.
     """
     base=Path(__file__).resolve().parent
+    revision_inputs = revision_inputs if revision_inputs is not None else _BodyRevisionInputs()
     dependencies={
         "body.inspect":["delivery_audit.py"],
         "body.timecode_format":["body_timecode.py"],
@@ -204,10 +256,12 @@ def _trusted_body_revision(tool_id):
                              "body_pixel_math.py","body_animation.py","composite_mix.py","media_vault.py","production_qc.py"],
         "body.motion_project":["body_motion_project.py","body_motion_worker.py"],
         "body.motion_export":["body_motion_project.py","production_qc.py"],
-        "body.film_finish":["film_finishing.py","media_vault.py","composite_mix.py","production_qc.py"],
+        "body.film_finish":["film_finishing.py","body_stream_custody.py","body_loudness.py","edit_timeline.py","media_vault.py","composite_mix.py","production_qc.py"],
         "body.color_lut":["body_color_pipeline.py","media_vault.py","delivery_audit.py","composite_mix.py","production_qc.py"],
+        "body.reference_graph":["reference_observatory.py","reference_evidence_tools.py"],
         "body.full_decode":["production_qc.py","delivery_audit.py"],
-        "body.loudness":["body_loudness.py","media_vault.py","composite_mix.py"],
+        "body.loudness":["body_loudness.py","media_vault.py","composite_mix.py","edit_timeline.py"],
+        "body.subtitle_delivery":["body_subtitles.py","body_stream_custody.py","media_vault.py","composite_mix.py","edit_timeline.py"],
         "body.review":["body_observation.py","production_qc.py","media_vault.py"],
         "body.temporal_evidence":["body_temporal_evidence.py","composite_mix.py","precision_retime.py","body_observation.py","production_qc.py","media_vault.py"],
         "body.review_data":["body_review_access.py","body_observation.py"],
@@ -257,8 +311,10 @@ def _trusted_body_revision(tool_id):
         "body.motion_export":["ffmpeg","ffprobe"],
         "body.film_finish":["ffmpeg","ffprobe"],
         "body.color_lut":["ffmpeg","ffprobe"],
+        "body.reference_graph":["ffmpeg","ffprobe"],
         "body.full_decode":["ffmpeg","ffprobe"],
         "body.loudness":["ffmpeg","ffprobe"],
+        "body.subtitle_delivery":["ffmpeg","ffprobe"],
         "body.review":["ffmpeg","ffprobe"],
         "body.temporal_evidence":["ffmpeg","ffprobe"],
         "body.review_data":[],
@@ -287,15 +343,9 @@ def _trusted_body_revision(tool_id):
                  "body_tool_contracts.py","body_document_schemas.py","registry.py")+tuple(known):
         p=base/item
         h.update(item.encode())
-        h.update(p.read_bytes())
+        h.update(revision_inputs.source_bytes(p))
     for cmd in commands[tool_id]:
-        executable=shutil.which(cmd)
-        if executable is None:
-            raise ValueError("Cannot fingerprint missing actual creative renderer")
-        file=Path(executable).resolve()
-        stat=file.stat()
-        h.update(json.dumps({"command":cmd,"binary_path":str(file),
-              "size":stat.st_size,"mtime_ns":stat.st_mtime_ns},sort_keys=True).encode())
+        h.update(revision_inputs.command_identity(cmd))
     runtime_libraries={"body.planar_insert":("opencv-python-headless","numpy"),
                        "body.visual_graph":("numpy","Pillow","OpenEXR"),
                        "body.motion2d":("numpy","Pillow","fonttools","supertonic"),
@@ -311,13 +361,11 @@ def _trusted_body_revision(tool_id):
                        "body.aces2_preview":("OpenEXR","opencolorio","Pillow","numpy"),
                        "body.aces2_movie":("OpenEXR","opencolorio","numpy")}
     for library in runtime_libraries.get(tool_id,()):
-        try:version=importlib.metadata.version(library)
-        except importlib.metadata.PackageNotFoundError:version="not_installed"
-        h.update(json.dumps({"library":library,"version":version},sort_keys=True).encode())
+        h.update(revision_inputs.library_identity(library))
     return "sha256:"+h.hexdigest()
 
 
-def _commit_actual_body_output(final_path,render):
+def _commit_actual_body_output(final_path,render,*,retain_source_attestations=False):
     """Only expose fully encoded, *decoder verified* original media.
 
     Incomplete FFmpeg/Blender/graphics files never occupy the final accepted
@@ -329,9 +377,10 @@ def _commit_actual_body_output(final_path,render):
     # fenced to the *current* owner; the receipt identity remains stable.
     with authorized_publication():
         recovered=recover_publication(
-            final_path,witness=_witness,verify=_verify_witness)
+            final_path,witness=_witness,verify=_verify_witness,
+            require_source_attestations=retain_source_attestations)
         if recovered is not None:
-            return recovered
+            return {**recovered, "success": True}
         if final_path.exists():
             raise FileExistsError("Cannot overwrite original media output")
     stage=final_path.with_name(
@@ -339,8 +388,14 @@ def _commit_actual_body_output(final_path,render):
     try:
         # Slow, untrusted renderer work happens outside the SQLite lease
         # transaction. Publication alone holds the short writer fence.
-        render(stage)
+        rendered=render(stage)
         preliminary=_witness(stage)
+        lineage={}
+        if retain_source_attestations:
+            if not isinstance(rendered,dict) or rendered.get("sha256")!=preliminary["sha256"]:
+                raise ValueError("Rendered source attestation lineage is not bound to physical output")
+            lineage["source_attestations"]=canonical_source_attestations(rendered.get("source_attestations"))
+            preliminary.update(lineage)
         if not _verify_witness(preliminary):
             raise RuntimeError("Staged creative media failed real decoder validation")
         with authorized_publication():
@@ -348,23 +403,27 @@ def _commit_actual_body_output(final_path,render):
             # renderer ran. Never clobber its final artifact or receipt.
             if final_path.exists():
                 recovered=recover_publication(
-                    final_path,witness=_witness,verify=_verify_witness)
+                    final_path,witness=_witness,verify=_verify_witness,
+                    require_source_attestations=retain_source_attestations)
                 if recovered is not None:
-                    return recovered
+                    return {**recovered, "success": True}
                 raise FileExistsError("Cannot overwrite original media output")
             prepare_publication(final_path,stage,preliminary)
             os.link(stage,final_path)
             # The same lease transaction covers the durable receipt,
             # final hardlink and directory fsync; no takeover in between.
             sync_published_file(final_path)
-        return _witness(final_path)
+        # This is the source application's acknowledgement of its own
+        # completed publication, not a claim of artistic quality or a
+        # verified native-editor export. Keep the original physical witness.
+        return {**_witness(final_path), **lineage, "success": True}
     finally:
         # Only our private encoded staging file is ours to remove. A previous
         # hardlink publication has a durable receipt and remains recoverable.
         stage.unlink(missing_ok=True)
 
 
-def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=None):
+def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=None,initialize_vault=True):
     """Attach native editor operations only through a host-configured client.
 
     The host owns its grants and argument/path policy. Project/model arguments
@@ -372,28 +431,34 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     are never advertised as replayable cached work or media delivery receipts.
     """
     root=Path(workspace).resolve()
-    vault=MediaVault(vault_root or (root/"vault"))
+    vault=MediaVault(vault_root or (root/"vault"),initialize=initialize_vault)
     catalog=ToolCatalog()
+    revision_inputs = _BodyRevisionInputs()
     # Research cannot become a source-rights attestation or a media writer.
     # Its explicit 'network' permission is not included in ordinary read grants.
     # The caller can attach an independently configured trusted client.
     researcher = research_client if research_client is not None else CreativeResearch()
     for operation_id, description, required, properties, runner in (
         ("body.research_assets",
-         "Search CC0 candidate image/audio/video metadata. No download, "
+         "Search CC0 candidate image/audio/video/3D model/texture/HDRI metadata. No download, "
          "no verified license, no automatic source import; original rights review required.",
          ["query", "media"],
-         {"query": {"type": "string"}, "media": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1}},
+         {"query": {"type": "string", "minLength": 1, "maxLength": 240},
+          "media": {"type": "string", "enum": list(ASSET_RESEARCH_MEDIA)},
+          "provider": {"type": "string", "enum": list(ASSET_RESEARCH_PROVIDERS)},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 12}},
          lambda args: researcher.assets(query=args["query"],media=args["media"],
-                                       limit=args.get("limit", 8))),
+                                       limit=args.get("limit", 8),
+                                       **({"provider": args["provider"]} if "provider" in args else {}))),
         ("body.research_studies",
          "Search published scholarly metadata about storytelling, editing, "
          "attention and visual/auditory perception; title is not an audience finding.",
          ["query"],
          {"query": {"type": "string"},
+          "provider": {"type": "string", "enum": list(STUDY_RESEARCH_PROVIDERS)},
           "limit": {"type": "integer", "minimum": 1}},
-         lambda args: researcher.studies(query=args["query"], limit=args.get("limit", 8))),
+         lambda args: researcher.studies(query=args["query"], limit=args.get("limit", 8),
+                                        **({"provider": args["provider"]} if "provider" in args else {}))),
     ):
         catalog.register(
             ToolSpec(
@@ -421,7 +486,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             resource="local machine",
             operation_schema=real_operation_schema(id,required)),fn if ready else None,
             idempotent=idempotent,
-            implementation_revision=_trusted_body_revision(id) if ready else None,
+            implementation_revision=_trusted_body_revision(id, revision_inputs=revision_inputs) if ready else None,
             material_fingerprint=(lambda inputs,name=id:
                 fingerprint_physical_inputs(name,inputs,root)) if ready else None)
 
@@ -447,9 +512,10 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         return _witness(path)
 
     def author_visual(inputs):
-        return author_visual_document(
+        receipt = author_visual_document(
             root, document=inputs["document"], out=inputs["out"],
             base=inputs.get("base"), expected_sha256=inputs.get("expected_sha256"))
+        return {**receipt, "success": True}
 
     def read_authored_visual(inputs):
         return read_visual_document(root, plan=inputs["plan"])
@@ -458,7 +524,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         plan=_path_within(root,inputs["plan"],exists=True)
         target=_body_output(root,inputs["out"],allowed=(".png",".mov",".exr"))
         return _commit_actual_body_output(target,lambda staged:
-            render_visual_graph(plan,root,vault.root,staged))
+            render_visual_graph(plan,root,vault.root,staged),retain_source_attestations=True)
 
     def inspect_voices(inputs):
         from .voice_contract import voice_inventory
@@ -509,7 +575,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             verification.update(observed)
             if observed["plan_sha256"]!=initial_sha:
                 raise ValueError("Verified rendering used a different director cut")
-        receipt=_commit_actual_body_output(target,produce)
+            return observed
+        receipt=_commit_actual_body_output(target,produce,retain_source_attestations=True)
         # Crash recovery may reuse an existing exact movie. It must still
         # fully decode picture and soundtrack before accepting that film.
         if not verification:
@@ -598,7 +665,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             os.link(temp,out)
         finally:
             temp.unlink(missing_ok=True)
-        return {"path":str(out),"sha256":sha256_file(out),
+        return {"path":str(out),"sha256":sha256_file(out),"success":True,
                 "bytes":len(contents),"verified_original_frames":imported["frame_count"],
                 "synchronous_sound_source_verified":True,
                 "industry_otio_edit_preserved_without_silent_drop":True,
@@ -622,14 +689,14 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         source=_path_within(root,inputs["plan"],exists=True)
         out=_body_output(root,inputs["out"],allowed=(".mp4",))
         return _commit_actual_body_output(
-            out,lambda staged:render_composition(source,root,vault.root,staged))
+            out,lambda staged:render_composition(source,root,vault.root,staged),retain_source_attestations=True)
 
     def finish_movie(inputs):
         source=_path_within(root,inputs["plan"],exists=True)
         dest=_body_output(root,inputs["out"],allowed=(".mp4",))
         return _commit_actual_body_output(
             dest,lambda staged:finish_authorized_movie(
-                source,root,vault.root,staged))
+                source,root,vault.root,staged),retain_source_attestations=True)
 
     def color_grade_movie(inputs):
         plan=_path_within(root,inputs["plan"],exists=True)
@@ -675,7 +742,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         output=_body_output(root,inputs["out"],allowed=(".mov",))
         return _commit_actual_body_output(output,
             lambda staged:render_aces2_scene_movie(
-                plan,root,vault.root,staged))
+                plan,root,vault.root,staged),retain_source_attestations=True)
 
     def review_data(inputs):
         archive=_path_within(root,inputs["bundle"],exists=True)
@@ -694,9 +761,30 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
             lambda staged:extract_verified_review_frame(
                 archive,inputs["bundle_sha256"],root,inputs["frame_index"],staged))
 
+    def subtitle_delivery(inputs):
+        plan=_path_within(root,inputs["plan"],exists=True)
+        dest=_body_output(root,inputs["out"],allowed=(".mp4",".mov"))
+        return _commit_actual_body_output(dest,
+            lambda staged:render_subtitle_delivery(plan,root,vault.root,staged))
+
     def physical_audio_loudness(inputs):
         original=_path_within(root,inputs["plan"],exists=True)
         return inspect_original_loudness(original,root,vault.root)
+
+    def reference_graph(inputs):
+        """Physically measure an owner-authorized short local reference; never import it."""
+        source=_path_within(root,inputs["source"],exists=True)
+        if source.suffix.lower() not in (".mp4",".mov",".mkv",".webm"):
+            raise ValueError("Reference study requires an authorized local video")
+        if source.stat().st_size>128*1024*1024:
+            raise ValueError("Reference media exceeds this bounded comparison tool")
+        bins=inputs.get("bins",32)
+        if type(bins) is not int or not 8<=bins<=64:
+            raise ValueError("Reference graph requires 8-64 physical bins")
+        from .reference_observatory import _probe
+        if _probe(source)[0]>90:
+            raise ValueError("Reference exceeds 90-second local comparison budget")
+        return inspect_authorized_reference(root,inputs["source"],bins=bins)
 
     def deep_media_qc(inputs):
         """Decode every actual video/audio stream, not just inspect metadata."""
@@ -742,7 +830,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         result=_witness(dest)
         if not _verify_witness(result):
             raise ValueError("Rendered EXR stage failed native release verification")
-        result.update({"actual_32bit_float_VFX_passes":True,
+        result.update({"success":True,"actual_32bit_float_VFX_passes":True,
                        "verified_frame_reuse_count":evidence["verified_frame_reuse_count"],
                        "newly_rendered_frame_count":evidence["newly_rendered_frame_count"],
                        "original_scene_sha256":evidence["original_scene_sha256"],
@@ -768,7 +856,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
     def import_native_owned_mlt(inputs):
         source=_path_within(root,inputs["edit"],exists=True)
         dest=_body_output(root,inputs["out"],allowed=(".json",))
-        return import_owned_mlt_project(source,root,vault.root,dest)
+        receipt = import_owned_mlt_project(source,root,vault.root,dest)
+        return {**receipt, "success": True}
 
     def relink_native_owned_mlt(inputs):
         source=_path_within(root,inputs["edit"],exists=True)
@@ -827,8 +916,10 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         plan=_path_within(root,inputs["plan"],exists=True)
         dest=_body_output(root,inputs["out"],allowed=(".mp4",))
         measured={}
-        def produce(stage):measured.update(render_cgi_plan(plan,root,vault.root,stage))
-        receipt=_commit_actual_body_output(dest,produce)
+        def produce(stage):
+            measured.update(render_cgi_plan(plan,root,vault.root,stage))
+            return measured
+        receipt=_commit_actual_body_output(dest,produce,retain_source_attestations=True)
         return {**receipt,**{k:v for k,v in measured.items() if k not in ("path","sha256")},
                 "native_controls_observed_in_this_invocation":bool(measured)}
 
@@ -836,8 +927,10 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         plan=_path_within(root,inputs["plan"],exists=True)
         dest=_body_output(root,inputs["out"],allowed=(".mp4",))
         measured={}
-        def produce(stage):measured.update(render_planar_insert(plan,root,vault.root,stage))
-        receipt=_commit_actual_body_output(dest,produce)
+        def produce(stage):
+            measured.update(render_planar_insert(plan,root,vault.root,stage))
+            return measured
+        receipt=_commit_actual_body_output(dest,produce,retain_source_attestations=True)
         return {**receipt,**{k:v for k,v in measured.items() if k not in ("path","sha256")},
                 "tracking_metrics_observed_in_this_invocation":bool(measured)}
 
@@ -886,9 +979,10 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         ref=vault.ingest(source,mime=mime,rights="generated_original",
                   source_type="trusted_renderer",source_id=proof["sha256"],
                   evidence="Verified original media from a registered trusted executable",
-                  owner_or_generator="zx7-authorized-body-graph")
+                  owner_or_generator="zx7-authorized-body-graph",
+                  source_attestations=proof.get("source_attestations"))
         record=vault.inspect(ref["asset_id"],attestation_id=ref["attestation_id"])
-        return {"path":record["path"],"sha256":ref["asset_id"],
+        return {"path":record["path"],"sha256":ref["asset_id"],"success":True,
                 "asset_id":ref["asset_id"],"attestation_id":ref["attestation_id"],
                 "rights":ref["rights"]}
 
@@ -928,10 +1022,16 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "write",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")
                      and importlib.util.find_spec("numpy") is not None),
         ["plan","out"],temporal_all_frames)
-    add("body.loudness","measure actual first soundtrack LUFS, LRA and measured true-peak",
-        "Read-only native FFmpeg EBU R128 measurement of original rights-cleared movie, no forced mastering targets",
+    add("body.loudness","measure selected original soundtrack programs LUFS, LRA and measured true-peak",
+        "Read-only native FFmpeg EBU R128 on rights-cleared audio master or movie; up to eight explicitly selected audio programs, separate decoded sample counts and true peaks, no forced targets or stem inference",
         "read",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
         ["plan"],physical_audio_loudness)
+    add("body.subtitle_delivery","original editable multilingual timed-text delivery",
+        "Add explicitly authored plain-text millisecond cues with one chosen default as selectable native mov_text tracks to a licensed MP4/MOV; verify exact original A/V packets, full decoded picture/sound and decoded cue times/text. No transcription or translation.",
+        "write",video_io,["plan","out"],subtitle_delivery)
+    add("body.reference_graph","physically study owner-authorized picture and sound reference rhythm",
+        "Reused source-bound FFmpeg editing grammar: actual frame differences, color, timed PCM energy and candidate cuts; never a quality score or licensed import",
+        "read",video_io,["source"],reference_graph)
     add("body.full_decode","physical full-movie delivery quality assurance",
         "Actually decode entire picture/sound; preserve deliberate creative style",
         "read",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
@@ -940,7 +1040,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Live FFmpeg exact BT.709 3D-CUBE transform; 8-bit viewing or 10-bit ProRes master",
         "write",video_io,["plan","out"],color_grade_movie)
     add("body.film_finish","measured film color grade and sound finishing",
-        "Local FFmpeg real picture operations and original audio loudness mastering",
+        "Local FFmpeg explicit picture operations; audio-only MP4 finishing of one selected soundtrack preserves other original stream packets, color precision, timing and decoded A/V",
         "write",bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
         ["plan","out"],finish_movie)
     add("body.composite_mix","original timeline multilayer edit, licensed voices and audio mix",
@@ -954,8 +1054,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Read only an owner-owned source graph from private creative-graphs/, with SHA and complete authored node/curve data for new non-destructive revisions; no arbitrary owner JSON or executable file read",
         "read",True,["plan"],read_authored_visual)
     add("body.visual_graph","editable native photo, motion graphic and VFX pixel graph",
-        "Authored mathematical pixels, masks, original-frame curves, inverse spatial sampling, convolution and alpha compositing; "
-        "float32 linear-sRGB internals, sealed sources, exact RGBA PNG/MOV or float32 EXR (requires OpenEXR 3.3+); separate editable audio",
+        "Authored mathematical pixels, animated cubic path masks with explicit winding/holes, original-frame curves, inverse spatial sampling, convolution and alpha compositing; "
+        "float32 linear-sRGB internals, sealed 8/16-bit sRGB PNG and float EXR sources, exact RGBA PNG/MOV or float32 EXR (requires OpenEXR 3.3+); separate editable audio",
         "write",bool(video_io and all(importlib.util.find_spec(name) is not None for name in ("numpy","PIL"))),
         ["plan","out"],render_visual)
     add("body.exr_checkpoint","durable original-frame 32float VFX render and exact verified resume",
@@ -963,8 +1063,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "write",bool(shutil.which("blender") and
                       importlib.util.find_spec("OpenEXR") is not None),
         ["scene_json","out"],render_checkpointed_exr)
-    add("body.aces2_movie","actual owned ACES2 scene-linear EXR to 10bit SDR movie",
-        "Every licensed native RGBA frame receives pinned OCIO2.5 ACES2 view on 16-bit RGB and real ProRes422 10bit encoding; SDR VFX review without audio, not HDR or aesthetic certification",
+    add("body.aces2_movie","actual owned ACES2 scene-linear EXR to 10bit SDR or PQ HDR movie",
+        "Every licensed native RGBA frame receives the selected pinned OCIO2.5 ACES2 view and 16-bit RGB to real ProRes422 10bit encoding; SDR or Rec.2100 PQ / 1000-nit-target Rec.2020 HDR picture, no soundtrack or independent mastering-monitor or artistic certification",
         "write",bool(shutil.which("ffmpeg") and shutil.which("ffprobe") and
                      importlib.util.find_spec("OpenEXR") and
                      importlib.util.find_spec("PyOpenColorIO") and
@@ -986,7 +1086,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "write",bool(shutil.which("blender") and video_io),
         ["scene_json","out"],render3d)
     add("body.motion_project","native Blender motion-design project and RNA controls",
-        "Isolated native .blend transactions: discover installed properties/enums, create/edit geometry, text, materials, nodes, cameras and animation; "
+        "Isolated native .blend transactions: discover installed properties/enums, create/edit geometry, text, materials, nodes, cameras, armature rest bones, skin weights and pose animation; "
         "save/reopen immutable packed projects and render authored original frames. Blender 4.5+ required; no full-studio quality certification.",
         "write",motion_runtime_ready(),["plan","out"],native_motion)
     add("body.motion_export","deliver actual native motion project renders",
@@ -1080,16 +1180,25 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         "Local style documents and package presence; actual TTS loading remains independently required",
         "read",True,["voice_assets"],inspect_voices)
     if editor_client is not None:
+        # Native applications expose arbitrarily rich nested schemas. The
+        # ordinary lightweight BODY registry intentionally checks only its
+        # own top-level fields. Enforce the *full* native schema at this
+        # boundary: unknown nested keys cannot reach a live document.
+        import copy
+        from .body_editor_mcp import native_admission_validator
+
         native={tool["name"]:tool for tool in editor_client.list_tools()}
         if set(editor_client.allowed_tools)-set(native):
             raise ValueError("Host-granted native editor tool is absent from discovery")
         for name,access in editor_client.allowed_tools.items():
             tool=native[name]
-            # Keep the native schema intact: BODY's minimal validator must not
-            # flatten or reinterpret the editor's richer JSON Schema dialect.
+            native_schema=copy.deepcopy(tool["inputSchema"])
+            validator=native_admission_validator(native_schema)
+            # Keep exported native schema intact. Admission is stricter only
+            # about invented top-level keys that the engine did not declare.
             schema={"type":"object","additionalProperties":False,
                     "required":["arguments"],
-                    "properties":{"arguments":tool["inputSchema"]}}
+                    "properties":{"arguments":native_schema}}
             spec=ToolSpec("body.editor."+name,"native video editor",
                 tool.get("description") or name,access,
                 license="native editor license; Velorn GPL-3.0-only",
@@ -1097,15 +1206,26 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
                 operation_schema=schema,
                 limitations=("Host-granted native operation; not a verified media delivery receipt.",
                              "Stateful writes are not automatically retried or cached."))
-            catalog.register(spec,
-                lambda inputs,n=name,a=access:editor_client.call(
-                    n,inputs["arguments"],
+            def native_call(inputs, *, n=name,a=access,original=copy.deepcopy(tool),
+                            validate=validator):
+                proposed=inputs["arguments"]
+                invalid=next(validate.iter_errors(proposed),None)
+                if invalid is not None:
+                    raise ValueError("Invalid native model parameters ("+
+                                     str(invalid.validator)[:40]+")")
+                # A hot-reloaded native editor ABI must never get a write
+                # under an old contract. Recheck the exact selected tool and
+                # host grant immediately before native dispatch.
+                live={item["name"]:item for item in editor_client.list_tools()}
+                if (live.get(n)!=original or editor_client.allowed_tools.get(n)!=a):
+                    raise RuntimeError("Native editor capability changed; rediscover host tools")
+                return editor_client.call(
+                    n,proposed,
                     # Source introspection is an internal safety prerequisite,
                     # not an additional tool that a model may grant itself.
-                    # Other write tools keep their existing exact access.
                     allowed_access=(frozenset({a,"read"}) if n=="split_clip"
-                                    else frozenset({a}))),
-                idempotent=False)
+                                    else frozenset({a})))
+            catalog.register(spec,native_call,idempotent=False)
     for spec,runner,idempotent,version,operational,materials in discover_enabled_body_plugins():
         if not operational:
             from dataclasses import replace
@@ -1120,6 +1240,12 @@ def validate_witness(_tool_id,result):
     """Physically revisit file and stored rights evidence on every resume."""
     if not isinstance(result,dict):
         return False
+    if _tool_id in ("body.visual_graph","body.render_edit_owned","body.composite_mix",
+                    "body.film_finish","body.planar_insert","body.cgi_shot","body.aces2_movie"):
+        try:
+            if canonical_source_attestations(result.get("source_attestations"))!=result["source_attestations"]:
+                return False
+        except (ValueError,TypeError,KeyError):return False
     if _tool_id in ("body.timecode_format","body.timecode_parse"):
         return verify_timecode_receipt(result,_tool_id)
     if _tool_id in ("body.mlt_owned_timecode_format","body.mlt_owned_timecode_parse"):

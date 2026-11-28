@@ -17,14 +17,17 @@ import subprocess
 import sys
 from typing import NamedTuple
 
+from studio_next.nvidia_native_tool_model import NVIDIA_OMNI_AUDIO_MODEL_ID
 from studio_next.native_render_evidence import destination_digest, timeline_scope_digest
 from studio_next.body_editor_export import native_export_file_identity
+from studio_next.native_editor_source_pin import PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION
 
 ROOT = Path(__file__).resolve().parents[1]
 _SOURCE_EDITOR = ROOT / "third_party" / "velorn"
 _EDITOR_CLIENT = ROOT / "engines" / "velorn" / "native-model-client.py"
 _EXAMPLE = ROOT / "engines" / "velorn" / "editor.example.json"
 _PINNED_EDITOR = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
+_PINNED_INTEGRATED_EDITOR = PINNED_VELORN_LOSS_AWARE_EXTRACT_REVISION
 _ALLOWED_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 # A previous genuine 40-turn hosted run verified two real exports and observed
 # their frames, but spent its last turns exporting a post-review revision and
@@ -55,7 +58,10 @@ _HOST_ALLOWED = frozenset({
     "save_project", "export_timeline", "move_clips",
 })
 AV_TRIAL_REVISION_TOOLS = frozenset({
-    "add_asset_to_timeline", "add_text_clip", "update_text_clip", "add_shape_clip",
+    # The pinned editor already supports independent title/video layers.
+    # A real 120B A/V trial replaced its last source clip with a title because
+    # this synthetic-only grant did not expose add_track. Do not grant removal.
+    "add_track", "add_asset_to_timeline", "add_text_clip", "update_text_clip", "add_shape_clip",
     "update_shape_clip", "set_clip_style", "move_clips", "set_clip_audio",
 })
 
@@ -80,7 +86,7 @@ def _sha256(path):
     return digest.hexdigest()
 
 
-def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
+def prepare_trial(workspace: Path, *, source: Path, audiovisual=False, integrated_native=False):
     """Private, non-overwriting real media and host grants; no user footage."""
     workspace = Path(workspace).resolve()
     source = Path(source).resolve()
@@ -91,7 +97,8 @@ def prepare_trial(workspace: Path, *, source: Path, audiovisual=False):
     rev = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"],
                          check=True, capture_output=True, text=True, timeout=15,
                          env=_no_cloud_credentials()).stdout.strip()
-    if rev != _PINNED_EDITOR:
+    if type(integrated_native) is not bool or rev != (
+            _PINNED_INTEGRATED_EDITOR if integrated_native else _PINNED_EDITOR):
         raise ValueError("Unpinned native editor source cannot enter trial")
     os.umask(0o077)
     workspace.mkdir(mode=0o700)
@@ -363,6 +370,52 @@ def verify_saved_native_trial(workspace: Path, *, source_ledger=None, max_clip_d
         result["verified_source_backed_audio_clips"] = real_original_audio_clips
     return result
 
+def verify_native_original_picture_visibility(workspace: Path):
+    """Recover the existing #179 actual-native original-source visibility proof.
+
+    This read-only checkpoint certifies a project-owned byte-exact video source
+    on an eligible *current editable timeline*, not pixels in a specific render.
+    It cannot substitute for the separately captured 6-second export window,
+    a model-chosen edit or independent creative quality evaluation.
+    """
+    from studio_next.native_source_acceptance import verify_original_footage_on_native_timeline
+
+    workspace = Path(workspace).resolve(strict=True)
+    projects = workspace / "projects"
+    candidates = list(projects.glob("*/project.comfystudio"))
+    if len(candidates) != 1:
+        raise ValueError("Exactly one native saved source project is required")
+    entries = json.loads((workspace / "source-ledger.json").read_text(encoding="utf-8"))
+    if not isinstance(entries, list) or not 1 <= len(entries) <= 2:
+        raise ValueError("Host-generated source ledger is missing")
+    video = [entry for entry in entries if isinstance(entry, dict)
+             and entry.get("media_kind", "video" if len(entries) == 1 else None) == "video"]
+    if len(video) != 1:
+        raise ValueError("Exactly one original synthetic source video required")
+    record = video[0]
+    if type(record.get("path")) is not str or type(record.get("sha256")) is not str:
+        raise ValueError("Original source identity is incomplete")
+    original = Path(record["path"])
+    if (original.is_symlink() or original.parent != workspace / "staging" or
+            original.suffix.lower() != ".mp4"):
+        raise ValueError("Original video must be within generated trial staging")
+    # The synthetic-only runner generated and SHA-attested this video; the
+    # old owner-safe structural verifier checks the independent native copy.
+    observed = verify_original_footage_on_native_timeline(
+        projects, candidates, [{
+            "path": str(original), "sha256": record["sha256"],
+        }], host_verified_export_windows=None)
+    return {
+        "source_original_visible_in_native_timeline":
+            observed["actual_original_video_used_on_native_timeline"],
+        "original_visible_video_clip_count":
+            observed["physically_verified_native_source_clip_count"],
+        # Without trusted export origin+decoded sampling timestamps, the
+        # verifier *must not* claim that these pixels reached the movie.
+        "source_original_rendered_pixels_verified": False,
+    }
+
+
 def decoded_video_frames_sha256(path: Path, *, max_frames=240):
     """Hash exact-time presented decoded RGB frames, not container metadata.
 
@@ -551,20 +604,52 @@ def trial_delivery_profile_compliant(
     return True
 
 
+def exports_with_wav_decisions(events):
+    """Match host-verified WAV delivery to a returned decision on the next turn."""
+    received = set()
+    pending = {}
+    for event in events:
+        turn = event.get("turn")
+        if type(turn) is not int:
+            continue
+        if (event.get("kind") == "native_tool_result" and
+                event.get("audio_sent_to_model_for_next_decision") is True and
+                event.get("audio_sha256") and event.get("observed_export_sha256")):
+            pending[turn + 1] = event["observed_export_sha256"]
+        if (turn in pending and "measured_model_wall_ms" in event and
+                event.get("kind") not in {"model_decision_failed", "model_protocol_response_rejected"}):
+            received.add(pending.pop(turn))
+    return received
+
+
 def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
-              audiovisual=False, allow_cloud_audio_diagnostics=False):
+              audiovisual=False, allow_cloud_audio_diagnostics=False,
+              allow_cloud_synthetic_wav=False, integrated_editor_source=None,
+              indexed_catalog=False):
     # Runtime API and CLI enforce the same explicit paid/provider disclosure.
     # An old reviewed visual-only request is not authority to send synthetic
     # sound statistics to a hosted model or to launch a new cloud evaluation.
+    if type(indexed_catalog) is not bool or (indexed_catalog and not audiovisual):
+        raise ValueError("Explicit indexed catalog requires a synthetic audiovisual trial")
     if audiovisual and allow_cloud_audio_diagnostics is not True:
         raise ValueError("Audiovisual cloud trial needs explicit audio diagnostics consent")
     if allow_cloud_audio_diagnostics and not audiovisual:
         raise ValueError("Cloud audio diagnostics require audiovisual trial mode")
-    if model_id != _ALLOWED_MODEL:
+    if type(allow_cloud_synthetic_wav) is not bool or (allow_cloud_synthetic_wav and not audiovisual):
+        raise ValueError("Synthetic WAV requires the audited Omni audiovisual trial")
+    expected_model = NVIDIA_OMNI_AUDIO_MODEL_ID if allow_cloud_synthetic_wav else _ALLOWED_MODEL
+    if model_id != expected_model:
         raise ValueError("NVIDIA native trial model must match audited fixed catalog identity")
-    roots, cfg = prepare_trial(workspace, source=_SOURCE_EDITOR,
-                               audiovisual=audiovisual)
+    source = (Path(integrated_editor_source).resolve() if integrated_editor_source is not None
+              else _SOURCE_EDITOR)
+    roots, cfg = prepare_trial(
+        workspace, source=source, audiovisual=audiovisual,
+        **({"integrated_native": True} if integrated_editor_source is not None else {}))
     workspace = Path(workspace).resolve()
+    if allow_cloud_synthetic_wav:
+        with (workspace / "brief.txt").open("a", encoding="utf-8") as brief:
+            brief.write(" Listen to source-bound synthetic WAV excerpts from both exports. "
+                        "Explain which audible detail informed your revision and compare the result.")
     receipt = workspace / "native-journal.jsonl"
     command = [
         sys.executable, str(_EDITOR_CLIENT),
@@ -577,14 +662,20 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         # transport for this trial; all BODY grants/schema checks remain.
         # There is NO host-authored creative edit or automatic invocation.
         "--structured-actions",
+        # Omni full-catalog trial 44998186099 made 25 identical project reads.
+        # Reuse the existing trusted frontier for Omni, or an explicitly
+        # selected synthetic A/V comparison. No new grants or native actions.
+        # Full historical 120B route remains unchanged unless opted in.
+        *(["--indexed-catalog"] if allow_cloud_synthetic_wav or indexed_catalog else []),
         "--fresh-trial-project",
         "--evaluation-evidence", (
             "reviewed-av-revision" if audiovisual else "reviewed-revision"),
         *(["--allow-cloud-audio-diagnostics", "--record-av-project-snapshots"]
           if audiovisual else []),
+        *(["--allow-cloud-original-wav-upload"] if allow_cloud_synthetic_wav else []),
         "--max-turns", str(_TRIAL_MAX_TURNS),
         "--model-timeout", str(_TRIAL_MODEL_TIMEOUT_SECONDS),
-        "--source", str(_SOURCE_EDITOR),
+        "--source", str(source),
         "--config", str(cfg),
         "--state", str(roots["state"]),
         "--brief-file", str(workspace / "brief.txt"),
@@ -663,6 +754,18 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
             "native_saved_project_verified": False,
             "native_project_rejection_type": type(exc).__name__,
         }
+    original_picture_visibility = {
+        "source_original_visible_in_native_timeline": False,
+        "original_visible_video_clip_count": 0,
+        "source_original_rendered_pixels_verified": False,
+    }
+    if saved_native["native_saved_project_verified"]:
+        try:
+            original_picture_visibility = verify_native_original_picture_visibility(workspace)
+        except (OSError, ValueError, TypeError):
+            # Preserve forensic outputs but never infer original content use.
+            # No filesystem/path contents in public negative evidence.
+            pass
     export_variants = len({entry["sha256"] for entry in media})
     independently_different_picture_exports = len({
         item.presentation for item in decoded_exports.values()})
@@ -688,8 +791,16 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
             changed_reviewed_audio = bool(
                 reviewed_pair_audio_acceptable and
                 a.pcm_sha256 != b.pcm_sha256)
+    wav_pair_verified = None
+    if allow_cloud_synthetic_wav:
+        with receipt.open(encoding="utf-8") as journal:
+            observed = exports_with_wav_decisions(json.loads(line) for line in journal)
+        wav_pair_verified = bool(pair and len(pair) == 2 and
+                                 all(item["export_sha256"] in observed for item in pair))
     evaluated = {
+        "both_reviewed_exports_returned_wav_conditioned_decisions": wav_pair_verified,
         **saved_native,
+        **original_picture_visibility,
         "different_decoded_export_count": export_variants,
         "different_decoded_picture_sequence_count": independently_different_picture_exports,
         "status": summary.get("status"),
@@ -706,7 +817,9 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
         "physical_export_verify_receipts": summary.get("independently_verified_export_receipts"),
         "decoded_real_exports": media,
         "decoded_audio_errors": len(audio_rejections) if audiovisual else None,
-        "original_media_sent_to_model": False,
+        **({"original_media_sent_to_model": False} if not allow_cloud_synthetic_wav else {}),
+        "private_owner_media_sent_to_model": False,
+        "synthetic_wav_upload_authorized": allow_cloud_synthetic_wav,
         "synthetic_frame_upload_explicitly_authorized": True,
         "artistic_quality_approved": False,
     }
@@ -719,8 +832,10 @@ def run_trial(workspace: Path, *, model_id: str, xvfb_binary: str, display: str,
                  (audiovisual and changed_reviewed_audio)) or
             (audiovisual and (
                 not reviewed_pair_audio_acceptable or bool(audio_rejections))) or
+            wav_pair_verified is False or
             not reviewed_pair_delivery_profile_compliant or
-            saved_native["native_saved_project_verified"] is not True):
+            saved_native["native_saved_project_verified"] is not True or
+            not original_picture_visibility["source_original_visible_in_native_timeline"]):
         raise RuntimeError("Model did not meet full real-native visual-revision-export proof")
     return evaluated
 
@@ -737,9 +852,18 @@ def main(argv=None):
                         help="Opt in to a model-driven trial with physically decoded sound")
     parser.add_argument("--allow-cloud-audio-diagnostics", action="store_true",
                         help="Separate consent for sending synthetic audio statistics to NVIDIA")
+    parser.add_argument("--allow-cloud-synthetic-wav", action="store_true",
+                        help="Permit source-bound generated WAV excerpts on the audited Omni trial")
+    parser.add_argument("--indexed-catalog", action="store_true",
+                        help="Explicit synthetic A/V comparison using the existing host indexed catalog")
+    parser.add_argument("--integrated-editor-source", type=Path,
+                        help="Use only the rebuilt, exact source-pinned cumulative ZX7 editor")
     args = parser.parse_args(argv)
     if args.prepare_audiovisual_only:
-        prepare_trial(args.workspace, source=_SOURCE_EDITOR, audiovisual=True)
+        prepare_trial(args.workspace,
+                      source=(args.integrated_editor_source or _SOURCE_EDITOR),
+                      audiovisual=True,
+                      integrated_native=args.integrated_editor_source is not None)
         return
     if args.audiovisual_trial and not args.allow_cloud_audio_diagnostics:
         parser.error("Audiovisual NVIDIA trial requires explicit cloud audio diagnostics consent")
@@ -748,7 +872,10 @@ def main(argv=None):
     run_trial(args.workspace, model_id=args.model_id,
               xvfb_binary=args.xvfb_binary, display=args.display,
               audiovisual=args.audiovisual_trial,
-              allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics)
+              allow_cloud_audio_diagnostics=args.allow_cloud_audio_diagnostics,
+              allow_cloud_synthetic_wav=args.allow_cloud_synthetic_wav,
+              integrated_editor_source=args.integrated_editor_source,
+              indexed_catalog=args.indexed_catalog)
 
 
 if __name__ == "__main__":

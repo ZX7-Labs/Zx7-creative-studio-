@@ -36,6 +36,27 @@ def admitted_owner_delivery(value):
     return MappingProxyType(dict(value))
 
 
+def owner_delivery_native_tool_hint(value):
+    """Owner delivery facts at the *native tool* boundary, never an edit plan.
+
+    Source-pinned Velorn resolves its default h264_hd target before its custom
+    dimension branch. Telling a model that resolution=custom alone works
+    would waste decisions on host-rejected 1080p exports. The actual timeline
+    and check_export_readiness remain authoritative; no mutation is selected.
+    """
+    approved = admitted_owner_delivery(value)
+    if approved is None:
+        return None
+    return (
+        f"OWNER DELIVERY: {approved['video_codec']} MP4 "
+        f"{approved['width']}x{approved['height']} "
+        f"@{approved['fps']}fps <={approved['max_duration']}s. "
+        "Native h264_hd default overrides custom. If timeline size matches, "
+        "use target=h264_project resolution=project. Verify "
+        "check_export_readiness.deliveryTarget; choose new outputPath.")
+
+
+
 def native_delivery_matches(native_readiness, approved):
     """Compare the actual pinned editor's *read-only* export deliveryTarget.
 

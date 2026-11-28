@@ -123,5 +123,60 @@ class NativeCGIControlsAcceptance(unittest.TestCase):
             self.assertGreater(proof['volume_control_mean_pixel_difference'],.05)
             self.assertGreater(proof['motion_blur_support_gain_pixels'],2)
 
+    def test_real_textured_cgi_derivative_retains_exact_grant_after_graph_reopen(self):
+        from PIL import Image
+        from studio_next.body_integration import run_body_project
+        from studio_next.media_vault import MediaVault, MediaRightsWithdrawn, sha256_file
+        from studio_next.test_blender_scene import sample
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            texture=root/"owned-label.png"
+            image=Image.new("RGB",(32,32),(220,50,30))
+            image.paste((20,160,210),(0,0,16,16))
+            image.save(texture)
+            vault=MediaVault(root/"vault")
+            def grant(identity):
+                return vault.ingest(texture,mime="image/png",rights="owner_supplied",
+                    source_type="owner_upload",source_id=identity,
+                    evidence="Original synthetic authored texture",owner_or_generator="owner")
+            original,other=grant("cgi-exact-grant"),grant("independent-same-bytes")
+            scene=sample()
+            scene.update(shot_id="owned-textured-cgi",width=96,height=64,frames=2,samples=2)
+            scene["camera"]["animate_location"][-1]["frame"]=2
+            scene["objects"][1]["animate"]["rotation_degrees"][-1]["frame"]=2
+            scene["materials"][2]["base_color_texture"]=texture.name
+            plan={"scene":scene,"assets":[{"name":texture.name,"media":{
+                "source":texture.name,"asset_id":original["asset_id"],
+                "attestation_id":original["attestation_id"]}}]}
+            (root/"plan.json").write_text(json.dumps(plan))
+            graph={"project":{"creative_intent":"Original texture on a native CGI shot"},
+                "assets":[],"shots":[{"id":"shot","purpose":"Owned textured scene",
+                                       "duration_seconds":2/scene["fps"]}],
+                "tool_graph":[
+                    {"id":"shot","tool_id":"body.cgi_shot","purpose":"Render owned native scene",
+                     "inputs":{"plan":"plan.json","out":"shot.mp4"},"depends_on":[]},
+                    {"id":"custody","tool_id":"body.asset_vault","purpose":"Exact derived rights",
+                     "inputs":{"source_witness":{"$node_output":"shot"}},"depends_on":["shot"]}]}
+            first=run_body_project(graph,root)
+            self.assertEqual(first["status"],"all_tool_results_verified",first)
+            digest=sha256_file(root/"shot.mp4")
+            generated=vault.inspect(digest)["rights_attestations"][0]
+            self.assertEqual(generated["source_attestations"],[
+                {key:original[key] for key in ("asset_id","attestation_id")}])
+            derivative=generated["attestation_id"]
+            reopened=run_body_project(graph,root)
+            self.assertEqual(reopened["reused"],["shot","custody"],reopened)
+            vault.withdraw_attestation(original["asset_id"],original["attestation_id"],
+                                       reason="Texture grant withdrawn")
+            self.assertEqual(vault.inspect(other["asset_id"],attestation_id=other["attestation_id"])
+                             ["rights_attestations"][0]["attestation_id"],other["attestation_id"])
+            with self.assertRaises(MediaRightsWithdrawn):
+                vault.inspect(digest,attestation_id=derivative)
+            with self.assertRaises(MediaRightsWithdrawn):
+                vault.checkout(digest,derivative,root/"revoked.mp4")
+            self.assertFalse((root/"revoked.mp4").exists())
+            self.assertNotEqual(run_body_project(graph,root)["status"],"all_tool_results_verified")
+            self.assertEqual(sha256_file(root/"shot.mp4"),digest)
+
 
 if __name__=='__main__':unittest.main()

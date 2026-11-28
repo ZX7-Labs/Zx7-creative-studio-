@@ -60,8 +60,54 @@ _NATIVE_REFERENCES = {
         "/clipId": "clips", "/clipIds/*": "clips",
         "/trackId": "tracks", "/maskAssetId": "assets"},
     "set_clips_enabled": {"/clipIds/*": "clips"},
+    "remove_timeline_markers": {"/markerIds/*": "markers"},
+    "set_timeline_marker_properties": {"/markerIds/*": "markers"},
     "set_clip_keyframes": {"/clipId": "clips"},
-    "set_clip_style": {"/clipId": "clips", "/clipIds/*": "clips"},
+    "set_clip_style": {
+        "/clipId": "clips", "/clipIds/*": "clips", "/trackId": "tracks"},
+    "update_caption_cues": {
+        "/clipId": "clips",
+    },
+    "set_clip_label_color": {
+        "/clipIds/*": "clips",
+    },
+    "select_clips": {
+        "/clipId": "clips",
+        "/clipIds/*": "clips",
+        "/trackId": "tracks",
+    },
+    "add_solid_color": {
+        "/trackId": "tracks",
+    },
+    "add_glsl_effect": {
+        "/clipId": "clips",
+    },
+    "update_glsl_effect": {
+        "/clipId": "clips",
+    },
+    "remove_glsl_effect": {
+        "/clipId": "clips",
+    },
+    "add_dip_to_black": {
+        "/clipIds/*": "clips",
+        "/trackId": "tracks",
+        "/clipPairs/*/outClipId": "clips",
+        "/clipPairs/*/inClipId": "clips",
+        "/clipPairs/*/clipAId": "clips",
+        "/clipPairs/*/clipBId": "clips",
+        "/clipPairs/*/fromClipId": "clips",
+        "/clipPairs/*/toClipId": "clips",
+        "/clipPairs/*/firstClipId": "clips",
+        "/clipPairs/*/secondClipId": "clips",
+        "/pairs/*/outClipId": "clips",
+        "/pairs/*/inClipId": "clips",
+        "/pairs/*/clipAId": "clips",
+        "/pairs/*/clipBId": "clips",
+        "/pairs/*/fromClipId": "clips",
+        "/pairs/*/toClipId": "clips",
+        "/pairs/*/firstClipId": "clips",
+        "/pairs/*/secondClipId": "clips",
+    },
 }
 
 
@@ -184,7 +230,14 @@ class NativeEditorIdentityReader:
         after = _project_state(after_object)
         # A renderer changed source/head during observation: never authorize
         # the caller's old object references on a mixed project snapshot.
-        if before != after:
+        # Pinned Velorn regenerates generatedAt on the snapshot heartbeat,
+        # even when its synchronous source-owned mutation revision is stable.
+        # A heartbeat is not an edit. ONLY the exact source-fenced writer may
+        # ignore that volatile timestamp: its live revision is checked below
+        # across both reads and synchronously again at native commit.
+        # Unfenced/legacy sources retain the conservative timestamp guard.
+        if (before[:2] != after[:2] or before[3:] != after[3:] or
+                (not self._require_live_revision and before[2] != after[2])):
             raise ValueError("native_identity_project_changed_during_read")
         live_revision = None
         if self._require_live_revision:
@@ -216,9 +269,77 @@ class NativeEditorIdentityReader:
             "clips": {"ids": clips, "complete": True},
             "assets": {"ids": asset_ids, "complete": True},
         }
+        # The pinned timeline snapshot publishes the full marker array and
+        # its count, unlike the summarized get_project response. A missing,
+        # oversized or contradictory marker receipt must not mint IDs or
+        # invalidate otherwise sound clip/track/asset-only observations.
+        marker_count = timeline.get("markerCount")
+        if type(marker_count) is int and 0 <= marker_count <= _MAX_ITEMS:
+            try:
+                marker_ids = _ids(timeline.get("markers"))
+            except ValueError:
+                pass  # A marker-specific policy will reject absent inventory.
+            else:
+                if len(marker_ids) == marker_count:
+                    inventory["markers"] = {"ids": marker_ids, "complete": True}
         if live_revision is not None:
             inventory["__zx7_live_revision"] = live_revision
         return inventory
+
+
+# Only pinned, synchronously committing editorial actions. An arbitrary
+# WRITE does not acquire native revision semantics by its name.
+_SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS = frozenset((
+    "move_clips", "trim_clips", "delete_clips",
+    "add_asset_to_timeline", "add_assets_to_timeline",
+    "set_clip_audio", "set_clip_speed", "update_track",
+    "add_transition", "set_clip_style", "split_clip", "extract_range",
+))
+
+
+def source_native_commit_intent(tool, inputs):
+    """Only source-attested *commits* need a native writer CAS token.
+
+    Reader-like previews remain public-schema clean. In the pinned editor
+    keyframe previews are the default; text and shape previews require an
+    explicit true. Never infer that a preview is a write from the tool name.
+    """
+    if tool == "set_clip_keyframes" or tool in _SOURCE_NATIVE_EDITORIAL_COMMIT_TOOLS:
+        return inputs.get("previewOnly") is False
+    if tool in ("update_text_clip", "update_shape_clip"):
+        return inputs.get("previewOnly") is not True
+    return False
+
+
+
+def pinned_native_revision_tools(source: Path, grants) -> frozenset[str]:
+    """Single source-pin authority for the gateway and direct MCP wire bridge."""
+    if (not isinstance(source, Path) or not isinstance(grants, Mapping) or
+            any(grants.get(name) != "read" for name in _READ_NAMES) or
+            not _source_matches_pinned_electron_mcp(source)):
+        return frozenset()
+    source_fenced = _source_matches_pinned_native_collaboration(source)
+    scene_fenced = (_source_matches_pinned_native_scene(source)
+                    if source_fenced else False)
+    editorial_fenced = (_source_matches_pinned_native_editorial(source)
+                        if scene_fenced else False)
+    fenced_names = (
+        (["update_text_clip"] if source_fenced else []) +
+        (["update_shape_clip", "set_clip_keyframes"] if scene_fenced else []) +
+        ([
+            "move_clips", "trim_clips", "delete_clips",
+            "add_asset_to_timeline", "add_assets_to_timeline",
+            "set_clip_audio", "set_clip_speed", "update_track",
+            "add_transition", "set_clip_style",
+        ] if editorial_fenced else [])
+    )
+    # Razor gained a new atomic native implementation only in this exact
+    # source child. Never grant its commit fence to legacy editor revisions.
+    if _source_matches_pinned_native_loss_aware_editorial(source):
+        fenced_names.append("split_clip")
+    if _source_matches_pinned_native_loss_aware_extract(source):
+        fenced_names.append("extract_range")
+    return frozenset(name for name in fenced_names if grants.get(name) == "write")
 
 
 def pinned_native_editor_identity_policy(source: Path, grants, session, *,
@@ -241,29 +362,7 @@ def pinned_native_editor_identity_policy(source: Path, grants, session, *,
         return None
     if not _source_matches_pinned_electron_mcp(source):
         return None
-    source_fenced = _source_matches_pinned_native_collaboration(source)
-    scene_fenced = (_source_matches_pinned_native_scene(source)
-                    if source_fenced else False)
-    editorial_fenced = (_source_matches_pinned_native_editorial(source)
-                        if scene_fenced else False)
-    fenced_names = (
-        (["update_text_clip"] if source_fenced else []) +
-        (["update_shape_clip", "set_clip_keyframes"] if scene_fenced else []) +
-        ([
-            "move_clips", "trim_clips", "delete_clips",
-            "add_asset_to_timeline", "add_assets_to_timeline",
-            "set_clip_audio", "set_clip_speed", "update_track",
-            "add_transition", "set_clip_style",
-        ] if editorial_fenced else [])
-    )
-    # Razor gained a new atomic native implementation only in this exact
-    # source child. Never grant its commit fence to legacy editor revisions.
-    if _source_matches_pinned_native_loss_aware_editorial(source):
-        fenced_names.append("split_clip")
-    if _source_matches_pinned_native_loss_aware_extract(source):
-        fenced_names.append("extract_range")
-    fenced_names = [name for name in fenced_names
-                    if grants.get(name) == "write"]
+    fenced_names = pinned_native_revision_tools(source, grants)
     reader = NativeEditorIdentityReader(
         session, grants, reserve_read=reserve_read,
         require_live_revision=bool(fenced_names))

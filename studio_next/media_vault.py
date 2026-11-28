@@ -29,6 +29,27 @@ class MediaCustodyError(ValueError):
     pass
 
 
+class MediaRightsWithdrawn(MediaCustodyError):
+    pass
+
+
+def canonical_source_attestations(value):
+    """Bounded exact grant pairs, not an inferred license or asset-only list."""
+    if type(value) is not list or len(value)>1024:
+        raise MediaCustodyError("Invalid bounded source attestation lineage")
+    pairs=set()
+    for item in value:
+        if (type(item) is not dict or set(item)!={"asset_id","attestation_id"} or
+                any(type(v) is not str or not _DIGEST.fullmatch(v) for v in item.values())):
+            raise MediaCustodyError("Invalid exact source attestation lineage")
+        pairs.add((item["asset_id"],item["attestation_id"]))
+    return [{"asset_id":d,"attestation_id":a} for d,a in sorted(pairs)]
+
+
+def _attestation_digest(record):
+    return hashlib.sha256(json.dumps(record,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
+
 def verify_media_container(path,mime):
     """Physical decoder/magic check; provenance text alone cannot create a film."""
     path=Path(path)
@@ -36,12 +57,13 @@ def verify_media_container(path,mime):
         if shutil.which("ffprobe") is None:
             raise MediaCustodyError("Real video decoder not installed; refuse unverifiable source")
         from .delivery_audit import _probe_details
+        from .edit_timeline import SELF_CONTAINED_VIDEO_INPUT
         import subprocess
         try:
             observed=_probe_details(path)
             decoded=subprocess.run([
                 "ffmpeg","-hide_banner","-loglevel","error","-nostdin",
-                "-xerror","-i",str(path),"-map","0:v",
+                "-xerror",*SELF_CONTAINED_VIDEO_INPUT,"-i",str(path),"-map","0:v",
                 "-map","0:a?","-f","null","-"],
                 capture_output=True,timeout=3600,check=False)
             if decoded.returncode!=0:
@@ -283,8 +305,11 @@ def verify_media_container(path,mime):
                 "Not a physically decoded and verified native 32f EXR bundle") from exc
     elif mime in ("audio/mpeg","audio/flac"):
         import subprocess
+        # Do not let a reference-only playlist confer custody of its targets.
+        audio_input=("-protocol_whitelist","file,pipe","-format_whitelist",
+                     "mp3" if mime=="audio/mpeg" else "flac")
         try:
-            data=json.loads(subprocess.check_output(["ffprobe","-v","error",
+            data=json.loads(subprocess.check_output(["ffprobe","-v","error",*audio_input,
                   "-show_entries","stream=codec_type","-of","json",str(path)],timeout=60))
         except (OSError,ValueError,subprocess.SubprocessError) as exc:
             raise MediaCustodyError("Claimed audio does not contain a decodable stream") from exc
@@ -292,7 +317,7 @@ def verify_media_container(path,mime):
             raise MediaCustodyError("No original decoded source sound")
         decoded=subprocess.run([
             "ffmpeg","-hide_banner","-loglevel","error","-nostdin",
-            "-xerror","-i",str(path),"-map","0:a:0",
+            "-xerror",*audio_input,"-i",str(path),"-map","0:a:0",
             "-f","null","-"],capture_output=True,timeout=3600,check=False)
         if decoded.returncode!=0:
             raise MediaCustodyError("Original compressed sound failed full decoder")
@@ -319,12 +344,19 @@ def sha256_file(path):
 
 class MediaVault:
     """SQLite WAL + atomic immutable blobs; empty results are never delivered."""
-    def __init__(self,root):
-        self.root=Path(root).resolve()
+    def __init__(self,root,*,initialize=True):
+        if type(initialize) is not bool:
+            raise MediaCustodyError("Vault initialization policy must be an explicit boolean")
+        supplied=Path(root)
+        if supplied.is_symlink():
+            raise MediaCustodyError("Source vault root cannot be a linked external directory")
+        self.root=supplied.resolve()
         self.objects=self.root/"objects"
         self.db=self.root/"assets.sqlite3"
         if self.objects.is_symlink() or self.db.is_symlink():
             raise MediaCustodyError("Source vault cannot use an external linked object or database")
+        if not initialize:
+            return  # Pure native tool discovery: no SQLite, directories, or asset writes.
         self.objects.mkdir(parents=True,exist_ok=True)
         with self._connect() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS blobs(
@@ -338,6 +370,17 @@ class MediaVault:
               PRIMARY KEY(digest,attestation_id),
               FOREIGN KEY(digest) REFERENCES blobs(digest))""")
             db.execute("CREATE INDEX IF NOT EXISTS attested_digest ON attestations(digest)")
+            db.execute("""CREATE TABLE IF NOT EXISTS withdrawn_attestations(
+              digest TEXT NOT NULL, attestation_id TEXT NOT NULL,
+              reason TEXT NOT NULL, withdrawn_at REAL NOT NULL,
+              PRIMARY KEY(digest,attestation_id),
+              FOREIGN KEY(digest,attestation_id) REFERENCES attestations(digest,attestation_id))""")
+
+            db.execute("""CREATE TABLE IF NOT EXISTS attestation_lineage(
+              digest TEXT NOT NULL, attestation_id TEXT NOT NULL,
+              parents_json TEXT NOT NULL,
+              PRIMARY KEY(digest,attestation_id),
+              FOREIGN KEY(digest,attestation_id) REFERENCES attestations(digest,attestation_id))""")
 
     def _connect(self):
         if self.db.is_symlink():
@@ -355,8 +398,17 @@ class MediaVault:
         return parent/digest
 
     def ingest(self,source,*,mime,rights,source_type,source_id,evidence,
-               owner_or_generator):
-        """Attest real file source and rights; never infer rights from an extension."""
+               owner_or_generator,source_attestations=None):
+        """Attest real file source and rights; never infer rights from an extension.
+
+        Only trusted host renderers supply exact, physically admitted parents.
+        Legacy and independent owner grants retain their original identity.
+        """
+        parents=None
+        if source_attestations is not None:
+            if source_type!="trusted_renderer":
+                raise MediaCustodyError("Only trusted renderers bind derivative lineage")
+            parents=canonical_source_attestations(source_attestations)
         if mime not in _ALLOWED_MIME or rights not in _RIGHTS:
             raise MediaCustodyError("Unsupported media type or unverified rights class")
         for value in (source_type,source_id,evidence,owner_or_generator):
@@ -372,20 +424,31 @@ class MediaVault:
         path=Path(source)
         if not path.is_file() or path.stat().st_size==0:
             raise MediaCustodyError("Asset has no actual file bytes")
-        size=path.stat().st_size
-        verify_media_container(path,mime)
-        digest=sha256_file(path)
-        dest=self._loc(digest)
-        dest.parent.mkdir(parents=True,exist_ok=True)
-        if dest.is_symlink():
-            raise MediaCustodyError("Content-addressed creative media may not be a symlink")
-        if not dest.is_file():
-            fd,tmp=tempfile.mkstemp(prefix="."+digest[:10]+"-",dir=dest.parent)
-            try:
-                with os.fdopen(fd,"wb") as handle, path.open("rb") as stream:
-                    shutil.copyfileobj(stream,handle,1024*1024)
-                    handle.flush();os.fsync(handle.fileno())
-                if sha256_file(tmp)!=digest:raise MediaCustodyError("Source changed while ingesting")
+        if self.objects.is_symlink():
+            raise MediaCustodyError("Source vault cannot use an external linked object directory")
+        # Validate the private staged snapshot, never a mutable upload path
+        # that can be replaced between physical decoding and CAS publication.
+        fd,tmp=tempfile.mkstemp(prefix=".ingest-",dir=self.objects)
+        try:
+            with os.fdopen(fd,"wb") as handle, path.open("rb") as stream:
+                before=os.fstat(stream.fileno())
+                shutil.copyfileobj(stream,handle,1024*1024)
+                handle.flush();os.fsync(handle.fileno())
+                after=os.fstat(stream.fileno())
+            size=Path(tmp).stat().st_size
+            if not size or size!=before.st_size or (
+                    before.st_size,before.st_mtime_ns,before.st_ctime_ns)!= (
+                    after.st_size,after.st_mtime_ns,after.st_ctime_ns):
+                raise MediaCustodyError("Source changed while ingesting")
+            digest=sha256_file(tmp)
+            verify_media_container(tmp,mime)
+            if sha256_file(tmp)!=digest:
+                raise MediaCustodyError("Staged media changed during physical verification")
+            dest=self._loc(digest)
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            if dest.is_symlink():
+                raise MediaCustodyError("Content-addressed creative media may not be a symlink")
+            if not dest.is_file():
                 try:
                     os.link(tmp,dest)
                 except FileExistsError:
@@ -394,18 +457,21 @@ class MediaVault:
                     if dest.is_symlink() or not dest.is_file() or sha256_file(dest)!=digest:
                         raise MediaCustodyError(
                             "Another publisher placed different bytes in immutable MediaVault")
-            finally:
-                if os.path.exists(tmp):os.unlink(tmp)
-        elif sha256_file(dest)!=digest:
-            raise MediaCustodyError("Previously saved media content is corrupted")
-        if dest.stat().st_size!=size:
-            raise MediaCustodyError("Mismatch in bytes of durable creative media")
+            elif sha256_file(dest)!=digest:
+                raise MediaCustodyError("Previously saved media content is corrupted")
+            if dest.stat().st_size!=size:
+                raise MediaCustodyError("Mismatch in bytes of durable creative media")
+        finally:
+            Path(tmp).unlink(missing_ok=True)
         attestation={
             "rights":rights,"source_type":source_type,"source_id":source_id,
             "evidence":evidence,"owner_or_generator":owner_or_generator,
             "digest":digest}
-        encoded=json.dumps(attestation,sort_keys=True,ensure_ascii=False).encode()
-        att_id=hashlib.sha256(encoded).hexdigest()
+        if parents is not None:
+            if source_id!=digest:
+                raise MediaCustodyError("Derivative lineage must bind the rendered output digest")
+            attestation["source_attestations"]=parents
+        att_id=_attestation_digest(attestation)
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             old=db.execute("SELECT size_bytes,mime FROM blobs WHERE digest=?",(digest,)).fetchone()
@@ -416,27 +482,106 @@ class MediaVault:
                        (digest,size,mime,time.time()))
             db.execute("INSERT OR IGNORE INTO attestations VALUES(?,?,?,?,?,?,?,?)",
                  (digest,att_id,rights,source_type,source_id,evidence,owner_or_generator,time.time()))
+            if parents is not None:
+                encoded=json.dumps(parents,sort_keys=True,separators=(",",":"))
+                db.execute("INSERT OR IGNORE INTO attestation_lineage VALUES(?,?,?)",(digest,att_id,encoded))
+            self._require_not_withdrawn(db,digest,att_id)
             db.execute("COMMIT")
         return {"asset_id":digest,"attestation_id":att_id,"mime":mime,
                 "rights":rights,"size_bytes":size,"verified_bytes":True}
 
+    @staticmethod
+    def _require_not_withdrawn(db,digest,attestation_id):
+        # Read the exact, committed ancestry under the caller's transaction.
+        # Hash verification also refuses a lost lineage row instead of treating
+        # a newly issued derivative as a historical independent grant.
+        pending=[(digest,attestation_id)];seen=set();root_parents=None;edges=0
+        while pending:
+            key=pending.pop()
+            if key in seen:continue
+            seen.add(key)
+            if len(seen)>4096:
+                raise MediaCustodyError("Source attestation ancestry exceeds host bounds")
+            row=db.execute("SELECT rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=? AND attestation_id=?",key).fetchone()
+            if row is None:raise MediaCustodyError("Unknown source attestation in lineage")
+            if db.execute("SELECT 1 FROM withdrawn_attestations WHERE digest=? AND attestation_id=?",key).fetchone() is not None:
+                raise MediaRightsWithdrawn("Exact source rights attestation has been withdrawn")
+            record=dict(zip(("rights","source_type","source_id","evidence","owner_or_generator"),row))
+            record["digest"]=key[0]
+            lineage=db.execute("SELECT parents_json FROM attestation_lineage WHERE digest=? AND attestation_id=?",key).fetchone()
+            parents=None
+            if lineage is not None:
+                try:parents=canonical_source_attestations(json.loads(lineage[0]))
+                except (TypeError,ValueError) as exc:raise MediaCustodyError("Invalid stored source attestation lineage") from exc
+                if record["source_type"]!="trusted_renderer" or record["source_id"]!=key[0]:
+                    raise MediaCustodyError("Invalid stored derivative authority")
+                record["source_attestations"]=parents
+            if _attestation_digest(record)!=key[1]:
+                raise MediaCustodyError("Stored rights attestation or lineage commitment differs")
+            if key==(digest,attestation_id):root_parents=parents
+            if parents is not None:
+                edges+=len(parents)
+                if edges>16384:raise MediaCustodyError("Source attestation ancestry exceeds host edge bounds")
+                pending.extend((p["asset_id"],p["attestation_id"]) for p in parents)
+        return root_parents
+
+    def withdraw_attestation(self,digest,attestation_id,*,reason):
+        """Owner-side, irreversible denial of this exact future vault admission.
+
+        Keep original bytes and prior evidence. No claim to delete existing
+        copies, invalidate historical exports or revoke independent grants.
+        Caller must be trusted and coordinate active native work.
+        """
+        self._loc(digest)
+        if not isinstance(attestation_id,str) or not _DIGEST.fullmatch(attestation_id):
+            raise MediaCustodyError("Exact original rights attestation identity required")
+        if (not isinstance(reason,str) or not reason.strip() or len(reason.encode("utf-8"))>2048):
+            raise MediaCustodyError("Explicit bounded owner withdrawal reason required")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM attestations WHERE digest=? AND attestation_id=?",
+                          (digest,attestation_id)).fetchone() is None:
+                raise MediaCustodyError("Unknown original rights attestation")
+            db.execute("INSERT OR IGNORE INTO withdrawn_attestations VALUES(?,?,?,?)",
+                       (digest,attestation_id,reason,time.time()))
+            recorded=db.execute("SELECT reason,withdrawn_at FROM withdrawn_attestations WHERE digest=? AND attestation_id=?",
+                                (digest,attestation_id)).fetchone()
+            if recorded[0]!=reason:
+                raise MediaCustodyError("Withdrawal history cannot be rewritten")
+            db.execute("COMMIT")
+        return {"asset_id":digest,"attestation_id":attestation_id,"withdrawn":True,
+                "reason":recorded[0],"withdrawn_at":recorded[1],
+                "scope":"current_vault_exact_attestation_future_admissions",
+                "historical_copies_deleted":False,"previous_backups_updated":False,
+                "independent_grants_revoked":False}
+
     def inspect(self,digest,*,attestation_id=None):
         path=self._loc(digest)
         with self._connect() as db:
+            db.execute("BEGIN")
             blob=db.execute("SELECT size_bytes,mime FROM blobs WHERE digest=?",(digest,)).fetchone()
             if blob is None:raise MediaCustodyError("Unknown media reference")
-            if attestation_id is None:
-                rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=?",
-                              (digest,)).fetchall()
-            else:
-                rows=db.execute("SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=? AND attestation_id=?",
-                               (digest,attestation_id)).fetchall()
+            query="SELECT attestation_id,rights,source_type,source_id,evidence,owner_or_generator FROM attestations WHERE digest=?"
+            rows=db.execute(query+" ORDER BY attestation_id",(digest,)).fetchall() if attestation_id is None else db.execute(query+" AND attestation_id=?",(digest,attestation_id)).fetchall()
+            if attestation_id is not None and not rows:
+                raise MediaCustodyError("Unknown source attestation")
+            active=[];lineages={}
+            for row in rows:
+                try:parents=self._require_not_withdrawn(db,digest,row[0])
+                except MediaRightsWithdrawn:
+                    if attestation_id is not None:raise
+                    continue
+                active.append(row)
+                if parents is not None:lineages[row[0]]=parents
+            rows=active
+            db.execute("COMMIT")
         if not rows or path.is_symlink() or not path.is_file() or path.stat().st_size!=blob[0] or sha256_file(path)!=digest:
             raise MediaCustodyError("Missing or altered stored media and provenance")
         return {"asset_id":digest,"size_bytes":blob[0],"mime":blob[1],
                 "path":str(path),"rights_attestations":[{
                     "attestation_id":a,"rights":b,"source_type":c,
-                    "source_id":d,"evidence":e,"owner_or_generator":f}
+                    "source_id":d,"evidence":e,"owner_or_generator":f,
+                    **({"source_attestations":lineages[a]} if a in lineages else {})}
                     for a,b,c,d,e,f in rows]}
 
     def checkout(self,digest,attestation_id,destination):
@@ -455,8 +600,14 @@ class MediaVault:
             if sha256_file(stage)!=digest:
                 raise MediaCustodyError(
                     "Copied creative media differs from immutable source")
+            # Serialize the final exclusive checkout link with withdrawal.
+            # Withdrawal after this transaction cannot recall an earlier copy.
             self.inspect(digest,attestation_id=attestation_id)
-            os.link(stage,dest)
+            with self._connect() as db:
+                db.execute("BEGIN IMMEDIATE")
+                self._require_not_withdrawn(db,digest,attestation_id)
+                os.link(stage,dest)
+                db.execute("COMMIT")
         finally:
             Path(stage).unlink(missing_ok=True)
         return record

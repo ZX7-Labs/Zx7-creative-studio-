@@ -22,16 +22,25 @@ import time
 from typing import Any
 
 from .providers import LocalModelOutputError
+from .body_picture_observation import TOOL as BODY_PICTURE_TOOL, validate_picture_receipt
 from .body_editor_client import (
     host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK,
-    host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK,
+    host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK, native_input_digest,
 )
-from .native_editor_source_pin import source_verified_preview_intent
+from .body_editor_policy import OwnerExportOffer
+from .body_editor_export import HOST_EXPORT_FAILURE_META
+from .body_editor_delivery import native_delivery_matches
+from .native_editor_source_pin import (
+    source_verified_preview_intent, source_verified_plan_preview_receipt,
+)
 from .native_render_evidence import (
-    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, DESTINATION_FIELD, RENDER_TOOL,
+    ACTIVE_AV_WINDOW, AUDIO_ENVELOPE, AV_PCM_FIELD, AV_REVIEW_FIELD, AV_WINDOW_AUDIO_FIELD,
+    DESTINATION_FIELD, RENDER_TOOL,
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
-    SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
+    SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
+    reviewed_av_comparison, reviewed_av_duplicate_export, reviewed_av_reference_frame_times,
+    valid_av_review_values, av_window_audio_values,
 )
 
 
@@ -115,6 +124,16 @@ def _native_mcp_error_status(result):
         raise NativeCreativeControlError(
             "Native MCP response has missing or contradictory boolean status")
     return present[0]
+
+
+def _contradictory_native_write_receipt(value):
+    """An outer success cannot override a failed or malformed application result."""
+    if not isinstance(value, dict):
+        return False
+    error = value.get("error")
+    return (("success" in value and value["success"] is not True) or
+            not (error is None or error is False or
+                 (type(error) is str and error == "")))
 
 
 def _digest(value):
@@ -288,6 +307,81 @@ def _native_placement_assets(texts):
                 choice[field] = asset[field]
         choices.append(choice)
     return {"assets": choices, "count": count, "complete": not limited, "staged_files_require_import": True}
+
+
+def _native_clip_style_targets(texts, timeline_id, inputs):
+    """Match the *pinned editor's* clip selectors against a complete real READ.
+
+    In NVIDIA trial #43855560474 the model-selected set_clip_style returned
+    the exact pinned pre-mutation "No matching clips found" error. The host
+    may reject an evidently empty target BEFORE sending an uncertain WRITE;
+    it must never invent a replacement clip or execute a different edit.
+    Return None for missing, stale, truncated, or ambiguous read evidence.
+    """
+    try:
+        snapshot = _strict_receipt(texts, "native clip style targets")
+    except NativeCreativeControlError:
+        return None
+    clips = snapshot.get("clips")
+    if (snapshot.get("id") != timeline_id or
+            snapshot.get("clipLimitApplied") is not False or
+            type(clips) is not list or len(clips) > 1000):
+        return None
+    seen = set()
+    for clip in clips:
+        if (type(clip) is not dict or
+                type(clip.get("id")) is not str or
+                not 1 <= len(clip["id"]) <= 128 or
+                clip["id"] in seen):
+            return None
+        seen.add(clip["id"])
+    all_ids = sorted(seen)
+    raw = inputs.get("clipIds") or inputs.get("clipId") or ""
+    explicit = (raw if type(raw) is list else raw.split(",") if type(raw) is str else [])
+    explicit = {item.strip() for item in explicit
+                if type(item) is str and item.strip()}
+    candidates = [clip for clip in clips if not explicit or clip["id"] in explicit]
+
+    selector = str(inputs.get("filter") or "").strip().lower()
+    selector = re.sub(r"[\s_-]+", "", selector)
+    # The renderer's selectedClipIds are not in get_timeline. Do not
+    # manufacture a selection from the clip array or claim zero matches.
+    if selector == "selected" and not explicit:
+        return {"all_ids": all_ids, "matched_ids": None,
+                "selection_unobservable": True}
+    if selector == "disabled":
+        candidates = [x for x in candidates if x.get("enabled") is False]
+    elif selector == "enabled":
+        candidates = [x for x in candidates if x.get("enabled") is not False]
+    elif selector == "visual":
+        candidates = [x for x in candidates
+                      if x.get("type") in ("video", "image", "text", "shape")]
+    elif selector == "audio":
+        candidates = [x for x in candidates if x.get("type") == "audio"]
+    elif selector in ("colored", "labeled"):
+        candidates = [x for x in candidates if bool(x.get("labelColor"))]
+    type_filter = str(inputs.get("type") or "").lower().strip()
+    if type_filter:
+        types = {item.strip() for item in type_filter.split(",") if item.strip()}
+        candidates = [x for x in candidates if str(x.get("type") or "").lower() in types]
+    track_id = str(inputs.get("trackId") or "").strip()
+    if track_id:
+        candidates = [x for x in candidates if x.get("trackId") == track_id]
+    name_query = str(inputs.get("nameIncludes") or "").lower().strip()
+    if name_query:
+        candidates = [x for x in candidates if name_query in
+                      str(x.get("name") or x.get("assetName") or x["id"]).lower()]
+    # Pinned Velorn's resolveMcpClipTargets also treats labelColor as an
+    # existing-label *filter*, even when set_clip_style is changing it.
+    # Preserve that real behavior in the preflight; don't falsely certify a
+    # new color as an already-matching clip and then send a doomed write.
+    color = str(inputs.get("labelColor") or "").strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        candidates = [x for x in candidates
+                      if str(x.get("labelColor") or "").lower() == color.lower()]
+    return {"all_ids": all_ids,
+            "matched_ids": sorted(x["id"] for x in candidates),
+            "selection_unobservable": False}
 
 
 def _pinned_source_clip_edit_plan_matches(name, plan):
@@ -628,6 +722,7 @@ def _model_event_window(events):
             for field in ("observed_export_sha256", "independently_verified_export_sha256",
                           "image_sha256", "audio_sha256",
                           "native_timeline_preview_unverified_export",
+                          "body_picture_source_sha256",
                           "must_reconcile_native_state",
                           "host_attested_read_only", "no_successful_native_observation",
                           "host_source_attested_preview_only", "no_automatic_retry",
@@ -661,6 +756,108 @@ def _native_project_presence_from_text(texts):
     if has is True and isinstance(status["project"], dict):
         return "present"
     return "unknown"
+
+
+def _model_observed_project_source_identity(texts):
+    """Private stable identity from the real pinned saved-project descriptor.
+
+    Velorn exposes a project path and created timestamp, not a project ID.
+    Never treat unsaved/malformed identifiers as a comparable project.
+    """
+    if _native_active_timeline_id_from_text(texts) is None:
+        return None
+    try:
+        receipt = _strict_receipt(texts, "native project source identity")
+        project = receipt.get("project")
+        if type(project) is not dict:
+            return None
+        location, created = project.get("path"), project.get("created")
+        if (type(location) is not str or not 1 <= len(location) <= 4096 or
+                type(created) is not str or not 1 <= len(created) <= 128):
+            return None
+        return hashlib.sha256(_wire({"path": location, "created": created}).encode()).hexdigest()
+    except NativeCreativeControlError:
+        return None
+
+
+def _model_read_native_source_clip_inventory(texts, *, project_id, active_timeline_id):
+    """Extract exact source-backed media IDs from a complete model-chosen READ.
+
+    Never infer media custody from text/shape clips, incomplete lists, names,
+    filesystem paths, or untrusted project IDs. A missing/malformed field
+    means UNKNOWN, not zero media or missing footage.
+    """
+    if (not isinstance(project_id, str) or not project_id or
+            not isinstance(active_timeline_id, str) or not active_timeline_id):
+        return None
+    try:
+        timeline = _strict_receipt(texts, "model observed native source clips")
+    except NativeCreativeControlError:
+        return None
+    tracks, clips = timeline.get("tracks"), timeline.get("clips")
+    if (timeline.get("id") != active_timeline_id or
+            timeline.get("clipLimitApplied") is not False or
+            type(tracks) is not list or len(tracks) > 256 or
+            type(clips) is not list or len(clips) > 1000):
+        return None
+    def identity(value):
+        return (type(value) is str and 1 <= len(value) <= 128 and
+                value == value.strip() and all(ord(c) >= 32 for c in value))
+    track_ids = set()
+    for track in tracks:
+        if (type(track) is not dict or not identity(track.get("id")) or
+                track["id"] in track_ids or track.get("type") not in ("video", "audio")):
+            return None
+        track_ids.add(track["id"])
+    source_video, source_audio, seen = {}, {}, set()
+    for clip in clips:
+        if type(clip) is not dict or not identity(clip.get("id")):
+            return None
+        cid, ctype, track_id = clip["id"], clip.get("type"), clip.get("trackId")
+        if (cid in seen or not identity(track_id) or track_id not in track_ids or
+                type(ctype) is not str):
+            return None
+        seen.add(cid)
+        if ctype in ("video", "image", "audio"):
+            asset_id = clip.get("assetId")
+            if not identity(asset_id):
+                return None
+            (source_audio if ctype == "audio" else source_video)[cid] = asset_id
+    return {"project_id": project_id, "timeline_id": active_timeline_id,
+            "video": source_video, "audio": source_audio}
+
+
+def _model_observed_native_source_change(before, after):
+    """Bounded facts between two *model-selected* complete native reads.
+
+    A disappeared clip does not prove accidental loss: splits, legitimate
+    replacements and concurrent GUI work can all change clip identities.
+    """
+    if (not isinstance(before, dict) or not isinstance(after, dict) or
+            before.get("project_id") != after.get("project_id") or
+            before.get("timeline_id") != after.get("timeline_id")):
+        return None
+    video_removed = sorted(set(before["video"]) - set(after["video"]))
+    audio_removed = sorted(set(before["audio"]) - set(after["audio"]))
+    video_assets_removed = sorted(set(before["video"].values()) - set(after["video"].values()))
+    return {
+        "status": "compared_model_selected_native_timelines",
+        "source_video_clips_before": len(before["video"]),
+        "source_video_clips_after": len(after["video"]),
+        "source_audio_clips_before": len(before["audio"]),
+        "source_audio_clips_after": len(after["audio"]),
+        "removed_source_video_clip_ids": video_removed[:16],
+        "removed_source_video_clip_count": len(video_removed),
+        "source_video_asset_ids_no_longer_on_timeline": video_assets_removed[:16],
+        "source_video_assets_no_longer_on_timeline_count": len(video_assets_removed),
+        "removed_source_audio_clip_ids": audio_removed[:16],
+        "removed_source_audio_clip_count": len(audio_removed),
+        "source_id_lists_truncated": any(len(a) > 16 for a in
+                                          (video_removed, video_assets_removed, audio_removed)),
+        "may_be_intentional_or_concurrent": True,
+        "no_automatic_repair": True,
+        "does_not_certify_original_media_custody_or_artistic_quality": True,
+    }
 
 
 def _native_timeline_clip_count_from_text(texts):
@@ -742,7 +939,9 @@ class NativeCreativeControl:
                  host_verified_timeline_preview_tools: tuple[str, ...] = (),
                  required_evidence: tuple[str, ...] = (),
                  host_content_revision_tools: tuple[str, ...] = (),
-                 host_capture_render_project=None):
+                 host_capture_render_project=None,
+                 host_capture_saved_project_identity=None,
+                 host_owner_delivery_offer=None):
         if type(max_turns) is not int or not 1 <= max_turns <= 128:
             raise NativeCreativeControlError("Native model session requires finite turn budget")
         if not callable(getattr(model, "decide", None)):
@@ -779,7 +978,21 @@ class NativeCreativeControl:
                 or host_tool_access.get("save_project") != "write"):
             raise NativeCreativeControlError("Render snapshots require a trusted A/V session and save grant")
         self._capture_render_project = host_capture_render_project
+        if (host_capture_saved_project_identity is not None and (
+                not callable(host_capture_saved_project_identity) or
+                host_capture_render_project is None)):
+            raise NativeCreativeControlError(
+                "Trusted save-time project capture requires native render custody")
+        self._capture_saved_project_identity = host_capture_saved_project_identity
         self._explicit_render_save_identity = None
+        if host_owner_delivery_offer is not None and (
+                not isinstance(host_owner_delivery_offer, OwnerExportOffer) or
+                host_capture_render_project is None or catalog_mode != "indexed" or
+                host_tool_access.get(RENDER_TOOL) != "write" or
+                host_tool_access.get("check_export_readiness") != "read"):
+            raise NativeCreativeControlError("Owner delivery offer requires indexed source-bound export grants")
+        self._owner_delivery_offer = host_owner_delivery_offer
+        self._owner_delivery_observations = {}
         if (not isinstance(host_content_revision_tools, (list, tuple, frozenset)) or
                 any(not isinstance(name, str) or not name
                     for name in host_content_revision_tools) or
@@ -843,8 +1056,8 @@ class NativeCreativeControl:
         self._capabilities = None
         self._machine_contracts = None
         self._last_search_result = None
-        self._previous_search_signature = None
-        self._identical_search_repetitions = 0
+        # At most max_turns (128) exact query identities per metadata streak.
+        self._search_streak_counts: dict[tuple[str, int, str], int] = {}
         self._selectable_tools: list[str] = []
         # On a tied lexical search, show a bounded *inspectable-only*
         # set of actual host grants. A model must explicitly describe
@@ -869,6 +1082,10 @@ class NativeCreativeControl:
         self._native_read_snapshots: dict[str, dict] = {}
         self._placement_observations: dict[str, tuple[str, Any]] = {}
         self._last_acknowledged_native_write: dict | None = None
+        # Preserve only complete model-selected source IDs across native edits.
+        # A host reconciliation is not a model observation.
+        self._model_observed_native_source_inventory: dict | None = None
+        self._model_observed_native_source_change: dict | None = None
         # Ground project presence only in actual native get_project results,
         # never in model text, metadata discovery, or an earlier session.
         self._project_presence = "unknown"
@@ -900,6 +1117,34 @@ class NativeCreativeControl:
             return
         if origin not in ("model_selected", "bootstrap", "host_reconciliation"):
             raise NativeCreativeControlError("Unrecognized native read provenance")
+        if name == "get_timeline" and origin == "model_selected":
+            # No hidden timeline READ. Only the real Brain-selected,
+            # complete native observation may update these facts.
+            project_snapshot = self._native_read_snapshots.get("get_project")
+            project_id = timeline_id = None
+            if project_snapshot is not None:
+                project_texts = project_snapshot["result_texts"]
+                timeline_id = _native_active_timeline_id_from_text(project_texts)
+                if timeline_id is not None:
+                    project_id = _model_observed_project_source_identity(project_texts)
+            current = _model_read_native_source_clip_inventory(
+                texts, project_id=project_id, active_timeline_id=timeline_id)
+            self._model_observed_native_source_change = (
+                _model_observed_native_source_change(
+                    self._model_observed_native_source_inventory, current)
+                if current is not None else None)
+            self._model_observed_native_source_inventory = current
+        elif name == "get_project" and origin == "model_selected":
+            # A different project can recycle the same timeline ID.
+            # Preserve a baseline only if its project identity remains
+            # coherent and unchanged after this chosen observation.
+            old = self._model_observed_native_source_inventory
+            if old is not None:
+                timeline = _native_active_timeline_id_from_text(texts)
+                pid = _model_observed_project_source_identity(texts)
+                if pid != old["project_id"] or timeline != old["timeline_id"]:
+                    self._model_observed_native_source_inventory = None
+                    self._model_observed_native_source_change = None
         item = {"tool": name, "inputs": copy.deepcopy(inputs),
                 "source": origin, "result_texts": list(texts),
                 "native_read_only_by_host_grant": True,
@@ -946,6 +1191,100 @@ class NativeCreativeControl:
             return None
         return _native_project_asset_count_from_text(snapshot["result_texts"])
 
+    async def _host_preflight_read(self, tool, arguments):
+        """Inspect mechanical prerequisites without refreshing a Brain's epoch.
+
+        Canonical gateway sessions expose a separate host-only READ path.
+        Older transport/test sessions without an observation fence retain
+        their original read call; no host path gains a new grant.
+        """
+        if self.host_tool_access is None or self.host_tool_access.get(tool) != "read":
+            raise NativeCreativeControlError("Host preflight requires an explicit READ grant")
+        read = getattr(self.session, "call_host_read", None)
+        if read is None:
+            read = self.session.call_tool
+        return await read(tool, arguments)
+
+    async def _inspect_owner_delivery_candidate(self, candidate, validator):
+        """Read actual mechanical readiness once per saved source/options.
+
+        Same grant and option projection as the native export preflight; no
+        model observation epoch is refreshed. This observation is not a lock,
+        a reservation, or a substitute for dispatch-time or physical checks.
+        """
+        tool = "check_export_readiness"
+        arguments = candidate["arguments"]
+        profile = candidate["owner_delivery_profile"]
+        fields = validator.schema.get("properties", {})
+        read_args = {key: value for key, value in arguments.items() if key in fields}
+        semantic_fields = set(arguments) - {"outputPath", "previewOnly"}
+        if not semantic_fields.issubset(fields) or not validator.is_valid(read_args):
+            return None, {"status": "readiness_schema_incompatible", "owner_delivery_profile": profile}
+        key = (self._explicit_render_save_identity, _wire(read_args))
+        if key not in self._owner_delivery_observations:
+            # At most the full timeline and one explicit window per save.
+            if len(self._owner_delivery_observations) >= 2:
+                self._owner_delivery_observations.clear()
+            status = "unconfirmed"
+            observed = None
+            digest = None
+            started = time.monotonic_ns()
+            try:
+                response = await self._host_preflight_read(tool, read_args)
+                if not _native_mcp_error_status(response):
+                    texts, images, audio = _native_content(response)
+                    if not images and not audio:
+                        state = _strict_receipt(texts, "Owner delivery readiness")
+                        digest = hashlib.sha256(texts[0].encode()).hexdigest()
+                        target = state.get("deliveryTarget")
+                        if isinstance(target, dict):
+                            # Bounded source facts only; do not copy native text,
+                            # unknown codec/container values or arbitrary metadata.
+                            observed = {}
+                            for name in ("width", "height", "fps", "duration", "rangeStart", "rangeEnd"):
+                                value = target.get(name)
+                                if type(value) in (int, float) and 0 <= value <= 16384:
+                                    observed[name] = value
+                            for name, admitted in (("container", ("mp4",)),
+                                                   ("videoCodec", ("h264", "h265"))):
+                                if target.get(name) in admitted:
+                                    observed[name] = target[name]
+                        if state.get("ready") is not True or state.get("blockers") != []:
+                            status = "not_ready"
+                        elif native_delivery_matches(state, profile):
+                            status = "matched"
+                            if arguments.get("range") == "custom":
+                                # A same-length shifted window is not the
+                                # exact optional range presented to the Brain.
+                                expected_range = {"rangeStart": arguments["startSeconds"],
+                                    "rangeEnd": arguments["endSeconds"],
+                                    "duration": arguments["endSeconds"] - arguments["startSeconds"]}
+                                if not all(type(target.get(name)) in (int, float) and
+                                        math.isclose(target[name], value, rel_tol=0, abs_tol=1e-6)
+                                        for name, value in expected_range.items()):
+                                    status = "profile_mismatch"
+                        else:
+                            status = "profile_mismatch"
+            except Exception:
+                # An optional read cannot change the native export contract.
+                # Cancellation remains a session boundary, not a read failure.
+                pass
+            elapsed = round((time.monotonic_ns() - started) / 1_000_000, 3)
+            self._append({"kind": "host_owner_delivery_readiness_observation", "tool": tool,
+                "inputs_sha256": hashlib.sha256(_wire(read_args).encode()).hexdigest(),
+                "text_sha256": digest, "native_readiness_status": status,
+                "measured_host_read_wall_ms": elapsed,
+                "host_attested_read_only": True, "no_model_selected_mutation": True})
+            self._owner_delivery_observations[key] = (status, observed)
+        status, observed = self._owner_delivery_observations[key]
+        if status == "matched":
+            return {**candidate, "native_readiness_verified": True,
+                "observed_delivery": observed,
+                "note": candidate["note"] + " Last host read matched owner profile; native readiness, source custody and destination rechecked at dispatch."}, None
+        return None, {"status": status, "owner_delivery_profile": profile,
+                      "observed_delivery": observed,
+                      "note": "Last host read did not establish an owner-matching export. Inspect current native state or choose different valid arguments; no export was attempted."}
+
     async def _observe_placement_inventory(self, tool, arguments, validator, *, refresh=False):
         timeline_id = self._trusted_project_active_timeline_id()
         if timeline_id is None or not validator.is_valid(arguments):
@@ -955,7 +1294,7 @@ class NativeCreativeControl:
             return previous[1]
         inventory = None
         try:
-            result = await self.session.call_tool(tool, arguments)
+            result = await self._host_preflight_read(tool, arguments)
             if not _native_mcp_error_status(result):
                 texts, images, audio = _native_content(result)
                 if not images and not audio:
@@ -1005,8 +1344,13 @@ class NativeCreativeControl:
         completion evidence. Historical receipts remain intact for forensics.
         """
         by_destination = {}
+        # Only trusted source-hash-matched, full-duration read receipts count.
+        # This is numeric audio coverage, NOT model semantic listening.
+        durations = {}
+        full_audio = set()
         unbound = set()  # Compatible with older, non-reviewed test journals.
         frames = set()
+        timed_frames = {}
         any_write = saw_frame = post_review_write = False
         verified_receipts = 0
         distinct_receipts = set()
@@ -1015,10 +1359,14 @@ class NativeCreativeControl:
             destination = event.get(DESTINATION_FIELD)
             if kind == "native_read_tool_reported_error":
                 if (destination is not None and
-                        (tool == _VERIFIED_EXPORT_TOOL or tool in _VERIFIED_FRAME_TOOLS)):
+                        (tool == _VERIFIED_EXPORT_TOOL or tool in _VERIFIED_FRAME_TOOLS or
+                         (self._requires_av_review and tool == AUDIO_ENVELOPE))):
                     invalid = by_destination.pop(destination, None)
                     if invalid is not None:
                         frames.discard(invalid)
+                        full_audio.discard(invalid)
+                    durations.pop(destination, None)
+                    timed_frames.pop(destination, None)
                 continue
             if kind != "native_tool_result":
                 continue
@@ -1028,8 +1376,11 @@ class NativeCreativeControl:
                 if saw_frame and tool in self.host_content_revision_tools:
                     post_review_write = True
                 by_destination.clear()
+                durations.clear()
+                full_audio.clear()
                 unbound.clear()
                 frames.clear()
+                timed_frames.clear()
                 verified_receipts = 0
                 distinct_receipts.clear()
             sha = event.get("independently_verified_export_sha256")
@@ -1042,8 +1393,38 @@ class NativeCreativeControl:
                     previous = by_destination.get(destination)
                     if previous is not None and previous != sha:
                         frames.discard(previous)
+                        full_audio.discard(previous)
+                        durations.pop(destination, None)
+                        timed_frames.pop(destination, None)
                     by_destination[destination] = sha
+                    values = event.get(AV_REVIEW_FIELD)
+                    if (tool == _VERIFIED_EXPORT_TOOL and
+                            valid_av_review_values(_VERIFIED_EXPORT_TOOL, values)):
+                        durations[destination] = values[0]
             observed = event.get("observed_export_sha256")
+            audio_values = (event.get(AV_REVIEW_FIELD) if tool == AUDIO_ENVELOPE
+                            else av_window_audio_values(event))
+            if (audio_values is not None and destination in by_destination and
+                    by_destination[destination] == observed and
+                    destination in durations and
+                    valid_av_review_values(AUDIO_ENVELOPE, audio_values) and
+                    audio_values[0] == 0 and
+                    abs(audio_values[1] - durations[destination]) <= 0.02 and
+                    isinstance(event.get(AV_PCM_FIELD), str) and
+                    re.fullmatch(r"[a-f0-9]{64}", event[AV_PCM_FIELD])):
+                full_audio.add(observed)
+            # A still is not separated timed picture evidence. Keep the
+            # latest valid source-bound sample set for each destination.
+            times = event.get(AV_REVIEW_FIELD)
+            hashes = event.get("image_sha256")
+            if (tool in (TIMED_FRAMES, ACTIVE_AV_WINDOW) and
+                    destination in durations and by_destination.get(destination) == observed and
+                    valid_av_review_values(tool, times) and
+                    isinstance(hashes, list) and len(hashes) == len(times) and
+                    all(isinstance(h, str) and re.fullmatch(r"[a-f0-9]{64}", h)
+                        for h in hashes) and
+                    (tool != ACTIVE_AV_WINDOW or audio_values is not None)):
+                timed_frames[destination] = (observed, times)
             if observed is not None and event.get("image_sha256"):
                 if ((destination is not None and by_destination.get(destination) == observed)
                         or (destination is None and observed in unbound)):
@@ -1054,11 +1435,77 @@ class NativeCreativeControl:
             "write_acknowledged": any_write,
             "post_review_write_acknowledged": post_review_write,
             "current_verified": current_verified,
+            "current_verified_destinations": set(by_destination),
             "current_frames": frames,
+            "current_timed_frames": {
+                digest for dest, (digest, times) in timed_frames.items()
+                if dest in durations and by_destination.get(dest) == digest and
+                times[-1] < durations[dest] and times[-1] - times[0] >= durations[dest] / 3
+            },
+            "current_full_audio": full_audio,
+            "current_short_av_exports": {by_destination[dest] for dest, duration in
+                                         durations.items() if duration <= 30 and dest in by_destination},
             "current_verified_output_count": len(by_destination) + len(unbound),
             "same_export_reverification_count": max(
                 0, verified_receipts - len(distinct_receipts)),
         }
+
+    def _source_bound_render_save_current(self):
+        """Host receipt fact, NOT a model command or proof of a good film.
+
+        The same native save preflight is shown before the model spends a turn
+        and enforced at export. A stale save after any non-render content write
+        cannot establish immutable render-source custody.
+        """
+        if self._capture_render_project is None:
+            return None
+        last_write = next(
+            (event.get("tool") for event in reversed(self.events)
+             if event.get("kind") == "native_tool_result" and
+             event.get("host_application_write_acknowledged") is True and
+             event.get("tool") != RENDER_TOOL), None)
+        saved = self._explicit_render_save_identity
+        return (last_write == "save_project" and
+                type(saved) is tuple and len(saved) in (2, 4) and
+                all(type(value) is str and value for value in saved[:2]) and
+                (len(saved) == 2 or all(_digest(value) for value in saved[2:])))
+
+    def _source_bound_export_needs_revision(self, evidence):
+        return bool(self._capture_render_project is not None and self._requires_av_review and
+                    (evidence["current_verified"] & evidence["current_frames"] &
+                     evidence["current_full_audio"]) and
+                    not evidence["post_review_write_acknowledged"])
+
+    def _source_bound_delivery_affordance(self, evidence):
+        """Expose one existing mechanical delivery option, never execute it.
+
+        A model-selected save and captured render remain mandatory. Actual
+        creative action, output destination and verification choice belong to
+        the Brain; native grants and preflight still govern any dispatch.
+        """
+        if self.catalog_mode != "indexed" or self._capture_render_project is None:
+            return None
+        last = next((event for event in reversed(self.events)
+                     if event.get("kind") == "native_tool_result" and
+                     event.get("host_application_write_acknowledged") is True), {})
+        if last.get("tool") == RENDER_TOOL:
+            # No path guesses, stale snapshots or implicit repeat export.
+            if (not all(_digest(last.get(field)) for field in (
+                    DESTINATION_FIELD, SAVED_RENDER_FIELD,
+                    SAVED_RENDER_OPTIONS_FIELD, SAVED_RENDER_MEDIA_FIELD)) or
+                    last[DESTINATION_FIELD] in evidence["current_verified_destinations"]):
+                return None
+            tool, access = _VERIFIED_EXPORT_TOOL, "read"
+        else:
+            count = self._trusted_project_clip_count()
+            if self._project_presence != "present" or count is None or count <= 0:
+                return None
+            tool = RENDER_TOOL if self._source_bound_render_save_current() else "save_project"
+            access = "write"
+        if (tool in self.tools and self.host_tool_access.get(tool) == access and
+                not self._host_write_already_acknowledged(tool)):
+            return tool
+        return None
 
     def _missing_completion_evidence(self):
         """Require still-current export receipts, not superseded or failed reads."""
@@ -1091,7 +1538,17 @@ class NativeCreativeControl:
         self.events.append(event)
 
     def _host_write_already_acknowledged(self, tool: str) -> bool:
-        """Trusted session policy only; previews and model claims are excluded."""
+        """Host-only write frontier; reopen a current save after a genuine edit.
+
+        Real Omni G1 #45553253460 repeated the identical ACKed save_project 42
+        times without an intervening content write. The existing source-bound
+        save witness already distinguishes that no-op from a new native edit.
+        Suppress only a provably current save in a source-capture A/V session:
+        no implicit creative action, no general-workspace single-save policy.
+        """
+        if (tool == "save_project" and self._capture_render_project is not None
+                and self._source_bound_render_save_current() is True):
+            return True
         return (tool in self._host_once_after_ack and
                 any(e.get("kind") == "native_tool_result" and
                     e.get("tool") == tool for e in self.events))
@@ -1237,6 +1694,8 @@ class NativeCreativeControl:
                             self._host_preconditions, self._host_possible_effects)})
             if self.catalog_mode == "indexed":
                 self._capabilities = self._machine_contracts
+        exact_lookup_index = (self._capabilities.exact_lookup_index()
+                              if self._capabilities is not None else None)
         tool_hints = _native_tool_hints(available) if self.catalog_mode == "full" else []
         show_tool_hints = self.catalog_mode == "full"
         # Same local-only schema family as the MCP host: preflight avoids
@@ -1246,6 +1705,9 @@ class NativeCreativeControl:
         from .body_editor_mcp import _local_schema_references
         local_indexed_contracts = (self.catalog_mode == "indexed" and
             getattr(self.model, "requires_indexed_native_function_contracts", False))
+        indexed_function_contracts = (local_indexed_contracts or
+            (self.catalog_mode == "indexed" and
+             getattr(self.model, "requires_native_function_contracts", False)))
         validators = {}
         for native_name, native_tool in self.tools.items():
             schema = _field(native_tool, "input_schema", _field(native_tool, "inputSchema"))
@@ -1264,10 +1726,10 @@ class NativeCreativeControl:
                     "additionalProperties" not in admission and
                     "patternProperties" not in admission):
                 admission["additionalProperties"] = False
-            if local_indexed_contracts and source_verified_preview_intent(
+            if indexed_function_contracts and source_verified_preview_intent(
                     native_name, {}, self._host_verified_top_level_previews):
                 # An omitted flag on these pinned write tools means preview.
-                # Preserve both choices and require the local model to choose
+                # Preserve both choices and require the indexed model to choose
                 # one explicitly. The native MCP schema remains unchanged.
                 admission["required"] = list(dict.fromkeys(
                     [*admission.get("required", []), "previewOnly"]))
@@ -1275,7 +1737,7 @@ class NativeCreativeControl:
             cls.check_schema(admission)
             validators[native_name] = cls(admission)
         selected_input_schemas = ({name: validator.schema for name, validator in validators.items()}
-                                  if local_indexed_contracts else None)
+                                  if indexed_function_contracts else None)
         track_sensing = (local_indexed_contracts and
             _SINGLE_ASSET_PLACEMENT in self._host_verified_top_level_previews and
             self.host_tool_access.get("get_timeline") == "read")
@@ -1292,6 +1754,21 @@ class NativeCreativeControl:
         asset_sensing = (local_indexed_contracts and
             _BATCH_ASSET_PLACEMENT in self._host_verified_top_level_previews and
             self.host_tool_access.get("get_assets") == "read")
+        # Actual Omni G1 uses --indexed-catalog for WAV; its provider-native
+        # function adapter needs the same already-installed bounded get_assets
+        # observation as full native tool mode. The host-only bootstrap alone
+        # cannot mint model authority: only an explicit model read or ACKed
+        # model-selected import, plus a positive real project asset count,
+        # allows this READ. No ID invention, host-selected edit or new grants.
+        provider_native_asset_sensing = (
+            self.catalog_mode in ("full", "indexed") and
+            getattr(self.model, "requires_native_function_contracts", False) is True and
+            self.host_tool_access is not None and
+            self.host_tool_access.get("get_assets") == "read" and
+            "get_assets" in validators and
+            validators["get_assets"].is_valid({"limit": _MAX_PLACEMENT_ASSETS}) and
+            any(self.host_tool_access.get(name) == "write"
+                for name in (_SINGLE_ASSET_PLACEMENT, _BATCH_ASSET_PLACEMENT)))
         # Restrict any special preview parser to an exact host-installed
         # native tool with an actual boolean previewOnly field.
         for name in self._host_verified_top_level_previews:
@@ -1413,6 +1890,10 @@ class NativeCreativeControl:
                                   "trusted_machine_fact": "project_open",
                                   "host_observed_value": False,
                                   "no_native_dispatch": True})
+            # Session-local, bounded model-authored history, never a receipt.
+            # Stateless adapters consume media once; later metadata/native reads
+            # must not erase what the model itself said when it received it.
+            media_rationales: dict[str, dict] = {}
             for turn in range(self.max_turns):
                 # Real Qwen trial #42420526258: 17 searches, an empty
                 # host-confirmed project, no source import, then a rejected
@@ -1454,6 +1935,21 @@ class NativeCreativeControl:
                                 "possibilities_not_creative_instructions": True,
                             }
                 export_evidence = self._current_export_evidence()
+                delivery_option = self._source_bound_delivery_affordance(export_evidence)
+                if delivery_option is not None:
+                    self._host_frontier_tools = [delivery_option] + [
+                        tool for tool in self._host_frontier_tools if tool != delivery_option]
+                # The last real 120B source-backed A/V trial sampled the
+                # first verified cut at 1/3/5s and the revised cut at
+                # 0.5/2.6/4.7s. Both physical films differed, but there was
+                # no identical-time visual comparison and their PCM matched.
+                # Report only the model's earlier validated sample times for
+                # another already-verified export. No native read/write, new
+                # grant or creative revision is selected by the host.
+                comparison_frame_seconds = (
+                    reviewed_av_reference_frame_times(
+                        self.events, self.host_content_revision_tools)
+                    if self._requires_av_review else None)
                 # Actual Qwen3.5-4B run #42621894429 verified the exact
                 # same MP4 eight times, then kept `verify` as the only
                 # selectable indexed tool. The verified-frame READ required
@@ -1469,6 +1965,60 @@ class NativeCreativeControl:
                          export_evidence["current_frames"]) and
                     ("verified_export_frame_observed" in self.required_evidence or
                      REVIEWED_RENDER_PAIR in self.required_evidence))
+                timed_frame_review_pending = (
+                    self.catalog_mode == "indexed" and self._requires_av_review and
+                    bool(export_evidence["current_verified"] -
+                         export_evidence["current_timed_frames"]) and
+                    TIMED_FRAMES in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(TIMED_FRAMES) == "read")
+                audio_review_pending = (
+                    self.catalog_mode == "indexed" and self._requires_av_review and
+                    bool(export_evidence["current_verified"] -
+                         export_evidence["current_full_audio"]))
+                # The existing original-WAV read is a real source-bound
+                # acoustic input, unlike the numeric full-film envelope.
+                # Offer it ONLY to an audio-capable Brain after actual export
+                # verification. This is an inspectable READ choice, never a
+                # host-dispatched probe or a semantic-listening certificate.
+                # The previous audio sample for the same verified export must
+                # not be repeatedly offered as if no evidence was observed.
+                raw_audio_reader = "zx7_observe_verified_export_audio"
+                actual_audio_observed = {
+                    event.get("observed_export_sha256")
+                    for event in self.events
+                    if event.get("kind") == "native_tool_result" and
+                       event.get("tool") == raw_audio_reader and
+                       event.get("audio_sent_to_model_for_next_decision") is True and
+                       _digest(event.get("audio_sha256"))
+                }
+                audio_excerpt_pending = (
+                    self.catalog_mode == "indexed" and
+                    self._requires_av_review and
+                    # A callable inherited stub (such as visual-only NVIDIA)
+                    # does not mean that a model can actually consume WAV.
+                    getattr(self.model, "supports_source_bound_wav_input", False) is True and
+                    callable(getattr(self.model, "decide_with_audio", None)) and
+                    # An Omni cloud adapter without an explicit one-use WAV
+                    # upload grant must never be offered this route. Local
+                    # models have no cloud-upload policy property.
+                    getattr(self.model, "allow_original_audio_upload", True) is True and
+                    raw_audio_reader in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(raw_audio_reader) == "read" and
+                    bool(export_evidence["current_verified"] - actual_audio_observed))
+                # An earlier verified cut and this verified revised cut
+                # may each have frames, but at disjoint timestamps. The old
+                # pending-frame check then hid the exact same-time READ behind
+                # another catalog search. Surface only the existing granted
+                # timed observer; never choose timestamps, dispatch, or count
+                # another review on the Brain's behalf.
+                matching_frame_review_pending = (
+                    self.catalog_mode == "indexed" and
+                    bool(comparison_frame_seconds) and
+                    TIMED_FRAMES in self.tools and
+                    self.host_tool_access is not None and
+                    self.host_tool_access.get(TIMED_FRAMES) == "read")
                 if frame_review_pending:
                     actual_frame_tools = [
                         tool for tool in sorted(_VERIFIED_FRAME_TOOLS)
@@ -1482,6 +2032,70 @@ class NativeCreativeControl:
                         actual_frame_tools +
                         [tool for tool in self._host_frontier_tools
                          if tool not in actual_frame_tools])
+                if timed_frame_review_pending or matching_frame_review_pending:
+                    self._host_frontier_tools = (
+                        [TIMED_FRAMES] +
+                        [tool for tool in self._host_frontier_tools
+                         if tool != TIMED_FRAMES])
+                if audio_review_pending and (
+                        AUDIO_ENVELOPE in self.tools and
+                        self.host_tool_access.get(AUDIO_ENVELOPE) == "read"):
+                    # A genuine first export in run #43883369538 had picture
+                    # observations but no timed sound observation before a
+                    # content edit. Surface an already-granted READ, without
+                    # executing it or choosing the Brain's creative next step.
+                    self._host_frontier_tools = (
+                        [AUDIO_ENVELOPE] + [tool for tool in self._host_frontier_tools
+                                             if tool != AUDIO_ENVELOPE])
+                combined_review_pending = (
+                    audio_review_pending and ACTIVE_AV_WINDOW in self.tools and
+                    self.host_tool_access.get(ACTIVE_AV_WINDOW) == "read" and
+                    bool(export_evidence["current_short_av_exports"] -
+                         export_evidence["current_full_audio"]))
+                if combined_review_pending:
+                    self._host_frontier_tools = (
+                        [ACTIVE_AV_WINDOW] + [tool for tool in self._host_frontier_tools
+                                              if tool != ACTIVE_AV_WINDOW])
+                if audio_excerpt_pending:
+                    # Retain the existing full-film numeric envelope and real
+                    # frame candidates. Offer only the real, permitted WAV
+                    # observer; the Brain decides whether and when to listen.
+                    insertion = 1 if audio_review_pending else 0
+                    self._host_frontier_tools.insert(insertion, raw_audio_reader)
+                # A source-identity refusal invalidates the project snapshot.
+                # Expose the actual granted recovery READ even in indexed mode;
+                # otherwise the model can spend its remaining budget searching
+                # for a mechanical prerequisite or proposing stale writes.
+                # No READ is dispatched here, and no edit is retried or granted.
+                if (self.catalog_mode == "indexed" and
+                        self._project_presence == "unknown" and
+                        (self._post_write_state_warning or {}).get(
+                            "native_model_observation_invalidated") is True and
+                        self.host_tool_access.get("get_project") == "read" and
+                        "get_project" in validators and
+                        validators["get_project"].is_valid({})):
+                    self._host_frontier_tools = ["get_project"] + [
+                        tool for tool in self._host_frontier_tools if tool != "get_project"]
+                # A confirmed source-pinned placement preflight denial is not
+                # a write, but the old placement inventory may be misleading.
+                # Make the real recovery READ contracts selectable without
+                # spending another discovery turn. Never dispatch a read here,
+                # choose an asset/track, or create a new grant.
+                feedback = self._last_preflight_feedback or {}
+                missing_audio_recovery = (
+                    feedback.get("validation_keyword") == "required_export_audio_missing")
+                if (self.catalog_mode == "indexed" and
+                        (missing_audio_recovery or feedback.get("rejection_code") in
+                         {"placement_plan_unconfirmed", "native_identity_model_observation_stale",
+                          "native_identity_model_observation_required"})):
+                    recovery = [name for name, inputs in (
+                        ("get_project", {}),
+                        ("get_timeline", {"includeClips": missing_audio_recovery}),
+                        ("get_assets", {"limit": _MAX_PLACEMENT_ASSETS}))
+                        if self.host_tool_access.get(name) == "read" and
+                        name in validators and validators[name].is_valid(inputs)]
+                    self._host_frontier_tools = recovery + [
+                        name for name in self._host_frontier_tools if name not in recovery]
                 visible_selectable = list(dict.fromkeys(
                     self._host_frontier_tools + self._selectable_tools))[:8]
                 placement_validator = None
@@ -1505,7 +2119,23 @@ class NativeCreativeControl:
                             "source": "host_authorized_current_timeline_read",
                             "read_only": True,
                         }
-                if asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable:
+                model_observed_project = any(
+                    e.get("kind") == "native_tool_result" and
+                    e.get("tool") == "get_project" for e in self.events)
+                # A genuine model-selected source import, explicitly ACKed by
+                # the host, is also enough to justify a fresh bounded assets
+                # READ. The prior host project reconciliation must separately
+                # attest a positive asset count; the model still chooses any
+                # ensuing clip placement, and live ID/commit fencing is intact.
+                model_import_acknowledged = any(
+                    e.get("kind") == "native_tool_result" and
+                    e.get("tool") == "import_asset_from_path" and
+                    e.get("host_application_write_acknowledged") is True
+                    for e in self.events)
+                if ((asset_sensing and _BATCH_ASSET_PLACEMENT in visible_selectable) or
+                        (provider_native_asset_sensing and
+                         (model_observed_project or model_import_acknowledged) and
+                         (self._trusted_project_asset_count() or 0) > 0)):
                     placement_assets = await self._observe_placement_inventory(
                         "get_assets", {"limit": _MAX_PLACEMENT_ASSETS}, validators["get_assets"])
                 if track_sensing and _SINGLE_ASSET_PLACEMENT in visible_selectable:
@@ -1523,6 +2153,39 @@ class NativeCreativeControl:
                     indexed_actions.append("describe")
                 if visible_selectable:
                     indexed_actions.append("invoke")
+                missing_completion = self._missing_completion_evidence()
+                delivery_candidate = delivery_feedback = None
+                if (self._owner_delivery_offer is not None and delivery_option == RENDER_TOOL and
+                        RENDER_TOOL in visible_selectable and
+                        not self._source_bound_export_needs_revision(export_evidence)):
+                    proposed = self._owner_delivery_offer.candidate(validators[RENDER_TOOL])
+                    if proposed is not None:
+                        delivery_candidate, delivery_feedback = await self._inspect_owner_delivery_candidate(
+                            proposed, validators["check_export_readiness"])
+                        # Velorn's full range includes timeline workspace padding.
+                        # Do NOT shorten it implicitly. If duration is the only
+                        # mismatch, separately expose the explicit owner-limit
+                        # window, with the exclusion stated and native-checked.
+                        observed = (delivery_feedback or {}).get("observed_delivery") or {}
+                        approved = proposed["owner_delivery_profile"]
+                        duration = observed.get("duration")
+                        if (delivery_candidate is None and
+                                (delivery_feedback or {}).get("status") == "profile_mismatch" and
+                                type(duration) in (int, float) and
+                                duration > approved["max_duration"] + 1e-6 and
+                                native_delivery_matches({"deliveryTarget": observed},
+                                    {**approved, "max_duration": duration})):
+                            bounded = self._owner_delivery_offer.candidate(validators[RENDER_TOOL],
+                                explicit_owner_window=True)
+                            if bounded is not None:
+                                bounded_result, bounded_feedback = await self._inspect_owner_delivery_candidate(
+                                    bounded, validators["check_export_readiness"])
+                                if bounded_result is not None:
+                                    delivery_candidate = {**bounded_result,
+                                        "full_timeline_observed_duration_seconds": duration,
+                                        "excludes_later_timeline_time": True}
+                                delivery_feedback = {**delivery_feedback,
+                                    "explicit_owner_window_readiness": (bounded_feedback or {"status": "matched"})}
                 context = {
                     "creative_brief": brief,
                     # Expose only actions that the exact current grammar
@@ -1532,13 +2195,17 @@ class NativeCreativeControl:
                         indexed_actions)
                         if self.catalog_mode == "indexed" else
                         ["discover", "describe", "invoke"]) +
-                        ([] if self._missing_completion_evidence() else ["finish"]),
+                        ([] if missing_completion else ["finish"]),
                     "actual_granted_native_tools": (
                         [] if self.catalog_mode == "indexed" else list(self.tools)),
                     "compact_tool_catalog": self.catalog_mode == "indexed",
                     "selectable_native_tools": visible_selectable,
                     "inspectable_native_tools": list(self._inspectable_tied_candidates),
                     "host_observed_machine_affordances": host_frontier,
+                    **({"host_owner_delivery_candidate": delivery_candidate}
+                       if delivery_candidate is not None else {}),
+                    **({"host_owner_delivery_feedback": delivery_feedback}
+                       if delivery_feedback is not None else {}),
                     "host_observed_content_video_tracks": content_video_tracks,
                     "host_selected_native_input_hints": (
                         _selected_native_input_hints(visible_selectable, self.tools,
@@ -1553,10 +2220,23 @@ class NativeCreativeControl:
                             self._host_write_already_acknowledged(name)
                             for name in self._host_once_after_ack))
                         if self._capabilities is not None else None),
+                    **({"capability_exact_lookup_index": copy.deepcopy(exact_lookup_index)}
+                       if exact_lookup_index is not None else {}),
                     "last_capability_search_result": self._last_search_result,
                     "completion_does_not_certify_artistic_quality": True,
                     "required_completion_evidence": sorted(self.required_evidence),
-                    "missing_completion_evidence": self._missing_completion_evidence(),
+                    "missing_completion_evidence": missing_completion,
+                    # Technical readiness is a current checkpoint, not art
+                    # approval or a host decision to stop. A further native
+                    # edit may revoke delivery proof. The Brain needs the
+                    # actual remaining decision budget to choose deliberately.
+                    "current_required_host_evidence_satisfied": (
+                        bool(self.required_evidence) and not missing_completion),
+                    "current_reviewed_av_comparison": (
+                        reviewed_av_comparison(self.events, self.host_content_revision_tools)
+                        if self._requires_av_review else None),
+                    "decision_turn_budget": {"maximum": self.max_turns,
+                        "remaining_including_current": self.max_turns - turn},
                     "audio_semantically_reviewed": False,
                     # Keep stable context first for local runtime prefix caching;
                     # this never caches decisions or replays native operations.
@@ -1567,6 +2247,10 @@ class NativeCreativeControl:
                     # simultaneous source reads. Host-only get_project checks
                     # MUST NOT erase a native import receipt/asset identity.
                     "last_acknowledged_native_write": self._last_acknowledged_native_write,
+                    # Native original-source fate from two independently
+                    # model-selected complete reads, not a forced check.
+                    "native_source_clip_change_after_observation":
+                        self._model_observed_native_source_change,
                     "native_read_snapshot_cache": list(self._native_read_snapshots.values()),
                     "native_project_presence_from_last_inspection": self._project_presence,
                     # A successful write and a lagging native READ are a
@@ -1594,6 +2278,8 @@ class NativeCreativeControl:
                     # NOT a completed film. IDs remain model-observed only.
                     "host_verified_execution_progress": {
                         "project_presence": self._project_presence,
+                        "source_bound_render_save_current":
+                            self._source_bound_render_save_current(),
                         "project_asset_count_from_native_read":
                             self._trusted_project_asset_count(),
                         "active_timeline_clip_count_from_native_read":
@@ -1629,6 +2315,11 @@ class NativeCreativeControl:
                             export_evidence["current_verified_output_count"],
                         "same_export_reverification_count":
                             export_evidence["same_export_reverification_count"],
+                        # Separate destinations can contain identical bytes.
+                        # A new render ACK is not a distinct reviewed cut.
+                        "current_av_export_matches_prior_reviewed_bytes": (
+                            self._requires_av_review and reviewed_av_duplicate_export(
+                                self.events, self.host_content_revision_tools)),
                         "verified_export_still_needs_model_visible_frame": (
                             bool(export_evidence["current_verified"]) and
                             not bool(export_evidence["current_frames"]) and
@@ -1642,6 +2333,39 @@ class NativeCreativeControl:
                             name for name in visible_selectable
                             if frame_review_pending and name in _VERIFIED_FRAME_TOOLS],
                         "current_frame_observation_not_automatically_executed": True,
+                        "verified_export_still_needs_separated_timed_frames": (
+                            self._requires_av_review and
+                            bool(export_evidence["current_verified"] -
+                                 export_evidence["current_timed_frames"])),
+                        "current_timed_picture_read_selectable": (
+                            [TIMED_FRAMES] if timed_frame_review_pending and
+                            TIMED_FRAMES in visible_selectable else []),
+                        "current_same_time_picture_comparison_read_selectable": (
+                            [TIMED_FRAMES] if matching_frame_review_pending and
+                            TIMED_FRAMES in visible_selectable else []),
+                        "verified_export_still_needs_full_duration_audio": (
+                            self._requires_av_review and
+                            bool(export_evidence["current_verified"] -
+                                 export_evidence["current_full_audio"])),
+                        "current_audio_observation_read_selectable": (
+                            [AUDIO_ENVELOPE] if audio_review_pending and
+                            AUDIO_ENVELOPE in visible_selectable else []),
+                        "current_combined_av_review_read_selectable": (
+                            [ACTIVE_AV_WINDOW] if combined_review_pending and
+                            ACTIVE_AV_WINDOW in visible_selectable else []),
+                        "combined_av_review_requires_actual_full_duration_and_separated_frames": True,
+                        "audio_observation_is_numeric_not_semantic_hearing": True,
+                        "audio_observation_not_automatically_executed": True,
+                        "current_source_audio_excerpt_read_selectable": (
+                            [raw_audio_reader] if audio_excerpt_pending and
+                            raw_audio_reader in visible_selectable else []),
+                        "audio_excerpt_was_automatically_dispatched": False,
+                        "raw_audio_transport_not_independent_semantic_hearing": True,
+                        **({
+                            "previous_source_review_seconds_for_matching_frames":
+                                comparison_frame_seconds,
+                            "matching_picture_seconds_are_read_only_and_not_auto_dispatched": True,
+                        } if comparison_frame_seconds else {}),
                     },
                 }
                 if placement_tracks is not None:
@@ -1670,11 +2394,26 @@ class NativeCreativeControl:
                         if not local_indexed_contracts and self._host_write_already_acknowledged(candidate):
                             continue
                         item = self.tools[candidate]
-                        schema = (turn_input_schemas[candidate] if local_indexed_contracts else
+                        schema = (turn_input_schemas[candidate] if indexed_function_contracts else
                                   _field(item, "input_schema", _field(item, "inputSchema")))
                         if not isinstance(schema, dict) or schema.get("type") != "object":
                             raise NativeCreativeControlError(
                                 "Native function signature is not an object schema")
+                        # The complete, current host asset observation can
+                        # constrain an optional explicit ID in the provider's
+                        # schema, just as current track IDs constrain placement.
+                        # Preserve omission/name/latest alternatives and never
+                        # restrict a partial inventory or invent an identity.
+                        if (candidate == _SINGLE_ASSET_PLACEMENT and
+                                provider_native_asset_sensing and
+                                placement_assets is not None and
+                                placement_assets["complete"] and placement_assets["assets"]):
+                            field = schema.get("properties", {}).get("assetId")
+                            if (isinstance(field, dict) and field.get("type") == "string"
+                                    and "enum" not in field and "const" not in field):
+                                schema = copy.deepcopy(schema)
+                                schema["properties"]["assetId"]["enum"] = [
+                                    "", *[asset["id"] for asset in placement_assets["assets"]]]
                         description = _field(item, "description", "")
                         specs.append({
                             "name": candidate,
@@ -1698,6 +2437,28 @@ class NativeCreativeControl:
                 if show_tool_hints:
                     context["host_declared_tool_hints"] = tool_hints
                     show_tool_hints = False
+                if media_rationales:
+                    context["historical_model_media_rationales"] = media_rationales
+                # Capture trusted provenance before _infer consumes its media.
+                # Do not retain media bytes or repeat an external media upload.
+                sensory_binding = None
+                if self._last_images:
+                    sensory_binding = ("picture", {
+                        "image_sha256": list(self._last_hashes),
+                        "native_picture_origin": self._last_image_provenance,
+                    })
+                    previous = next((event for event in reversed(self.events)
+                                     if event.get("kind") == "native_tool_result"), {})
+                    if previous.get("image_sha256") == self._last_hashes:
+                        sensory_binding[1]["observation_sequence"] = previous.get("sequence")
+                        for key in (AV_REVIEW_FIELD, AV_WINDOW_AUDIO_FIELD):
+                            if key in previous:
+                                sensory_binding[1][key] = copy.deepcopy(previous[key])
+                        for key in ("observed_export_sha256", "body_picture_source_sha256"):
+                            if _digest(previous.get(key)):
+                                sensory_binding[1][key] = previous[key]
+                elif self._last_audio and self._last_audio_evidence is not None:
+                    sensory_binding = ("audio", copy.deepcopy(self._last_audio_evidence))
                 model_started = time.monotonic_ns()
                 inference_had_media = bool(self._last_images or self._last_audio)
                 try:
@@ -1773,12 +2534,24 @@ class NativeCreativeControl:
                 # project-state observation available to the small model.
                 # A new successful native call replaces this text below.
                 action, args = decision["action"], decision["arguments"]
+                if sensory_binding is not None:
+                    modality, binding = sensory_binding
+                    reason_bytes = decision["reason"].encode("utf-8")
+                    # Keep one historical rationale per actual modality. This
+                    # is the model's unverified text, not semantic evidence,
+                    # current state, a validated native input or a new grant.
+                    media_rationales[modality] = {
+                        **binding, "decision_turn": turn, "action": action,
+                        **({"tool": args["tool"]} if "tool" in args else {}),
+                        "reason": reason_bytes[:512].decode("utf-8", errors="ignore"),
+                        "reason_truncated": len(reason_bytes) > 512,
+                        "host_verified_semantics": False,
+                        "current_native_state_or_tool_authority": False,
+                    }
                 if action != "search":
-                    # Only consecutive duplicate metadata searches are
-                    # redundant. Describing a schema, inspecting real state,
-                    # or taking any other model action ends this streak.
-                    self._previous_search_signature = None
-                    self._identical_search_repetitions = 0
+                    # Describing a schema, inspecting state or choosing any
+                    # non-search action ends the metadata-only streak.
+                    self._search_streak_counts.clear()
                 if action == "finish":
                     missing = self._missing_completion_evidence()
                     if missing:
@@ -1808,17 +2581,16 @@ class NativeCreativeControl:
                     # events. Do NOT choose or invoke a tool on its behalf.
                     signature = (args["query"], args.get("limit", 6),
                                  self._capabilities.revision)
-                    if signature == self._previous_search_signature:
-                        self._identical_search_repetitions += 1
-                    else:
-                        self._identical_search_repetitions = 0
-                    self._previous_search_signature = signature
+                    # Genuine trial #46007258095 alternated identical queries
+                    # with other searches. An adjacent-only check missed them.
+                    repetitions = self._search_streak_counts.get(signature, 0)
+                    self._search_streak_counts[signature] = repetitions + 1
                     self._last_search_result = self._capabilities.search(
                         args["query"], limit=args.get("limit", 6))
-                    if self._identical_search_repetitions:
+                    if repetitions:
                         self._last_search_result["same_metadata_query_without_new_evidence"] = True
                         self._last_search_result["identical_query_repeat_count"] = min(
-                            self._identical_search_repetitions, 100)
+                            repetitions, 100)
                         self._last_search_result["no_native_edit_or_inspection_performed"] = True
                     # Only tool identities from actual discovery enter the
                     # model-facing result. Host grant map is authoritative.
@@ -1880,6 +2652,7 @@ class NativeCreativeControl:
                                   "query_sha256": hashlib.sha256(
                                       args["query"].encode("utf-8")).hexdigest(),
                                   "catalog_revision": self._capabilities.revision,
+                                  "identical_query_repeat_count": min(repetitions, 100),
                                   "result_tool_names": [
                                       match["tool"] for match in
                                       self._last_search_result["matches"]],
@@ -1970,6 +2743,29 @@ class NativeCreativeControl:
                                       list(invalid.schema_path)[:16])[:512],
                                   "no_native_dispatch": True})
                     continue
+                # A stale identity refusal clears the trusted project snapshot.
+                # A later model-chosen JPEG preview cannot be source-bound until
+                # the model obtains a fresh project observation. Refuse BEFORE
+                # dispatch instead of terminating on the missing identity after
+                # a real read (Super VL journal #45740294453, turns 20-23).
+                if (native_name in self._host_verified_timeline_previews and
+                        args["inputs"].get("includeImage") is not False and
+                        self._trusted_project_active_timeline_id() is None):
+                    self._last_preflight_feedback = {
+                        "tool": native_name,
+                        "validation_keyword": "native_preview_needs_project_observation",
+                        "required_prior_native_tool": "get_project",
+                        "model_must_choose_project_observation": True,
+                        "no_native_dispatch": True}
+                    self._append({"kind": "model_action_rejected", "turn": turn,
+                                  **timing, "tool": native_name,
+                                  "inputs_sha256": hashlib.sha256(
+                                      _wire(args["inputs"]).encode()).hexdigest(),
+                                  "validation_keyword":
+                                      "native_preview_needs_project_observation",
+                                  "schema_location": "native/live_timeline_identity",
+                                  "no_native_dispatch": True})
+                    continue
                 # A model may propose a timeline ID as trackId, even after
                 # genuine visual review. For pinned content clip tools an
                 # explicitly supplied existing track MUST be one of the
@@ -1979,6 +2775,62 @@ class NativeCreativeControl:
                 # The editor's createTrack/newTrack/newTopTrack path remains
                 # unrestricted: it is a distinct genuine creative operation.
                 content_inputs = args["inputs"]
+                # Before a model-selected clip style WRITE, perform one
+                # host-granted fresh READ of the exact current clip inventory.
+                # The pinned editor rejects an empty target before mutation.
+                # Keep that failure out of the uncertain-write path without
+                # guessing a replacement target, replaying, or trusting the
+                # model's claimed clip ID. The native editor still rechecks.
+                if (native_name == "set_clip_style" and
+                        self.host_tool_access is not None and
+                        self.host_tool_access.get("get_timeline") == "read" and
+                        "get_timeline" in validators and
+                        validators["get_timeline"].is_valid({
+                            "includeClips": True, "limit": 1000})):
+                    observed_targets = None
+                    timeline_id = self._trusted_project_active_timeline_id()
+                    if timeline_id is not None:
+                        try:
+                            checked = await self._host_preflight_read(
+                                "get_timeline", {"includeClips": True, "limit": 1000})
+                            if not _native_mcp_error_status(checked):
+                                checked_texts, checked_images, checked_audio = (
+                                    _native_content(checked))
+                                if not checked_images and not checked_audio:
+                                    observed_targets = _native_clip_style_targets(
+                                        checked_texts, timeline_id, content_inputs)
+                        except (NativeCreativeControlError, ValueError, OSError):
+                            # No trustworthy, complete source read: do not
+                            # turn uncertainty into a guessed positive match.
+                            pass
+                    if (observed_targets is None or
+                            observed_targets["matched_ids"] is None or
+                            not observed_targets["matched_ids"]):
+                        keyword = ("host_clip_style_target_unconfirmed"
+                                   if observed_targets is None or
+                                      observed_targets["matched_ids"] is None
+                                   else "host_clip_style_no_matching_clip")
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": keyword,
+                            "host_observed_clip_ids": (
+                                observed_targets["all_ids"][:32]
+                                if observed_targets is not None else []),
+                            "host_source_attested_read_only": True,
+                            "choose_exact_existing_clip_id_from_native_state": True,
+                            "label_color_is_also_a_selector_in_pinned_editor": (
+                                bool(content_inputs.get("labelColor"))),
+                            "no_native_dispatch": True,
+                            "no_automatic_retry": True}
+                        self._append({
+                            "kind": "model_action_rejected", "turn": turn,
+                            **timing, "tool": native_name,
+                            "inputs_sha256": hashlib.sha256(
+                                _wire(content_inputs).encode()).hexdigest(),
+                            "validation_keyword": keyword,
+                            "schema_location": "native/get_timeline/clips",
+                            "no_native_dispatch": True})
+                        continue
                 needs_existing_video_track = (
                     native_name in _CONTENT_VIDEO_TRACK_WRITES and
                     type(content_inputs.get("trackId")) is str and
@@ -2056,6 +2908,63 @@ class NativeCreativeControl:
                                       "schema_location": ",".join(failures)[:512],
                                       "no_native_dispatch": True})
                         continue
+                # A second creative G1 A/V export must follow an actual
+                # model-selected, host-acknowledged content revision, not
+                # another file with the same reviewed picture and sound.
+                # Preserve a legitimately unverified first render, and scope
+                # this refusal to strict source-bound AV review sessions.
+                if (native_name == RENDER_TOOL and
+                        self._capture_render_project is not None and
+                        self._requires_av_review and
+                        args["inputs"].get("previewOnly") is not True):
+                    reviewed = self._current_export_evidence()
+                    if self._source_bound_export_needs_revision(reviewed):
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "native_second_export_needs_content_revision",
+                            "required_next_action": "model_choose_real_edit",
+                            "verified_first_picture_and_audio_reviewed": True,
+                            "source_content_revision_required": True,
+                            "no_automatic_edit": True,
+                            "no_native_dispatch": True,
+                        }
+                        self._append({"kind": "model_action_rejected", "turn": turn,
+                                      **timing, "tool": native_name,
+                                      "inputs_sha256": hashlib.sha256(
+                                          _wire(args["inputs"]).encode()).hexdigest(),
+                                      "validation_keyword":
+                                          "native_second_export_needs_content_revision",
+                                      "schema_location": "native/reviewed_av_edit_before_second_export",
+                                      "no_native_dispatch": True})
+                        continue
+                # A reviewed A/V export must capture the exact native project
+                # bytes and source closure at the LAST model-confirmed save.
+                # Actual 120B G1 exported three audible films without ever
+                # selecting save_project, leaving zero immutable render-bound
+                # snapshots. Do not render unprovable footage then call it a
+                # verified native revision. This is admission, never a
+                # model-selected creative action or automatic save.
+                if (native_name == RENDER_TOOL and
+                        self._capture_render_project is not None and
+                        args["inputs"].get("previewOnly") is not True):
+                    if self._source_bound_render_save_current() is not True:
+                        self._last_preflight_feedback = {
+                            "tool": native_name,
+                            "validation_keyword": "native_export_needs_acknowledged_save",
+                            "required_prior_native_tool": "save_project",
+                            "required_save_previewOnly_false": True,
+                            "model_must_choose_save_action": True,
+                            "no_automatic_save": True,
+                            "no_native_dispatch": True}
+                        self._append({"kind": "model_action_rejected", "turn": turn,
+                                      **timing, "tool": native_name,
+                                      "inputs_sha256": hashlib.sha256(
+                                          _wire(args["inputs"]).encode()).hexdigest(),
+                                      "validation_keyword":
+                                          "native_export_needs_acknowledged_save",
+                                      "schema_location": "native/reviewed_av_source_snapshot",
+                                      "no_native_dispatch": True})
+                        continue
                 self._last_preflight_feedback = None
                 source_preview_only = source_verified_preview_intent(
                     native_name, args["inputs"], self._host_verified_top_level_previews)
@@ -2072,6 +2981,12 @@ class NativeCreativeControl:
                                   decision["reason"].encode("utf-8")).hexdigest(),
                               "model_reason_utf8_bytes": len(decision["reason"].encode("utf-8")),
                               "uncertain_write_do_not_replay": True})
+                if native_name == RENDER_TOOL and self._owner_delivery_offer is not None:
+                    self._owner_delivery_offer.retire_submitted(args["inputs"])
+                    # Dispatch may change current readiness even if refused.
+                    # Re-read only after the model has actually chosen export.
+                    if args["inputs"].get("previewOnly") is not True:
+                        self._owner_delivery_observations = {}
                 call_started = time.monotonic_ns()
                 try:
                     result = await self.session.call_tool(native_name, args["inputs"])
@@ -2123,6 +3038,14 @@ class NativeCreativeControl:
                                 "project_state_unknown": True,
                                 "must_inspect_native_project": True,
                             }
+                        if code == "placement_plan_unconfirmed":
+                            # Preserve the immutable journal and last write ACK,
+                            # not potentially stale source-selection hints.
+                            self._placement_observations.clear()
+                            for read_tool in ("get_assets", "get_timeline"):
+                                self._native_read_snapshots.pop(read_tool, None)
+                            self._last_native_texts = []
+                            self._last_native_preview_feedback = None
                         # The next call still requires a new MODEL decision.
                         self._last_preflight_feedback = {
                             "tool": native_name, "validation_keyword": "host_pre_dispatch",
@@ -2246,6 +3169,32 @@ class NativeCreativeControl:
                         # Record bounded, private evidence and let the MODEL
                         # select the next action. Never silently treat the
                         # failed observation as successful or retry it.
+                        export_failure = None
+                        if self.host_pre_dispatch_rejections and native_name == _VERIFIED_EXPORT_TOOL:
+                            meta = (result.get("_meta") if isinstance(result, dict)
+                                    else getattr(result, "meta", None))
+                            candidate = meta.get(HOST_EXPORT_FAILURE_META) if type(meta) is dict else None
+                            if (type(candidate) is dict and
+                                    candidate.get("inputs_sha256") == native_input_digest(args["inputs"]) and
+                                    candidate.get("missing_required_audio") is True and
+                                    type(candidate.get("unchanged_already_inspected")) is bool and
+                                    isinstance(candidate.get("export_sha256"), str) and
+                                    re.fullmatch(r"[0-9a-f]{64}", candidate["export_sha256"])):
+                                export_failure = candidate
+                                self._last_preflight_feedback = {
+                                    "tool": native_name,
+                                    "validation_keyword": "required_export_audio_missing",
+                                    "native_export_sha256": candidate["export_sha256"],
+                                    "same_export_requires_new_media_before_retry": True,
+                                    "correction": (
+                                        "Inspect the current editable timeline and selected export "
+                                        "range. Confirm source-backed sound is placed on an active "
+                                        "audio track, or correct the export settings if the track "
+                                        "is already present. Choose the needed edit and save, then "
+                                        "render and verify a new physical output."),
+                                    "no_successful_native_observation": True,
+                                    "no_automatic_retry": True,
+                                }
                         # Bind a failed read to its specific requested export.
                         # A later verifier failure must revoke earlier reviewed
                         # proof for that file, without recording its raw path.
@@ -2256,14 +3205,28 @@ class NativeCreativeControl:
                             path_digest = destination_digest(args["inputs"].get("path"))
                             if path_digest is not None:
                                 failed_read_binding[DESTINATION_FIELD] = path_digest
+                        previous_event = self.events[-2] if len(self.events) >= 2 else {}
+                        failure_evidence = ({
+                            "missing_required_audio": True,
+                            "export_sha256": export_failure["export_sha256"],
+                            "unchanged_already_inspected":
+                                export_failure["unchanged_already_inspected"],
+                        } if export_failure is not None else {})
                         self._append({"kind": "native_read_tool_reported_error",
-                                      **failed_read_binding,
+                                      **failed_read_binding, **failure_evidence,
                                       "turn": turn, "tool": native_name,
                                       "measured_native_mcp_wall_ms": native_ms,
                                       "error_sha256": digest,
                                       "error_text_exceeded_evidence_budget": out_of_budget,
                                       "host_attested_read_only": True,
                                       "no_successful_native_observation": True})
+                        if (failure_evidence.get("unchanged_already_inspected") is True and
+                                previous_event.get("kind") == "native_read_tool_reported_error" and
+                                previous_event.get("unchanged_already_inspected") is True and
+                                previous_event.get("export_sha256") == failure_evidence["export_sha256"] and
+                                previous_event.get(DESTINATION_FIELD) == failed_read_binding.get(DESTINATION_FIELD)):
+                            outcome = "native_export_recovery_required"
+                            break
                         continue
                     # A reported write error (or an operation of unknown
                     # access) does not prove that a mutation never happened.
@@ -2289,8 +3252,22 @@ class NativeCreativeControl:
                         self.host_tool_access is not None and
                         self.host_tool_access.get(native_name) == "read" and
                         args["inputs"].get("includeImage") is not False)
+                    body_picture = native_name == BODY_PICTURE_TOOL
+                    body_picture_sha = None
+                    if body_picture:
+                        if (self.host_tool_access is None or
+                                self.host_tool_access.get(native_name) != "read" or
+                                len(images) != 1 or images[0][0] != "image/png" or audio):
+                            raise NativeCreativeControlError("BODY picture lacks trusted read-only PNG evidence")
+                        body_receipt = _strict_receipt(texts, "BODY source picture")
+                        try:
+                            picture_hash = validate_picture_receipt(
+                                body_receipt, images[0][1], args["inputs"].get("source_sha256"))
+                        except ValueError as exc:
+                            raise NativeCreativeControlError(str(exc)) from exc
+                        body_picture_sha = body_receipt["source_sha256"]
                     if (images and native_name not in _VERIFIED_FRAME_TOOLS
-                            and not live_timeline_image):
+                            and not live_timeline_image and not body_picture):
                         raise NativeCreativeControlError("Untrusted tool supplied image evidence")
                     if audio and native_name not in _VERIFIED_AUDIO_TOOLS:
                         raise NativeCreativeControlError("Untrusted tool supplied audio evidence")
@@ -2419,7 +3396,10 @@ class NativeCreativeControl:
                             isinstance(host_result, dict) and
                             host_result.get("action") == native_name)
                         acknowledged_preview = (
-                            top_level_preview or placement_preview or (
+                            top_level_preview or placement_preview or
+                            source_verified_plan_preview_receipt(
+                                native_name, args["inputs"], host_response,
+                                self._host_verified_top_level_previews) or (
                                 preview is True and (
                                     (success is False and (
                                         not isinstance(host_response, dict) or
@@ -2476,6 +3456,8 @@ class NativeCreativeControl:
                             outcome = "native_error_requires_state_reconciliation"
                             break
                         if (success is not True or
+                                _contradictory_native_write_receipt(host_response) or
+                                _contradictory_native_write_receipt(host_result) or
                                 (isinstance(host_response, dict) and
                                  host_response.get("previewOnly") is True) or
                                 (isinstance(host_result, dict) and
@@ -2505,18 +3487,17 @@ class NativeCreativeControl:
                     hashes = (
                         _source_bound_live_timeline_preview(
                             texts, images, self._trusted_project_active_timeline_id())
-                        if live_timeline_image else
+                        if live_timeline_image else [picture_hash] if body_picture else
                         _source_bound_images(texts, images))
                     audio_evidence = _source_bound_audio(texts, audio)
                     av_values = None
+                    combined_audio = None
                     new_export_sha = None
                     observed_export_sha = None
                     if native_name == ACTIVE_AV_WINDOW:
-                        # A chosen partial A/V window is *not* full-film sound
-                        # listening or a completed audiovisual review. The MCP
-                        # bridge binds both underlying decoder results to the
-                        # same verified video. Check that contract before
-                        # admitting its image evidence into the model context.
+                        # The existing window binds both decoder results to
+                        # one verified video. A partial read never certifies a
+                        # full-film review; numeric audio is not listening.
                         window = _strict_receipt(texts, "targeted A/V window")
                         envelope = window.get("audio_timeline")
                         if (window.get("kind") !=
@@ -2529,7 +3510,13 @@ class NativeCreativeControl:
                                 len(window["samples"]) != len(images) or
                                 not 2 <= len(images) <= 4 or
                                 window.get("numeric_audio_not_semantic_listening") is not True or
-                                window.get("human_or_artistic_quality_approved") is not False):
+                                window.get("human_or_artistic_quality_approved") is not False or
+                                window.get("requested_start_seconds") != args["inputs"].get("start_seconds") or
+                                window.get("requested_duration_seconds") != args["inputs"].get("duration_seconds") or
+                                envelope.get("requested_start_seconds") != window.get("requested_start_seconds") or
+                                envelope.get("requested_duration_seconds") != window.get("requested_duration_seconds") or
+                                [sample.get("sampled_video_seconds_requested")
+                                 for sample in window["samples"]] != args["inputs"].get("frame_seconds")):
                             raise NativeCreativeControlError(
                                 "Targeted window did not bind video and audio to one source")
                     if self._requires_av_review and native_name == TIMED_FRAMES and not images:
@@ -2540,7 +3527,7 @@ class NativeCreativeControl:
                                 p.get("native_export_sha256")):
                             raise NativeCreativeControlError("Native export has no independent physical decoder proof")
                         new_export_sha = p["native_export_sha256"]
-                    elif images and not live_timeline_image:
+                    elif images and not live_timeline_image and not body_picture:
                         p = _strict_receipt(texts, "verified native video")
                         if not _digest(p.get("export_sha256")):
                             raise NativeCreativeControlError("Native frame lacks source identity")
@@ -2559,6 +3546,21 @@ class NativeCreativeControl:
                     if self._requires_av_review and native_name in (
                             _VERIFIED_EXPORT_TOOL, TIMED_FRAMES, AUDIO_ENVELOPE):
                         av_values = av_review_values(native_name, p)
+                    elif self._requires_av_review and native_name == ACTIVE_AV_WINDOW:
+                        frames = av_review_values(ACTIVE_AV_WINDOW, p)
+                        envelope = p["audio_timeline"]
+                        audio_values = av_review_values(AUDIO_ENVELOPE, envelope)
+                        # Preserve the actual request, not merely a plausible
+                        # duration asserted by a malformed decoder response.
+                        if (audio_values is not None and
+                                abs((audio_values[1] - audio_values[0]) -
+                                    p["requested_duration_seconds"]) <= 0.02 and
+                                av_window_audio_values({"tool": native_name,
+                                    AV_REVIEW_FIELD: frames, AV_WINDOW_AUDIO_FIELD: audio_values,
+                                    AV_PCM_FIELD: envelope.get("preview_pcm_sha256"),
+                                    "image_sha256": hashes}) is not None):
+                            av_values = frames
+                            combined_audio = audio_values
                 except NativeCreativeControlError as exc:
                     self._append({"kind": "native_observation_rejected", "turn": turn,
                                   "tool": native_name, "error": str(exc),
@@ -2590,6 +3592,7 @@ class NativeCreativeControl:
                 self._last_image_provenance = (
                     "live_editable_timeline_preview_not_verified_export"
                     if live_timeline_image else (
+                        "body_source_picture_not_verified_video_export" if body_picture else
                         "independently_verified_export_frame" if images else None))
                 self._last_audio, self._last_audio_evidence = audio, audio_evidence
                 # Capture only a genuinely observed pre-write native count.
@@ -2630,11 +3633,28 @@ class NativeCreativeControl:
                     render_binding[AV_REVIEW_FIELD] = av_values
                     if native_name == AUDIO_ENVELOPE:
                         render_binding[AV_PCM_FIELD] = p["preview_pcm_sha256"]
+                    elif native_name == ACTIVE_AV_WINDOW:
+                        render_binding[AV_WINDOW_AUDIO_FIELD] = combined_audio
+                        render_binding[AV_PCM_FIELD] = p["audio_timeline"]["preview_pcm_sha256"]
+                save_capture_failed = False
                 if self._capture_render_project is not None and native_name == "save_project":
                     save_result = host_response.get("result")
                     saved = save_result.get("project") if isinstance(save_result, dict) else None
                     self._explicit_render_save_identity = (
                         (saved.get("path"), saved.get("modified")) if isinstance(saved, dict) else None)
+                    if self._capture_saved_project_identity is not None:
+                        try:
+                            identity = await asyncio.to_thread(
+                                self._capture_saved_project_identity, saved)
+                            if (type(identity) is not tuple or len(identity) != 4 or
+                                    identity[:2] != self._explicit_render_save_identity or
+                                    not all(_digest(item) for item in identity[2:])):
+                                raise ValueError("Trusted save-time capture returned invalid identity")
+                        except (OSError, ValueError, TypeError):
+                            self._explicit_render_save_identity = None
+                            save_capture_failed = True
+                        else:
+                            self._explicit_render_save_identity = identity
                 if self._capture_render_project is not None and native_name == RENDER_TOOL and render_binding:
                     previous_write = next(
                         (event.get("tool") for event in reversed(self.events)
@@ -2642,17 +3662,21 @@ class NativeCreativeControl:
                          and event.get("tool") != RENDER_TOOL), None)
                     if previous_write == "save_project":
                         try:
-                            project_sha, options_sha = await asyncio.to_thread(
+                            project_sha, options_sha, media_sha = await asyncio.to_thread(
                                 self._capture_render_project, host_response, render_binding,
                                 self._explicit_render_save_identity)
-                            if not _digest(project_sha) or not _digest(options_sha):
-                                raise ValueError("Render snapshot lacks trusted digests")
+                            if not all(_digest(value) for value in
+                                       (project_sha, options_sha, media_sha)):
+                                raise ValueError("Render snapshot lacks trusted media digests")
                         except (OSError, ValueError):
                             render_binding[SAVED_RENDER_FAILURE] = True
                         else:
                             render_binding[SAVED_RENDER_FIELD] = project_sha
                             render_binding[SAVED_RENDER_OPTIONS_FIELD] = options_sha
+                            render_binding[SAVED_RENDER_MEDIA_FIELD] = media_sha
                 self._append({"kind": "native_tool_result", "turn": turn, **render_binding,
+                              **({"native_save_project_checkpoint_failed": True}
+                                 if save_capture_failed else {}),
                               "tool": native_name,
                               "measured_native_mcp_wall_ms": native_ms,
                               "text_sha256": [hashlib.sha256(s.encode()).hexdigest() for s in texts],
@@ -2674,12 +3698,16 @@ class NativeCreativeControl:
                               "image_sha256": hashes,
                               "native_timeline_preview_unverified_export": (
                                   True if live_timeline_image else None),
+                              "body_picture_source_sha256": body_picture_sha,
                               "audio_sha256": audio_evidence["wav_sha256"] if audio_evidence else None,
                               "independently_verified_export_sha256": new_export_sha,
                               "observed_export_sha256": observed_export_sha,
                               "audio_sent_to_model_for_next_decision": bool(audio),
                               "audio_semantically_heard": False,
                               "human_or_artistic_quality_approved": False})
+                if save_capture_failed:
+                    outcome = "native_save_checkpoint_failed"
+                    break
                 if render_binding.get(SAVED_RENDER_FAILURE):
                     outcome = "native_render_snapshot_failed"
                     break
@@ -2717,8 +3745,7 @@ class NativeCreativeControl:
                     # native write is selected or retried on its behalf.
                     self._inspectable_tied_candidates = []
                     self._last_search_result = None
-                    self._previous_search_signature = None
-                    self._identical_search_repetitions = 0
+                    self._search_streak_counts.clear()
                 if (reobserve_project and
                         self.host_tool_access is not None and
                         self.host_tool_access.get("get_project") == "read" and

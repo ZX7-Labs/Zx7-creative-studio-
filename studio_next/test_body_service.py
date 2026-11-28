@@ -23,6 +23,38 @@ def plan():
 
 
 class IndependentLocalCreativeServiceTests(unittest.TestCase):
+    def test_job_listing_is_durable_state_not_physical_execution_proof(self):
+        with tempfile.TemporaryDirectory() as root:
+            entered=threading.Event()
+            release=threading.Event()
+            def executor(ir,workspace):
+                entered.set()
+                if not release.wait(8):
+                    raise RuntimeError("Test did not release worker")
+                return {"status":"all_tool_results_verified","video_proven":False}
+            owner=LocalBodyCoordinator(root,execute=executor,workers=1)
+            try:
+                owner.submit(plan(),workspace_id="first-film",job_id="first")
+                self.assertTrue(entered.wait(4))
+                owner.submit(plan(),workspace_id="second-film",job_id="second")
+                listing=owner.list_jobs()
+                self.assertEqual({j["job_id"]:j["status"] for j in listing["jobs"]},
+                                 {"first":"running","second":"queued"})
+                self.assertIs(listing["status_is_physical_execution_evidence"],False)
+                self.assertIs(listing["status_is_observed_durable_job_state"],True)
+                release.set()
+                for _ in range(150):
+                    if all(j["status"]=="completed" for j in owner.list_jobs()["jobs"]):
+                        break
+                    time.sleep(.01)
+                listing=owner.list_jobs()
+                self.assertEqual({j["status"] for j in listing["jobs"]},{"completed"})
+                self.assertIs(listing["status_is_physical_execution_evidence"],False)
+                self.assertIs(listing["successful_jobs_do_not_automatically_prove_a_movie_exists"],True)
+            finally:
+                release.set()
+                owner.close()
+
     def test_real_job_queue_and_restart_do_not_rewrite_approved_art(self):
         with tempfile.TemporaryDirectory() as root:
             seen=[]
@@ -261,6 +293,42 @@ class IndependentLocalCreativeServiceTests(unittest.TestCase):
                         trusted_idempotent=False,
                         existing_result_verifier=lambda _:True,lease_seconds=3600)
             finally:restart.close()
+
+    def test_stage_progress_closes_read_only_database_on_every_poll(self):
+        from contextlib import closing
+        from unittest.mock import patch
+        import sqlite3
+        with tempfile.TemporaryDirectory() as root:
+            service = LocalBodyCoordinator(root, execute=lambda ir, workspace: {})
+            opened = []
+            try:
+                folder = service._workspace("actual")
+                folder.mkdir()
+                key = "a" * 64
+                with closing(sqlite3.connect(folder / "production.sqlite3")) as conn, conn:
+                    conn.execute("CREATE TABLE node_results (project_key TEXT, node_id TEXT, "
+                                 "node_state TEXT, attempts INTEGER, updated_at REAL)")
+                    conn.execute("INSERT INTO node_results VALUES (?, 'render', 'running', 1, 0)",
+                                 (key,))
+                real_connect = sqlite3.connect
+                def tracked(*args, **kwargs):
+                    db = real_connect(*args, **kwargs)
+                    opened.append(db)
+                    return db
+                with patch("studio_next.body_service.sqlite3.connect", side_effect=tracked):
+                    for _ in range(5):
+                        result = service._stage_progress("actual", project_key=key,
+                                                         node_ids=["render"])
+                        self.assertTrue(result["tool_progress_is_actual_sqlite"])
+                        self.assertEqual(result["observed_tool_states"][0]["node_id"], "render")
+                self.assertGreaterEqual(len(opened), 5)
+                for db in opened:
+                    with self.assertRaises(sqlite3.ProgrammingError):
+                        db.execute("SELECT 1")
+            finally:
+                for db in opened:
+                    db.close()
+                service.close()
 
     def test_api_exposes_actual_stored_tool_progress_not_invented_percent(self):
         with tempfile.TemporaryDirectory() as root:

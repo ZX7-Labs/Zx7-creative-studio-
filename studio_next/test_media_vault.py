@@ -9,6 +9,103 @@ from studio_next.media_vault import MediaVault,MediaCustodyError
 
 
 class MediaVaultProductionTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Actual decoder required for container custody")
+    def test_reference_playlist_is_not_an_immutable_video_or_audio_asset(self):
+        from studio_next.delivery_audit import _probe_details
+        from studio_next.edit_timeline import probe_media
+        from studio_next.media_vault import sha256_file
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            segment=root/"separate-source.ts"
+            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-nostdin",
+                "-f","lavfi","-i","color=c=red:s=160x90:r=24:d=1",
+                "-f","lavfi","-i","sine=frequency=440:duration=1",
+                "-c:v","libx264","-c:a","aac","-f","mpegts",str(segment)],
+                check=True,timeout=40)
+            playlist=root/"reference.m3u8"
+            playlist.write_text("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n"
+                +"#"+"padding "*80+"\n#EXTINF:1.0,\nseparate-source.ts\n#EXT-X-ENDLIST\n")
+            for mime in ("video/mp4","audio/mpeg","audio/flac"):
+                with self.subTest(mime=mime):
+                    vault=MediaVault(root/mime.replace("/","-"))
+                    with self.assertRaises(MediaCustodyError):
+                        vault.ingest(playlist,mime=mime,rights="owner_supplied",
+                            source_type="owner_upload",source_id="reference-only",
+                            evidence="Playlist is not self-contained media",
+                            owner_or_generator="owner")
+                    with self.assertRaises(MediaCustodyError):
+                        vault.inspect(sha256_file(playlist))
+                    self.assertFalse(any(p.is_file() for p in vault.objects.rglob("*")))
+            for reader in (_probe_details,probe_media):
+                with self.subTest(reader=reader.__name__):
+                    with self.assertRaises((ValueError,subprocess.CalledProcessError)):
+                        reader(playlist)
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Actual decoder required for container custody")
+    def test_supported_self_contained_containers_and_extensionless_cas(self):
+        from studio_next.delivery_audit import _probe_details
+        from studio_next.edit_timeline import probe_media
+        from studio_next.media_vault import verify_media_container,sha256_file
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            original=root/"original.mp4"
+            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-nostdin",
+                "-f","lavfi","-i","color=c=blue:s=160x90:r=24:d=1",
+                "-c:v","libx264",str(original)],check=True,timeout=40)
+            for suffix,codec,mime in (("mp4",None,"video/mp4"),
+                    ("mov","copy","video/quicktime"),
+                    ("mkv","copy",None),("webm","libvpx-vp9","video/webm")):
+                with self.subTest(suffix=suffix):
+                    movie=root/("original."+suffix)
+                    if codec:
+                        subprocess.run(["ffmpeg","-hide_banner","-loglevel","error",
+                            "-nostdin","-i",str(original),"-c:v",codec,str(movie)],
+                            check=True,timeout=40)
+                    self.assertEqual(_probe_details(movie)["width"],160)
+                    self.assertAlmostEqual(probe_media(movie)["seconds"],1,places=2)
+                    if mime:
+                        self.assertEqual(verify_media_container(movie,mime)["video_sha256"],
+                                         sha256_file(movie))
+                        raw=root/(suffix+"-cas")
+                        shutil.copyfile(movie,raw)
+                        self.assertEqual(verify_media_container(raw,mime)["video_sha256"],
+                                         sha256_file(movie))
+            for suffix,codec,mime in (("mp3","libmp3lame","audio/mpeg"),
+                                      ("flac","flac","audio/flac")):
+                with self.subTest(suffix=suffix):
+                    sound=root/("source."+suffix)
+                    subprocess.run(["ffmpeg","-hide_banner","-loglevel","error",
+                        "-nostdin","-f","lavfi","-i","sine=frequency=440:duration=1",
+                        "-c:a",codec,str(sound)],check=True,timeout=40)
+                    self.assertTrue(verify_media_container(sound,mime)["actual_file_bytes_checked"])
+
+    def test_read_only_catalog_probe_does_not_create_vault_or_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "never-initialized"
+            MediaVault(target, initialize=False)
+            self.assertFalse(target.exists())
+            self.assertFalse((root / "never-initialized" / "assets.sqlite3").exists())
+            with self.assertRaisesRegex(MediaCustodyError, "boolean"):
+                MediaVault(target, initialize="false")
+            self.assertFalse(target.exists())
+            original = MediaVault(root / "created-on-use")
+            self.assertTrue(original.db.is_file())
+            self.assertTrue(original.objects.is_dir())
+
+    def test_read_only_vault_inventory_rejects_redirected_vault_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            alias = root / "vault"
+            alias.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(MediaCustodyError, "linked"):
+                MediaVault(alias, initialize=False)
+            self.assertEqual(list(outside.iterdir()), [])
+
     def test_original_photography_survives_move_or_restart(self):
         with tempfile.TemporaryDirectory() as root:
             input=Path(root)/"camera.mov"
@@ -27,6 +124,32 @@ class MediaVaultProductionTests(unittest.TestCase):
             self.assertTrue(target.is_file())
             with self.assertRaises(MediaCustodyError):
                 restarted.checkout(ref["asset_id"],ref["attestation_id"],target)
+
+    def test_ingest_attests_only_the_bytes_physically_validated(self):
+        from studio_next import media_vault
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            source=root/"original.svg"
+            source.write_text('<svg xmlns="http://www.w3.org/2000/svg"><rect width="8" height="8" fill="red"/></svg>')
+            original=source.read_bytes()
+            original_digest=media_vault.sha256_file(source)
+            invalid=b"X"*len(original)
+            vault=MediaVault(root/"vault")
+            native_verify=media_vault.verify_media_container
+            def replace_upload_after_decode(path,mime):
+                result=native_verify(path,mime)
+                source.write_bytes(invalid)
+                return result
+            with patch.object(media_vault,"verify_media_container",
+                              side_effect=replace_upload_after_decode):
+                proof=vault.ingest(source,mime="image/svg+xml",rights="owner_supplied",
+                    source_type="owner_upload",source_id="original-image",
+                    evidence="Owner original",owner_or_generator="owner")
+            self.assertEqual(proof["asset_id"],original_digest)
+            self.assertEqual(Path(vault.inspect(original_digest)["path"]).read_bytes(),original)
+            with self.assertRaises(MediaCustodyError):
+                vault.inspect(media_vault.sha256_file(source))
+            self.assertFalse(list(vault.objects.glob(".ingest-*")))
 
     def test_competing_immutable_vault_cas_is_not_overwritten(self):
         from studio_next import media_vault

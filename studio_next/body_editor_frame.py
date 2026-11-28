@@ -19,6 +19,7 @@ from .body_editor_client import EditorAccessError
 from .body_editor_policy import EditorPathPolicy
 from .body_editor_export import _no_path_symlinks, VIDEO_EXTENSIONS
 from .delivery_audit import _probe_details
+from .edit_timeline import SELF_CONTAINED_VIDEO_INPUT
 from .media_vault import sha256_file
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -95,7 +96,7 @@ def observe_verified_export_frame(path: str, *, policy: EditorPathPolicy,
     output_limit = 4 * 1024 * 1024
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
-        "-protocol_whitelist", "file,pipe,crypto",
+        *SELF_CONTAINED_VIDEO_INPUT,
         "-ss", format(at_seconds, ".9f"), "-i", str(source),
         "-vf", "scale='min(768,iw)':'min(768,ih)':force_original_aspect_ratio=decrease",
         "-frames:v", "1", "-fs", str(output_limit),

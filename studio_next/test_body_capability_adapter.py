@@ -1,5 +1,6 @@
 """Physical trusted BODY catalog through universal small/large brain interface."""
 import tempfile
+import shutil
 from pathlib import Path
 import unittest
 
@@ -32,6 +33,140 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(actual["native_result"].content[0].text)
             self.assertEqual(gateway.evidence()[0]["access"], "read")
 
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Physical BODY graph renderer requires FFmpeg and FFprobe")
+    async def test_real_body_author_and_render_cross_the_internal_controller_ack_boundary(self):
+        """Scripted choices exercise genuine BODY operations, not neural artistry."""
+        import hashlib
+        import json
+        from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
+        from studio_next.native_creative_control import NativeCreativeControl
+        from studio_next.test_native_creative_control import ScriptedModel, decision
+        from studio_next.test_body_visual_document import graph
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            gateway = await connect_installed_zx7_body(root)
+            grants = gateway._live_grants("zx7")
+            view = CombinedCapabilityMcpSession(gateway, "zx7")
+            plan = "creative-graphs/first.json"
+            model = ScriptedModel([
+                decision("invoke", tool="body.visual_author", inputs={"document": graph(), "out": plan}),
+                decision("invoke", tool="body.visual_graph", inputs={"plan": plan, "out": "first.png"}),
+                decision("finish", summary="fixture only"),
+            ])
+            result = await NativeCreativeControl(view, model, host_tool_access=grants,
+                max_turns=3, required_evidence=("native_write_acknowledged",)).run("Synthetic integration fixture")
+            self.assertEqual(result["status"], "model_finished_unverified")
+            writes = [e for e in result["events"] if e.get("host_application_write_acknowledged") is True]
+            self.assertEqual([e["tool"] for e in writes], ["body.visual_author", "body.visual_graph"])
+            self.assertEqual(json.loads((root / plan).read_text()), graph())
+            with Image.open(root / "first.png") as image:
+                image.load()
+                self.assertEqual(image.size, (32, 24))
+            self.assertEqual(hashlib.sha256((root / plan).read_bytes()).hexdigest(),
+                json.loads(model.observed[1]["last_native_result_texts"][0])["sha256"])
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Physical BODY graph renderer requires FFmpeg and FFprobe")
+    async def test_actual_body_picture_reaches_model_without_native_video_import(self):
+        """A decoded graphics render is a model-visible image, not an export proof."""
+        import hashlib
+        import io
+        import json
+        from studio_next.capability_mcp_session import CombinedCapabilityMcpSession
+        from studio_next.native_creative_control import NativeCreativeControl
+        from studio_next.native_creative_audit import audit_native_journal
+        from studio_next.test_native_creative_control import ScriptedModel, decision
+        from studio_next.test_body_visual_document import graph
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            gateway = await connect_installed_zx7_body(root)
+            grants = gateway._live_grants("zx7")
+            self.assertEqual(grants.get("body.observe_picture"), "read")
+            view = CombinedCapabilityMcpSession(gateway, "zx7")
+            plan = "creative-graphs/first.json"
+            await view.call_tool("body.visual_author", {"document": graph(), "out": plan})
+            rendered = await view.call_tool("body.visual_graph", {"plan": plan, "out": "first.png"})
+            sha = json.loads(rendered.content[0].text)["sha256"]
+            model = ScriptedModel([
+                decision("invoke", tool="body.observe_picture", inputs={"source": "first.png", "source_sha256": sha}),
+                decision("finish", summary="fixture only"),
+            ])
+            result = await NativeCreativeControl(view, model, host_tool_access=grants,
+                max_turns=2).run("Synthetic picture-sensor integration fixture")
+            self.assertEqual(result["status"], "model_finished_unverified")
+            context, pictures = model.images_observed[0]
+            self.assertEqual(context["native_picture_origin"], "body_source_picture_not_verified_video_export")
+            self.assertEqual(pictures[0][0], "image/png")
+            with Image.open(io.BytesIO(pictures[0][1])) as preview, Image.open(root / "first.png") as original:
+                self.assertEqual(preview.convert("RGBA").tobytes(), original.convert("RGBA").tobytes())
+            observed = next(e for e in result["events"] if e.get("body_picture_source_sha256"))
+            self.assertEqual(observed["body_picture_source_sha256"], sha)
+            self.assertIsNone(observed["observed_export_sha256"])
+            self.assertEqual(observed["image_sha256"], [hashlib.sha256(pictures[0][1]).hexdigest()])
+            audit = audit_native_journal(result["events"], host_tool_access=grants, expected_required_evidence=())
+            self.assertEqual(audit["observed_verified_export_digests"], [])
+
+    async def test_body_picture_read_refuses_wrong_bytes_links_private_paths_and_write_only(self):
+        import hashlib
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
+            root = Path(td)
+            image = root / "picture.png"
+            Image.new("RGB", (12, 10), "red").save(image)
+            sha = hashlib.sha256(image.read_bytes()).hexdigest()
+            external = Path(outside) / "picture.png"
+            external.write_bytes(image.read_bytes())
+            (root / "link.png").symlink_to(external)
+            (root / "state").mkdir()
+            (root / "state/private.png").write_bytes(image.read_bytes())
+            adapter = InstalledBodyAdapter(root, allowed_access=("read",))
+            self.assertIn("body.observe_picture", adapter.trusted_grants())
+            for source, digest in (("picture.png", "a" * 64), ("link.png", sha),
+                    (str(external), sha), ("state/private.png", sha)):
+                with self.subTest(source=source), self.assertRaises((ValueError, PermissionError)):
+                    await adapter.call_tool("body.observe_picture", {"source": source, "source_sha256": digest})
+            result = await adapter.call_tool("body.observe_picture", {"source": "picture.png", "source_sha256": sha})
+            self.assertEqual(len(result.content), 2)
+            self.assertFalse((root / "vault").exists())
+            denied = InstalledBodyAdapter(root, allowed_access=("write",))
+            self.assertNotIn("body.observe_picture", denied.trusted_grants())
+            with self.assertRaises(PermissionError):
+                await denied.call_tool("body.observe_picture", {"source": "picture.png", "source_sha256": sha})
+
+    async def test_model_attachment_cannot_bypass_original_source_custody_policy(self):
+        from studio_next.body_integration import body_catalog
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = InstalledBodyAdapter(root)
+            raw = body_catalog(root, initialize_vault=False)
+            self.assertTrue({"body.render_edit", "body.otio"}.issubset(
+                {item["id"] for item in raw.discover()}))
+            grants = adapter.trusted_grants()
+            for legacy in ("body.render_edit", "body.otio"):
+                self.assertNotIn(legacy, grants)
+                with self.assertRaises(PermissionError):
+                    await adapter.call_tool(legacy, {"edit": "fake.json", "out": "fake.mp4"})
+            self.assertEqual(list(root.iterdir()), [])
+            if "body.render_edit_owned" in raw.executable_ids():
+                self.assertIn("body.render_edit_owned", grants)
+            if "body.otio_owned_export" in raw.executable_ids():
+                self.assertIn("body.otio_owned_export", grants)
+
+    async def test_denied_and_pure_read_calls_do_not_initialize_owner_storage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = InstalledBodyAdapter(root, allowed_access=("read",))
+            with self.assertRaises(PermissionError):
+                await adapter.call_tool("body.visual_author", {})
+            self.assertEqual(list(root.iterdir()), [])
+            result = await adapter.call_tool("body.timecode_format", {
+                "numerator": 24, "denominator": 1, "frame_index": 48, "drop_frame": False})
+            self.assertFalse(result.is_error)
+            self.assertEqual(list(root.iterdir()), [])
+
     async def test_read_grant_cannot_execute_write_tools(self):
         with tempfile.TemporaryDirectory() as root:
             gateway = await connect_installed_zx7_body(root, allowed_access=("read",))
@@ -54,6 +189,33 @@ class InstalledBodyGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(any("Markdown" in str(t) for t in real.tools))
             self.assertIsNone(real.nextCursor)
 
+
+    async def test_catalog_discovery_and_grant_refresh_are_pure_read_only(self):
+        """Observing possible creative tools must never create a media store."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter = InstalledBodyAdapter(root, allowed_access=("read", "write"))
+            expected = adapter.trusted_grants()
+            names = {tool.name for tool in (await adapter.list_tools()).tools}
+            self.assertIn("body.timecode_format", names)
+            self.assertEqual(set(expected), names)
+            self.assertFalse((root / "vault").exists(),
+                "Read-only installed-tool inventory unexpectedly initialized media storage")
+            self.assertFalse((root / ".zx7-host-private").exists())
+            self.assertEqual(list(root.iterdir()), [])
+
+    async def test_attaching_actual_body_gateway_does_not_write_before_tool_dispatch(self):
+        """The live shared Brain/BODY discovery path must remain side-effect free."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gateway = await connect_installed_zx7_body(root, allowed_access=("read",))
+            overview = gateway._current().overview()
+            self.assertGreater(overview["operation_count"], 0)
+            self.assertTrue(gateway.search("timecode", limit=4)["matches"])
+            await gateway.refresh()
+            self.assertEqual(gateway.evidence(), [])
+            self.assertEqual(list(root.iterdir()), [],
+                "Tool discovery, gateway attachment or refresh wrote owner workspace")
 
     async def test_real_installed_body_respects_host_supplied_call_budget(self):
         with tempfile.TemporaryDirectory() as root:

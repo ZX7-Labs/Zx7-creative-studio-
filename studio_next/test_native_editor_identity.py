@@ -34,9 +34,14 @@ class NativeReadSession:
         self.error_tool = None
         self.malformed_tool = None
         self.human_edit_during_read = False
+        self.snapshot_heartbeat_between_reads = False
+        self.provide_native_revision = False
+        self.native_revision = "a" * 40
         self.fail_before_source = False
         self.limit_assets = False
         self.limit_clips = False
+        self.markers = None  # Older/non-marker fixtures omit marker receipts.
+        self.marker_count_override = None
         self.write_attempts = 0
         self.tools = [
             SimpleNamespace(name=name, description="Pinned read " + name,
@@ -77,9 +82,12 @@ class NativeReadSession:
         if name == "get_project":
             if self.fail_before_source:
                 raise RuntimeError("private /home/sensitive/owned-media.mov")
-            if self.human_edit_during_read and sum(
-                    c[0] == "get_project" for c in self.calls) == 2:
-                self.revision = "revision-human"
+            if sum(c[0] == "get_project" for c in self.calls) == 2:
+                if self.human_edit_during_read:
+                    self.revision = "revision-human"
+                    self.native_revision = "b" * 40
+                elif self.snapshot_heartbeat_between_reads:
+                    self.revision = "snapshot-heartbeat-without-native-edit"
             data = {
                 "project": {
                     # Exact pinned Velorn source contract intentionally has
@@ -102,12 +110,18 @@ class NativeReadSession:
                 "id": self.current_timeline, "tracks": self.tracks,
                 "clips": self.clips,
                 "clipLimitApplied": self.limit_clips}
+            if self.markers is not None:
+                data["markers"] = self.markers
+                data["markerCount"] = (len(self.markers) if self.marker_count_override is None
+                                       else self.marker_count_override)
         elif name == "get_assets":
             data = {
                 "count": len(self.assets), "assets": self.assets,
                 "limitApplied": self.limit_assets}
         else:
             raise AssertionError("unsupported tool: " + name)
+        if name == "get_project" and self.provide_native_revision:
+            data["zx7NativeRevision"] = self.native_revision
         return SimpleNamespace(is_error=False, content=[
             SimpleNamespace(type="text", text=json.dumps(data))])
 
@@ -141,6 +155,44 @@ class PinnedReaderUnitTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "project_changed_during_read"):
             await self.reader()
         self.assertEqual(self.native.write_attempts, 0)
+
+    async def test_source_fenced_native_identity_ignores_heartbeat_not_a_live_edit(self):
+        """Pinned upstream snapshot generatedAt refreshes on a heartbeat.
+        Source-attested zx7NativeRevision remains stable without a mutation.
+        Never turn the volatile presentation stamp into a false edit.
+        """
+        self.native.provide_native_revision = True
+        self.native.snapshot_heartbeat_between_reads = True
+        trusted = NativeEditorIdentityReader(
+            self.native, GRANTS, require_live_revision=True)
+        observed = await trusted()
+        self.assertEqual(observed["__zx7_live_revision"], "a" * 40)
+        self.assertEqual([name for name, _ in self.native.calls],
+                         ["get_project", "get_timeline", "get_assets", "get_project"])
+        self.assertEqual(self.native.write_attempts, 0)
+
+        # Legacy / unfenced sources have no same-commit CAS: reject drift.
+        legacy = NativeReadSession()
+        legacy.snapshot_heartbeat_between_reads = True
+        with self.assertRaisesRegex(ValueError, "project_changed_during_read"):
+            await NativeEditorIdentityReader(legacy, GRANTS)()
+        self.assertEqual(legacy.write_attempts, 0)
+
+    async def test_source_fenced_concurrent_native_mutation_and_missing_token_fail_closed(self):
+        self.native.provide_native_revision = True
+        self.native.human_edit_during_read = True
+        fenced = NativeEditorIdentityReader(
+            self.native, GRANTS, require_live_revision=True)
+        with self.assertRaisesRegex(ValueError, "project_changed_during_read"):
+            await fenced()
+        self.assertEqual(self.native.write_attempts, 0)
+
+        missing = NativeReadSession()
+        missing.snapshot_heartbeat_between_reads = True
+        with self.assertRaisesRegex(ValueError, "native_identity_live_revision_unavailable"):
+            await NativeEditorIdentityReader(
+                missing, GRANTS, require_live_revision=True)()
+        self.assertEqual(missing.write_attempts, 0)
 
     async def test_limited_snapshots_are_unknown_not_missing_ids(self):
         for field in ("limit_assets", "limit_clips"):
@@ -215,6 +267,253 @@ class PinnedReaderUnitTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(policy["rules"]["update_text_clip"]["/clipId"], "clips")
             self.assertNotIn("create_project", policy["rules"])
             self.assertNotIn("get_assets", policy["rules"])
+
+
+    async def test_marker_inventory_requires_complete_counted_native_receipt(self):
+        from studio_next.capability_reference_guard import (
+            CapabilityReferenceError, compile_reference_rules, validate_live_references,
+        )
+        rules = compile_reference_rules({"/markerIds/*": "markers"})
+        self.assertNotIn("markers", await self.reader())
+        for rows, count in (([], 0), ([{"id": "marker-1"}], 1)):
+            self.native.markers = rows
+            self.native.marker_count_override = count
+            inventory = await self.reader()
+            self.assertEqual(inventory["markers"], {
+                "ids": [row["id"] for row in rows], "complete": True})
+        self.assertEqual(validate_live_references({"markerIds": ["marker-1"]},
+            rules, inventory)["host_reference_checks_passed"], 1)
+        for rows, count in (
+            ([{"id": "marker-1"}], 2),
+            ([{"id": "marker-1"}], True),
+            ([{"id": "marker-1"}, {"id": "marker-1"}], 2),
+            ([{"id": 123}], 1),
+            ([{"id": "marker-1"}], "1"),
+        ):
+            with self.subTest(rows=rows, count=count):
+                self.native.markers = rows
+                self.native.marker_count_override = count
+                inventory = await self.reader()
+                self.assertNotIn("markers", inventory)
+                self.assertEqual(inventory["clips"]["ids"], ["clip-1"])
+                with self.assertRaisesRegex(CapabilityReferenceError,
+                                            "native_identity_inventory_unavailable"):
+                    validate_live_references({"markerIds": ["marker-1"]},
+                                             rules, inventory)
+
+    async def test_source_attested_explicit_clip_track_reference_coverage(self):
+        """Pinned Electron and renderer accept these explicit existing IDs.
+
+        Never infer an artistic selector from an arbitrary field name. In
+        particular a dip pair can use either array alias and either ID alias.
+        """
+        from studio_next.capability_reference_guard import (
+            CapabilityReferenceError, compile_reference_rules,
+            validate_live_references,
+        )
+        expected = {
+            "update_caption_cues": {
+                "/clipId": "clips"
+            },
+            "set_clip_label_color": {
+                "/clipIds/*": "clips"
+            },
+            "select_clips": {
+                "/clipId": "clips",
+                "/clipIds/*": "clips",
+                "/trackId": "tracks"
+            },
+            "add_solid_color": {
+                "/trackId": "tracks"
+            },
+            "add_glsl_effect": {
+                "/clipId": "clips"
+            },
+            "update_glsl_effect": {
+                "/clipId": "clips"
+            },
+            "remove_glsl_effect": {
+                "/clipId": "clips"
+            },
+            "add_dip_to_black": {
+                "/clipIds/*": "clips",
+                "/trackId": "tracks",
+                "/clipPairs/*/outClipId": "clips",
+                "/clipPairs/*/inClipId": "clips",
+                "/clipPairs/*/clipAId": "clips",
+                "/clipPairs/*/clipBId": "clips",
+                "/clipPairs/*/fromClipId": "clips",
+                "/clipPairs/*/toClipId": "clips",
+                "/clipPairs/*/firstClipId": "clips",
+                "/clipPairs/*/secondClipId": "clips",
+                "/pairs/*/outClipId": "clips",
+                "/pairs/*/inClipId": "clips",
+                "/pairs/*/clipAId": "clips",
+                "/pairs/*/clipBId": "clips",
+                "/pairs/*/fromClipId": "clips",
+                "/pairs/*/toClipId": "clips",
+                "/pairs/*/firstClipId": "clips",
+                "/pairs/*/secondClipId": "clips"
+            },
+            "set_clip_style": {
+                "/clipId": "clips",
+                "/clipIds/*": "clips",
+                "/trackId": "tracks"
+            }
+        }
+        grants = {**GRANTS, **{name: "write" for name in expected}}
+        with patch("studio_next.native_editor_identity._source_matches_pinned_electron_mcp",
+                   return_value=True):
+            policy = pinned_native_editor_identity_policy(
+                Path("/not-a-valid-source"), grants, self.native)
+        inventory = await self.reader()
+        for name, rules in expected.items():
+            with self.subTest(tool=name):
+                self.assertEqual(policy["rules"].get(name), rules)
+                compiled = compile_reference_rules(rules)
+                self.assertEqual(validate_live_references(
+                    {}, compiled, inventory)["host_reference_checks_passed"], 0)
+                for path, kind in rules.items():
+                    def arguments(value):
+                        for part in reversed(path.lstrip("/").split("/")):
+                            value = [value] if part == "*" else {part: value}
+                        return value
+                    valid = inventory[kind]["ids"][0]
+                    self.assertEqual(validate_live_references(
+                        arguments(valid), compiled, inventory)[
+                            "host_reference_checks_passed"], 1)
+                    with self.assertRaisesRegex(
+                            CapabilityReferenceError,
+                            "native_reference_not_in_live_inventory"):
+                        validate_live_references(
+                            arguments("invented-id"), compiled, inventory)
+        # These rules never add a grant or grant native commit/CAS semantics.
+        with patch("studio_next.native_editor_identity._source_matches_pinned_electron_mcp",
+                   return_value=True):
+            limited = pinned_native_editor_identity_policy(
+                Path("/not-a-valid-source"), GRANTS, self.native)
+        self.assertNotIn("set_clip_label_color", limited["rules"])
+
+
+class ArchivedLabelReferenceAdmissionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_partial_label_batch_refused_before_native_write(self):
+        """Native label resolution can otherwise silently omit a missing ID."""
+        class LabelSession(NativeReadSession):
+            def __init__(self):
+                super().__init__()
+                self.tools.append(SimpleNamespace(
+                    name="set_clip_label_color", description="Native label edit",
+                    input_schema={"type": "object", "properties": {
+                        "clipIds": {"type": "array", "items": {"type": "string"}},
+                        "color": {"type": "string"},
+                        "filter": {"type": "string"},
+                        "previewOnly": {"type": "boolean"}}}))
+
+            async def call_tool(self, name, args):
+                if name == "set_clip_label_color":
+                    self.calls.append((name, args))
+                    self.write_attempts += 1
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text='{"applied":true}')])
+                return await super().call_tool(name, args)
+
+        native = LabelSession()
+        grants = {"get_project": "read", "get_timeline": "read",
+                  "get_assets": "read", "set_clip_label_color": "write"}
+        with patch("studio_next.native_editor_identity._source_matches_pinned_electron_mcp",
+                   return_value=True):
+            policy = pinned_native_editor_identity_policy(
+                Path("/not-a-valid-source"), grants, native)
+        binding = ((native, grants, {}, None, {}, policy) if policy is not None
+                   else (native, grants))
+        gateway = CapabilityGateway({"editor": binding})
+        await gateway.refresh()
+        session = CapabilityGatewayMcpSession(gateway, "editor")
+        mixed = {"clipIds": ["clip-1", "invented-clip"],
+                 "color": "#ff0000", "previewOnly": False}
+        denied = await session.call_tool("set_clip_label_color", mixed)
+        self.assertEqual(host_pre_dispatch_rejection(
+            denied, "set_clip_label_color", mixed),
+            "native_reference_not_in_live_inventory")
+        self.assertEqual(native.write_attempts, 0)
+        self.assertEqual(gateway.evidence(), [])
+        good = {"clipIds": ["clip-1"], "color": "#ff0000",
+                "previewOnly": False}
+        accepted = await session.call_tool("set_clip_label_color", good)
+        self.assertIs(accepted.is_error, False)
+        self.assertEqual(native.write_attempts, 1)
+        # A legitimate native filter does not require model-invented IDs.
+        filtered = await session.call_tool("set_clip_label_color", {
+            "filter": "enabled", "color": "#00ff00", "previewOnly": False})
+        self.assertIs(filtered.is_error, False)
+        self.assertEqual(native.write_attempts, 2)
+
+
+
+class MarkerReferenceAdmissionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_marker_edits_refuse_partial_targets_before_write(self):
+        class MarkerSession(NativeReadSession):
+            def __init__(self, operation):
+                super().__init__()
+                self.operation = operation
+                self.markers = [{"id": "marker-1"}]
+                self.tools.append(SimpleNamespace(
+                    name=operation, description="Native marker edit",
+                    input_schema={"type": "object", "properties": {
+                        "markerIds": {"type": "array", "items": {"type": "string"}},
+                        "all": {"type": "boolean"},
+                        "label": {"type": "string"},
+                        "previewOnly": {"type": "boolean"}}}))
+
+            async def call_tool(self, name, args):
+                if name == self.operation:
+                    self.calls.append((name, args))
+                    self.write_attempts += 1
+                    return SimpleNamespace(is_error=False, content=[
+                        SimpleNamespace(type="text", text='{"applied":true}')])
+                return await super().call_tool(name, args)
+
+        for operation in ("remove_timeline_markers", "set_timeline_marker_properties"):
+            with self.subTest(operation=operation):
+                native = MarkerSession(operation)
+                grants = {"get_project": "read", "get_timeline": "read",
+                          "get_assets": "read", operation: "write"}
+                with patch("studio_next.native_editor_identity._source_matches_pinned_electron_mcp",
+                           return_value=True):
+                    policy = pinned_native_editor_identity_policy(
+                        Path("/not-a-valid-source"), grants, native)
+                binding = ((native, grants, {}, None, {}, policy)
+                           if policy is not None else (native, grants))
+                gateway = CapabilityGateway({"editor": binding})
+                await gateway.refresh()
+                session = CapabilityGatewayMcpSession(gateway, "editor")
+                edit = ({"label": "New cue"} if operation ==
+                        "set_timeline_marker_properties" else {})
+                mixed = {**edit, "markerIds": ["marker-1", "missing-marker"],
+                         "previewOnly": False}
+                denied = await session.call_tool(operation, mixed)
+                self.assertEqual(host_pre_dispatch_rejection(
+                    denied, operation, mixed),
+                    "native_reference_not_in_live_inventory")
+                self.assertEqual(native.write_attempts, 0)
+                self.assertEqual(gateway.evidence(), [])
+                good = {**edit, "markerIds": ["marker-1"], "previewOnly": False}
+                native.marker_count_override = 2
+                denied = await session.call_tool(operation, good)
+                self.assertEqual(host_pre_dispatch_rejection(
+                    denied, operation, good),
+                    "native_identity_inventory_unavailable")
+                self.assertEqual(native.write_attempts, 0)
+                self.assertEqual(gateway.evidence(), [])
+                native.marker_count_override = None
+                accepted = await session.call_tool(operation, good)
+                self.assertIs(accepted.is_error, False)
+                self.assertEqual(native.write_attempts, 1)
+                # Legitimate native all/filter semantics need no invented ID.
+                accepted = await session.call_tool(operation, {
+                    **edit, "all": True, "previewOnly": False})
+                self.assertIs(accepted.is_error, False)
+                self.assertEqual(native.write_attempts, 2)
 
 
 class RealGatewayIdentityAdmissionTests(unittest.IsolatedAsyncioTestCase):

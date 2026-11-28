@@ -73,6 +73,78 @@ class AuditoryModelTransport(unittest.TestCase):
         self.assertEqual(json.loads(parts[1]["text"])["wav_sha256"],evidence["wav_sha256"])
         self.assertFalse(json.loads(parts[1]["text"])["original_multichannel_mastering_proven"])
 
+    def test_real_localhost_structured_original_wav_http_roundtrip(self):
+        """Send actual SHA-bound mono WAV through the real local HTTP adapter
+        and JSON-schema action grammar. This is media transport evidence ONLY,
+        never semantic hearing, remote API permission or artistic acceptance.
+        """
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from studio_next.local_native_structured_model import LocalNativeStructuredCreativeModel
+
+        original = wav_bytes()
+        received = []
+
+        class LocalAudioHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                raw_request = self.rfile.read(int(self.headers["Content-Length"]))
+                received.append((self.path, json.loads(raw_request)))
+                answer = {
+                    "choices": [{"finish_reason": "stop", "message": {
+                        "content": json.dumps({
+                            "action": "search",
+                            "arguments": {"query": "inspect real host tools"},
+                            "reason": "Transport protocol fixture, not a neural interpretation",
+                        })}}],
+                    "usage": {"prompt_tokens": 20, "completion_tokens": 10,
+                              "total_tokens": 30},
+                }
+                raw_response = json.dumps(answer).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw_response)))
+                self.end_headers()
+                self.wfile.write(raw_response)
+
+            def log_message(self, *_args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), LocalAudioHandler) as server:
+            server.timeout = 5
+            listener = threading.Thread(target=server.handle_request, daemon=True)
+            listener.start()
+            model = LocalNativeStructuredCreativeModel(
+                LocalModelSettings(
+                    model_id="loopback-audio-transport-fixture",
+                    base_url=f"http://127.0.0.1:{server.server_port}"),
+                system_prompt="Choose only actual host-authorized native actions")
+            action = model.decide_with_audio({
+                "compact_tool_catalog": True,
+                "available_actions": ["search"],
+                "selectable_native_tools": [],
+                "inspectable_native_tools": [],
+                "host_native_tool_contracts": [],
+                "audio_evidence": {
+                    "export_sha256": "a" * 64,
+                    "wav_sha256": hashlib.sha256(original).hexdigest(),
+                },
+            }, [("audio/wav", original)])
+            listener.join(timeout=5)
+
+        self.assertEqual(action["action"], "search")
+        self.assertEqual(len(received), 1)
+        path, payload = received[0]
+        self.assertEqual(path, "/v1/chat/completions")
+        self.assertEqual(payload["response_format"]["type"], "json_schema")
+        pieces = payload["messages"][1]["content"]
+        self.assertEqual([item["type"] for item in pieces],
+                         ["text", "text", "input_audio"])
+        self.assertEqual(base64.b64decode(pieces[-1]["input_audio"]["data"]), original)
+        self.assertEqual(json.loads(pieces[1]["text"])["wav_sha256"],
+                         hashlib.sha256(original).hexdigest())
+        self.assertTrue(model.supports_source_bound_wav_input)
+        self.assertEqual(model.last_call_usage["total_tokens"], 30)
+
     def test_local_server_usage_is_reported_not_invented_or_verified(self):
         class ReportedUsageReply(FakeReply):
             def read(self, length):
@@ -163,6 +235,49 @@ class Session:
 
 
 class ActualNativeAudioRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_audio_rationale_is_bounded_historical_context_not_a_receipt(self):
+        audio = wav_bytes()
+        private = "MODEL-ONLY-SOUND-RATIONALE"
+        class Model(ScriptedAudioModel):
+            def decide(self, context):
+                if self.decisions < 2:
+                    return super().decide(context)
+                note = context["historical_model_media_rationales"]["audio"]
+                self.notes.append(dict(note))
+                # A custom adapter must not mutate the controller's history.
+                note["reason"] = "adapter mutation"
+                if len(self.notes) == 1:
+                    return {"action": "describe", "arguments": {
+                        "tool": "zx7_observe_verified_export_audio"}, "reason": "inspect"}
+                return {"action": "finish", "arguments": {"summary": "Fixture"},
+                        "reason": "done"}
+            def decide_with_audio(self, context, sounds):
+                self.audio_input = (context, sounds)
+                return {"action": "describe", "arguments": {
+                    "tool": "zx7_observe_verified_export_audio"}, "reason": private}
+        model = Model()
+        model.notes = []
+        session = Session(audio)
+        with tempfile.TemporaryDirectory() as root:
+            journal = Path(root) / "private.jsonl"
+            result = await NativeCreativeControl(session, model, max_turns=5,
+                receipt_path=journal).run("Review the scene's sound")
+            self.assertEqual(len(model.notes), 2)
+            self.assertEqual(model.notes[0], model.notes[1])
+            note = model.notes[0]
+            self.assertEqual(note["reason"], private)
+            self.assertFalse(note["reason_truncated"])
+            self.assertEqual(note["decision_turn"], 2)
+            self.assertEqual(note["wav_sha256"], hashlib.sha256(audio).hexdigest())
+            self.assertEqual(note["export_sha256"], "a" * 64)
+            self.assertEqual(note["requested_start_seconds"], 1)
+            self.assertFalse(note["host_verified_semantics"])
+            self.assertFalse(note["current_native_state_or_tool_authority"])
+            self.assertNotIn(private, journal.read_text())
+            self.assertNotIn(private, json.dumps(result))
+            self.assertEqual(session.calls, 2)
+            self.assertFalse(result["artistic_quality_independently_approved"])
+
     async def test_audio_reaches_next_model_turn_with_sha_bound_custody(self):
         audio=wav_bytes()
         model=ScriptedAudioModel()

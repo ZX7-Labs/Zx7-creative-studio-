@@ -55,6 +55,80 @@ class CapabilityFabricTests(unittest.TestCase):
         self.assertEqual(fabric.search("create project checkpoint", limit=1)
                          ["matches"][0]["id"], "native/create_project_checkpoint")
 
+    def test_lower_rank_cutoff_tie_does_not_hide_complete_stronger_groups(self):
+        # Broad real-catalog queries can have a decisive match and a large
+        # unrelated tail sharing a single score. Never choose from a split
+        # equal-score group, but do not discard the stronger complete group.
+        leading = [tool("planar_insert", "Project surface tracking"),
+                   tool("planar_mask", "Project surface tracking")]
+        tail = [tool(f"project_{i:02d}", "Project") for i in range(8)]
+        ops = leading + tail
+        fabric = CapabilityFabric({"native": (ops, {t.name: "write" for t in ops})})
+        for limit in (2, 3, 6, 8):
+            with self.subTest(limit=limit):
+                result = fabric.search("planar project", limit=limit)
+                self.assertEqual({x["id"] for x in result["matches"]},
+                                 {"native/planar_insert", "native/planar_mask"})
+                self.assertTrue(result["has_more"])
+                self.assertFalse(result["requires_refinement"])
+                self.assertNotIn("candidate_examples", result)
+        top_tie = fabric.search("planar project", limit=1)
+        self.assertTrue(top_tie["requires_refinement"])
+        self.assertEqual(top_tie["matches"], [])
+
+    def test_long_native_description_indexes_late_asset_clip_identity_not_only_summary(self):
+        # Actual pinned Velorn described native asset placement in a
+        # 200+ character sentence: the source's useful "clip" terminology
+        # occurs only after the formerly indexed 128-char short summary.
+        # "timeline clip add" must not rank a marker operation over the
+        # media placement operation just because its retrieval description
+        # was truncated. This is a generic retrieval-fidelity test.
+        late_clip = ("Preview or place a project asset on the active timeline. "
+                     "Can target a specific asset id/name or the latest generated "
+                     "asset, choose playhead/selected-clip/timeline-end placement, "
+                     "use an existing compatible track, or create a new top "
+                     "video/audio track. Defaults to previewOnly.")
+        marker_desc = "Add timeline markers and labels at selected times"
+        one = tool("add_asset_to_timeline", late_clip)
+        two = tool("add_timeline_markers", marker_desc)
+        fabric = CapabilityFabric({"native": (
+            [one, two],
+            {"add_asset_to_timeline": "write",
+             "add_timeline_markers": "write"})})
+        self.assertNotIn("clip", fabric.describe(
+            "native/add_asset_to_timeline",
+            revision=fabric.revision)["description"][:128].casefold())
+        hit = fabric.search("timeline clip add", limit=1)
+        self.assertEqual(hit["matches"][0]["id"],
+                         "native/add_asset_to_timeline")
+        self.assertFalse(hit["requires_refinement"])
+        # The human-visible summary remains compact even when search
+        # uses the full original host description.
+        self.assertLessEqual(len(hit["matches"][0]["description"]), 96)
+        updated = CapabilityFabric({"native": (
+            [tool("add_asset_to_timeline",
+                  late_clip.replace("selected-clip", "selected-frame")),
+             two], {"add_asset_to_timeline": "write",
+                    "add_timeline_markers": "write"})})
+        self.assertNotEqual(fabric.revision, updated.revision)
+        self.assertNotEqual(fabric.search("timeline clip add", limit=1),
+                            updated.search("timeline clip add", limit=1))
+
+    def test_search_results_cannot_mutate_catalog_readiness_or_effects(self):
+        fabric = CapabilityFabric({"design": (
+            [tool("mask_layer", "Edit vector artwork")],
+            {"mask_layer": "write"}, {"mask_layer": ["project_open"]},
+            {"mask_layer": ["mask_present"]})})
+        result = fabric.search("mask_layer")["matches"][0]
+        result["requires"].clear()
+        result["may_enable"].append("invented_permission")
+        self.assertEqual(fabric.search("mask_layer")["matches"][0]["requires"],
+                         ["project_open"])
+        self.assertEqual(fabric.search("mask_layer")["matches"][0]["may_enable"],
+                         ["mask_present"])
+        self.assertFalse(fabric.check_prerequisites("design/mask_layer",
+            revision=fabric.revision, trusted_facts={"project_open": False})["admissible"])
+
     def test_optional_search_facets_are_actual_host_granted_not_a_tool_manual(self):
         granted = [tool("create_project"), tool("get_timeline"),
                    tool("import_asset_from_path"), tool("add_clip_to_timeline")]
@@ -111,6 +185,16 @@ class CapabilityFabricTests(unittest.TestCase):
                          None)
         self.assertEqual(fabric.search("import_asset_from_path")["matches"][0]["id"],
                          "native/import_asset_from_path")
+        # Actual installed audit #45942607052 observed all 77 grants.
+        # Keep the complete identity list usable with the existing 4KB cap;
+        # unlike full schemas, these identities only authorize retrieval.
+        index = fabric.exact_lookup_index()
+        self.assertIsNotNone(index)
+        self.assertEqual(index["operation_ids"], sorted("native/" + n for n in grants))
+        self.assertLessEqual(len(json.dumps(index).encode("utf-8")), 4096)
+        for identity in index["operation_ids"]:
+            self.assertEqual([m["id"] for m in fabric.search(identity, limit=1)["matches"]],
+                             [identity])
 
     def test_host_action_facets_are_budgeted_and_cannot_reveal_ungranted_names(self):
         candidates = [tool("action"+str(i)+"_"+"x"*24)
@@ -137,6 +221,31 @@ class CapabilityFabricTests(unittest.TestCase):
         self.assertLessEqual(len(json.dumps(overview).encode("utf-8")), 900)
         self.assertEqual(fabric.overview().get("host_granted_action_prefixes"),
                          None)
+
+    def test_small_exact_lookup_index_is_complete_bounded_and_retrieval_only(self):
+        fabric = CapabilityFabric({
+            "video": ([tool("mask", "Native video mask"), tool("private_delete")],
+                      {"mask": "write"}),
+            "photo": ([tool("mask", "Native photo mask")], {"mask": "write"}),
+        })
+        index = fabric.exact_lookup_index()
+        self.assertEqual(index["operation_ids"], ["photo/mask", "video/mask"])
+        self.assertEqual(index["revision"], fabric.revision)
+        self.assertIs(index["retrieval_only_not_execution_grant"], True)
+        self.assertNotIn("private_delete", json.dumps(index))
+        self.assertNotIn("input_schema", json.dumps(index))
+        for identity in index["operation_ids"]:
+            self.assertEqual([m["id"] for m in fabric.search(identity, limit=1)["matches"]],
+                             [identity])
+        index["operation_ids"].append("invented/action")
+        self.assertNotIn("invented/action", fabric.exact_lookup_index()["operation_ids"])
+        for names in ([f"op_{i}" for i in range(97)],
+                      [f"op_{i}_" + "x"*100 for i in range(48)],
+                      ["界"*60], ["trailing_space "]):
+            with self.subTest(names=len(names)):
+                large = CapabilityFabric({"native": ([tool(n) for n in names],
+                    {n: "read" for n in names})})
+                self.assertIsNone(large.exact_lookup_index())
 
     def test_only_actual_installed_and_host_granted_apis_can_be_exposed(self):
         f = CapabilityFabric({

@@ -39,9 +39,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            ffmpeg unzip xvfb xauth x11-xkb-utils xkb-data \
+            ffmpeg unzip xvfb xauth xdotool x11-xkb-utils xkb-data \
             libnss3 libatk-bridge2.0-0 libasound2t64 libgtk-3-0 \
             libgbm1 libxss1 libxdamage1 libxcomposite1 libxrandr2 libx11-xcb1
+          command -v xdotool
           python -m pip install --no-cache-dir '.[editor,production]'
       - name: Verify genuine clean pinned third-party source before install
         run: |
@@ -50,14 +51,19 @@ jobs:
           git -C third_party/velorn diff --exit-code HEAD --
           node --version
           python -c 'import mcp; import jsonschema; print("Actual MCP SDK and schema validation imported")'
-      - name: Prepare an independent approved desktop source in the installed prefix
+      - name: Prepare the exact cumulative native BODY source in the installed prefix
         run: |
+          set -euo pipefail
           studio_env="$RUNNER_TEMP/zx7-owner-proof-venv"
           python -m venv --system-site-packages "$studio_env"
           "$studio_env/bin/python" -m pip install --ignore-installed --no-deps .
           mkdir -p "$studio_env/share/zx7-studio"
           source="$studio_env/share/zx7-studio/velorn"
-          bash engines/velorn/prepare-supported-source.sh "$GITHUB_WORKSPACE/third_party/velorn" "$source"
+          bash engines/velorn/prepare-native-loss-aware-extract-candidate.sh \
+            "$GITHUB_WORKSPACE/third_party/velorn" "$source" --install
+          pinned=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_extract_revision"])')
+          test "$(git -C "$source" rev-parse HEAD)" = "$pinned"
+          git -C "$source" diff --exit-code HEAD --
           test ! -L "$source"
           test ! -e "$source/.git/objects/info/alternates"
           echo "ZX7_STUDIO_ENV=$studio_env" >> "$GITHUB_ENV"
@@ -76,9 +82,14 @@ jobs:
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(stat -c '%u:%a' "$helper")" = "0:4755"
-          actual="$(xvfb-run -a node_modules/electron/dist/electron --version)"
-          test "$actual" = "v45.2.3"
-          echo "ELECTRON $actual SANDBOX: ROOT-OWNED 4755 HELPER VERIFIED"
+          # Keep actual native GUI tests below. This duplicated
+          # version-only Xvfb launch can exit 1 without providing a
+          # meaningful editor signal after a checksum-verified install.
+          version_file="$PWD/node_modules/electron/dist/version"
+          test -f "$version_file"
+          installed_version="$(tr -d '\r\n' < "$version_file")"
+          test "${installed_version#v}" = "45.2.3"
+          echo "ELECTRON v${installed_version#v} SANDBOX: ROOT-OWNED 4755 HELPER VERIFIED"
       - name: Reproduce and fix actual desktop image sequence selection on Electron 45
         run: |
           editor="$ZX7_SUPPORTED_EDITOR/node_modules/electron/dist/electron"
@@ -91,7 +102,7 @@ jobs:
           python -u engines/velorn/mcp-e2e.py \
             --source "$ZX7_SUPPORTED_EDITOR" \
             --xvfb-binary /usr/bin/Xvfb \
-            --display 127.0.0.1:95
+            --display 127.0.0.1:97
       - name: Prove installed Studio creates and revises an editable project outside the checkout
         run: |
           PATH="$ZX7_STUDIO_ENV/bin:$PATH" "$ZX7_STUDIO_ENV/bin/python" -u engines/velorn/installed-studio-e2e.py \
@@ -106,8 +117,13 @@ jobs:
               tail -n 120 "$log"
             fi
           done
-      - name: Recheck pinned native source remains unchanged
+      - name: Recheck upstream and cumulative exact native source remain unchanged
         if: always()
         run: |
           test "$(git -C third_party/velorn rev-parse HEAD)" = "b3c02adbd5c0779feb8abf34978299e9502cc0e7"
           git -C third_party/velorn diff --exit-code HEAD --
+          if [[ -n "${ZX7_SUPPORTED_EDITOR:-}" ]]; then
+            expected=$(python -c 'import json;print(json.load(open("studio_next/editor_runtime/source-lock.json"))["loss_aware_extract_revision"])')
+            test "$(git -C "$ZX7_SUPPORTED_EDITOR" rev-parse HEAD)" = "$expected"
+            git -C "$ZX7_SUPPORTED_EDITOR" diff --exit-code HEAD --
+          fi
