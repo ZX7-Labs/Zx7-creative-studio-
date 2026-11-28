@@ -22,6 +22,7 @@ from .body_editor_client import (
     EditorPreDispatchError, HOST_PRE_DISPATCH_META, native_input_digest, _load_json,
 )
 from .body_editor_policy import EditorPathPolicy
+from .body_editor_export import HOST_EXPORT_FAILURE_META, NativeExportMissingAudio
 
 
 def _local_schema_references(schema):
@@ -484,6 +485,13 @@ def create_editor_server(client, *, allowed_access=frozenset({"read"}),
                     verified_exports.pop(next(iter(verified_exports)))
                 return types.CallToolResult(is_error=False, content=[
                     types.TextContent(type="text", text=json.dumps(proof, allow_nan=False))])
+            except NativeExportMissingAudio as exc:
+                verified_exports.pop(str(Path(arguments["path"]).resolve()), None)
+                return types.CallToolResult(is_error=True, content=[types.TextContent(
+                    type="text", text=str(exc))], _meta={HOST_EXPORT_FAILURE_META: {
+                        "inputs_sha256": native_input_digest(arguments),
+                        "export_sha256": exc.sha256, "missing_required_audio": True,
+                        "unchanged_already_inspected": exc.cached}})
             except (ValueError, OSError, subprocess.SubprocessError) as exc:
                 return failed("Independent native export verification failed: " + str(exc))
         if name in (observed_frame_name, observed_samples_name):
@@ -736,8 +744,10 @@ def main(argv=None):
             from .body_editor_frame import observe_verified_export_frame
             from .body_editor_audio import observe_verified_export_audio
             from .body_editor_audio_timeline import observe_verified_export_audio_timeline
+            missing_audio_cache = {}
             export_verifier = lambda path, expected=None: verify_native_editor_export(
-                path, policy=config._policy, expected=expected)
+                path, policy=config._policy, expected=expected,
+                missing_audio_cache=missing_audio_cache)
             frame_observer = lambda path, verified_sha256, at_seconds: observe_verified_export_frame(
                 path, policy=config._policy, verified_sha256=verified_sha256,
                 at_seconds=at_seconds)

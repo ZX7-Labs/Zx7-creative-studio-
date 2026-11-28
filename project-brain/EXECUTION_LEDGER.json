@@ -1365,9 +1365,25 @@
   "request_id": "ZX7_SUPER_VL_G1_CURRENT_REVIEWED_DELIVERY_20261128",
   "run": 46115838860,
   "job": 140889352284,
-  "status": "IN_PROGRESS",
-  "observed": "Exact source/consent guard passed; dependency installation active; no inference or outcome yet established.",
+  "status": "FAILED_TERMINAL",
+  "observed": "48 turns; true WAV imported but placement twice refused stale. Saved timeline had no active audio clip. Only physical output was 144 H.264 frames, no audio. The same required-audio verification failed 33 times; no accepted pair.",
+  "artifact_id": 15252247480,
+  "artifact_sha256": "a07208897b146a1979f072ebeb97a284639d75f8aff355433cd4251210f28e48",
+  "retired_trial_trigger_commit": "83c4dae3b70861665719956a30f34a5ff7ee4e16",
   "scope": "Same Super VL synthetic A/V task, 48 turns, existing authorization; tested current reviewed comparison and explicit owner-window choice, no automatic finish, private media or widened authority.",
   "prior_failed_run": 46045586986
+ },
+ "g1_missing_required_audio_recovery_20261128": {
+  "audit": "EVIDENCE/2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md",
+  "historical_run": 46115838860,
+  "exact_observed_verifier_expectation": {
+   "width": 640,
+   "height": 360,
+   "duration_seconds": 6,
+   "require_audio": true
+  },
+  "status": "LOCAL_PHYSICAL_AND_PROTOCOL_VERIFIED",
+  "proof": "Archived failed file and original error digest reproduced. 33 identical requests decoded once. Same path replaced with fixture-remuxed original WAV was freshly decoded and verified with peak -15 dBFS. Pinned MCP, revision policies, physical verifier and controller suite: 303/303. Scripted controller stops after two consecutive cached rejections of the same unchanged output.",
+  "limits": "No new genuine model or fresh installed Electron run. Hosted candidate CI pending. G1 recovery behavior in a real model run and full studio acceptance stay open."
  }
 }

@@ -240,6 +240,36 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(any(e["kind"] == "native_tool_result" for e in result["events"]))
                     self.assertNotIn("not-imported.mp4", path.read_text())
 
+    async def test_trusted_silent_export_failure_guides_model_and_stops_repeated_reads(self):
+        from studio_next.body_editor_client import native_input_digest
+        from studio_next.body_editor_export import HOST_EXPORT_FAILURE_META
+
+        class FailedExportSession(FakeSession):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                return SimpleNamespace(is_error=True, content=[
+                    SimpleNamespace(type="text", text="arbitrary bridge error text")],
+                    meta={HOST_EXPORT_FAILURE_META: {
+                        "inputs_sha256": native_input_digest(arguments),
+                        "export_sha256": "a" * 64, "missing_required_audio": True,
+                        "unchanged_already_inspected": len(self.calls) > 1}})
+
+        session = FailedExportSession()
+        tool = "zx7_verify_native_export"
+        session.tools = [spec for spec in session.tools if spec.name == tool]
+        model = ScriptedModel([decision("invoke", tool=tool, inputs={
+            "path": "/bound/export.mp4", "expected": {"require_audio": True}})
+            for _ in range(6)])
+        result = await NativeCreativeControl(
+            session, model, host_tool_access={tool: "read"},
+            host_pre_dispatch_rejections=True, max_turns=6).run("Deliver audible native A/V")
+        self.assertEqual(result["status"], "native_export_recovery_required")
+        self.assertEqual(len(session.calls), 3)
+        feedback = model.observed[1]["last_rejected_native_action_feedback"]
+        self.assertEqual(feedback["validation_keyword"], "required_export_audio_missing")
+        self.assertNotIn("arbitrary bridge error text", json.dumps(model.observed))
+        self.assertFalse(any(event["kind"] == "native_tool_result" for event in result["events"]))
+
     async def test_unverified_frame_failure_exposes_trusted_next_prerequisite(self):
         # A real CPU Qwen trial attempted frame review five times without
         # first verifying any of its three native exports. Do not replay the

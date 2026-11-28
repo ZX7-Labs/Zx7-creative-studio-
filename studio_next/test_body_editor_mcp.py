@@ -920,6 +920,26 @@ class EditorMCPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(observed, [("/trusted/export.mp4", {"require_audio": True}),
                                     ("/etc/passwd", None)])
 
+    async def test_missing_required_audio_returns_only_input_bound_host_evidence(self):
+        from studio_next.body_editor_client import native_input_digest
+        from studio_next.body_editor_export import HOST_EXPORT_FAILURE_META, NativeExportMissingAudio
+
+        args = {"path": "/trusted/export.mp4", "expected": {"require_audio": True}}
+
+        def verifier(path, expected=None):
+            self.assertEqual((path, expected), (args["path"], args["expected"]))
+            raise NativeExportMissingAudio("b" * 64, cached=True)
+
+        async def check(session):
+            result = await session.call_tool("zx7_verify_native_export", args)
+            self.assertTrue(result.is_error)
+            self.assertEqual(result.meta[HOST_EXPORT_FAILURE_META], {
+                "inputs_sha256": native_input_digest(args), "export_sha256": "b" * 64,
+                "missing_required_audio": True, "unchanged_already_inspected": True})
+            self.assertFalse(any(x["method"] == "tools/call" for x in self.requests))
+
+        await self.with_session(check, export_verifier=verifier)
+
     async def test_a_frame_is_only_visible_after_its_exact_export_was_verified(self):
         observers = []
         def verifier(path, expected=None):

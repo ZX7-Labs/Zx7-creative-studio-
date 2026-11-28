@@ -16,6 +16,19 @@ from .media_vault import sha256_file
 from .production_qc import full_decode_inspection
 
 
+HOST_EXPORT_FAILURE_META = "zx7_host_export_validation_failure"
+
+
+class NativeExportMissingAudio(ValueError):
+    """A fully inspected, unchanged export has no required audio stream."""
+
+    def __init__(self, sha256, *, cached=False):
+        super().__init__("Native export failed independent picture/sound checks: "
+                         "the required soundtrack is absent")
+        self.sha256 = sha256
+        self.cached = cached
+
+
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm"})
 
 
@@ -43,7 +56,7 @@ def _no_path_symlinks(path: Path, roots: tuple[Path, ...]) -> bool:
 def verify_native_editor_export(path: str, *, policy: EditorPathPolicy,
                                 expected: dict | None = None,
                                 max_seconds: int = 7200,
-                                inspector=full_decode_inspection) -> dict:
+                                inspector=full_decode_inspection, missing_audio_cache=None) -> dict:
     """Inspect a *completed* physical export; reject mutated or escaped files.
 
     The host supplies roots and the decode budget, not the AI's tool arguments.
@@ -63,11 +76,21 @@ def verify_native_editor_export(path: str, *, policy: EditorPathPolicy,
     if not _no_path_symlinks(source, (policy.outputs_root,)):
         raise EditorAccessError("Export observation refuses symbolic-link indirection")
     before = native_export_file_identity(source)
+    requires_audio = isinstance(expected, dict) and expected.get("require_audio") is True
+    if (requires_audio and missing_audio_cache is not None and
+            missing_audio_cache.get(source) == before):
+        raise NativeExportMissingAudio(before[-1], cached=True)
     report = inspector(source, expected=expected, max_seconds=max_seconds)
     after = native_export_file_identity(source)
     if before != after or report.get("sha256") != before[-1]:
         raise ValueError("Native export changed during independent decoding")
     if not report.get("technical_delivery_verified"):
+        if (requires_audio and report.get("audio_present") is False and
+                report.get("full_picture_and_sound_decoder_completed") is True):
+            if missing_audio_cache is not None:
+                missing_audio_cache.clear()
+                missing_audio_cache[source] = before
+            raise NativeExportMissingAudio(before[-1])
         raise ValueError("Native export failed independent picture/sound checks: "
                          + "; ".join(report.get("delivery_mismatches", [])))
     return {

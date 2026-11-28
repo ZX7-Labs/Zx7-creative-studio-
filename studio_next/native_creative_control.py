@@ -25,9 +25,10 @@ from .providers import LocalModelOutputError
 from .body_picture_observation import TOOL as BODY_PICTURE_TOOL, validate_picture_receipt
 from .body_editor_client import (
     host_pre_dispatch_rejection, HOST_REJECTION_FEEDBACK,
-    host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK,
+    host_native_revision_rejection, HOST_NATIVE_REVISION_FEEDBACK, native_input_digest,
 )
 from .body_editor_policy import OwnerExportOffer
+from .body_editor_export import HOST_EXPORT_FAILURE_META
 from .body_editor_delivery import native_delivery_matches
 from .native_editor_source_pin import (
     source_verified_preview_intent, source_verified_plan_preview_receipt,
@@ -2080,13 +2081,17 @@ class NativeCreativeControl:
                 # Make the real recovery READ contracts selectable without
                 # spending another discovery turn. Never dispatch a read here,
                 # choose an asset/track, or create a new grant.
+                feedback = self._last_preflight_feedback or {}
+                missing_audio_recovery = (
+                    feedback.get("validation_keyword") == "required_export_audio_missing")
                 if (self.catalog_mode == "indexed" and
-                        (self._last_preflight_feedback or {}).get(
-                            "rejection_code") == "placement_plan_unconfirmed"):
+                        (missing_audio_recovery or feedback.get("rejection_code") in
+                         {"placement_plan_unconfirmed", "native_identity_model_observation_stale",
+                          "native_identity_model_observation_required"})):
                     recovery = [name for name, inputs in (
                         ("get_project", {}),
-                        ("get_assets", {"limit": _MAX_PLACEMENT_ASSETS}),
-                        ("get_timeline", {"includeClips": False}))
+                        ("get_timeline", {"includeClips": missing_audio_recovery}),
+                        ("get_assets", {"limit": _MAX_PLACEMENT_ASSETS}))
                         if self.host_tool_access.get(name) == "read" and
                         name in validators and validators[name].is_valid(inputs)]
                     self._host_frontier_tools = recovery + [
@@ -3164,6 +3169,32 @@ class NativeCreativeControl:
                         # Record bounded, private evidence and let the MODEL
                         # select the next action. Never silently treat the
                         # failed observation as successful or retry it.
+                        export_failure = None
+                        if self.host_pre_dispatch_rejections and native_name == _VERIFIED_EXPORT_TOOL:
+                            meta = (result.get("_meta") if isinstance(result, dict)
+                                    else getattr(result, "meta", None))
+                            candidate = meta.get(HOST_EXPORT_FAILURE_META) if type(meta) is dict else None
+                            if (type(candidate) is dict and
+                                    candidate.get("inputs_sha256") == native_input_digest(args["inputs"]) and
+                                    candidate.get("missing_required_audio") is True and
+                                    type(candidate.get("unchanged_already_inspected")) is bool and
+                                    isinstance(candidate.get("export_sha256"), str) and
+                                    re.fullmatch(r"[0-9a-f]{64}", candidate["export_sha256"])):
+                                export_failure = candidate
+                                self._last_preflight_feedback = {
+                                    "tool": native_name,
+                                    "validation_keyword": "required_export_audio_missing",
+                                    "native_export_sha256": candidate["export_sha256"],
+                                    "same_export_requires_new_media_before_retry": True,
+                                    "correction": (
+                                        "Inspect the current editable timeline and selected export "
+                                        "range. Confirm source-backed sound is placed on an active "
+                                        "audio track, or correct the export settings if the track "
+                                        "is already present. Choose the needed edit and save, then "
+                                        "render and verify a new physical output."),
+                                    "no_successful_native_observation": True,
+                                    "no_automatic_retry": True,
+                                }
                         # Bind a failed read to its specific requested export.
                         # A later verifier failure must revoke earlier reviewed
                         # proof for that file, without recording its raw path.
@@ -3174,14 +3205,28 @@ class NativeCreativeControl:
                             path_digest = destination_digest(args["inputs"].get("path"))
                             if path_digest is not None:
                                 failed_read_binding[DESTINATION_FIELD] = path_digest
+                        previous_event = self.events[-2] if len(self.events) >= 2 else {}
+                        failure_evidence = ({
+                            "missing_required_audio": True,
+                            "export_sha256": export_failure["export_sha256"],
+                            "unchanged_already_inspected":
+                                export_failure["unchanged_already_inspected"],
+                        } if export_failure is not None else {})
                         self._append({"kind": "native_read_tool_reported_error",
-                                      **failed_read_binding,
+                                      **failed_read_binding, **failure_evidence,
                                       "turn": turn, "tool": native_name,
                                       "measured_native_mcp_wall_ms": native_ms,
                                       "error_sha256": digest,
                                       "error_text_exceeded_evidence_budget": out_of_budget,
                                       "host_attested_read_only": True,
                                       "no_successful_native_observation": True})
+                        if (failure_evidence.get("unchanged_already_inspected") is True and
+                                previous_event.get("kind") == "native_read_tool_reported_error" and
+                                previous_event.get("unchanged_already_inspected") is True and
+                                previous_event.get("export_sha256") == failure_evidence["export_sha256"] and
+                                previous_event.get(DESTINATION_FIELD) == failed_read_binding.get(DESTINATION_FIELD)):
+                            outcome = "native_export_recovery_required"
+                            break
                         continue
                     # A reported write error (or an operation of unknown
                     # access) does not prove that a mutation never happened.

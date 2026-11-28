@@ -81,6 +81,45 @@ class NativeEditorExportTests(unittest.TestCase):
             verify_native_editor_export(str(self.file), policy=self.policy, inspector=failed)
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Needs actual FFmpeg/FFprobe")
+    def test_required_audio_absence_is_bound_to_physical_file_and_cached(self):
+        from studio_next.body_editor_export import NativeExportMissingAudio
+        from studio_next.production_qc import full_decode_inspection
+
+        def render(with_audio):
+            command = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                       "testsrc2=size=160x90:rate=12:duration=1"]
+            if with_audio:
+                command += ["-f", "lavfi", "-i",
+                            "sine=frequency=440:sample_rate=48000:duration=1"]
+            subprocess.run(command + ["-c:v", "mpeg4", "-c:a", "aac", str(self.file)],
+                           timeout=30, check=True)
+
+        inspections = []
+        cache = {}
+
+        def inspect(source, **kwargs):
+            inspections.append(source)
+            return full_decode_inspection(source, **kwargs)
+
+        def verify(expected):
+            return verify_native_editor_export(
+                str(self.file), policy=self.policy, expected=expected,
+                inspector=inspect, missing_audio_cache=cache)
+
+        render(False)
+        for retry in (False, True):
+            with self.assertRaises(NativeExportMissingAudio) as failure:
+                verify({"require_audio": True})
+            self.assertEqual(failure.exception.sha256, sha256_file(self.file))
+            self.assertIs(failure.exception.cached, retry)
+        self.assertEqual(len(inspections), 1)
+        self.assertTrue(verify({"require_audio": False})["physical_export_verified"])
+        render(True)
+        self.assertTrue(verify({"require_audio": True})["observation"]["audio_present"])
+        self.assertEqual(len(inspections), 3)
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
                          "Needs actual FFmpeg/FFprobe for full physical decode")
     def test_real_encoded_picture_and_sound_are_independently_decoded(self):
         self.file.unlink()
