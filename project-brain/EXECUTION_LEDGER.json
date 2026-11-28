@@ -612,58 +612,51 @@
   "next_action": "Use measured compositional route for real-model matched G2 experiment only with valid bounded scope and comparable native outputs; do not conflate synthetic speech recognition with music comprehension. Verify genuine current-project completion, human coedit and independent quality."
  },
  "latest_ci_checkpoint": {
-  "source": "76cc6e01ea03f247d50ef6b8dba92128c4b56d90",
-  "merge_test_commit": "c924af406e4cf6550a5c49fcfbe19b982afee3d4",
-  "exact_equal_tree": "14ae19e13ccc568811e64ac05b126991bf49213e",
-  "observed_date": "2026-11-28",
-  "checks_observed": 29,
-  "counts": {
-   "success": 28,
-   "failure": 1
-  },
-  "actual_model_jobs_skipped": [
-   140669097002,
-   140669281482
-  ],
-  "installed": {
-   "run": 46047138772,
-   "job": 140669096382,
-   "independent_ci_job": 140675692496,
-   "tests_run": 1823,
-   "pass": 1791,
-   "skip": 32,
-   "failed": 0,
-   "errors": 0,
-   "artifact": 15223537158,
-   "zip_sha256": "b56b21ed0b196587ffb56f73348c1af71a53aed004faee05b4de9f2119b87f02",
-   "local_crc_ok": true,
-   "manifest_verified": 24,
-   "physical_mp4_full_decode": 3,
-   "local_redownload_verified": true
+  "source": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
+  "tree": "60ccc5e6436c33fa682afa39e1a96b457068bc05",
+  "tested_merge": "42a0ea1977d2da66848d02f087d5b2e1f5128eab",
+  "workflows": {
+   "success": 29
   },
   "mlt": {
-   "run": 46047138653,
-   "job": 140669095900,
-   "tests_run": 1823,
-   "pass": 1821,
+   "run": 46101251636,
+   "job": 140843964765,
+   "tests": 1827,
+   "pass": 1825,
    "skip": 2,
-   "failed": 0,
-   "additional_separate_test_runs": [
+   "fail": 0,
+   "preliminary": [
     52,
     26
    ],
-   "new_audio_finish_and_png16_tests_executed": true
+   "four_lineage_tests_passed": true
   },
-  "research": {
-   "run": 46047138534,
-   "job": 140669095015,
-   "result": "FAILED",
-   "failure": "Europe PMC unavailable or invalid JSON, elapsed ~20.8s; precise underlying transport/JSON cause unproven. Crossref, Openverse, Poly Haven, museum, NASA, eight Wikipedia languages, SiteMatrix 347 editions succeeded; Commons video returned zero leads.",
-   "decision": "Keep failure, no weakened acceptance or blind rerun."
+  "installed": {
+   "baseline": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
+   "tested_merge": "42a0ea1977d2da66848d02f087d5b2e1f5128eab",
+   "exact_tree": "60ccc5e6436c33fa682afa39e1a96b457068bc05",
+   "installed_run": 46101251651,
+   "jobs": [
+    140843964834,
+    140848194870
+   ],
+   "artifact": 15246172402,
+   "sha256": "292500ed737182e4426d0b18a9f93cdc659e42406f63f777d8a89e40414ae07a",
+   "tests": {
+    "run": 1827,
+    "pass": 1795,
+    "skip": 32,
+    "failures": 0,
+    "errors": 0
+   },
+   "verification": "All four new physical lineage tests executed; independently downloaded exact ZIP, CRC, 24 manifest entries, 5 changed wheel blobs, 3 complete FFmpeg physical media decodes; merge tree equal. No legal/artistic acceptance.",
+   "hosted_observed": {
+    "success": 29,
+    "mlt_run": 46101251636,
+    "research_success": true
+   }
   },
-  "creativity_release_accepted": false,
-  "previous_exact_ledger_commit": "76cc6e01ea03f247d50ef6b8dba92128c4b56d90",
-  "previous_exact_ledger_blob": "9a0659096ce43d95bd0a57182383270c01dc29ca"
+  "scope": "technical only; not actual model or professional acceptance"
  },
  "consolidation": {
   "owner_priority": "2026-11-26",
@@ -1244,8 +1237,7 @@
    },
    "verification": "All four new physical lineage tests executed; independently downloaded exact ZIP, CRC, 24 manifest entries, 5 changed wheel blobs, 3 complete FFmpeg physical media decodes; merge tree equal. No legal/artistic acceptance.",
    "hosted_observed": {
-    "success": 28,
-    "in_progress": 1,
+    "success": 29,
     "mlt_run": 46101251636,
     "research_success": true
    }
@@ -1328,6 +1320,12 @@
    },
    "environment": "installed wheel-only local overlay, three checkout-only scripts.run_native_model_trial imports unavailable and 36 official MCP optional tests skipped"
   },
-  "limits": "Local scripted host coordination evidence, not genuine model capability or real native readiness on current candidate. Candidate optional and may be ignored. No new provider run. Existing filesystem race limits remain; offer does not reserve path or change existing no-overwrite enforcement. No broad H265 support claimed. Exact hosted matrix pending."
+  "limits": "Local scripted host coordination evidence, not genuine model capability or real native readiness on current candidate. Candidate optional and may be ignored. No new provider run. Existing filesystem race limits remain; offer does not reserve path or change existing no-overwrite enforcement. No broad H265 support claimed. Exact hosted matrix pending.",
+  "integration": {
+   "parent_terminal": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
+   "parent_all_29_pass": true,
+   "local_candidate": "97b0a183f3a696677f1a5d6a374125003a2dd905",
+   "action": "lease checked canonical fast-forward with updated terminal evidence"
+  }
  }
 }

@@ -1932,3 +1932,56 @@ Previous exact records at [76cc6e01ea03f247d50ef6b8dba92128c4b56d90](https://git
   }
 }
 ```
+
+
+## 28 Nov — derivative parent terminal 29/29; candidate integration
+
+```json
+{
+  "source": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
+  "tree": "60ccc5e6436c33fa682afa39e1a96b457068bc05",
+  "tested_merge": "42a0ea1977d2da66848d02f087d5b2e1f5128eab",
+  "workflows": {
+    "success": 29
+  },
+  "mlt": {
+    "run": 46101251636,
+    "job": 140843964765,
+    "tests": 1827,
+    "pass": 1825,
+    "skip": 2,
+    "fail": 0,
+    "preliminary": [
+      52,
+      26
+    ],
+    "four_lineage_tests_passed": true
+  },
+  "installed": {
+    "baseline": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
+    "tested_merge": "42a0ea1977d2da66848d02f087d5b2e1f5128eab",
+    "exact_tree": "60ccc5e6436c33fa682afa39e1a96b457068bc05",
+    "installed_run": 46101251651,
+    "jobs": [
+      140843964834,
+      140848194870
+    ],
+    "artifact": 15246172402,
+    "sha256": "292500ed737182e4426d0b18a9f93cdc659e42406f63f777d8a89e40414ae07a",
+    "tests": {
+      "run": 1827,
+      "pass": 1795,
+      "skip": 32,
+      "failures": 0,
+      "errors": 0
+    },
+    "verification": "All four new physical lineage tests executed; independently downloaded exact ZIP, CRC, 24 manifest entries, 5 changed wheel blobs, 3 complete FFmpeg physical media decodes; merge tree equal. No legal/artistic acceptance.",
+    "hosted_observed": {
+      "success": 29,
+      "mlt_run": 46101251636,
+      "research_success": true
+    }
+  },
+  "scope": "technical only; not actual model or professional acceptance"
+}
+```
