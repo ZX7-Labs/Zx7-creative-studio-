@@ -1672,3 +1672,146 @@ Prior ancestry receipt `source_sha` field refers to **derived output** SHA, not 
 ### Continuity terminal exact parent matrix
 
 `2fab105621d36a05958fc5f8cd06ea7e49e1584e`: 29/29 hosted workflow success. MLT [#46044220019](https://github.com/ZX7-Labs/Zx7-creative-studio-/actions/runs/46044220019) job 140659308916 logs verified checked-out merge `809c304d2ecbfce490805d0bfcf78bf9a958e345` with exact parent tree; 52 and 26 preliminary tests, full 1821 tests / 1819 pass / 2 skip. No neural/creative acceptance. Safe fast-forward to independently locally verified physical-media candidate, no active parent CI cancelled. G1 matched trial #46045586986 status in_progress at observation.
+
+
+## 28 Nov — terminal physical media integration, matched G1 negative and visual ancestor rights
+
+Previous exact records at [76cc6e01ea03f247d50ef6b8dba92128c4b56d90](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/76cc6e01ea03f247d50ef6b8dba92128c4b56d90/project-brain/EXECUTION_LEDGER.json), blob `9a0659096ce43d95bd0a57182383270c01dc29ca`. Candidate exact code blobs match locally tested bytes. No acceptance gate changed.
+
+```json
+{
+  "ci": {
+    "source": "76cc6e01ea03f247d50ef6b8dba92128c4b56d90",
+    "merge_test_commit": "c924af406e4cf6550a5c49fcfbe19b982afee3d4",
+    "exact_equal_tree": "14ae19e13ccc568811e64ac05b126991bf49213e",
+    "observed_date": "2026-11-28",
+    "checks_observed": 29,
+    "counts": {
+      "success": 28,
+      "failure": 1
+    },
+    "actual_model_jobs_skipped": [
+      140669097002,
+      140669281482
+    ],
+    "installed": {
+      "run": 46047138772,
+      "job": 140669096382,
+      "independent_ci_job": 140675692496,
+      "tests_run": 1823,
+      "pass": 1791,
+      "skip": 32,
+      "failed": 0,
+      "errors": 0,
+      "artifact": 15223537158,
+      "zip_sha256": "b56b21ed0b196587ffb56f73348c1af71a53aed004faee05b4de9f2119b87f02",
+      "local_crc_ok": true,
+      "manifest_verified": 24,
+      "physical_mp4_full_decode": 3,
+      "local_redownload_verified": true
+    },
+    "mlt": {
+      "run": 46047138653,
+      "job": 140669095900,
+      "tests_run": 1823,
+      "pass": 1821,
+      "skip": 2,
+      "failed": 0,
+      "additional_separate_test_runs": [
+        52,
+        26
+      ],
+      "new_audio_finish_and_png16_tests_executed": true
+    },
+    "research": {
+      "run": 46047138534,
+      "job": 140669095015,
+      "result": "FAILED",
+      "failure": "Europe PMC unavailable or invalid JSON, elapsed ~20.8s; precise underlying transport/JSON cause unproven. Crossref, Openverse, Poly Haven, museum, NASA, eight Wikipedia languages, SiteMatrix 347 editions succeeded; Commons video returned zero leads.",
+      "decision": "Keep failure, no weakened acceptance or blind rerun."
+    },
+    "creativity_release_accepted": false,
+    "previous_exact_ledger_commit": "76cc6e01ea03f247d50ef6b8dba92128c4b56d90",
+    "previous_exact_ledger_blob": "9a0659096ce43d95bd0a57182383270c01dc29ca"
+  },
+  "trial": {
+    "run": 46045586986,
+    "job": 140663907085,
+    "source": "4719db96d6230c186064b4739d94e9be08e97fc0",
+    "retired": "87df7e5be744b72b08fdbbe41dc12897c678fdc9",
+    "baseline_run": 46007258095,
+    "result": "FAILED_TURN_BUDGET_EXHAUSTED",
+    "artifact": 15223750481,
+    "zip_sha256": "091c9515d2b98b040d926ce0bac643030ae9874d47dd0c0f6321b4ac3f1cf350",
+    "local_crc_ok": true,
+    "archive_entries": 24,
+    "turns": 48,
+    "searches": 6,
+    "write_acks": 13,
+    "usage_records": 48,
+    "reported_total_tokens": 614460,
+    "model_wall_ms": 1197586.947,
+    "first_export_turn": 12,
+    "second_export_turn": 20,
+    "previous": {
+      "searches": 21,
+      "tokens": 572800,
+      "first_export_turn": 23,
+      "export_count": 1,
+      "model_wall_ms": 1362433.837
+    },
+    "physical": {
+      "distinct_exports": 2,
+      "distinct_picture_sequences": 2,
+      "profile": "640x360 H264 24fps, 144 frames each; 6s synthetic A/V",
+      "outputs": [
+        "fe0eaf543c1d558412ed7bb51c8a7fa11268b0d08b5ebf3372600fbccb540d78",
+        "46779dea997232807edc2fdac9d002cc8d8ea0216afd0f18d1bef8803efca37d"
+      ],
+      "local_rgb_hashes": [
+        "9f3f959329525c3e036bc9258e39d58f61c818b9c65cbe439fe45514dcd242cd",
+        "f40d0a607ab56b49770c9fc43413830535e505a8710d061d9fb97e77c2985311"
+      ],
+      "local_pcm_s16le_hash": "4762b126e870a82caa75aa4549f5903f2a46b507a4d06f1f0a0e637aa0ececa1",
+      "audio_identical": true,
+      "original_video_audio_staged_and_native_sha_match": true,
+      "final_project_sha256": "9929d80c51c1ffd144a04c7e368f927b9667b0127cd9e6ca846985da96e6b619",
+      "saved_clips": 4,
+      "reviewed_native_render_pair": null,
+      "reviewed_native_av_pair": null,
+      "third_export_ack_turn": 47,
+      "third_export_not_retained_or_verified": true
+    },
+    "refusals": {
+      "stale_placement": 3,
+      "output_exists": 7,
+      "export_delivery_mismatch": 2,
+      "export_target_enum": 1
+    },
+    "observations": "Both exports observed at 0,2,4s + full numeric audio 0–6s (turns 14/23), then additional video layer, no actual sound edit; saved audio gainDb 0, fadeIn/out 0. Later video clip scaleX/Y 1.6 and opacity 1; no inferred intended units. Final ACK at turn47 not a physical third export. Fewer searches/earlier distinct visual result, higher reported tokens, no isolated causal claim. No accepted pair or semantic hearing.",
+    "next": "Isolate deterministic destination/profile coordination (existing feedback did not prevent repeated refusals); preserve model's choice to export and all native no-overwrite/authority checks. Inspect render source identity and intentional sound revision; no blind repeated paid full trial."
+  },
+  "correction": {
+    "baseline": "76cc6e01ea03f247d50ef6b8dba92128c4b56d90",
+    "blobs": {
+      "studio_next/media_vault.py": "c24401f245afa239d75d0e6159216b1305ee767f",
+      "studio_next/body_visual_render.py": "2eb8c83a3b8951931a87404ac7b566c0ee0036ab",
+      "studio_next/body_publication.py": "467ef353f613ec06315a0745054c92697d2eaea4",
+      "studio_next/body_integration.py": "3d5967d0af6fd534f9c5cc82a7347534de19bd94",
+      "studio_next/test_body_derivative_rights.py": "b3e4b5f6573f777861ac859365afbe5205f836e5"
+    },
+    "red": "Two actual native visual derivative tests failed: fresh descendant checkout permitted after source withdrawal and at checkout link boundary.",
+    "correction": "Real sealed visual graph records exact source attestation pairs from the renderer; verified physical output hash binds metadata, publication schema 2 persists/reconstructs same provenance on recovery. Vault optional lineage commitment extends exact grant identity and atomically stores ancestry; verify all transitive grant hashes/withdrawals inside read snapshot and checkout/ingest writer transaction. Bounded 1024 parents, 4096 nodes, 16384 edges. Independent grants preserve original hashes; lost new lineage row fails closed.",
+    "local": {
+      "initial_suite": 63,
+      "final_run": 81,
+      "passed": 77,
+      "skipped": 4,
+      "failures": 0,
+      "errors": 0,
+      "scope": "Exact 76cc6e01 installed wheel overlay, actual real PNG graph and two generations, source/derivative bytes preserved, independent grant, restart, checkout-boundary withdrawal, interrupted post-publication settlement without rerender, deleted lineage row, existing real Inkscape process-death tests, physical edit and custody. Four missing local OpenEXR tests skipped."
+    },
+    "limits": "Only visual graph producer now emits exact lineage; other trusted producer routes and historical unbound generated grants still require reconciliation. No raw-path recall, old backup update, historical deletion, claim of legal rights or broad revocation. Existing graph source revision policy remains; old unbound visual results may require new render with new path to issue lineage-bound grant. Hosted candidate pending."
+  }
+}
+```

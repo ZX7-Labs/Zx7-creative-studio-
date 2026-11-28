@@ -16,7 +16,7 @@ import time
 from .body_animation import curve_value
 from .body_visual_graph import VisualGraph,associate,to_linear,rgba8
 from .composite_mix import _exact_media,sealed_attested_original
-from .media_vault import MediaVault,sha256_file
+from .media_vault import MediaVault,sha256_file,canonical_source_attestations
 from .production_qc import full_decode_inspection
 
 
@@ -255,6 +255,9 @@ def render_visual_graph(plan_file,workspace,vault_root,output,*,
         "delivery_precision":"float32_linear_srgb_associated_rgba" if selection["format"]=="exr32" else "8bit_srgb_straight_rgba",
         "explicitly_clipped_rgb_components":clipped,
         "audio_policy":"separate_editable_tracks","source_assets":len(sources.sources),
+        "source_attestations":canonical_source_attestations([
+            {"asset_id":media["asset_id"],"attestation_id":media["attestation_id"]}
+            for _,media,_ in sources.sources.values()]),
         "project_node_fingerprints":graph.node_fingerprints(),
         "convolution_backend":graph.convolution_backend,
         "convolution_backend_runtime_version": (

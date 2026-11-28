@@ -45,7 +45,8 @@ from .body_motion_project import run_motion_project,export_motion_media,verify_m
 from .body_planar import render_planar_insert
 from .delivery_audit import audit_delivered_movie,_probe_details
 from .durable_graph import DurableFilmGraph,execute_durable_film_graph
-from .media_vault import MediaVault,sha256_file,verify_media_container,MediaCustodyError
+from .media_vault import (MediaVault,sha256_file,verify_media_container,MediaCustodyError,
+                          canonical_source_attestations)
 from .composite_mix import render_composition
 from .film_finishing import finish_authorized_movie
 from .body_color_pipeline import render_verified_color_job
@@ -364,7 +365,7 @@ def _trusted_body_revision(tool_id, *, revision_inputs=None):
     return "sha256:"+h.hexdigest()
 
 
-def _commit_actual_body_output(final_path,render):
+def _commit_actual_body_output(final_path,render,*,retain_source_attestations=False):
     """Only expose fully encoded, *decoder verified* original media.
 
     Incomplete FFmpeg/Blender/graphics files never occupy the final accepted
@@ -376,7 +377,8 @@ def _commit_actual_body_output(final_path,render):
     # fenced to the *current* owner; the receipt identity remains stable.
     with authorized_publication():
         recovered=recover_publication(
-            final_path,witness=_witness,verify=_verify_witness)
+            final_path,witness=_witness,verify=_verify_witness,
+            require_source_attestations=retain_source_attestations)
         if recovered is not None:
             return {**recovered, "success": True}
         if final_path.exists():
@@ -386,8 +388,14 @@ def _commit_actual_body_output(final_path,render):
     try:
         # Slow, untrusted renderer work happens outside the SQLite lease
         # transaction. Publication alone holds the short writer fence.
-        render(stage)
+        rendered=render(stage)
         preliminary=_witness(stage)
+        lineage={}
+        if retain_source_attestations:
+            if not isinstance(rendered,dict) or rendered.get("sha256")!=preliminary["sha256"]:
+                raise ValueError("Rendered source attestation lineage is not bound to physical output")
+            lineage["source_attestations"]=canonical_source_attestations(rendered.get("source_attestations"))
+            preliminary.update(lineage)
         if not _verify_witness(preliminary):
             raise RuntimeError("Staged creative media failed real decoder validation")
         with authorized_publication():
@@ -395,7 +403,8 @@ def _commit_actual_body_output(final_path,render):
             # renderer ran. Never clobber its final artifact or receipt.
             if final_path.exists():
                 recovered=recover_publication(
-                    final_path,witness=_witness,verify=_verify_witness)
+                    final_path,witness=_witness,verify=_verify_witness,
+                    require_source_attestations=retain_source_attestations)
                 if recovered is not None:
                     return {**recovered, "success": True}
                 raise FileExistsError("Cannot overwrite original media output")
@@ -407,7 +416,7 @@ def _commit_actual_body_output(final_path,render):
         # This is the source application's acknowledgement of its own
         # completed publication, not a claim of artistic quality or a
         # verified native-editor export. Keep the original physical witness.
-        return {**_witness(final_path), "success": True}
+        return {**_witness(final_path), **lineage, "success": True}
     finally:
         # Only our private encoded staging file is ours to remove. A previous
         # hardlink publication has a durable receipt and remains recoverable.
@@ -515,7 +524,7 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         plan=_path_within(root,inputs["plan"],exists=True)
         target=_body_output(root,inputs["out"],allowed=(".png",".mov",".exr"))
         return _commit_actual_body_output(target,lambda staged:
-            render_visual_graph(plan,root,vault.root,staged))
+            render_visual_graph(plan,root,vault.root,staged),retain_source_attestations=True)
 
     def inspect_voices(inputs):
         from .voice_contract import voice_inventory
@@ -965,7 +974,8 @@ def body_catalog(workspace,*,vault_root=None,editor_client=None,research_client=
         ref=vault.ingest(source,mime=mime,rights="generated_original",
                   source_type="trusted_renderer",source_id=proof["sha256"],
                   evidence="Verified original media from a registered trusted executable",
-                  owner_or_generator="zx7-authorized-body-graph")
+                  owner_or_generator="zx7-authorized-body-graph",
+                  source_attestations=proof.get("source_attestations"))
         record=vault.inspect(ref["asset_id"],attestation_id=ref["attestation_id"])
         return {"path":record["path"],"sha256":ref["asset_id"],"success":True,
                 "asset_id":ref["asset_id"],"attestation_id":ref["attestation_id"],
@@ -1225,6 +1235,11 @@ def validate_witness(_tool_id,result):
     """Physically revisit file and stored rights evidence on every resume."""
     if not isinstance(result,dict):
         return False
+    if _tool_id=="body.visual_graph":
+        try:
+            if canonical_source_attestations(result.get("source_attestations"))!=result["source_attestations"]:
+                return False
+        except (ValueError,TypeError,KeyError):return False
     if _tool_id in ("body.timecode_format","body.timecode_parse"):
         return verify_timecode_receipt(result,_tool_id)
     if _tool_id in ("body.mlt_owned_timecode_format","body.mlt_owned_timecode_parse"):

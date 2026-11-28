@@ -15,12 +15,14 @@ import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from .media_vault import canonical_source_attestations
 
 
 _ATTEMPT = contextvars.ContextVar("zx7_physical_publication", default=None)
 _PUBLICATION_GUARD = contextvars.ContextVar(
     "zx7_physical_publication_guard", default=None)
 _SHA = re.compile(r"^[0-9a-f]{64}$")
+_MAX_RECEIPT_BYTES = 256 * 1024  # up to 1024 exact source grant pairs
 
 
 @contextmanager
@@ -112,7 +114,7 @@ def require_published_source(final, tool_id):
     if directory.is_symlink() or final.is_symlink() or not directory.is_dir():
         raise ValueError("Source needs an authentic host publication")
     for receipt in directory.glob("*.json"):
-        if receipt.is_symlink() or receipt.stat().st_size>16384:continue
+        if receipt.is_symlink() or receipt.stat().st_size>_MAX_RECEIPT_BYTES:continue
         try:
             record=json.loads(receipt.read_text())
             identity=record["identity"]
@@ -130,12 +132,16 @@ def _load_receipt(final):
     path = _receipt_location(final)
     if path is None or not path.exists():
         return None
-    if path.is_symlink() or path.stat().st_size > 16384:
+    if path.is_symlink() or path.stat().st_size > _MAX_RECEIPT_BYTES:
         raise ValueError("Untrusted physical publication receipt")
     record = json.loads(path.read_text(encoding="utf-8"))
     fields = {"schema", "identity", "output", "stage", "sha256", "bytes"}
+    if isinstance(record,dict) and record.get("schema")==2:
+        fields=fields|{"source_attestations"}
+        if canonical_source_attestations(record.get("source_attestations"))!=record["source_attestations"]:
+            raise ValueError("Noncanonical publication source attestation lineage")
     if (not isinstance(record, dict) or set(record) != fields or
-            record["schema"] != 1 or record["identity"] != _ATTEMPT.get() or
+            record["schema"] not in (1,2) or record["identity"] != _ATTEMPT.get() or
             record["output"] != str(Path(final).absolute()) or
             not isinstance(record["sha256"], str) or
             not _SHA.fullmatch(record["sha256"]) or
@@ -160,6 +166,9 @@ def prepare_publication(final, stage, witness):
     record = {"schema": 1, "identity": _ATTEMPT.get(),
               "output": str(final), "stage": stage.name,
               "sha256": witness["sha256"], "bytes": witness["bytes"]}
+    if "source_attestations" in witness:
+        record["schema"]=2
+        record["source_attestations"]=canonical_source_attestations(witness["source_attestations"])
     # Tools have already closed the encoded file; force its data to storage
     # before a durable receipt could advertise it after process/power loss.
     with stage.open("rb") as media:
@@ -179,12 +188,14 @@ def prepare_publication(final, stage, witness):
         Path(temporary).unlink(missing_ok=True)
 
 
-def recover_publication(final, *, witness, verify):
+def recover_publication(final, *, witness, verify, require_source_attestations=False):
     """Return the same decoded output, or None if nothing was published yet."""
     final = Path(final).absolute()
     record = _load_receipt(final)
     if record is None:
         return None
+    if require_source_attestations and "source_attestations" not in record:
+        raise ValueError("Original publication lacks exact source attestation lineage")
     stage = final.parent / record["stage"]
     source = final if final.exists() else stage
     if not source.exists():
@@ -203,7 +214,8 @@ def recover_publication(final, *, witness, verify):
     if stage.exists() and not stage.is_symlink() and os.path.samefile(stage, final):
         stage.unlink()
         _sync_directory(final.parent)
-    return witness(final)
+    return {**witness(final), **({"source_attestations":record["source_attestations"]}
+                                if "source_attestations" in record else {})}
 
 
 def sync_published_file(final):
