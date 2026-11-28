@@ -1815,3 +1815,57 @@ Previous exact records at [76cc6e01ea03f247d50ef6b8dba92128c4b56d90](https://git
   }
 }
 ```
+
+
+## 28 Nov — current reviewed comparison, exact G1 prefix evidence
+
+{
+  "baseline": "d6db538822bc0bda461b5a7104ae3a50dcda7772",
+  "real_run": 46045586986,
+  "artifact": 15223750481,
+  "artifact_sha256": "091c9515d2b98b040d926ce0bac643030ae9874d47dd0c0f6321b4ac3f1cf350",
+  "replayed_actual_journal": {
+    "pair_qualifying_sequence": 73,
+    "turn": 23,
+    "matched_picture_seconds": [
+      0,
+      2,
+      4
+    ],
+    "sampled_picture_changed": true,
+    "comparable_audio_window_seconds": [
+      0,
+      6
+    ],
+    "decoded_audio_changed": false,
+    "invalidated_sequence": 91,
+    "invalidated_turn": 32,
+    "invalidating_tool": "add_asset_to_timeline",
+    "terminal_pair": null,
+    "terminal_status": "turn_budget_exhausted"
+  },
+  "correction": "Exact script evaluator allows changed picture OR changed audio, not both; still requires matching source/render custody, audible conforming soundtrack, current evidence and model finish. Historical pair qualified technically at turn 23 then invalidated. No terminal or semantic/artistic acceptance. Expose current matching observation facts to model from existing invalidation-aware comparator, without action selection, automatic finish, proof relaxation, or invented meaning.",
+  "blobs": {
+    "studio_next/native_render_evidence.py": "b24058c46bb8a4e1d64cd9aebbab9147a32c646c",
+    "studio_next/native_creative_control.py": "36c19c5234bb2e00369fe5dc74953a184efd1497",
+    "studio_next/test_native_render_evidence.py": "82d3b505c42b8a4561777dd202ac55af45624aa9",
+    "studio_next/test_native_creative_control.py": "8c6193ddb4ac6eb065de68b55162ffd80dce8778"
+  },
+  "tests": {
+    "red": "missing comparison API",
+    "focused": 13,
+    "full_attempt": 172,
+    "passed": 170,
+    "environment_errors": 2,
+    "environment_error": "installed wheel lacks checkout-only scripts.run_native_model_trial",
+    "filtered_rerun": "170/170 pass, two named repository-script tests excluded only in local wheel overlay",
+    "actual_journal_replay": "qualifying comparison sequence 73, null at 91, terminal null"
+  },
+  "limits": "No paid replay; no causal proof of autonomous improvement; repeated export destination/profile refusal remains; need exact hosted tests before integration and genuine qualified completion followed by independent assessment.",
+  "parent_hosted_observed": {
+    "success": 17,
+    "in_progress": 12,
+    "research_live": "success",
+    "no_failures_observed": true
+  }
+}

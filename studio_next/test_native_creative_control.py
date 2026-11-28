@@ -2413,6 +2413,14 @@ class NativeCreativeControlTests(unittest.IsolatedAsyncioTestCase):
                     contexts.update({ctx["turn"]: ctx
                                      for ctx, _ in model.images_observed})
                     self.assertEqual(set(contexts), set(range(len(actions))))
+                    self.assertIsNone(contexts[10]["current_reviewed_av_comparison"])
+                    self.assertEqual(contexts[12]["current_reviewed_av_comparison"], {
+                        "matched_picture_seconds": [1, 4],
+                        "sampled_picture_changed": True,
+                        "comparable_audio_window_seconds": [0, 6],
+                        "decoded_audio_changed": False,
+                    })
+                    self.assertIn("finish", contexts[12]["available_actions"])
                     self.assertTrue(any(
                         e.get("tool") == "update_text_clip" and
                         e.get("kind") == "native_tool_result" and

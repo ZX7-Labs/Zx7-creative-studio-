@@ -28,6 +28,29 @@ class ReviewedAVPairTests(unittest.TestCase):
         return (render("before", "a" * 64, ["a" * 64, "b" * 64]) +
                 [write("update_text_clip")] + render("after", "b" * 64, ["d" * 64, "b" * 64]))
 
+    def test_current_comparison_explains_picture_only_change_and_expires(self):
+        from studio_next.native_render_evidence import reviewed_av_comparison
+        events = self.events()
+        revisions = {"update_text_clip"}
+        expected = {"matched_picture_seconds": [1, 4],
+                    "sampled_picture_changed": True,
+                    "comparable_audio_window_seconds": [0, 6],
+                    "decoded_audio_changed": False}
+        self.assertEqual(reviewed_av_comparison(events, revisions), expected)
+        for invalidation in (
+            dict(events[4]),
+            dict(events[8], kind="native_read_tool_reported_error"),
+            dict(events[6], independently_verified_export_sha256="f" * 64),
+        ):
+            self.assertIsNone(reviewed_av_comparison(events + [invalidation], revisions))
+        self.assertIsNone(reviewed_av_comparison(events[:-1], revisions))
+        events[7]["native_av_review"] = [0.5, 3.5]
+        self.assertIsNone(reviewed_av_comparison(events, revisions))
+        events[8]["native_av_pcm_sha256"] = "d" * 64
+        self.assertEqual(reviewed_av_comparison(events, revisions), {
+            **expected, "matched_picture_seconds": [],
+            "sampled_picture_changed": None, "decoded_audio_changed": True})
+
     def test_container_only_change_does_not_prove_audiovisual_revision(self):
         events = self.events()
         revisions = {"update_text_clip"}

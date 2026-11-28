@@ -138,14 +138,19 @@ def native_render_binding(requested, receipt):
     return {DESTINATION_FIELD: destination, SCOPE_FIELD: scope}
 
 
-def _decoded_review_changed(before, after):
+def _decoded_review_comparison(before, after):
     before_frames, before_audio = before
     after_frames, after_audio = after
-    return (
-        any(before_frames[time] != after_frames[time]
-            for time in before_frames.keys() & after_frames.keys()) or
-        (before_audio[:2] == after_audio[:2] and before_audio[2] != after_audio[2])
-    )
+    times = sorted(before_frames.keys() & after_frames.keys())
+    audio_comparable = before_audio[:2] == after_audio[:2]
+    return {
+        "matched_picture_seconds": times,
+        "sampled_picture_changed": (any(before_frames[t] != after_frames[t] for t in times)
+                                    if times else None),
+        "comparable_audio_window_seconds": list(before_audio[:2]) if audio_comparable else None,
+        "decoded_audio_changed": (before_audio[2] != after_audio[2]
+                                  if audio_comparable else None),
+    }
 
 
 def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
@@ -157,7 +162,7 @@ def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
     invalidating_reads = FRAME_TOOLS | {VERIFY_TOOL}
     if audiovisual:
         invalidating_reads |= {AUDIO_ENVELOPE}
-    last_review = before_revision = pair = None
+    last_review = before_revision = pair = comparison = None
     for event in events:
         tool, path = event.get("tool"), event.get(DESTINATION_FIELD)
         if event.get("kind") == "native_read_tool_reported_error":
@@ -255,21 +260,37 @@ def _reviewed_render_pair_state(events, revision_tools, *, audiovisual=False):
                 decoded = (review[TIMED_FRAMES], review[AUDIO_ENVELOPE])
             last_review = (rendered[path], path, digest, decoded)
             if (before_revision is not None and before_revision[0] == rendered[path] and
-                    before_revision[1] != path and before_revision[2] != digest and
-                    (not audiovisual or _decoded_review_changed(before_revision[3], decoded))):
+                    before_revision[1] != path and before_revision[2] != digest):
+                candidate = (_decoded_review_comparison(before_revision[3], decoded)
+                             if audiovisual else None)
+                if audiovisual and not (candidate["sampled_picture_changed"] or
+                                        candidate["decoded_audio_changed"]):
+                    continue
+                comparison = candidate
                 pair = [
                     {"destination_sha256": output_path, "export_sha256": output_digest,
                      "timeline_sha256": scope}
                     for scope, output_path, output_digest, _ in (before_revision, last_review)
                 ]
-    return pair, before_revision, rendered, verified
+    return pair, before_revision, rendered, verified, comparison if pair is not None else None
 
 
 def reviewed_render_pair(events, revision_tools, *, audiovisual=False):
     """Return the latest qualifying pair of file receipts from one timeline."""
-    pair, _, _, _ = _reviewed_render_pair_state(
+    pair, _, _, _, _ = _reviewed_render_pair_state(
         events, revision_tools, audiovisual=audiovisual)
     return pair
+
+
+def reviewed_av_comparison(events, revision_tools):
+    """Explain the still-current qualifying pair, not semantic or artistic approval.
+
+    A None modality comparison means there was no matching observation window.
+    Writes and failed reads revoke this summary exactly as they revoke the pair.
+    """
+    _, _, _, _, comparison = _reviewed_render_pair_state(
+        events, revision_tools, audiovisual=True)
+    return comparison
 
 
 def reviewed_av_duplicate_export(events, revision_tools):
@@ -279,7 +300,7 @@ def reviewed_av_duplicate_export(events, revision_tools):
     This is byte equality, not a new observation, creative revision, or
     claim that all perceptually identical encodings have equal hashes.
     """
-    pair, before, rendered, verified = _reviewed_render_pair_state(
+    pair, before, rendered, verified, _ = _reviewed_render_pair_state(
         events, revision_tools, audiovisual=True)
     if pair is not None or before is None or before[3] is None:
         return False
@@ -297,7 +318,7 @@ def reviewed_av_reference_frame_times(events, revision_tools):
     action, source attestation, artistic plan or evidence waiver. None means
     no safely comparable current export (or that the pair already qualifies).
     """
-    pair, before, rendered, verified = _reviewed_render_pair_state(
+    pair, before, rendered, verified, _ = _reviewed_render_pair_state(
         events, revision_tools, audiovisual=True)
     if pair is not None or before is None or before[3] is None:
         return None

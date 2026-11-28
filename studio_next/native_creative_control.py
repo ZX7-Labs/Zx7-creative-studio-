@@ -36,7 +36,7 @@ from .native_render_evidence import (
     REVIEWED_AV_PAIR, REVIEWED_RENDER_PAIR, SAVED_RENDER_FAILURE, SAVED_RENDER_FIELD,
     SAVED_RENDER_MEDIA_FIELD, SAVED_RENDER_OPTIONS_FIELD, TIMED_FRAMES, av_review_values,
     destination_digest, native_render_binding, reviewed_render_pair,
-    reviewed_av_duplicate_export, reviewed_av_reference_frame_times,
+    reviewed_av_comparison, reviewed_av_duplicate_export, reviewed_av_reference_frame_times,
     valid_av_review_values, av_window_audio_values,
 )
 
@@ -2094,6 +2094,9 @@ class NativeCreativeControl:
                     # actual remaining decision budget to choose deliberately.
                     "current_required_host_evidence_satisfied": (
                         bool(self.required_evidence) and not missing_completion),
+                    "current_reviewed_av_comparison": (
+                        reviewed_av_comparison(self.events, self.host_content_revision_tools)
+                        if self._requires_av_review else None),
                     "decision_turn_budget": {"maximum": self.max_turns,
                         "remaining_including_current": self.max_turns - turn},
                     "audio_semantically_reviewed": False,
