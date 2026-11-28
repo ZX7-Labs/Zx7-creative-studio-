@@ -180,6 +180,8 @@ Primary progress is a reproducible capability that closes an actual acceptance d
 
 **Before implementation:** name concrete acceptance blocker, source owner, negative/missing evidence, smallest falsifiable change, matched control, success/failure condition, consent/resources and stop rule. Otherwise maintenance backlog, unless needed for security/correctness/release. Do not reopen accepted work without changed dependency or contrary evidence. The host may verify and align evidence and perform explicitly authorized deterministic substeps of a selected action; not silently choose edits, save on behalf of a model when a gate requires its save, replay uncertain writes, waive model observation or widen grants. Benchmark changes need comparable evidence and retained negative history.
 
+The [28 November product audit](../project-brain/EVIDENCE/2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md) records exact Brain–BODY failure evidence, design judgment and the closure experiments behind this rule.
+
 ### Critical creative-interface decision rule
 
 - Qualify provider/ABI, model tool competence, semantic perception and creative reasoning separately before expensive full-loop trials. Use the smallest discriminating control; connectivity alone proves none of these.

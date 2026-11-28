@@ -9,6 +9,8 @@ Build one local-first, free/open-source creative BODY operated by a replaceable 
 3. [Typed ledger](project-brain/EXECUTION_LEDGER.json) — the same snapshot in machine-readable form; read relevant entries.
 4. [Build blueprint](docs/BUILD_BLUEPRINT.md) — relevant fixed requirement and acceptance gate. [CAPABILITIES](CAPABILITIES.md) and [ENGINEERING_STANDARD](ENGINEERING_STANDARD.md) retain original authority. [Master Plan](docs/ZX7_CREATIVE_STUDIO_MASTER_PLAN.md) preserves original rationale and G2 hypothesis. [Document map](docs/DOCUMENT_MAP.md) indexes all references.
 
+5. [Independent product audit](project-brain/EVIDENCE/2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md) — read the evidence, architecture judgment and closure criteria for the acceptance work you are taking on.
+
 ## Fresh-session execution
 
 Owner shorthand **Continue ZX7** means resume, not restart planning or audit. When starting from stale main, locate the live head of draft PR #356 and read its AGENTS, BRIEF, STATE and relevant ledger/blueprint before writing. Follow the latest verified canonical workstream if it has changed. Act as principal research engineer, architect and accountable implementer: challenge past decisions with evidence; execute reversible authorized work without routine reconfirmation; continue useful independent work when another task is blocked. Progress means accepted capability or resolved critical uncertainty. Stop at real dependencies, authorization boundaries or completed outcomes; record exact blockers, not promises of unattended work.

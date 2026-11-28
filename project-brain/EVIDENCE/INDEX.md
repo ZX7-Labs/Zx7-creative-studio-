@@ -5,6 +5,7 @@ Current verdict: [STATE](../STATE.md) and [ledger](../EXECUTION_LEDGER.json). [C
 | Evidence | Original source |
 |---|---|
 | Earlier full receipts | [Immutable historical index](https://github.com/ZX7-Labs/Zx7-creative-studio-/blob/766dd9d0076c442f364124b23d1c04412581d184/project-brain/EVIDENCE/INDEX.md) |
+| 28 Nov product audit, including actual one-use failure | [Independent audit](2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md) |
 | Causal failures/retests | [Failure register](FAILURE_REGISTER.md) |
 | First inherit inspection | [10 Nov](2026-11-10-INHERIT.md) |
 | Wrong-profile, soundless NVIDIA failure | [10 Nov trial](2026-11-10-NVIDIA-ONE-SHOT.md) |

@@ -8,6 +8,7 @@ Start at [AGENTS](../AGENTS.md). This is durable engineering memory, not another
 | Current status / next action / working branch | [STATE](STATE.md) |
 | Typed implementation, failures, gates, source IDs | [EXECUTION_LEDGER](EXECUTION_LEDGER.json), bound to STATE |
 | Exact evidence and original artifacts | [EVIDENCE/INDEX](EVIDENCE/INDEX.md) |
+| Whole-product audit and completion strategy | [28 November independent audit](EVIDENCE/2026-11-28-INDEPENDENT-PRODUCT-AUDIT.md) |
 | Causal failure and retest distinction | [EVIDENCE/FAILURE_REGISTER](EVIDENCE/FAILURE_REGISTER.md) |
 | New architecture decision | [DECISIONS](DECISIONS.md) |
 | Active risk and falsifiable exit | [RISKS](RISKS.md) |
