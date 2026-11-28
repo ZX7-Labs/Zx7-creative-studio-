@@ -107,6 +107,46 @@ def _continuous_audio_samples(path, stream, scratch):
     return count
 
 
+def _missing_video_tail_filter(report, video):
+    """Recover a positive terminal sample duration omitted by MOV demux.
+
+    No timestamp or payload rewrite is permitted: the caller still requires
+    exact native stream, packet and complete decoded-picture equality.
+    """
+    first = previous = None
+    count = 0
+    tail = None
+    with report.open(encoding="utf-8") as rows:
+        for row in rows:
+            if not row.startswith("pts="):
+                continue
+            try:
+                fields = dict(item.split("=", 1) for item in row.split("|")[:3])
+                dts = int(fields["dts"])
+                tail = fields["duration"]
+            except (ValueError, KeyError):
+                return None
+            if previous is not None and dts <= previous:
+                return None
+            if first is None:
+                first = dts
+            previous = dts
+            count += 1
+    if not count or tail != "N/A" or video.get("start_pts") != 0:
+        return None
+    try:
+        tick = Fraction(video["time_base"])
+        duration = video["duration_ts"]
+        if tick.numerator != 1 or type(duration) is not int or int(video["nb_frames"]) != count:
+            return None
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return None
+    remaining = duration - (previous - first)
+    if not 0 < remaining <= 2**31 - 1:
+        return None
+    return f"setts=duration=if(eq(N\\,{count-1})\\,{remaining}\\,DURATION):pts=PTS:dts=DTS"
+
+
 def _sound_only_finish(frozen, encoded, audio_filters, selection, private):
     """Apply one explicit sound edit without changing unselected native streams."""
     info = _probe(frozen)
@@ -138,9 +178,13 @@ def _sound_only_finish(frozen, encoded, audio_filters, selection, private):
     source_samples = _continuous_audio_samples(frozen, selected, private / "clock-before")
     chain = [*audio_filters, f"aresample={rate}", f"atrim=end_sample={int(samples)}", f"asettb=1/{rate}", "asetpts=N"]
     selector = f"a:{selection}"
+    picture_report = private / "video-packets-before"
+    picture_digest = _packet_digest(frozen, videos[0]["index"], picture_report)
+    tail_filter = _missing_video_tail_filter(picture_report, videos[0])
+    copy_options = ["-bsf:v:0", tail_filter] if tail_filter else []
     subprocess.run(["ffmpeg", "-v", "error", "-xerror", "-nostdin", "-n", "-copyts",
         *SELF_CONTAINED_VIDEO_INPUT, "-i", str(frozen), "-map", "0", "-c", "copy",
-        f"-filter:{selector}", ",".join(chain), f"-c:{selector}", "aac",
+        *copy_options, f"-filter:{selector}", ",".join(chain), f"-c:{selector}", "aac",
         f"-b:{selector}", "192k", f"-ar:{selector}", str(rate),
         "-map_metadata", "0", "-map_chapters", "0", "-write_btrt", "0",
         "-movflags", "+faststart", str(encoded)], check=True, capture_output=True, timeout=3600)
@@ -161,7 +205,8 @@ def _sound_only_finish(frozen, encoded, audio_filters, selection, private):
                 raise ValueError("Native sound finish changed the selected sample clock or layout")
             continue
         if (any(before.get(k) != after.get(k) for k in _AV_FIELDS) or
-                _packet_digest(frozen, before["index"], private / "packets-before") !=
+                (picture_digest if before["index"] == videos[0]["index"] else
+                 _packet_digest(frozen, before["index"], private / "packets-before")) !=
                 _packet_digest(encoded, after["index"], private / "packets-after")):
             raise ValueError("Native sound finish changed unselected codec parameters, timing or packets")
     decoded_before = _decoded_av(frozen, videos[0], len(audios))

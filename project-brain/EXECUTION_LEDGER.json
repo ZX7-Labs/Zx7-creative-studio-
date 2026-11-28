@@ -1273,5 +1273,44 @@
   "studio_next/test_native_creative_control.py": "a45e59377f2a109cdd9d155077514c827e892a49",
   "engines/velorn/owner_delivery_proof.py": "a728ff87509ae0ce31c5db00b104b754cf14007e",
   "engines/velorn/mcp-e2e.py": "cdf26803f3f5772645f110802639406e11108bd4"
+ },
+ "field_g_vfr_terminal_duration_20261128": {
+  "baseline": "1c316a76495b8c2c1210ff3b2b7b8f281ccb0897",
+  "previous_head_hosted": {
+   "source": "1c316a76495b8c2c1210ff3b2b7b8f281ccb0897",
+   "workflows": "29/29 technical",
+   "mlt_run": 46111037082,
+   "mlt_job": 140874396439,
+   "mlt_tests": 1832,
+   "pass": 1830,
+   "skip": 2,
+   "installed_pass": 1800,
+   "installed_skip": 32,
+   "owner_window_job": 140874762774,
+   "owner_window": "48 independently decoded frames, actual nonzero sound, selected range fixture, wrong dimensions refused; not neural acceptance",
+   "research": "Europe PMC live recovered; original transport root cause unknown",
+   "model_execution": "skipped"
+  },
+  "causal_reproduction": {
+   "ffmpeg": "7.1.5",
+   "input": "two 0.6s, 30fps H264/AAC sources, authored 24fps fit timeline",
+   "time_base": "1/1000000",
+   "old_frame_count": 28,
+   "old_video_duration_ts": 1141666,
+   "remux_duration_ts": 1182440,
+   "added_ticks": 40774,
+   "root": "zero final video sample duration; MOV remux inserts estimated duration even with unchanged packet PTS/DTS and payload"
+  },
+  "correction": "Renderer supplies authored frame duration when encoded packet duration missing, retaining explicit PTS/DTS. Sound-only route derives a positive final duration from bounded source packet census and stream duration; existing strict stream/packet/full decoded A/V proof retained. Unsupported zero or unproven durations are not silently normalized.",
+  "local_physical": "Real FFmpeg isolated command/algorithm experiment: new authored source 28 frames, 1183333 ticks, same picture packet PTS/DTS and payload as legacy. Positive VFR final duration 41667 ticks recovered; complete existing video fields, packets and decoded picture identical after audio edit, decoded audio changed. Conventional positive-duration control unchanged. Legacy zero-duration remux still fails exact timing. Not exact repository test execution.",
+  "integrated_regression": "Actual fit and fill source rendering, attested film finishing, independent stream metadata/packet/full decoded-picture equality, changed sound and original hashes.",
+  "candidate_blobs": {
+   "studio_next/edit_timeline.py": "48c8f2d629a6a199313fff4de9b2c794a68637ae",
+   "studio_next/film_finishing.py": "7410e9e5e48f234c8f317cb01473eb93ace2ab04",
+   "studio_next/test_film_finishing.py": "c1b710fd05f593aa65daefffab7bc20e1811ea15"
+  },
+  "integrated_ci": "NOT_RUN_AT_COMMIT",
+  "independent_field_acceptance": "NOT_ACCEPTED",
+  "remaining": "Run exact-head physical regression and full matrix, inspect actual native artifact. Existing legacy zero-duration masters remain refused; support only with explicit owner-intent and exact independent native evidence. All A-L/G gates stay open."
  }
 }

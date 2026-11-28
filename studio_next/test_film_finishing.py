@@ -301,5 +301,80 @@ class IndependentFilmFinishingTests(unittest.TestCase):
             self.assertTrue(result["runner_or_probe_mocked"])
             self.assertTrue(result_path.exists())
 
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Physical FFmpeg timeline and sound finishing required")
+    def test_fit_fill_timeline_sound_finish_preserves_original_video_clock(self):
+        from studio_next.edit_timeline import edit_ffmpeg_command, probe_media
+        from studio_next.media_vault import sha256_file
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            sources = []
+            for i, frequency in enumerate((440, 660)):
+                shot = root / f"shot-{i}.mp4"
+                subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-n",
+                    "-f", "lavfi", "-i", "testsrc2=size=160x96:rate=30:duration=0.6",
+                    "-f", "lavfi", "-i", f"sine=frequency={frequency}:sample_rate=48000:duration=0.6",
+                    "-c:v", "libx264", "-c:a", "aac", "-shortest", str(shot)],
+                    check=True, capture_output=True, timeout=60)
+                sources.append(shot)
+            originals = [sha256_file(shot) for shot in sources]
+            vault = MediaVault(root / "vault")
+
+            def picture(path):
+                stream = json.loads(subprocess.check_output(["ffprobe", "-v", "error",
+                    "-select_streams", "v:0", "-show_streams", "-show_data_hash", "sha256",
+                    "-of", "json", str(path)], timeout=60))["streams"][0]
+                packets = json.loads(subprocess.check_output(["ffprobe", "-v", "error",
+                    "-select_streams", "v:0", "-show_packets", "-show_data_hash", "sha256",
+                    "-show_entries", "packet=pts,dts,duration,size,flags,data_hash:packet_side_data",
+                    "-of", "json", str(path)], timeout=60))["packets"]
+                return stream, packets
+
+            def decoded(path):
+                return subprocess.check_output(["ffmpeg", "-v", "error", "-xerror",
+                    "-i", str(path), "-map", "0:v:0", "-map", "0:a:0",
+                    "-c:v", "rawvideo", "-pix_fmt", "yuv420p", "-fps_mode", "passthrough",
+                    "-threads:v", "1", "-c:a", "pcm_f64le", "-f", "streamhash",
+                    "-hash", "sha256", "-"], timeout=60).splitlines()
+
+            for framing in ("fit", "fill"):
+                with self.subTest(framing=framing):
+                    original = root / f"{framing}-original.mp4"
+                    edit = {"format": {"width": 160, "height": 96, "fps": 24,
+                                       "framing": framing, "background": "#000000"},
+                            "clips": [{"id": f"shot-{i}", "source": shot.name,
+                                       "rights": "generated_original", "audio": "preserve_source"}
+                                      for i, shot in enumerate(sources)]}
+                    subprocess.run(edit_ffmpeg_command(edit, root, original,
+                        source_info=[probe_media(shot) for shot in sources]),
+                        check=True, capture_output=True, timeout=60)
+                    native, packets = picture(original)
+                    self.assertGreater(len(packets), 0)
+                    self.assertGreater(native["duration_ts"] -
+                        (packets[-1]["dts"] - packets[0]["dts"]), 0)
+                    source_digest = sha256_file(original)
+                    ref = vault.ingest(original, mime="video/mp4", rights="generated_original",
+                        source_type="trusted_renderer", source_id=f"vfr-{framing}",
+                        evidence="Actual generated original fit/fill timeline",
+                        owner_or_generator="independent-ffmpeg")
+                    plan = root / f"{framing}-sound.json"
+                    plan.write_text(json.dumps({"media": {"source": original.name,
+                        "asset_id": ref["asset_id"], "attestation_id": ref["attestation_id"]},
+                        "ops": {"video_ops": [], "audio_ops": [{"kind": "gain", "db": -6}]}}))
+                    finished = root / f"{framing}-finished.mp4"
+                    result = finish_authorized_movie(plan, root, root / "vault", finished)
+                    after, after_packets = picture(finished)
+                    for key in ("time_base", "start_pts", "duration_ts", "r_frame_rate",
+                                "avg_frame_rate", "nb_frames", "extradata_hash", "pix_fmt"):
+                        self.assertEqual(native.get(key), after.get(key), key)
+                    self.assertEqual(packets, after_packets)
+                    before_decode, after_decode = decoded(original), decoded(finished)
+                    self.assertEqual(before_decode[0], after_decode[0])
+                    self.assertNotEqual(before_decode[1], after_decode[1])
+                    self.assertEqual(sha256_file(original), source_digest)
+                    self.assertTrue(result["unselected_packets_and_decoded_av_preserved"])
+            self.assertEqual([sha256_file(shot) for shot in sources], originals)
+
+
 if __name__=="__main__":
     unittest.main()

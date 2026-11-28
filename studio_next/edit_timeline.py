@@ -126,7 +126,11 @@ def edit_ffmpeg_command(edit, root, dest, *, source_info):
     frags.append("".join(concat)+f"concat=n={len(edit['clips'])}:v=1:a=1[v][a]")
     argv+=["-filter_complex",";".join(frags),"-map","[v]","-map","[a]",
            "-c:v","libx264","-pix_fmt","yuv420p","-crf","20",
-           "-c:a","aac","-b:a","160k","-movflags","+faststart",str(dest)]
+           "-c:a","aac","-b:a","160k",
+           # Preserve timestamps and fill only omitted packet durations
+           # using the explicitly authored frame clock, not a CFR conversion.
+           "-bsf:v",f"setts=duration=if(gt(DURATION\\,0)\\,DURATION\\,round(1/({fps}*TB))):pts=PTS:dts=DTS",
+           "-movflags","+faststart",str(dest)]
     return argv
 
 
